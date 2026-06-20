@@ -8677,7 +8677,48 @@ def _attach_scoped_structured_writer_redo(
     )
 
 
-def test_real_writer_uses_structured_path_when_enabled(monkeypatch) -> None:
+def _schema_contract_segmented_zh_markdown() -> str:
+    return (
+        f"## {report_label('zh-CN', 'executive_summary')}\n"
+        "Fake segmented schema-contract report recommends Cursor for pricing-led "
+        "evaluation while keeping Windsurf as a monitored alternative. "
+        "[source:raw-source-a]\n\n"
+        f"## {report_label('zh-CN', 'decision_summary')}\n"
+        "- Cursor should lead the first buying conversation because the verified "
+        "pricing source is clearer for procurement comparison. [source:raw-source-a]\n"
+        "- Windsurf remains a watch item until refreshed pricing proof is collected. "
+        "[source:raw-source-b]\n\n"
+        f"## {report_label('zh-CN', 'competitive_findings')}\n"
+        "The available evidence supports a cautious Cursor-first recommendation, "
+        "with Windsurf follow-up framed as a collection gap rather than a winner "
+        "claim. [source:raw-source-a] [source:raw-source-b]\n\n"
+        f"## {report_label('zh-CN', 'evidence_support')}\n"
+        "The support layer lists source coverage after the core recommendation. "
+        "[source:raw-source-a]\n"
+    )
+
+
+def _schema_contract_segmented_en_markdown(
+    *,
+    note: str = "Scoped segment output.",
+) -> str:
+    return (
+        f"## {report_label('en-US', 'executive_summary')}\n"
+        "Recommendation: GitHub Copilot and Cursor remain the risk-adjusted primary "
+        "choices. [source:raw-source-a]\n\n"
+        f"## {report_label('en-US', 'decision_summary')}\n"
+        f"{note} [source:raw-source-a]\n\n"
+        f"## {report_label('en-US', 'competitive_findings')}\n"
+        "The scoped update is handled through schema-contract segment authoring. "
+        "[source:raw-source-b]\n\n"
+        f"## {report_label('en-US', 'evidence_support')}\n"
+        "Support material remains after the core report. [source:raw-source-a]\n"
+    )
+
+
+def test_real_schema_contract_writer_uses_segmented_authoring_when_enabled(
+    monkeypatch,
+) -> None:
     service = _segmented_writer_service()
     service._settings = replace(
         service._settings,
@@ -8689,23 +8730,42 @@ def test_real_writer_uses_structured_path_when_enabled(monkeypatch) -> None:
     record.detail.raw_sources = _structured_writer_raw_sources()
     _attach_structured_writer_redo(record)
 
-    structured_report = _structured_writer_fixture_report(record.detail)
+    async def fail_if_structured_report_called(
+        self,
+        record,
+        evidence_pack_result,
+        timeout_seconds,
+    ):
+        raise AssertionError("Structured JSON writer must not run")
 
-    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
-        return structured_report
+    async def fake_segmented_report(
+        self,
+        record,
+        *,
+        evidence_pack_result,
+        timeout_seconds,
+        language_guidance,
+        memory_context,
+        layer_context,
+        required_sections,
+    ):
+        return _schema_contract_segmented_zh_markdown()
 
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
-        fake_structured_report,
+        fail_if_structured_report_called,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_segmented_report_markdown",
+        fake_segmented_report,
     )
 
     asyncio.run(service._real_writer_step(record))
 
-    assert "## \u6267\u884c\u6458\u8981" in record.detail.report_md
-    assert "## \u652f\u6491\u6750\u6599" in record.detail.report_md
-    assert "Segment Evidence Pack JSON" not in record.detail.report_md
+    assert "Fake segmented schema-contract report" in record.detail.report_md
     event_types = [event.type for event in record.events]
-    assert "writer_structured_report_validated" in event_types
+    assert "writer_markdown_fallback_used" not in event_types
+    assert "writer_structured_report_validated" not in event_types
     assert "writer_publication_contract_validated" in event_types
     selected_event = next(
         event
@@ -8715,13 +8775,14 @@ def test_real_writer_uses_structured_path_when_enabled(monkeypatch) -> None:
     assert selected_event.payload == {
         "targets": ["core.battlecard"],
         "llm_required": True,
+        "authoring_mode": "schema_contract_segment",
     }
     assert record.previous_structured_report_snapshot is None
-    assert record.structured_report_snapshot == structured_report
-    assert any(
-        span.name == "writer_structured_report_validated"
-        for span in record.detail.trace_spans
-    )
+    assert record.structured_report_snapshot is None
+
+
+def test_structured_json_writer_method_remains_available_for_diagnostics() -> None:
+    assert hasattr(_segmented_writer_service(), "_writer_structured_report")
 
 
 def test_real_schema_first_success_does_not_emit_markdown_fallback(monkeypatch) -> None:
@@ -8735,17 +8796,38 @@ def test_real_schema_first_success_does_not_emit_markdown_fallback(monkeypatch) 
     record.detail.execution_mode = "real"
     record.detail.output_language = "zh-CN"
     record.detail.raw_sources = _structured_writer_raw_sources()
-    structured_report = _structured_writer_fixture_report(record.detail)
 
-    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
-        return structured_report
+    async def fail_if_structured_report_called(
+        self,
+        record,
+        evidence_pack_result,
+        timeout_seconds,
+    ):
+        raise AssertionError("Structured JSON writer must not run")
+
+    async def fake_segmented_report(
+        self,
+        record,
+        *,
+        evidence_pack_result,
+        timeout_seconds,
+        language_guidance,
+        memory_context,
+        layer_context,
+        required_sections,
+    ):
+        return _schema_contract_segmented_zh_markdown()
 
     async def fail_if_markdown_writer_called(self, record, evidence_pack_result, timeout_seconds):
         raise AssertionError("Markdown fallback must not be called")
 
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
-        fake_structured_report,
+        fail_if_structured_report_called,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_segmented_report_markdown",
+        fake_segmented_report,
     )
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_markdown_report_from_evidence_pack",
@@ -8756,11 +8838,11 @@ def test_real_schema_first_success_does_not_emit_markdown_fallback(monkeypatch) 
 
     event_types = [event.type for event in record.events]
     assert "writer_markdown_fallback_used" not in event_types
-    assert "writer_structured_report_validated" in event_types
+    assert "writer_structured_report_validated" not in event_types
     assert "writer_publication_contract_validated" in event_types
 
 
-def test_real_schema_first_still_uses_structured_writer_when_pack_requires_segments(
+def test_real_schema_first_uses_segmented_writer_when_pack_requires_segments(
     monkeypatch,
 ) -> None:
     service = _segmented_writer_service()
@@ -8777,15 +8859,29 @@ def test_real_schema_first_still_uses_structured_writer_when_pack_requires_segme
     record.detail.execution_mode = "real"
     record.detail.output_language = "zh-CN"
     record.detail.raw_sources = _structured_writer_raw_sources()
-    structured_report = _structured_writer_fixture_report(record.detail)
-    structured_calls: list[object] = []
+    segmented_calls: list[object] = []
 
-    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
-        structured_calls.append(evidence_pack_result)
-        return structured_report
+    async def fail_if_structured_report_called(
+        self,
+        record,
+        evidence_pack_result,
+        timeout_seconds,
+    ):
+        raise AssertionError("Structured JSON writer must not run")
 
-    async def fail_if_segmented_writer_called(self, *args, **kwargs):
-        raise AssertionError("Segmented writer must not bypass schema-first routing")
+    async def fake_segmented_report(
+        self,
+        record,
+        *,
+        evidence_pack_result,
+        timeout_seconds,
+        language_guidance,
+        memory_context,
+        layer_context,
+        required_sections,
+    ):
+        segmented_calls.append(evidence_pack_result)
+        return _schema_contract_segmented_zh_markdown()
 
     monkeypatch.setattr(
         "packages.agents.writer.logic.build_writer_evidence_pack",
@@ -8795,19 +8891,20 @@ def test_real_schema_first_still_uses_structured_writer_when_pack_requires_segme
     )
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
-        fake_structured_report,
+        fail_if_structured_report_called,
     )
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_segmented_report_markdown",
-        fail_if_segmented_writer_called,
+        fake_segmented_report,
     )
 
     asyncio.run(service._real_writer_step(record))
 
-    assert structured_calls
-    assert structured_calls[0].metrics.segmented_writer_required is True
+    assert segmented_calls
+    assert segmented_calls[0].metrics.segmented_writer_required is True
     event_types = [event.type for event in record.events]
-    assert "writer_structured_report_validated" in event_types
+    assert "writer_structured_report_validated" not in event_types
+    assert "writer_publication_contract_validated" in event_types
     assert "writer_markdown_fallback_used" not in event_types
 
 
@@ -8825,15 +8922,37 @@ def test_real_schema_first_writer_fails_closed_when_structured_path_fails(
     record.detail.output_language = "zh-CN"
     record.detail.raw_sources = _structured_writer_raw_sources()
 
-    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
-        raise ValueError("structured section failed")
+    async def fail_if_structured_report_called(
+        self,
+        record,
+        evidence_pack_result,
+        timeout_seconds,
+    ):
+        raise AssertionError("Structured JSON writer must not run")
+
+    async def fake_segmented_report(
+        self,
+        record,
+        *,
+        evidence_pack_result,
+        timeout_seconds,
+        language_guidance,
+        memory_context,
+        layer_context,
+        required_sections,
+    ):
+        raise ValueError("schema-contract segment failed")
 
     async def fail_if_markdown_writer_called(self, record, evidence_pack_result, timeout_seconds):
         raise AssertionError("Markdown fallback must not run for real schema-first reports")
 
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
-        fake_structured_report,
+        fail_if_structured_report_called,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_segmented_report_markdown",
+        fake_segmented_report,
     )
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_markdown_report_from_evidence_pack",
@@ -8849,11 +8968,9 @@ def test_real_schema_first_writer_fails_closed_when_structured_path_fails(
     assert "writer_markdown_fallback_used" not in event_types
 
 
-def test_real_schema_first_scoped_redo_discards_unscoped_recommendation_drift(
+def test_schema_contract_segment_scoped_redo_uses_segment_authoring(
     monkeypatch,
 ) -> None:
-    from packages.agents.writer.structured_renderer import render_structured_report
-
     service = _segmented_writer_service()
     service._settings = replace(
         service._settings,
@@ -8867,53 +8984,50 @@ def test_real_schema_first_scoped_redo_discards_unscoped_recommendation_drift(
     record.detail.execution_mode = "real"
     record.detail.output_language = "en-US"
     record.detail.raw_sources = _structured_writer_raw_sources()
-    previous_snapshot = _structured_writer_fixture_report(record.detail)
-    previous_snapshot.core.executive_summary.recommendation.text = (
-        "GitHub Copilot and Cursor are the risk-adjusted primary choices."
+    record.detail.report_md = _schema_contract_segmented_en_markdown(
+        note="Previous scoped report.",
     )
-    record.structured_report_snapshot = previous_snapshot
-    record.detail.report_md = render_structured_report(previous_snapshot)
     _attach_scoped_structured_writer_redo(
         record,
         subagent="persona",
         competitor="Claude Code",
     )
 
-    candidate = previous_snapshot.model_copy(deep=True)
-    candidate.core.executive_summary.recommendation.text = (
-        "Windsurf is the primary recommendation."
-    )
-    candidate.core.executive_summary.risk_adjusted_rationale.text = (
-        "Windsurf has broad feature coverage."
-    )
+    async def fail_if_structured_report_called(
+        self,
+        record,
+        evidence_pack_result,
+        timeout_seconds,
+    ):
+        raise AssertionError("Structured JSON writer must not run")
 
-    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
-        return candidate
+    async def fake_segment_report(self, record, evidence_pack_result, timeout_seconds):
+        return _schema_contract_segmented_en_markdown(
+            note="Scoped schema-contract segment update.",
+        )
 
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
-        fake_structured_report,
+        fail_if_structured_report_called,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_schema_contract_segment_report",
+        fake_segment_report,
     )
 
     asyncio.run(service._real_writer_step(record))
 
     assert "GitHub Copilot and Cursor" in record.detail.report_md
-    assert "Windsurf is the primary recommendation" not in record.detail.report_md
-    assert record.structured_report_snapshot == previous_snapshot
-    assert not any(
-        event.type == "writer_structured_repair_failed_preserved_previous"
-        for event in record.events
-    )
-    assert "writer_schema_first_failed_closed" not in [
-        event.type for event in record.events
-    ]
+    assert "Scoped schema-contract segment update" in record.detail.report_md
+    event_types = [event.type for event in record.events]
+    assert "writer_structured_report_validated" not in event_types
+    assert "writer_publication_contract_validated" in event_types
+    assert "writer_schema_first_failed_closed" not in event_types
 
 
-def test_real_schema_first_scoped_redo_merges_scoped_section_and_discards_unscoped_recommendation_drift(  # noqa: E501
+def test_schema_contract_segment_scoped_redo_preserves_previous_report_on_segment_error(
     monkeypatch,
 ) -> None:
-    from packages.agents.writer.structured_renderer import render_structured_report
-
     service = _segmented_writer_service()
     service._settings = replace(
         service._settings,
@@ -8927,172 +9041,46 @@ def test_real_schema_first_scoped_redo_merges_scoped_section_and_discards_unscop
     record.detail.execution_mode = "real"
     record.detail.output_language = "en-US"
     record.detail.raw_sources = _structured_writer_raw_sources()
-    previous_snapshot = _structured_writer_fixture_report(record.detail)
-    previous_snapshot.core.executive_summary.recommendation.text = (
-        "GitHub Copilot and Cursor are the risk-adjusted primary choices."
+    record.detail.report_md = _schema_contract_segmented_en_markdown(
+        note="Previous report must remain.",
     )
-    previous_snapshot.core.user_review_themes.cross_competitor_patterns[0].text = (
-        "Previous persona pattern."
-    )
-    record.structured_report_snapshot = previous_snapshot
-    record.detail.report_md = render_structured_report(previous_snapshot)
     _attach_scoped_structured_writer_redo(
         record,
         subagent="persona",
         competitor="Claude Code",
     )
 
-    candidate = previous_snapshot.model_copy(deep=True)
-    candidate.core.executive_summary.recommendation.text = (
-        "Windsurf is the primary recommendation."
-    )
-    candidate.core.executive_summary.risk_adjusted_rationale.text = (
-        "Windsurf has broad feature coverage."
-    )
-    candidate.core.user_review_themes.cross_competitor_patterns[0].text = (
-        "Updated Claude Code persona evidence supports terminal-heavy teams."
-    )
+    async def fail_if_structured_report_called(
+        self,
+        record,
+        evidence_pack_result,
+        timeout_seconds,
+    ):
+        raise AssertionError("Structured JSON writer must not run")
 
-    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
-        return candidate
+    async def fake_segment_report(self, record, evidence_pack_result, timeout_seconds):
+        raise ValueError("schema-contract segment scoped redo failed")
 
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
-        fake_structured_report,
+        fail_if_structured_report_called,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_schema_contract_segment_report",
+        fake_segment_report,
     )
 
     asyncio.run(service._real_writer_step(record))
 
     assert "GitHub Copilot and Cursor" in record.detail.report_md
-    assert "Windsurf is the primary recommendation" not in record.detail.report_md
-    assert "Updated Claude Code persona evidence" in record.detail.report_md
-    assert (
-        record.structured_report_snapshot.core.executive_summary.recommendation.text
-        == "GitHub Copilot and Cursor are the risk-adjusted primary choices."
-    )
-    assert (
-        record.structured_report_snapshot.core.user_review_themes.cross_competitor_patterns[
-            0
-        ].text
-        == "Updated Claude Code persona evidence supports terminal-heavy teams."
-    )
-    assert not any(
-        event.type == "writer_structured_repair_failed_preserved_previous"
-        for event in record.events
-    )
-
-
-def test_real_schema_first_scoped_redo_uses_markdown_previous_recommendation_without_snapshot(  # noqa: E501
-    monkeypatch,
-) -> None:
-    service = _segmented_writer_service()
-    service._settings = replace(
-        service._settings,
-        writer_structured_report_enabled=True,
-        writer_timeout_seconds=10,
-    )
-    record = _segmented_writer_record(
-        service,
-        competitors=["Claude Code", "Cursor", "Windsurf"],
-    )
-    record.detail.execution_mode = "real"
-    record.detail.output_language = "en-US"
-    record.detail.raw_sources = _structured_writer_raw_sources()
-    record.detail.report_md = (
-        "## Executive Summary\n"
-        "- Recommendation: GitHub Copilot and Cursor are the risk-adjusted primary choices. "
-        "[source:raw-source-a]\n"
-    )
-    _attach_scoped_structured_writer_redo(
-        record,
-        subagent="persona",
-        competitor="Claude Code",
-    )
-    candidate = _structured_writer_fixture_report(record.detail)
-    candidate.core.executive_summary.recommendation.text = (
-        "Windsurf is the primary recommendation."
-    )
-    candidate.core.executive_summary.risk_adjusted_rationale.text = (
-        "Windsurf has broad feature coverage."
-    )
-
-    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
-        return candidate
-
-    monkeypatch.setattr(
-        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
-        fake_structured_report,
-    )
-
-    asyncio.run(service._real_writer_step(record))
-
-    assert "GitHub Copilot and Cursor" in record.detail.report_md
-    assert "Windsurf is the primary recommendation" not in record.detail.report_md
-    event = next(
-        event
-        for event in record.events
-        if event.type == "writer_structured_repair_failed_preserved_previous"
-    )
-    assert event.payload["previous_report_preserved"] is True
-    assert "recommendation changed" in event.payload["reason"]
-    assert "writer_schema_first_failed_closed" not in [
-        event.type for event in record.events
-    ]
-
-
-def test_real_schema_first_scoped_redo_preserves_previous_report_on_structured_section_regression(  # noqa: E501
-    monkeypatch,
-) -> None:
-    from packages.agents.writer.structured_renderer import render_structured_report
-
-    service = _segmented_writer_service()
-    service._settings = replace(
-        service._settings,
-        writer_structured_report_enabled=True,
-        writer_timeout_seconds=10,
-    )
-    record = _segmented_writer_record(
-        service,
-        competitors=["Claude Code", "Cursor", "Windsurf"],
-    )
-    record.detail.execution_mode = "real"
-    record.detail.output_language = "en-US"
-    record.detail.raw_sources = _structured_writer_raw_sources()
-    previous_snapshot = _structured_writer_fixture_report(record.detail)
-    previous_snapshot.core.user_review_themes.cross_competitor_patterns[0].text = (
-        "Previous persona pattern includes adoption blocker, buyer context, "
-        "switching trigger, and evidence caveat with enough detail."
-    )
-    record.structured_report_snapshot = previous_snapshot
-    record.detail.report_md = render_structured_report(previous_snapshot)
-    _attach_scoped_structured_writer_redo(
-        record,
-        subagent="persona",
-        competitor="Claude Code",
-    )
-    candidate = previous_snapshot.model_copy(deep=True)
-    candidate.core.user_review_themes.cross_competitor_patterns[0].text = "Thin."
-    candidate.core.user_review_themes.competitor_themes[0].direct_user_signals = []
-
-    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
-        return candidate
-
-    monkeypatch.setattr(
-        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
-        fake_structured_report,
-    )
-
-    asyncio.run(service._real_writer_step(record))
-
-    assert "Previous persona pattern includes adoption blocker" in record.detail.report_md
-    assert "Thin." not in record.detail.report_md
-    assert record.structured_report_snapshot == previous_snapshot
+    assert "Previous report must remain" in record.detail.report_md
     event = next(
         event
         for event in record.events
         if event.type == "writer_schema_first_failed_closed"
     )
-    assert "scoped structured section regressed" in event.payload["reason"]
+    assert event.payload["previous_report_preserved"] is True
+    assert "schema-contract segment scoped redo failed" in event.payload["reason"]
 
 
 def test_markdown_writer_still_runs_when_structured_flag_disabled(monkeypatch) -> None:
@@ -9113,9 +9101,16 @@ def test_markdown_writer_still_runs_when_structured_flag_disabled(monkeypatch) -
     async def fake_markdown_writer(self, record, evidence_pack_result, timeout_seconds):
         return "## 执行摘要\n\nFallback-disabled-path report. [source:raw-source-a]\n"
 
+    async def fail_if_segmented_writer_called(self, *args, **kwargs):
+        raise AssertionError("Segmented writer should not run when flag is disabled")
+
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
         fail_if_structured_writer_called,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_segmented_report_markdown",
+        fail_if_segmented_writer_called,
     )
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_markdown_report_from_evidence_pack",
@@ -9126,6 +9121,9 @@ def test_markdown_writer_still_runs_when_structured_flag_disabled(monkeypatch) -
 
     assert record.detail.status != "failed"
     assert "Fallback-disabled-path report" in record.detail.report_md
+    event_types = [event.type for event in record.events]
+    assert "writer_publication_contract_validated" not in event_types
+    assert "writer_markdown_fallback_used" not in event_types
 
 
 def test_structured_repair_selection_not_emitted_when_markdown_fallback_used(
@@ -9147,13 +9145,26 @@ def test_structured_repair_selection_not_emitted_when_markdown_fallback_used(
     record.detail.raw_sources = _structured_writer_raw_sources()
     _attach_structured_writer_redo(record)
 
-    async def fake_structured_report(
+    async def fail_if_structured_report_called(
         self,
         record,
         evidence_pack_result,
         timeout_seconds,
     ):
-        raise ValueError("structured section failed")
+        raise AssertionError("Structured JSON writer must not run")
+
+    async def fake_segmented_report(
+        self,
+        record,
+        *,
+        evidence_pack_result,
+        timeout_seconds,
+        language_guidance,
+        memory_context,
+        layer_context,
+        required_sections,
+    ):
+        raise ValueError("schema-contract segment failed")
 
     async def fake_markdown_writer(
         self,
@@ -9165,7 +9176,11 @@ def test_structured_repair_selection_not_emitted_when_markdown_fallback_used(
 
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
-        fake_structured_report,
+        fail_if_structured_report_called,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_segmented_report_markdown",
+        fake_segmented_report,
     )
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_markdown_report_from_evidence_pack",
