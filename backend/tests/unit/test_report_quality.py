@@ -2309,6 +2309,39 @@ def test_writer_hardening_generates_chinese_review_and_swot_headings() -> None:
     assert "证据缺口（Evidence gap）" in report
 
 
+def test_writer_hardening_does_not_add_citations_to_markers_or_tables() -> None:
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="hardening-marker-table-citations",
+        execution_mode="real",
+        source_count=2,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    markdown = """# Cursor vs Copilot
+
+<!-- report-section:key=executive_summary layer=core -->
+
+## Executive Takeaway
+Cursor has a clearer pricing story for small engineering teams.
+
+| Source ID | Title | Notes |
+| --- | --- | --- |
+| source-0 | Cursor pricing | Verified pricing evidence |
+""".strip()
+
+    report = writer._harden_report_markdown(detail, markdown)
+    lines = report.splitlines()
+
+    assert any("[source:" in line for line in lines if "clearer pricing story" in line)
+    assert all(
+        "[source:" not in line
+        for line in lines
+        if line.startswith("<!-- report-section:")
+    )
+    assert all("[source:" not in line for line in lines if line.startswith("|"))
+
+
 def test_writer_hardening_keeps_layer_specific_report_floor() -> None:
     writer = _WriterHarness()
     expected_sections = {

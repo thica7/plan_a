@@ -181,6 +181,43 @@ def test_structured_scoped_regression_problem_detects_thinned_scoped_section() -
     assert "user_review_themes" in problem
 
 
+def test_structured_scoped_regression_allows_minor_source_count_variation() -> None:
+    from test_writer_structured_renderer import _report
+
+    previous = _report("en-US")
+    merged = previous.model_copy(deep=True)
+    previous_source_ids = [f"raw-source-{index}" for index in range(62)]
+    previous.core.competitor_deep_dives[0].positioning[0].source_ids = previous_source_ids
+    merged.core.competitor_deep_dives[0].positioning[0].source_ids = previous_source_ids[:-1]
+
+    problem = structured_scoped_regression_problem(
+        previous=previous,
+        merged=merged,
+        affected_keys={"competitor_deep_dives"},
+    )
+
+    assert problem is None
+
+
+def test_structured_scoped_regression_detects_material_source_count_loss() -> None:
+    from test_writer_structured_renderer import _report
+
+    previous = _report("en-US")
+    merged = previous.model_copy(deep=True)
+    previous_source_ids = [f"raw-source-{index}" for index in range(10)]
+    previous.core.competitor_deep_dives[0].positioning[0].source_ids = previous_source_ids
+    merged.core.competitor_deep_dives[0].positioning[0].source_ids = previous_source_ids[:4]
+
+    problem = structured_scoped_regression_problem(
+        previous=previous,
+        merged=merged,
+        affected_keys={"competitor_deep_dives"},
+    )
+
+    assert problem is not None
+    assert "source_id_count" in problem
+
+
 def test_previous_recommendation_posture_uses_structured_report_first() -> None:
     from test_writer_structured_renderer import _report
 

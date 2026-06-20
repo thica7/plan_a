@@ -5112,6 +5112,10 @@ class WriterAgentMixin:
         stripped = line.strip()
         if not stripped:
             return False
+        if stripped.startswith("<!--") and "report-section:" in stripped:
+            return False
+        if stripped.startswith("|"):
+            return False
         if stripped.startswith("#"):
             return False
         if set(stripped) <= {"-", " ", "|", ":"}:

@@ -9,6 +9,8 @@ from packages.schema.models import RedoScope
 
 
 _SOURCE_TOKEN_RE = re.compile(r"\[source:[^\]]+\]")
+_SOURCE_ID_REGRESSION_MIN_LOSS = 2
+_SOURCE_ID_REGRESSION_MAX_RETAINED_RATIO = 0.8
 _RECOMMENDATION_MARKER_RE = re.compile(
     r"^\s*(?:[-*]\s*)?(?:recommendation|推荐|建议|采购建议|推荐决策)\s*[:：]\s*(.+)$",
     re.IGNORECASE,
@@ -116,14 +118,23 @@ def structured_scoped_regression_problem(
                 f"{key} scoped structured section regressed: claim_count "
                 f"{previous_metrics['claim_count']} -> {merged_metrics['claim_count']}"
             )
+        previous_source_count = previous_metrics["source_id_count"]
+        merged_source_count = merged_metrics["source_id_count"]
+        source_loss = previous_source_count - merged_source_count
+        source_loss_threshold = max(
+            _SOURCE_ID_REGRESSION_MIN_LOSS,
+            int(previous_source_count * (1 - _SOURCE_ID_REGRESSION_MAX_RETAINED_RATIO)),
+        )
         if (
-            previous_metrics["source_id_count"] >= 2
-            and merged_metrics["source_id_count"] < previous_metrics["source_id_count"]
+            previous_source_count >= 3
+            and source_loss >= source_loss_threshold
+            and merged_source_count
+            < int(previous_source_count * _SOURCE_ID_REGRESSION_MAX_RETAINED_RATIO)
         ):
             return (
                 f"{key} scoped structured section regressed: source_id_count "
-                f"{previous_metrics['source_id_count']} -> "
-                f"{merged_metrics['source_id_count']}"
+                f"{previous_source_count} -> "
+                f"{merged_source_count}"
             )
         previous_claims = _text_claims_by_path(previous_section)
         merged_claims = _text_claims_by_path(merged_section)
