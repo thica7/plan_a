@@ -7,6 +7,7 @@ from datetime import datetime
 import pytest
 
 from packages.agents import SubagentContext
+from packages.agents.writer.assembler import ReportSectionFragment
 from packages.agents.writer.repair import build_writer_repair_plan
 from packages.agents.writer.structured_report import StructuredReport
 from packages.business_intel.homepage import HomepageVerification
@@ -10332,6 +10333,67 @@ async def test_segmented_writer_assembles_duplicate_sections_before_return(
 
 
 @pytest.mark.asyncio
+async def test_segmented_writer_assembly_telemetry_preserves_keyed_duplicates(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-keyed-duplicate-telemetry",
+    )
+    pack = _SegmentedWriterFakePack(segments=[])
+
+    async def fake_segment_parts(*args, **kwargs):
+        return [
+            ReportSectionFragment(
+                markdown="Decision from shard one [source:cursor-pricing].",
+                section_key="decision_summary",
+                layer="core",
+                segment_name="decision_summary sources:1",
+            ),
+            ReportSectionFragment(
+                markdown="Decision from shard two [source:cursor-pricing].",
+                section_key="decision_summary",
+                layer="core",
+                segment_name="decision_summary sources:2",
+            ),
+        ]
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(service, "_writer_segment_markdown_parts", fake_segment_parts)
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
+
+    report = await service._writer_segmented_report_markdown(
+        record,
+        evidence_pack_result=pack,
+        timeout_seconds=60,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    assembly_event = next(
+        event for event in record.events if event.type == "writer_assembly_completed"
+    )
+    payload = assembly_event.payload
+    assert report.count("## Decision Summary") == 1
+    assert payload["duplicate_section_count_before"] == 1
+    assert payload["merged_section_keys"] == ["decision_summary"]
+    assert payload["legacy_heading_duplicate_section_count_before"] == 0
+    assert payload["legacy_heading_merged_section_keys"] == []
+
+
+@pytest.mark.asyncio
 async def test_segmented_writer_fails_when_contract_retry_still_invalid(
     monkeypatch,
 ) -> None:
@@ -11696,8 +11758,102 @@ async def test_writer_section_repair_synthesizes_evidence_shards_once(
 
     assert calls == ["evidence_shard", "evidence_shard", "section_fragment"]
     assert result.count("## Decision Summary") == 1
-    assert result.count("## Competitive Findings") == 1
+    assert "## Competitive Findings" not in result
     assert "Repaired shard note" in result
+    assert "Repaired shard finding" not in result
+
+
+@pytest.mark.asyncio
+async def test_writer_section_repair_keeps_allowed_h2s_for_segment_group_key(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-repair-swot-evidence-shards",
+        competitors=["Cursor"],
+    )
+
+    class FakeMetrics:
+        segmented_writer_required = True
+
+    class FakeEvidencePackResult:
+        metrics = FakeMetrics()
+
+        def telemetry_payload(self):
+            return {
+                "raw_source_count": 1,
+                "represented_source_count": 1,
+                "dropped_source_count": 0,
+                "segmented_writer_required": True,
+            }
+
+        def preflight_errors(self):
+            return []
+
+        def repair_segment_inputs(self, sections):
+            assert list(sections) == ["swot_matrix"]
+            return [
+                {
+                    "repair_sections": ["swot_matrix"],
+                    "segments": [
+                        {
+                            "schema_version": "writer_evidence_pack.v1",
+                            "segment_name": "swot_matrix",
+                            "segment_kind": "evidence_shard",
+                            "section_id": "swot_matrix",
+                            "output_language": "en-US",
+                            "segment_batch": "sources:1",
+                            "segment_input_chars": 2000,
+                            "allowed_source_ids": ["raw-source-a"],
+                            "groups": [],
+                            "sources": [],
+                        }
+                    ],
+                    "allowed_source_ids": ["raw-source-a"],
+                    "repair_part": 1,
+                    "repair_part_count": 1,
+                    "repair_input_chars": 2000,
+                }
+            ]
+
+        def validate_segment_citations(self, markdown, *, allowed_source_ids):
+            return [
+                source_id
+                for source_id in source_tokens(markdown)
+                if source_id not in allowed_source_ids
+            ]
+
+        def sanitize_segment_citations(self, markdown, *, allowed_source_ids):
+            return markdown
+
+    async def fake_segment_writer(*args, **kwargs):
+        segment = kwargs["segment"]
+        if segment["segment_kind"] == "evidence_shard":
+            return "- SWOT shard note [source:raw-source-a]"
+        return (
+            "## Side-by-Side Decision Matrix\n"
+            "Matrix repair stays with swot_matrix group keys. [source:raw-source-a]\n\n"
+            "## SWOT Analysis\n"
+            "SWOT repair stays with swot_matrix group keys. [source:raw-source-a]"
+        )
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: FakeEvidencePackResult(),
+    )
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+
+    result = await service._writer_section_repair_markdown(
+        record,
+        sections=["swot_matrix"],
+        previous_report="## SWOT Analysis\nThin.",
+    )
+
+    assert "## Side-by-Side Decision Matrix" in result
+    assert "## SWOT Analysis" in result
+    assert "Matrix repair stays" in result
+    assert "SWOT repair stays" in result
 
 
 @pytest.mark.asyncio

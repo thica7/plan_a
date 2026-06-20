@@ -33,6 +33,7 @@ from packages.agents.writer.repair import (
 )
 from packages.agents.writer.segment_contract import (
     CORE_HEADING_KEYS,
+    SECTION_ALLOWED_KEYS,
     SegmentContract,
     SUPPORT_HEADING_KEYS,
     heading_key_for,
@@ -2234,12 +2235,18 @@ class WriterAgentMixin:
             output_language=detail.output_language,
             competitors=detail.plan.competitors,
         )
+        legacy_heading_telemetry = self._writer_legacy_heading_assembly_telemetry(
+            sections,
+            output_language=detail.output_language,
+        )
         assembly_telemetry = {
             **assembled.telemetry,
             **self._writer_segment_fragment_telemetry(sections),
-            **self._writer_legacy_heading_assembly_telemetry(
-                sections,
-                output_language=detail.output_language,
+            "legacy_heading_duplicate_section_count_before": (
+                legacy_heading_telemetry["duplicate_section_count_before"]
+            ),
+            "legacy_heading_merged_section_keys": (
+                legacy_heading_telemetry["merged_section_keys"]
             ),
         }
         await self.emit(
@@ -3273,8 +3280,13 @@ class WriterAgentMixin:
                 layer_context=self._writer_layer_context(detail),
                 required_sections=self._writer_required_sections(detail),
             )
-            return self._join_section_repair_parts(
+            repaired_parts = self._filter_section_repair_parts_to_requested_sections(
                 [fragment.markdown for fragment in repaired_fragments],
+                sections=sections,
+                output_language=detail.output_language,
+            )
+            return self._join_section_repair_parts(
+                repaired_parts,
                 section_headings,
             )
 
@@ -3326,6 +3338,85 @@ class WriterAgentMixin:
         except KeyError:
             heading = section
         return f"{section} -> ## {heading}"
+
+    def _filter_section_repair_parts_to_requested_sections(
+        self,
+        parts: Sequence[str],
+        *,
+        sections: Sequence[str],
+        output_language: object,
+    ) -> list[str]:
+        output_language_text = str(output_language)
+        requested_keys = self._requested_section_keys(sections, output_language_text)
+        if not requested_keys:
+            return list(parts)
+
+        filtered_parts: list[str] = []
+        for part in parts:
+            filtered_part = self._filter_section_repair_part_to_requested_sections(
+                part,
+                requested_keys=requested_keys,
+                output_language=output_language_text,
+            )
+            if filtered_part is None:
+                filtered_parts.append(part)
+            elif filtered_part:
+                filtered_parts.append(filtered_part)
+        return filtered_parts
+
+    def _requested_section_keys(
+        self,
+        sections: Sequence[str],
+        output_language: str,
+    ) -> set[str]:
+        requested_keys: set[str] = set()
+        for section in sections:
+            section_text = str(section).strip()
+            if not section_text:
+                continue
+            requested_keys.add(section_text)
+            if (
+                section_text not in CORE_HEADING_KEYS
+                and section_text not in SUPPORT_HEADING_KEYS
+            ):
+                requested_keys.update(SECTION_ALLOWED_KEYS.get(section_text, ()))
+            section_heading_key = heading_key_for(section_text, output_language)
+            if section_heading_key is not None:
+                requested_keys.add(section_heading_key)
+            try:
+                label_key = heading_key_for(
+                    report_label(output_language, section_text),
+                    output_language,
+                )
+            except KeyError:
+                label_key = None
+            if label_key is not None:
+                requested_keys.add(label_key)
+        return requested_keys
+
+    def _filter_section_repair_part_to_requested_sections(
+        self,
+        part: str,
+        *,
+        requested_keys: set[str],
+        output_language: str,
+    ) -> str | None:
+        matches = list(re.finditer(r"(?m)^##\s+(.+?)\s*$", part))
+        if not matches:
+            return None
+
+        blocks: list[str] = []
+        for index, match in enumerate(matches):
+            heading_key = heading_key_for(match.group(1), output_language)
+            if heading_key not in requested_keys:
+                continue
+            next_match = matches[index + 1] if index + 1 < len(matches) else None
+            block = part[
+                match.start() : next_match.start() if next_match else None
+            ].strip()
+            if block:
+                blocks.append(block)
+        return "\n\n".join(blocks).strip()
 
     def _join_section_repair_parts(
         self,
