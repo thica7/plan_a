@@ -29,12 +29,15 @@ export function buildReportSourceBundle(
     for (const alias of evidenceRawSourceAliases(item)) {
       aliases[alias] = item.raw_source_id;
     }
-    const candidateOrigin = item.metadata.collector_candidate_origin
-      ? String(item.metadata.collector_candidate_origin)
-      : "enterprise_evidence";
-    const fetchMethod = item.metadata.collector_fetch_method
-      ? String(item.metadata.collector_fetch_method)
-      : "enterprise_projection";
+    const candidateOrigin =
+      metadataText(item.metadata, "kb_collector_candidate_origin") ??
+      metadataText(item.metadata, "collector_candidate_origin") ??
+      (metadataText(item.metadata, "kb_sync") ? "rag_kb" : "enterprise_evidence");
+    const fetchMethod =
+      metadataText(item.metadata, "kb_collector_fetch_method") ??
+      metadataText(item.metadata, "collector_fetch_method") ??
+      "enterprise_projection";
+    const candidateConfidence = metadataNumber(item.metadata, "kb_collector_confidence");
     sources.push({
       id: item.raw_source_id,
       competitor: competitorName,
@@ -48,7 +51,7 @@ export function buildReportSourceBundle(
       confidence: item.reliability_score,
       candidate_origin: candidateOrigin,
       candidate_rank: null,
-      candidate_confidence: null,
+      candidate_confidence: candidateConfidence,
       fetch_method: fetchMethod,
       quality_score: item.reliability_score,
       failure_reason: null,
@@ -62,8 +65,30 @@ export function buildReportSourceBundle(
 
 function evidenceRawSourceAliases(item: EvidenceRecord): string[] {
   const aliases = item.metadata.raw_source_aliases;
-  if (!Array.isArray(aliases)) return [];
-  return aliases
-    .map((alias) => String(alias).trim())
-    .filter((alias) => alias.length > 0 && alias !== item.raw_source_id);
+  const normalizedAliases = Array.isArray(aliases)
+    ? aliases.map((alias) => String(alias).trim())
+    : [];
+  const kbRawSourceId = metadataText(item.metadata, "kb_raw_source_id");
+  if (kbRawSourceId) normalizedAliases.push(kbRawSourceId);
+  return normalizedAliases.filter(
+    (alias, index, values) =>
+      alias.length > 0 && alias !== item.raw_source_id && values.indexOf(alias) === index,
+  );
+}
+
+function metadataText(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key];
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "boolean") return value ? "true" : null;
+  return null;
+}
+
+function metadataNumber(metadata: Record<string, unknown>, key: string): number | null {
+  const value = metadata[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
