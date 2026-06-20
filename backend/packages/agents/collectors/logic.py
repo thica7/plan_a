@@ -61,6 +61,22 @@ USER_RESEARCH_SOURCE_TYPES = {
     "manual",
 }
 
+KB_INGEST_ALLOWED_SOURCE_TYPES = {
+    "official",
+    "official_site",
+    "official_docs",
+    "official_pricing",
+    "official_api",
+    "trust_center",
+    "webpage_verified",
+    "verified_webpage",
+    "verified_document",
+    "review_site",
+    "manual_transcript",
+    "manual_note",
+    "manual",
+}
+
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
 
@@ -535,6 +551,212 @@ class CollectorAgentMixin:
         )
         self._extend_source_batch(sources, pipeline_sources, target_source_count)
         return sources
+
+    async def _collect_competitor_from_kb(
+        self,
+        record: RunRecord,
+        detail: RunDetail,
+        dimension: str,
+        competitor: str,
+        context: SubagentContext,
+        *,
+        target_source_count: int,
+    ) -> list[RawSource]:
+        query = self._kb_retrieval_query(detail, competitor, dimension)
+        request = {
+            "query": query,
+            "competitors": [competitor],
+            "dimensions": [dimension],
+            "top_k": max(target_source_count * 3, 5),
+            "mode": "sparse",
+        }
+        try:
+            from packages.tools.rag_retrieve import rag_retrieve_tool
+
+            raw_hits = await rag_retrieve_tool.ainvoke(request)
+        except Exception as exc:  # noqa: BLE001 - KB reuse is a warm-start, not a hard dependency.
+            self._trace_local_tool(
+                record,
+                agent="collector",
+                subagent=context.subagent,
+                name="rag_kb_warm_start",
+                input_text=json.dumps(request, ensure_ascii=False),
+                output_text=json.dumps({"error": str(exc), "degraded": True}, ensure_ascii=False),
+                context=context,
+                metadata={"degraded": True, "source_count": 0},
+            )
+            return []
+
+        hits = raw_hits if isinstance(raw_hits, list) else []
+        sources: list[RawSource] = []
+        rejections: list[dict[str, object]] = []
+        for rank, hit in enumerate(hits):
+            if not isinstance(hit, dict):
+                rejections.append({"rank": rank, "reason": "invalid_hit"})
+                continue
+            source = self._raw_source_from_kb_hit(
+                detail,
+                competitor,
+                dimension,
+                hit,
+                rank=rank,
+                query=query,
+            )
+            if source is None:
+                rejections.append({"rank": rank, "reason": "unusable_hit"})
+                continue
+            if self._candidate_already_collected(
+                detail,
+                sources,
+                competitor=competitor,
+                dimension=dimension,
+                url=str(source.url) if source.url else None,
+            ):
+                rejections.append(
+                    {
+                        "rank": rank,
+                        "reason": "duplicate_source",
+                        "source_id": source.id,
+                    }
+                )
+                continue
+            problem = self._source_quality_problem(source)
+            if problem is not None:
+                rejections.append(
+                    {
+                        "rank": rank,
+                        "reason": "source_quality_problem",
+                        "source_id": source.id,
+                        "detail": problem,
+                    }
+                )
+                continue
+            sources.append(source)
+            if len(sources) >= target_source_count:
+                break
+
+        self._trace_local_tool(
+            record,
+            agent="collector",
+            subagent=context.subagent,
+            name="rag_kb_warm_start",
+            input_text=json.dumps(request, ensure_ascii=False),
+            output_text=json.dumps(
+                {
+                    "hit_count": len(hits),
+                    "source_ids": [source.id for source in sources],
+                    "rejections": rejections[:8],
+                },
+                ensure_ascii=False,
+            ),
+            context=context,
+            metadata={
+                "hit_count": len(hits),
+                "source_count": len(sources),
+                "rejection_count": len(rejections),
+            },
+        )
+        return sources
+
+    def _kb_retrieval_query(self, detail: RunDetail, competitor: str, dimension: str) -> str:
+        skill = self._skill_registry.get(dimension)
+        parts = [
+            self._web_search_query(detail, competitor, dimension),
+            detail.topic,
+            competitor,
+            dimension,
+            skill.description if skill is not None else "",
+        ]
+        seen: set[str] = set()
+        terms: list[str] = []
+        for part in parts:
+            value = " ".join(str(part).split())
+            key = value.casefold()
+            if not value or key in seen:
+                continue
+            seen.add(key)
+            terms.append(value)
+        return " ".join(terms)
+
+    def _raw_source_from_kb_hit(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+        hit: dict[str, object],
+        *,
+        rank: int,
+        query: str,
+    ) -> RawSource | None:
+        text = str(hit.get("text") or "").strip()
+        url = str(hit.get("url") or "").strip()
+        if not text or not url.startswith(("http://", "https://")):
+            return None
+        source_type = (
+            str(hit.get("source_type") or "webpage_verified").strip()
+            or "webpage_verified"
+        )
+        if source_type in {"llm_public_knowledge", "web_search_result"}:
+            return None
+        title = str(hit.get("title") or f"{competitor} {dimension} KB evidence").strip()
+        snippet = self._dimension_evidence_snippet(text, dimension, text[:1000])
+        content_hash = str(hit.get("content_hash") or "").strip() or hashlib.sha256(
+            text.encode("utf-8", errors="ignore")
+        ).hexdigest()[:16]
+        score = self._coerce_confidence(
+            hit.get("rerank_score") if hit.get("rerank_score") is not None else hit.get("score"),
+            default=0.5,
+        )
+        confidence = max(
+            0.89,
+            min(0.96, 0.86 + score * 0.10),
+            self._verified_source_confidence(detail, competitor, dimension, url, snippet),
+        )
+        metadata = {
+            "kb_retrieved": True,
+            "kb_retrieval_query": query,
+            "kb_document_id": str(hit.get("document_id") or ""),
+            "kb_chunk_id": str(hit.get("chunk_id") or ""),
+            "kb_hit_score": score,
+            "kb_rerank_score": hit.get("rerank_score"),
+            "kb_source_type": source_type,
+            "kb_competitor": str(hit.get("competitor") or ""),
+            "kb_dimension": str(hit.get("dimension") or ""),
+            "kb_document_status": str(hit.get("status") or "active"),
+            "kb_fetched_at": str(hit.get("fetched_at") or ""),
+            "kb_last_seen_at": str(hit.get("last_seen_at") or ""),
+            "source_material_level": "kb_retrieval_chunk",
+        }
+        try:
+            return RawSource(
+                id=compute_raw_source_id(
+                    source_type=source_type,
+                    competitor=competitor,
+                    dimension=dimension,
+                    url=url,
+                    content_hash=content_hash,
+                    title=title,
+                    snippet=snippet,
+                    run_id=detail.id,
+                    source_role="kb-retrieved",
+                ),
+                competitor=competitor,
+                dimension=dimension,
+                source_type=source_type,
+                title=title,
+                url=url,
+                snippet=snippet,
+                content_hash=content_hash,
+                confidence=confidence,
+                candidate_origin="rag_kb",
+                candidate_rank=rank,
+                candidate_confidence=score,
+                fetch_method="rag_kb_retrieve",
+                quality_score=confidence,
+                metadata=metadata,
+            )
+        except Exception:
+            return None
 
     async def _collect_competitor_with_research_pipeline(
         self,
@@ -1953,6 +2175,20 @@ class CollectorAgentMixin:
         }
         memory_official_first = self._memory_prefers_official_sources(detail.plan)
         try:
+            kb_sources = await self._collect_competitor_from_kb(
+                record,
+                detail,
+                dimension,
+                competitor,
+                context,
+                target_source_count=target_source_count,
+            )
+            self._extend_source_batch(sources, kb_sources, target_source_count)
+            collect_payload["kb_warm_start_source_count"] = len(kb_sources)
+            collect_payload["kb_warm_start_source_ids"] = [source.id for source in kb_sources]
+        except Exception as exc:  # noqa: BLE001 - KB warm-start must never block collection.
+            collect_payload["kb_warm_start_error"] = str(exc)
+        try:
             sources = await self._collect_competitor_with_web_search(
                 record,
                 dimension,
@@ -2110,6 +2346,105 @@ class CollectorAgentMixin:
             },
         )
 
+    async def _sync_collected_sources_to_kb(
+        self,
+        record: RunRecord,
+        detail: RunDetail,
+        sources: list[RawSource],
+        context: SubagentContext | None = None,
+    ) -> dict[str, object]:
+        try:
+            from packages.tools.ingest_document import ingest_document_tool
+        except Exception as exc:  # noqa: BLE001 - KB persistence is non-blocking.
+            return {"attempted": 0, "ingested": 0, "error": str(exc)}
+
+        attempted = 0
+        ingested = 0
+        skipped: list[dict[str, str]] = []
+        errors: list[str] = []
+        for source in sources:
+            text = self._kb_text_from_raw_source(source)
+            skip_reason = self._kb_ingest_skip_reason(source, text)
+            if skip_reason:
+                skipped.append({"source_id": source.id, "reason": skip_reason})
+                continue
+            attempted += 1
+            try:
+                await ingest_document_tool.ainvoke(
+                    {
+                        "url": str(source.url) if source.url else "",
+                        "title": source.title or source.id,
+                        "text": text[:50000],
+                        "competitor": source.competitor or "",
+                        "dimension": source.dimension or "",
+                        "source_type": source.source_type or "webpage_verified",
+                        "metadata": {
+                            **source.metadata,
+                            "run_id": detail.id,
+                            "raw_source_id": source.id,
+                            "collector_confidence": source.confidence,
+                            "collector_candidate_origin": source.candidate_origin,
+                            "collector_fetch_method": source.fetch_method,
+                        },
+                        "crawl_run_id": detail.id,
+                        "index_vectors": False,
+                    }
+                )
+                ingested += 1
+            except Exception as exc:  # noqa: BLE001 - one bad KB write must not block the run.
+                errors.append(f"{source.id}: {str(exc)[:160]}")
+
+        summary: dict[str, object] = {
+            "attempted": attempted,
+            "ingested": ingested,
+            "skipped": skipped[:12],
+            "errors": errors[:5],
+        }
+        self._trace_local_tool(
+            record,
+            agent="collect_join",
+            subagent="collect_join",
+            name="kb_ingest_collected_sources",
+            input_text=json.dumps(
+                {"source_ids": [source.id for source in sources]}, ensure_ascii=False
+            ),
+            output_text=json.dumps(summary, ensure_ascii=False),
+            context=context,
+            metadata={
+                "attempted": attempted,
+                "ingested": ingested,
+                "skipped": len(skipped),
+                "errors": len(errors),
+            },
+        )
+        return summary
+
+    def _kb_text_from_raw_source(self, source: RawSource) -> str:
+        pieces = [source.title, source.snippet]
+        full_text = source.metadata.get("full_text")
+        if isinstance(full_text, str):
+            pieces.append(full_text)
+        return "\n\n".join(
+            part.strip() for part in pieces if isinstance(part, str) and part.strip()
+        )
+
+    def _kb_ingest_skip_reason(self, source: RawSource, text: str) -> str:
+        if source.metadata.get("kb_retrieved"):
+            return "already_from_kb"
+        if not source.url:
+            return "missing_url"
+        if source.source_type.casefold() not in KB_INGEST_ALLOWED_SOURCE_TYPES:
+            return "source_type_not_allowlisted"
+        if source.failure_reason:
+            return "failed_source"
+        if source.confidence < 0.75:
+            return "low_confidence"
+        if len(text.strip()) < 40:
+            return "text_too_short"
+        if self._source_quality_problem(source) is not None:
+            return "source_quality_problem"
+        return ""
+
     async def _real_collect_join_step(self, record: RunRecord, dimensions: list[str]) -> None:
         detail = record.detail
         before_count = len(detail.raw_sources)
@@ -2146,21 +2481,7 @@ class CollectorAgentMixin:
         detail.raw_sources = self._normalize_collected_sources(detail, dimensions)
         self._annotate_community_claim_clusters(detail, dimensions)
         normalized_count = len(detail.raw_sources)
-        # Auto-ingest collected sources into global KB
-        try:
-            from packages.tools.ingest_document import ingest_document_tool
-            for source in detail.raw_sources:
-                if source.text and source.ok:
-                    await ingest_document_tool.ainvoke({
-                        "url": source.url or "",
-                        "title": source.title or "",
-                        "text": source.text[:50000],
-                        "competitor": source.competitor or "",
-                        "dimension": source.dimension or "",
-                        "source_type": source.source_type or "web",
-                    })
-        except Exception:
-            pass  # Non-fatal: KB ingestion should not block pipeline
+        kb_ingest = await self._sync_collected_sources_to_kb(record, detail, detail.raw_sources)
         self._append_agent_message(
             record,
             from_agent="collect_join",
@@ -2174,6 +2495,7 @@ class CollectorAgentMixin:
                 "source_ids": [
                     source.id for source in detail.raw_sources if source.dimension in dimensions
                 ],
+                "kb_ingest": kb_ingest,
             },
         )
         detail.updated_at = datetime.utcnow()
@@ -2188,6 +2510,7 @@ class CollectorAgentMixin:
                     "before_count": before_count,
                     "after_count": normalized_count,
                     "dimensions": dimensions,
+                    "kb_ingest": kb_ingest,
                 }
             },
         )

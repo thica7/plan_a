@@ -2921,6 +2921,29 @@ def test_writer_grounding_prompt_lists_allowed_sources_and_gap_queries() -> None
     assert "suggested_query=Cursor security Missing official security evidence." in prompt
 
 
+def test_writer_grounding_prompt_reuses_kb_only_via_source_tokens() -> None:
+    import asyncio
+
+    writer = _WriterHarness()
+    detail = _run_detail(
+        run_id="writer-grounding-kb-reuse",
+        execution_mode="real",
+        source_count=1,
+        report_md="",
+        metrics=RunMetrics(),
+    )
+    detail.raw_sources[0].id = "kb-source-1"
+    detail.raw_sources[0].candidate_origin = "rag_kb"
+    detail.raw_sources[0].metadata["kb_document_id"] = "doc-1"
+
+    prompt = asyncio.run(writer._writer_grounding_prompt(detail))
+
+    assert "KB-Reused Evidence" in prompt
+    assert "[source:kb-source-1]" in prompt
+    assert "Additional KB Evidence" not in prompt
+    assert "doc-1" not in prompt
+
+
 def test_writer_grounding_prompt_lists_all_sources_without_duplicating_full_snippets() -> None:
     import asyncio
 

@@ -85,6 +85,9 @@ class RetrievalHit(BaseModel):
     dimension: str | None = None
     source_type: str = ""
     content_hash: str = ""
+    fetched_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    status: str = "active"
 
 
 class RetrievalRequest(BaseModel):
@@ -100,7 +103,7 @@ class RetrievalRequest(BaseModel):
     mmr_lambda: float = Field(default=0.0, ge=0.0, le=1.0)
     enable_query_rewrite: bool = True
     num_rewrites: int = Field(default=3, ge=0, le=5)
-    mode: Literal["dense", "hybrid"] = "hybrid"
+    mode: Literal["dense", "hybrid", "sparse"] = "hybrid"
 
 
 class RetrievalResponse(BaseModel):

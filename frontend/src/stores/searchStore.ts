@@ -11,10 +11,13 @@ export interface RetrievalHit {
   score: number;
   rerank_score: number | null;
   url: string | null;
-  title: string;
+  title: string | null;
   competitor: string | null;
   dimension: string | null;
   source_type: string;
+  fetched_at?: string | null;
+  last_seen_at?: string | null;
+  status?: string;
 }
 
 interface SearchState {

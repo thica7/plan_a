@@ -73,6 +73,7 @@ class RawSourceDigestMessagePayload(_MessagePayload):
     source_ids: list[str] = Field(default_factory=list)
     before_count: int | None = Field(default=None, ge=0)
     after_count: int | None = Field(default=None, ge=0)
+    kb_ingest: dict[str, Any] = Field(default_factory=dict)
 
 
 class CommunitySearchSummaryMessagePayload(_MessagePayload):

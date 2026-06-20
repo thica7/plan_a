@@ -329,7 +329,7 @@ class RetrievalService:
             dense_hits = _normalise_scores(dense_hits)
             self._dense_hits += len(dense_hits)
 
-        if request.mode == "hybrid":
+        if request.mode in {"hybrid", "sparse"}:
             sparse_hits = await self._sparse_search(
                 query,
                 request.top_k,
@@ -381,6 +381,9 @@ class RetrievalService:
                     dimension=doc.dimension,
                     source_type=doc.source_type,
                     content_hash=doc.content_hash,
+                    fetched_at=getattr(doc, "fetched_at", None),
+                    last_seen_at=getattr(doc, "last_seen_at", None),
+                    status=getattr(doc, "status", "active"),
                 ))
         return sparse_hits
 

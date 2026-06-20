@@ -49,8 +49,8 @@ class SparseRepo:
                 id="sparse-doc",
                 url=None,
                 title="Sparse",
-                competitor=None,
-                dimension=None,
+                competitor="Acme",
+                dimension="pricing",
                 source_type="manual",
                 content_hash="hash",
             )
@@ -262,6 +262,32 @@ async def test_retrieval_filters_flow_into_dense_and_sparse_search() -> None:
     assert vector_store.calls[0]["competitors"] == ["Netlify"]
     assert vector_store.calls[0]["dimensions"] == ["security"]
     assert repo.filters == [{"competitors": ["Netlify"], "dimensions": ["security"]}]
+
+
+@pytest.mark.asyncio
+async def test_sparse_mode_uses_sqlite_without_dense_vector_search() -> None:
+    repo = SparseRepo()
+    vector_store = FixedVectorStore()
+    service = RetrievalService(
+        repo=repo,
+        vector_store=vector_store,
+        embed_fn=embed,
+    )
+
+    response = await service.retrieve(
+        RetrievalRequest(
+            query="pricing",
+            mode="sparse",
+            competitors=["Acme"],
+            dimensions=["pricing"],
+            enable_query_rewrite=False,
+            final_top_k=3,
+        )
+    )
+
+    assert vector_store.calls == []
+    assert repo.filters == [{"competitors": ["Acme"], "dimensions": ["pricing"]}]
+    assert [hit.chunk_id for hit in response.hits] == ["sparse"]
 
 
 @pytest.mark.asyncio

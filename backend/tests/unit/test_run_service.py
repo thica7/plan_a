@@ -1,7 +1,7 @@
 import asyncio
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -5050,6 +5050,82 @@ async def test_collect_join_normalizes_covered_competitors_and_dedupes() -> None
     assert len(record.detail.raw_sources) == 1
     assert record.detail.raw_sources[0].covered_competitors == ["A", "B"]
     assert service.get_trace(detail.id)[-1].subagent == "collect_join"
+
+
+@pytest.mark.asyncio
+async def test_collect_join_ingests_verified_raw_sources_into_kb(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    class FakeIngestTool:
+        async def ainvoke(self, payload):  # noqa: ANN001, ANN202
+            calls.append(payload)
+            return "doc-ingested"
+
+    monkeypatch.setattr("packages.tools.ingest_document.ingest_document_tool", FakeIngestTool())
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Collect join KB ingest",
+            competitors=["Acme"],
+            dimensions=["feature"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+    record.detail.raw_sources = [
+        RawSource(
+            id="verified-source",
+            competitor="Acme",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="Acme feature docs",
+            url="https://acme.example/features",
+            snippet=(
+                "Acme supports agentic coding workflows, repository context, "
+                "tool calls, and code generation for developers."
+            ),
+            content_hash="hash-verified",
+            confidence=0.92,
+        ),
+        RawSource(
+            id="weak-source",
+            competitor="Acme",
+            dimension="feature",
+            source_type="llm_public_knowledge",
+            title="Weak public knowledge",
+            url="https://acme.example/weak-public-knowledge",
+            snippet="Acme might support coding.",
+            content_hash="hash-weak",
+            confidence=0.5,
+        ),
+    ]
+
+    await service._real_collect_join_step(record, ["feature"])
+
+    assert len(calls) == 1
+    payload = calls[0]
+    assert payload["url"] == "https://acme.example/features"
+    assert "agentic coding workflows" in str(payload["text"])
+    assert payload["crawl_run_id"] == detail.id
+    assert payload["index_vectors"] is False
+    assert payload["metadata"]["raw_source_id"] == "verified-source"
+    completed = record.detail.agent_messages[-1].payload["kb_ingest"]
+    assert completed["attempted"] == 1
+    assert completed["ingested"] == 1
+    assert completed["skipped"][0]["source_id"] == "weak-source"
+    assert completed["skipped"][0]["reason"] == "source_type_not_allowlisted"
 
 
 @pytest.mark.asyncio
@@ -12389,6 +12465,206 @@ def test_collector_keeps_feature_docs_when_navigation_contains_feature_facts() -
         confidence=0.84,
     )
 
+    assert service._source_quality_problem(source) is None
+
+
+def test_collect_qa_flags_stale_kb_reused_source_for_refresh() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-stale-kb-source",
+        topic="Acme pricing",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="Acme pricing",
+            competitors=["Acme"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="stale-kb-pricing",
+                competitor="Acme",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Acme pricing",
+                url="https://acme.example/pricing",
+                snippet=(
+                    "Acme pricing includes a Pro plan at $20 per month "
+                    "and Team billing for developer teams."
+                ),
+                content_hash="stale-kb-pricing-hash",
+                confidence=0.94,
+                candidate_origin="rag_kb",
+                metadata={
+                    "kb_retrieved": True,
+                    "kb_document_status": "active",
+                    "kb_fetched_at": (_now() - timedelta(days=120)).isoformat(),
+                },
+            )
+        ],
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+    freshness = [
+        issue for issue in issues if issue.field_path == "raw_sources[stale-kb-pricing].freshness"
+    ]
+
+    assert freshness
+    assert freshness[0].severity == "blocker"
+    assert freshness[0].target_agent == "collector"
+    assert freshness[0].redo_scope.kind == "collector"
+    assert "45-day freshness policy" in freshness[0].problem
+
+
+def test_collect_qa_flags_kb_live_source_contradiction() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-kb-live-contradiction",
+        topic="Acme security",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="Acme security",
+            competitors=["Acme"],
+            dimensions=["security"],
+        ),
+        raw_sources=[
+            RawSource(
+                id="kb-security-sso",
+                competitor="Acme",
+                dimension="security",
+                source_type="webpage_verified",
+                title="Acme security docs",
+                url="https://acme.example/security",
+                snippet="Acme supports SSO, SCIM, SOC 2, and audit log controls.",
+                content_hash="kb-security-sso-hash",
+                confidence=0.94,
+                candidate_origin="rag_kb",
+                metadata={
+                    "kb_retrieved": True,
+                    "kb_document_status": "active",
+                    "kb_fetched_at": _now().isoformat(),
+                },
+            ),
+            RawSource(
+                id="live-security-sso",
+                competitor="Acme",
+                dimension="security",
+                source_type="webpage_verified",
+                title="Acme current security notes",
+                url="https://acme.example/security/current",
+                snippet="Acme does not support SSO while SCIM and SOC 2 remain available.",
+                content_hash="live-security-sso-hash",
+                confidence=0.94,
+                candidate_origin="web_fetch",
+            ),
+        ],
+    )
+
+    issues = service._build_collect_qa_issues(detail)
+    contradictions = [
+        issue for issue in issues if issue.field_path == "raw_sources[security][Acme].contradictions"
+    ]
+
+    assert contradictions
+    assert contradictions[0].severity == "blocker"
+    assert contradictions[0].detected_by == "consistency"
+    assert contradictions[0].redo_scope.kind == "collector"
+    assert "support:sso" in contradictions[0].problem
+
+
+@pytest.mark.asyncio
+async def test_collector_warm_starts_from_rag_kb(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeRagTool:
+        async def ainvoke(self, payload):  # noqa: ANN001, ANN202
+            assert payload["mode"] == "sparse"
+            assert payload["competitors"] == ["Acme"]
+            assert payload["dimensions"] == ["feature"]
+            return [
+                {
+                    "chunk_id": "chunk-acme-feature",
+                    "document_id": "doc-acme-feature",
+                    "text": (
+                        "Acme supports agentic coding workflows, repository context, "
+                        "tool calls, and code generation for developer teams."
+                    ),
+                    "score": 0.91,
+                    "url": "https://acme.example/features",
+                    "title": "Acme feature docs",
+                    "competitor": "Acme",
+                    "dimension": "feature",
+                    "source_type": "webpage_verified",
+                    "content_hash": "hash-acme-feature",
+                }
+            ]
+
+    monkeypatch.setattr("packages.tools.rag_retrieve.rag_retrieve_tool", FakeRagTool())
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-kb-warm-start",
+        topic="Acme coding agent",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="Acme coding agent",
+            competitors=["Acme"],
+            dimensions=["feature"],
+            homepage_hints={"Acme": "https://acme.example"},
+        ),
+    )
+    record = RunRecord(detail=detail)
+    context = SubagentContext(run_id=detail.id, agent="collector", subagent="feature::Acme")
+
+    sources = await service._collect_competitor_from_kb(
+        record,
+        detail,
+        "feature",
+        "Acme",
+        context,
+        target_source_count=1,
+    )
+
+    assert len(sources) == 1
+    source = sources[0]
+    assert source.candidate_origin == "rag_kb"
+    assert source.metadata["kb_document_id"] == "doc-acme-feature"
+    assert str(source.url) == "https://acme.example/features"
     assert service._source_quality_problem(source) is None
 
 
