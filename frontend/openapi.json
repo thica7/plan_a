@@ -1792,6 +1792,97 @@
         }
       }
     },
+    "/api/knowledge/documents/rollback": {
+      "post": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Rollback Knowledge Documents",
+        "operationId": "rollback_knowledge_documents_api_knowledge_documents_rollback_post",
+        "parameters": [
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentRollbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeRollbackResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/knowledge/search": {
       "post": {
         "tags": [
@@ -13254,6 +13345,11 @@
             "type": "string",
             "title": "Recommendation",
             "default": ""
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
           }
         },
         "additionalProperties": false,
@@ -15188,6 +15284,61 @@
           "target_document_id"
         ],
         "title": "DocumentMergeRequest"
+      },
+      "DocumentRollbackRequest": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Document Ids"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "raw_source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Source Id"
+          },
+          "crawl_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawl Run Id"
+          },
+          "restore_previous": {
+            "type": "boolean",
+            "title": "Restore Previous",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "DocumentRollbackRequest"
       },
       "EnterpriseRunProjection": {
         "properties": {
@@ -18279,6 +18430,60 @@
           "edges"
         ],
         "title": "KnowledgeGraphReadModel"
+      },
+      "KnowledgeRollbackResult": {
+        "properties": {
+          "matched_count": {
+            "type": "integer",
+            "title": "Matched Count",
+            "default": 0
+          },
+          "rolled_back_count": {
+            "type": "integer",
+            "title": "Rolled Back Count",
+            "default": 0
+          },
+          "restored_count": {
+            "type": "integer",
+            "title": "Restored Count",
+            "default": 0
+          },
+          "archived_document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Archived Document Ids"
+          },
+          "restored_document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Restored Document Ids"
+          },
+          "skipped_document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skipped Document Ids"
+          },
+          "vector_cleanup_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Cleanup Error"
+          }
+        },
+        "type": "object",
+        "title": "KnowledgeRollbackResult",
+        "description": "Result for rolling back polluted knowledge documents."
       },
       "KnowledgeStatsResponse": {
         "properties": {
@@ -21811,6 +22016,11 @@
             "type": "string",
             "title": "Status",
             "default": "active"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
           }
         },
         "type": "object",

@@ -482,6 +482,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/documents/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rollback Knowledge Documents */
+        post: operations["rollback_knowledge_documents_api_knowledge_documents_rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/knowledge/search": {
         parameters: {
             query?: never;
@@ -2783,6 +2800,10 @@ export interface components {
              * @default
              */
             recommendation: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
         };
         /** BusinessQARule */
         BusinessQARule: {
@@ -3632,6 +3653,22 @@ export interface components {
         DocumentMergeRequest: {
             /** Target Document Id */
             target_document_id: string;
+        };
+        /** DocumentRollbackRequest */
+        DocumentRollbackRequest: {
+            /** Document Ids */
+            document_ids?: string[];
+            /** Run Id */
+            run_id?: string | null;
+            /** Raw Source Id */
+            raw_source_id?: string | null;
+            /** Crawl Run Id */
+            crawl_run_id?: string | null;
+            /**
+             * Restore Previous
+             * @default true
+             */
+            restore_previous: boolean;
         };
         /** EnterpriseRunProjection */
         EnterpriseRunProjection: {
@@ -4998,6 +5035,35 @@ export interface components {
              * Format: date-time
              */
             generated_at?: string;
+        };
+        /**
+         * KnowledgeRollbackResult
+         * @description Result for rolling back polluted knowledge documents.
+         */
+        KnowledgeRollbackResult: {
+            /**
+             * Matched Count
+             * @default 0
+             */
+            matched_count: number;
+            /**
+             * Rolled Back Count
+             * @default 0
+             */
+            rolled_back_count: number;
+            /**
+             * Restored Count
+             * @default 0
+             */
+            restored_count: number;
+            /** Archived Document Ids */
+            archived_document_ids?: string[];
+            /** Restored Document Ids */
+            restored_document_ids?: string[];
+            /** Skipped Document Ids */
+            skipped_document_ids?: string[];
+            /** Vector Cleanup Error */
+            vector_cleanup_error?: string | null;
         };
         /** KnowledgeStatsResponse */
         KnowledgeStatsResponse: {
@@ -6484,6 +6550,10 @@ export interface components {
              * @default active
              */
             status: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
         };
         /** RetrievalPreset */
         RetrievalPreset: {
@@ -9624,6 +9694,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeDocument"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rollback_knowledge_documents_api_knowledge_documents_rollback_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentRollbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeRollbackResult"];
                 };
             };
             /** @description Validation Error */
