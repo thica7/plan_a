@@ -1380,6 +1380,40 @@
   overflow-wrap: anywhere;
 }
 
+.source-audit-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  margin: 2px 0;
+}
+
+.source-audit-grid div {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px;
+}
+
+.source-audit-grid dt,
+.source-audit-grid dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.source-audit-grid dt {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.source-audit-grid dd {
+  color: var(--text);
+  font-size: 12px;
+}
 .source-card.cited,
 .source-strip span.cited {
   border-color: rgba(15, 118, 110, 0.28);

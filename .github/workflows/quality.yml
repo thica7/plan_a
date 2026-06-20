@@ -144,6 +144,10 @@ jobs:
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
+      - name: Test report source trace
+        working-directory: frontend
+        run: pnpm test -- src/features/report/ReportSourceTrace.test.tsx src/features/report/sourceBundle.test.ts
+
       - name: Build frontend
         working-directory: frontend
         run: pnpm build
