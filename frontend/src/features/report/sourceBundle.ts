@@ -29,6 +29,12 @@ export function buildReportSourceBundle(
     for (const alias of evidenceRawSourceAliases(item)) {
       aliases[alias] = item.raw_source_id;
     }
+    const candidateOrigin = item.metadata.collector_candidate_origin
+      ? String(item.metadata.collector_candidate_origin)
+      : "enterprise_evidence";
+    const fetchMethod = item.metadata.collector_fetch_method
+      ? String(item.metadata.collector_fetch_method)
+      : "enterprise_projection";
     sources.push({
       id: item.raw_source_id,
       competitor: competitorName,
@@ -40,6 +46,13 @@ export function buildReportSourceBundle(
       snippet: item.snippet,
       content_hash: item.content_hash,
       confidence: item.reliability_score,
+      candidate_origin: candidateOrigin,
+      candidate_rank: null,
+      candidate_confidence: null,
+      fetch_method: fetchMethod,
+      quality_score: item.reliability_score,
+      failure_reason: null,
+      metadata: item.metadata,
       extracted_at: item.captured_at,
     });
   }

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime
 import re
+from datetime import datetime
 from urllib.parse import urlparse
 
 from packages.business_intel.claim_validator import validate_project_claims
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS, evaluate_business_qa
 from packages.business_intel.planning import build_business_intel_plan
-from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.report_citation_policy import report_section_policy
+from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.scorer import score_project_readiness
 from packages.business_intel.source_reconciliation import (
     evidence_by_source_token,

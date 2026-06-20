@@ -46,7 +46,7 @@ export interface RedoScope {
 export interface QCIssue {
   id: string;
   severity: "info" | "warn" | "blocker";
-  detected_by: "citation" | "consistency" | "coverage" | "schema" | "reflector";
+  detected_by: "citation" | "consistency" | "coverage" | "schema" | "reflector" | "text_quality";
   target_agent: string;
   target_subagent?: string | null;
   target_competitor?: string | null;
@@ -67,6 +67,13 @@ export interface RawSource {
   snippet: string;
   content_hash: string;
   confidence: number;
+  candidate_origin: string;
+  candidate_rank?: number | null;
+  candidate_confidence?: number | null;
+  fetch_method: string;
+  quality_score: number;
+  failure_reason?: string | null;
+  metadata: Record<string, unknown>;
   extracted_at: string;
 }
 

@@ -44,7 +44,7 @@ class SectionWriter:
                 required_sections=required_sections,
             )
             if getattr(contract, "segment_kind", None) == "evidence_shard":
-                section_id = str(getattr(contract, "section_id"))
+                section_id = str(contract.section_id)
                 segment_competitor = (
                     segment.get("segment_competitor")
                     if isinstance(segment.get("segment_competitor"), str)

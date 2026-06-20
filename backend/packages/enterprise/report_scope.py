@@ -8,8 +8,8 @@ from packages.enterprise.store import EnterpriseStore
 from packages.schema.enterprise import (
     ClaimRecord,
     CompetitorRecord,
-    EvidenceRecord,
     EnterpriseRunProjection,
+    EvidenceRecord,
     ProjectRecord,
     ReportVersionRecord,
 )
