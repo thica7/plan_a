@@ -10267,6 +10267,16 @@ async def test_segmented_writer_assembles_duplicate_sections_before_return(
     assert payload["duplicate_section_count_after"] == 0
     assert "decision_summary" in payload["merged_section_keys"]
     assert "competitive_findings" in payload["merged_section_keys"]
+    assert payload["fragment_layer_counts"] == {"core": 6, "support": 1}
+    assert payload["fragment_section_keys"] == [
+        "decision_summary",
+        "decision_summary",
+        "competitive_findings",
+        "review_theme_summary",
+        "competitor_deep_dives",
+        "swot_matrix",
+        "evidence_support",
+    ]
 
 
 @pytest.mark.asyncio

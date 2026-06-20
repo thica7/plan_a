@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from packages.agents.writer.assembler import (
+    ReportSectionFragment,
     StructuredReportAssembler,
+    assemble_report_fragments,
     assemble_report_sections,
 )
 from packages.agents.writer.evidence_pack import (
@@ -30,6 +32,10 @@ from packages.agents.writer.repair import (
     structured_repair_target_for_issue,
 )
 from packages.agents.writer.segment_contract import (
+    CORE_HEADING_KEYS,
+    SegmentContract,
+    SUPPORT_HEADING_KEYS,
+    heading_key_for,
     segment_contract_for,
     validate_segment_contract,
 )
@@ -1328,7 +1334,14 @@ class WriterAgentMixin:
                 )
             try:
                 structured_enabled = self._settings.writer_structured_report_enabled
-                if structured_enabled:
+                segmented_writer_required = bool(
+                    getattr(
+                        evidence_pack_result.metrics,
+                        "segmented_writer_required",
+                        False,
+                    )
+                )
+                if structured_enabled and not segmented_writer_required:
                     try:
                         structured_report = await self._writer_structured_report(
                             record,
@@ -1608,7 +1621,7 @@ class WriterAgentMixin:
                             )
                             writer_mode = (
                                 "real segmented LLM call"
-                                if evidence_pack_result.metrics.segmented_writer_required
+                                if segmented_writer_required
                                 else "real LLM call"
                             )
                 else:
@@ -1619,7 +1632,7 @@ class WriterAgentMixin:
                     )
                     writer_mode = (
                         "real segmented LLM call"
-                        if evidence_pack_result.metrics.segmented_writer_required
+                        if segmented_writer_required
                         else "real LLM call"
                     )
                 self._require_writer_report_output(report_md)
@@ -2212,18 +2225,30 @@ class WriterAgentMixin:
             layer_context=layer_context,
             required_sections=required_sections,
         )
-        assembled = assemble_report_sections(
+        assembly_sections = self._writer_assembly_fragments(
             sections,
+            output_language=detail.output_language,
+        )
+        assembled = assemble_report_fragments(
+            assembly_sections,
             output_language=detail.output_language,
             competitors=detail.plan.competitors,
         )
+        assembly_telemetry = {
+            **assembled.telemetry,
+            **self._writer_segment_fragment_telemetry(sections),
+            **self._writer_legacy_heading_assembly_telemetry(
+                sections,
+                output_language=detail.output_language,
+            ),
+        }
         await self.emit(
             detail.id,
             "writer_assembly_completed",
             "writer",
             None,
             "Writer segmented report assembled",
-            assembled.telemetry,
+            assembly_telemetry,
         )
         preflight = run_writer_quality_preflight(detail, assembled.markdown)
         await self.emit(
@@ -2275,9 +2300,9 @@ class WriterAgentMixin:
         memory_context: str,
         layer_context: str,
         required_sections: str,
-    ) -> list[str]:
+    ) -> list[ReportSectionFragment]:
         detail = record.detail
-        sections: list[str] = []
+        sections: list[ReportSectionFragment] = []
         shards_by_section: dict[tuple[str, str | None], list[str]] = {}
         section_allowed_source_ids: dict[tuple[str, str | None], set[str]] = {}
         for segment in segments:
@@ -2313,7 +2338,13 @@ class WriterAgentMixin:
                     if isinstance(source_id, str)
                 )
                 continue
-            sections.append(segment_md)
+            sections.append(
+                self._writer_report_section_fragment(
+                    markdown=segment_md,
+                    segment=segment,
+                    contract=contract,
+                )
+            )
 
         for (section_id, segment_competitor), shard_notes in shards_by_section.items():
             section_segment = self._writer_section_segment_from_shards(
@@ -2325,7 +2356,7 @@ class WriterAgentMixin:
                     (section_id, segment_competitor)
                 ],
             )
-            section_md, _ = await self._writer_validated_segment_markdown(
+            section_md, section_contract = await self._writer_validated_segment_markdown(
                 record,
                 evidence_pack_result=evidence_pack_result,
                 segment=section_segment,
@@ -2335,8 +2366,124 @@ class WriterAgentMixin:
                 layer_context=layer_context,
                 required_sections=required_sections,
             )
-            sections.append(section_md)
+            sections.append(
+                self._writer_report_section_fragment(
+                    markdown=section_md,
+                    segment=section_segment,
+                    contract=section_contract,
+                )
+            )
         return sections
+
+    def _writer_report_section_fragment(
+        self,
+        *,
+        markdown: str,
+        segment: Mapping[str, object],
+        contract: SegmentContract,
+    ) -> ReportSectionFragment:
+        segment_competitor = segment.get("segment_competitor")
+        return ReportSectionFragment(
+            markdown=markdown,
+            section_key=str(segment.get("section_key") or contract.section_id),
+            layer=str(
+                segment.get("layer")
+                or (
+                    "support"
+                    if contract.segment_kind == "support_fragment"
+                    else "core"
+                )
+            ),
+            segment_name=str(segment.get("segment_name") or contract.segment_name),
+            competitor=segment_competitor
+            if isinstance(segment_competitor, str) and segment_competitor
+            else None,
+        )
+
+    def _writer_assembly_fragments(
+        self,
+        fragments: Sequence[ReportSectionFragment],
+        *,
+        output_language: object,
+    ) -> list[ReportSectionFragment]:
+        output_language_text = str(output_language)
+        assembly_fragments: list[ReportSectionFragment] = []
+        for fragment in fragments:
+            matches = list(re.finditer(r"(?m)^##\s+(.+?)\s*$", fragment.markdown))
+            if not matches:
+                assembly_fragments.append(fragment)
+                continue
+
+            intro = fragment.markdown[: matches[0].start()].strip()
+            if intro:
+                assembly_fragments.append(
+                    ReportSectionFragment(
+                        markdown=intro,
+                        section_key="",
+                        layer=fragment.layer,
+                        segment_name=fragment.segment_name,
+                        competitor=fragment.competitor,
+                    )
+                )
+
+            for index, match in enumerate(matches):
+                next_match = matches[index + 1] if index + 1 < len(matches) else None
+                block = fragment.markdown[
+                    match.start() : next_match.start() if next_match else None
+                ].strip()
+                heading_key = heading_key_for(match.group(1), output_language_text)
+                layer = (
+                    "support"
+                    if heading_key in SUPPORT_HEADING_KEYS
+                    else fragment.layer
+                )
+                assembly_fragments.append(
+                    ReportSectionFragment(
+                        markdown=block,
+                        section_key=heading_key or "",
+                        layer=layer,
+                        segment_name=fragment.segment_name,
+                        competitor=fragment.competitor,
+                    )
+                )
+        return assembly_fragments
+
+    def _writer_segment_fragment_telemetry(
+        self,
+        fragments: Sequence[ReportSectionFragment],
+    ) -> dict[str, object]:
+        layer_counts: dict[str, int] = {}
+        for fragment in fragments:
+            layer_counts[fragment.layer] = layer_counts.get(fragment.layer, 0) + 1
+        return {
+            "input_fragment_count": len(fragments),
+            "fragment_layer_counts": layer_counts,
+            "fragment_section_keys": [fragment.section_key for fragment in fragments],
+            "fragment_segment_names": [fragment.segment_name for fragment in fragments],
+        }
+
+    def _writer_legacy_heading_assembly_telemetry(
+        self,
+        fragments: Sequence[ReportSectionFragment],
+        *,
+        output_language: object,
+    ) -> dict[str, object]:
+        output_language_text = str(output_language)
+        heading_counts: dict[str, int] = {}
+        for fragment in fragments:
+            for match in re.finditer(r"(?m)^##\s+(.+?)\s*$", fragment.markdown):
+                heading_key = heading_key_for(match.group(1), output_language_text)
+                if heading_key is not None:
+                    heading_counts[heading_key] = heading_counts.get(heading_key, 0) + 1
+        canonical_order = CORE_HEADING_KEYS + SUPPORT_HEADING_KEYS
+        return {
+            "duplicate_section_count_before": sum(
+                count - 1 for count in heading_counts.values() if count > 1
+            ),
+            "merged_section_keys": [
+                key for key in canonical_order if heading_counts.get(key, 0) > 1
+            ],
+        }
 
     def _writer_section_segment_from_shards(
         self,
@@ -3116,7 +3263,7 @@ class WriterAgentMixin:
         )
         if repair_has_evidence_shards:
             timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
-            repaired_sections = await self._writer_segment_markdown_parts(
+            repaired_fragments = await self._writer_segment_markdown_parts(
                 record,
                 evidence_pack_result=evidence_pack_result,
                 segments=repair_segments,
@@ -3126,7 +3273,10 @@ class WriterAgentMixin:
                 layer_context=self._writer_layer_context(detail),
                 required_sections=self._writer_required_sections(detail),
             )
-            return self._join_section_repair_parts(repaired_sections, section_headings)
+            return self._join_section_repair_parts(
+                [fragment.markdown for fragment in repaired_fragments],
+                section_headings,
+            )
 
         repaired_sections = []
         for writer_context_json in writer_context_jsons:
