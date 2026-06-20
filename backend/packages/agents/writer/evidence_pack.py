@@ -30,6 +30,9 @@ SINGLE_CALL_CONTEXT_TARGET_CHARS = 240_000
 SEGMENT_INPUT_TARGET_CHARS = SINGLE_CALL_CONTEXT_TARGET_CHARS
 SEGMENT_SOURCE_BATCH_SIZE = 4
 SEGMENT_FACT_BATCH_SIZE = 32
+LEGACY_STRATEGIC_SEGMENT_ALIASES: dict[str, tuple[str, ...]] = {
+    "swot_matrix": ("side_by_side_matrix", "swot_analysis"),
+}
 SOURCE_CITATION_RE = re.compile(
     r"(?:\[source:([^\]]+)\]|\u3010source:([^\u3011]+)\u3011)"
 )
@@ -2161,8 +2164,9 @@ def _repair_segment_names(sections: Sequence[str]) -> set[str]:
         names.add("user_research")
     if any(token in normalized for token in ("competitor", "deep", "vendor")):
         names.add("competitor_deep_dives")
-    if "swot_matrix" in normalized:
-        names.update({"side_by_side_matrix", "swot_analysis"})
+    for legacy_name, mapped_names in LEGACY_STRATEGIC_SEGMENT_ALIASES.items():
+        if legacy_name in normalized:
+            names.update(mapped_names)
     if any(token in normalized for token in ("matrix", "side_by_side", "side-by-side")):
         names.add("side_by_side_matrix")
     if "swot" in normalized:
