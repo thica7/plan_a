@@ -54,6 +54,19 @@ class StructuredSourceConflict:
         }
 
 
+def extract_structured_fact_positions(
+    text: str,
+    *,
+    dimension: str = "",
+) -> list[tuple[str, str]]:
+    """Extract deterministic fact positions such as support:sso or price:pro:month."""
+    normalized = text.casefold()
+    positions = _binary_fact_positions(normalized)
+    if "pricing" in dimension.casefold():
+        positions.extend(_pricing_fact_positions(normalized))
+    return positions
+
+
 def extract_structured_source_claims(
     sources: list[RawSource],
     *,
@@ -62,9 +75,8 @@ def extract_structured_source_claims(
     claims: list[StructuredSourceClaim] = []
     for source in sources:
         text = f"{source.title}\n{source.snippet}".casefold()
-        claims.extend(_binary_claims(source, text))
-        if "pricing" in dimension.casefold():
-            claims.extend(_pricing_claims(source, text))
+        positions = extract_structured_fact_positions(text, dimension=dimension)
+        claims.extend(_claims_from_positions(source, positions))
     return claims
 
 
@@ -100,41 +112,55 @@ def find_structured_source_conflicts(
     return conflicts
 
 
-def _binary_claims(source: RawSource, text: str) -> list[StructuredSourceClaim]:
+def _claims_from_positions(
+    source: RawSource,
+    positions: list[tuple[str, str]],
+) -> list[StructuredSourceClaim]:
     claims: list[StructuredSourceClaim] = []
-    for term in CONTRADICTION_FACT_TERMS:
-        start = text.find(term)
-        if start < 0:
-            continue
-        window = text[max(0, start - 90) : start + len(term) + 90]
-        predicate = f"supports:{term}"
-        if _negative_position_window(window, term):
+    for claim_area, position in positions:
+        if claim_area.startswith("support:"):
+            term = claim_area.removeprefix("support:")
             claims.append(
                 _claim(
                     source,
-                    predicate=predicate,
-                    value="false",
-                    polarity="negative",
-                    claim_area=f"support:{term}",
-                    position="unsupported",
+                    predicate=f"supports:{term}",
+                    value="true" if position == "supported" else "false",
+                    polarity="positive" if position == "supported" else "negative",
+                    claim_area=claim_area,
+                    position=position,
                 )
             )
-        elif _positive_position_window(window):
+        elif claim_area.startswith("price:"):
             claims.append(
                 _claim(
                     source,
-                    predicate=predicate,
-                    value="true",
-                    polarity="positive",
-                    claim_area=f"support:{term}",
-                    position="supported",
+                    predicate=claim_area,
+                    value=position,
+                    polarity="observed",
+                    claim_area=claim_area,
+                    position=position,
                 )
             )
     return claims
 
 
-def _pricing_claims(source: RawSource, text: str) -> list[StructuredSourceClaim]:
-    claims: list[StructuredSourceClaim] = []
+def _binary_fact_positions(text: str) -> list[tuple[str, str]]:
+    positions: list[tuple[str, str]] = []
+    for term in CONTRADICTION_FACT_TERMS:
+        start = text.find(term)
+        if start < 0:
+            continue
+        window = text[max(0, start - 90) : start + len(term) + 90]
+        claim_area = f"support:{term}"
+        if _negative_position_window(window, term):
+            positions.append((claim_area, "unsupported"))
+        elif _positive_position_window(window):
+            positions.append((claim_area, "supported"))
+    return positions
+
+
+def _pricing_fact_positions(text: str) -> list[tuple[str, str]]:
+    positions: list[tuple[str, str]] = []
     for match in PRICE_AMOUNT_RE.finditer(text):
         value = match.group("prefix") or match.group("suffix")
         if not value:
@@ -145,41 +171,13 @@ def _pricing_claims(source: RawSource, text: str) -> list[StructuredSourceClaim]
             continue
         cadence = "year" if any(term in window for term in ("year", "annual")) else "month"
         normalized_amount = value.rstrip("0").rstrip(".") if "." in value else value
-        position = f"${normalized_amount}/{cadence}"
-        claims.append(
-            _claim(
-                source,
-                predicate=f"price:{plan}:{cadence}",
-                value=position,
-                polarity="observed",
-                claim_area=f"price:{plan}:{cadence}",
-                position=position,
-            )
-        )
+        positions.append((f"price:{plan}:{cadence}", f"${normalized_amount}/{cadence}"))
     if "free plan" in text or "free tier" in text:
         if _negative_position_window(text, "free plan"):
-            claims.append(
-                _claim(
-                    source,
-                    predicate="supports:free plan",
-                    value="false",
-                    polarity="negative",
-                    claim_area="support:free plan",
-                    position="unsupported",
-                )
-            )
+            positions.append(("support:free plan", "unsupported"))
         elif _positive_position_window(text):
-            claims.append(
-                _claim(
-                    source,
-                    predicate="supports:free plan",
-                    value="true",
-                    polarity="positive",
-                    claim_area="support:free plan",
-                    position="supported",
-                )
-            )
-    return claims
+            positions.append(("support:free plan", "supported"))
+    return positions
 
 
 def _claim(

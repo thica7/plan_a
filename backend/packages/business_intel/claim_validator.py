@@ -5,6 +5,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 from packages.identity import stable_prefixed_id
+from packages.rag.structured_claims import extract_structured_fact_positions
 from packages.schema.enterprise import (
     ClaimRecord,
     ClaimValidationIssue,
@@ -413,6 +414,10 @@ def _conflicting_evidence_ids(
     claim: ClaimRecord,
     evidence: list[EvidenceRecord],
 ) -> list[str]:
+    structured_conflicts = _structured_conflicting_evidence_ids(claim, evidence)
+    if structured_conflicts:
+        return structured_conflicts
+
     claim_text = claim.claim_text.casefold()
     positive_claim = any(
         phrase in claim_text
@@ -452,6 +457,46 @@ def _conflicting_evidence_ids(
             result.append(item.id)
     return result
 
+
+def _structured_conflicting_evidence_ids(
+    claim: ClaimRecord,
+    evidence: list[EvidenceRecord],
+) -> list[str]:
+    claim_positions = _positions_by_claim_area(
+        extract_structured_fact_positions(claim.claim_text, dimension=claim.claim_type)
+    )
+    if not claim_positions:
+        return []
+
+    result: list[str] = []
+    for item in evidence:
+        evidence_positions = _positions_by_claim_area(
+            extract_structured_fact_positions(
+                f"{item.title} {item.snippet}",
+                dimension=item.dimension,
+            )
+        )
+        if _has_structured_position_conflict(claim_positions, evidence_positions):
+            result.append(item.id)
+    return result
+
+
+def _positions_by_claim_area(positions: list[tuple[str, str]]) -> dict[str, set[str]]:
+    by_claim_area: dict[str, set[str]] = {}
+    for claim_area, position in positions:
+        by_claim_area.setdefault(claim_area, set()).add(position)
+    return by_claim_area
+
+
+def _has_structured_position_conflict(
+    claim_positions: dict[str, set[str]],
+    evidence_positions: dict[str, set[str]],
+) -> bool:
+    for claim_area, positions in claim_positions.items():
+        evidence_values = evidence_positions.get(claim_area)
+        if evidence_values and evidence_values.isdisjoint(positions):
+            return True
+    return False
 
 def _validation_status(
     *,

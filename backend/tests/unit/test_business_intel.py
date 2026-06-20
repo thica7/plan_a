@@ -1583,6 +1583,47 @@ def test_claim_validator_marks_high_risk_status_and_conflicts() -> None:
     }
 
 
+
+def test_claim_validator_detects_structured_pricing_conflict() -> None:
+    competitor = _competitor()
+    pricing_evidence = EvidenceRecord(
+        id="evidence-pricing-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="pricing-conflict",
+        competitor_id=competitor.id,
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.sh/pricing",
+        snippet="Cursor Pro plan costs $30 per month for developer teams.",
+        content_hash="hash-pricing-conflict",
+        reliability_score=0.92,
+        quality_label="accepted",
+    )
+    claim = ClaimRecord(
+        id="claim-pricing-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        competitor_id=competitor.id,
+        claim_type="pricing",
+        claim_text="Cursor Pro plan costs $20 per month for developer teams.",
+        evidence_ids=["evidence-pricing-conflict"],
+        confidence=0.9,
+    )
+
+    report = validate_project_claims(
+        project_id="project-1",
+        claims=[claim],
+        evidence=[pricing_evidence],
+    )
+
+    result = report.results[0]
+    assert result.status == "unsupported"
+    assert result.validation_status == "not_applicable"
+    assert result.issue_ids
+    assert report.issues[0].issue_type == "conflicting_evidence"
+    assert report.issues[0].evidence_ids == ["evidence-pricing-conflict"]
 def test_report_release_gate_warns_on_high_risk_single_source_claim() -> None:
     competitor = _competitor()
     evidence = [

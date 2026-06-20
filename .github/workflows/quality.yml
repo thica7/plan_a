@@ -25,6 +25,7 @@ jobs:
         run: |
           python -m ruff check \
             backend/app/routes/knowledge.py \
+            backend/packages/business_intel/claim_validator.py \
             backend/packages/agents/qa/logic.py \
             backend/packages/business_intel/report_quality.py \
             backend/packages/knowledge/models.py \
@@ -69,7 +70,9 @@ jobs:
             backend/tests/unit/test_secret_scan.py \
             backend/tests/unit/test_report_quality.py \
             backend/tests/unit/test_compare_real_run_quality_script.py \
-            backend/tests/unit/test_llm_client.py
+            backend/tests/unit/test_llm_client.py \
+            backend/tests/unit/test_business_intel.py::test_claim_validator_marks_high_risk_status_and_conflicts \
+            backend/tests/unit/test_business_intel.py::test_claim_validator_detects_structured_pricing_conflict
 
   backend-knowledge-acceptance:
     name: Knowledge repository acceptance shard
