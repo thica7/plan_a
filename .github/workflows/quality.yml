@@ -28,6 +28,7 @@ jobs:
             backend/packages/llm/doubao_client.py \
             backend/scripts/compare_real_run_quality.py \
             backend/scripts/scan_secrets.py \
+            backend/tests/unit/test_rag_kb_eval_set.py \
             backend/tests/unit/test_report_quality.py \
             backend/tests/unit/test_llm_client.py \
             backend/tests/unit/test_compare_real_run_quality_script.py \
@@ -40,6 +41,17 @@ jobs:
             backend/tests/unit/test_report_quality.py \
             backend/tests/unit/test_compare_real_run_quality_script.py \
             backend/tests/unit/test_llm_client.py
+
+      - name: Run RAG KB quality tests
+        run: |
+          pytest -q \
+            backend/tests/unit/test_rag_kb_eval_set.py \
+            backend/tests/unit/test_retrieval_params.py::test_sparse_mode_uses_sqlite_without_dense_vector_search \
+            backend/tests/unit/test_run_service.py::test_collect_qa_flags_stale_kb_reused_source_for_refresh \
+            backend/tests/unit/test_run_service.py::test_collect_qa_flags_kb_live_source_contradiction \
+            backend/tests/unit/test_run_service.py::test_collector_warm_starts_from_rag_kb \
+            backend/tests/unit/test_run_service.py::test_collect_join_ingests_verified_raw_sources_into_kb \
+            backend/tests/unit/test_report_quality.py::test_writer_grounding_prompt_reuses_kb_only_via_source_tokens
 
       - name: Scan for accidental provider secrets
         run: python backend/scripts/scan_secrets.py

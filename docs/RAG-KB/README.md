@@ -124,34 +124,42 @@ git diff --check
 4. `git diff --check` 通过，仅有 Windows autocrlf 换行提示。
 5. ruff 在 `--ignore E501` 下通过；不忽略 E501 时，`writer/logic.py` 存在大量既有长行，本次没有做无关格式化。
 
+补充验收门禁：
+
+```powershell
+.venv\Scripts\python.exe -m pytest backend\tests\unit\test_rag_kb_eval_set.py backend\tests\unit\test_retrieval_params.py::test_sparse_mode_uses_sqlite_without_dense_vector_search backend\tests\unit\test_run_service.py::test_collect_qa_flags_stale_kb_reused_source_for_refresh backend\tests\unit\test_run_service.py::test_collect_qa_flags_kb_live_source_contradiction backend\tests\unit\test_run_service.py::test_collector_warm_starts_from_rag_kb backend\tests\unit\test_run_service.py::test_collect_join_ingests_verified_raw_sources_into_kb backend\tests\unit\test_report_quality.py::test_writer_grounding_prompt_reuses_kb_only_via_source_tokens -q
+.venv\Scripts\python.exe -m ruff check backend\tests\unit\test_rag_kb_eval_set.py
+git diff --check
+```
+
+结果：
+
+1. 新增 `eval/rag-kb-quality-gate-eval.jsonl`，覆盖 pricing 变更、功能下线、官网/第三方冲突、旧 KB vs 新网页、竞品歧义、security 冲突、free plan 冲突。
+2. 新增 `backend/tests/unit/test_rag_kb_eval_set.py`，保证 eval set 有固定风险场景、可追溯 evidence、KB/live source mix、预期 gate。
+3. `.github/workflows/quality.yml` 新增 RAG KB targeted quality tests，避免每次依赖全量 backend unit。
+4. 本轮 targeted 测试通过：`9 passed`。
+
 ## 后续建议
 
 优先级最高：
 
-1. 增加面向 RAG KB 的 eval set：
-   - 已知 pricing 变更。
-   - 功能下线。
-   - 官网与第三方冲突。
-   - KB 旧资料 vs 新网页资料。
-   - 竞品名称歧义。
-
-2. KB 文档版本化：
+1. KB 文档版本化：
    - 同 URL 多次采集不要简单覆盖。
    - 保留 document version、raw_source_id、run_id、crawl_run_id。
    - 支持污染回滚。
 
-3. 更细的 freshness schema：
+2. 更细的 freshness schema：
    - `observed_at`、`last_verified_at`、`expires_at`。
    - 按 dimension/source_type 计算 freshness score。
    - 过期时强制 collector live verification。
 
-4. 前端可解释性面板：
+3. 前端可解释性面板：
    - 展示 KB warm-start query。
    - 展示 accepted/rejected hit。
    - 展示 rejected reason、source_id、doc/chunk id。
    - 让质量门禁发现失真时可以直接倒查。
 
-5. contradiction pass 升级：
+4. contradiction pass 升级：
    - 当前是启发式检测，适合先兜底。
    - 后续可以接结构化抽取或 claim validator，把冲突落成 `conflict_evidence`。
 
