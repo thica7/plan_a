@@ -100,7 +100,7 @@ class RetrievalHit(BaseModel):
     fetched_at: datetime | None = None
     last_seen_at: datetime | None = None
     status: str = "active"
-
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 class RetrievalRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2_000)

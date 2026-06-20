@@ -658,6 +658,32 @@ class CollectorAgentMixin:
         )
         return sources
 
+    @staticmethod
+    def _copy_kb_source_metadata(
+        metadata: dict[str, object],
+        hit_metadata: dict[str, Any],
+    ) -> None:
+        key_map = {
+            "raw_source_id": "kb_raw_source_id",
+            "kb_raw_source_id": "kb_raw_source_id",
+            "run_id": "kb_collector_run_id",
+            "collector_run_id": "kb_collector_run_id",
+            "kb_collector_run_id": "kb_collector_run_id",
+            "collector_candidate_origin": "kb_collector_candidate_origin",
+            "kb_collector_candidate_origin": "kb_collector_candidate_origin",
+            "collector_fetch_method": "kb_collector_fetch_method",
+            "kb_collector_fetch_method": "kb_collector_fetch_method",
+        }
+        for source_key, target_key in key_map.items():
+            value = hit_metadata.get(source_key)
+            if value not in (None, "") and target_key not in metadata:
+                metadata[target_key] = str(value)
+        confidence = hit_metadata.get("collector_confidence")
+        if confidence is None:
+            confidence = hit_metadata.get("kb_collector_confidence")
+        if confidence is not None:
+            metadata["kb_collector_confidence"] = confidence
+
     def _kb_retrieval_query(self, detail: RunDetail, competitor: str, dimension: str) -> str:
         skill = self._skill_registry.get(dimension)
         parts = [
@@ -707,6 +733,9 @@ class CollectorAgentMixin:
             hit.get("rerank_score") if hit.get("rerank_score") is not None else hit.get("score"),
             default=0.5,
         )
+        hit_metadata = hit.get("metadata")
+        if not isinstance(hit_metadata, dict):
+            hit_metadata = {}
         confidence = max(
             0.89,
             min(0.96, 0.86 + score * 0.10),
@@ -727,6 +756,7 @@ class CollectorAgentMixin:
             "kb_last_seen_at": str(hit.get("last_seen_at") or ""),
             "source_material_level": "kb_retrieval_chunk",
         }
+        self._copy_kb_source_metadata(metadata, hit_metadata)
         try:
             return RawSource(
                 id=compute_raw_source_id(

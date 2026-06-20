@@ -41,6 +41,7 @@ jobs:
             backend/tests/unit/test_knowledge_rollback.py \
             backend/tests/unit/test_llm_client.py \
             backend/tests/unit/test_rag_kb_eval_set.py \
+            backend/tests/unit/test_rag_kb_collector_chain.py \
             backend/tests/unit/test_report_quality.py \
             backend/tests/unit/test_retrieval_params.py \
             backend/tests/unit/test_secret_scan.py \
@@ -116,6 +117,7 @@ jobs:
         run: |
           pytest -q \
             backend/tests/unit/test_rag_kb_eval_set.py \
+            backend/tests/unit/test_rag_kb_collector_chain.py \
             backend/tests/unit/test_knowledge_evidence_bridge.py \
             backend/tests/unit/test_structured_source_claims.py \
             backend/tests/unit/test_retrieval_params.py::test_sparse_mode_uses_sqlite_without_dense_vector_search \

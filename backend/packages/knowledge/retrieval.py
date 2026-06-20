@@ -384,6 +384,7 @@ class RetrievalService:
                         "fetched_at": getattr(document, "fetched_at", hit.fetched_at),
                         "last_seen_at": getattr(document, "last_seen_at", hit.last_seen_at),
                         "status": status,
+                        "metadata": getattr(document, "metadata", hit.metadata),
                     }
                 )
             )
@@ -424,6 +425,7 @@ class RetrievalService:
                     fetched_at=getattr(doc, "fetched_at", None),
                     last_seen_at=getattr(doc, "last_seen_at", None),
                     status=getattr(doc, "status", "active"),
+                    metadata=getattr(doc, "metadata", {}) or {},
                 ))
         return sparse_hits
 
