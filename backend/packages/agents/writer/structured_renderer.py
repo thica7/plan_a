@@ -18,7 +18,7 @@ from packages.business_intel.report_sections import SectionLayer, report_section
 
 _WHITESPACE_RE = re.compile(r"\s+")
 
-_ZH_LABELS = {
+STRUCTURED_REPORT_ZH_LABELS = {
     "adoption_blockers": "采用障碍",
     "attack_points": "攻击点",
     "battlecard": "战报",
@@ -68,7 +68,7 @@ _ZH_LABELS = {
     "opportunities": "机会",
 }
 
-_EN_LABELS = {
+STRUCTURED_REPORT_EN_LABELS = {
     "adoption_blockers": "Adoption Blockers",
     "attack_points": "Attack Points",
     "battlecard": "Battlecards",
@@ -151,7 +151,7 @@ def _is_zh(output_language: str) -> bool:
 
 
 def _labels_for(is_zh: bool) -> dict[str, str]:
-    return _ZH_LABELS if is_zh else _EN_LABELS
+    return STRUCTURED_REPORT_ZH_LABELS if is_zh else STRUCTURED_REPORT_EN_LABELS
 
 
 def _render_executive_summary(

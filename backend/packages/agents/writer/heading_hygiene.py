@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from packages.agents.writer.structured_renderer import _EN_LABELS
+from packages.agents.writer.structured_renderer import STRUCTURED_REPORT_EN_LABELS
 from packages.i18n.language import REPORT_LABELS
 
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -16,7 +16,7 @@ ENGLISH_STRUCTURAL_HEADINGS = frozenset(
     normalize_heading_text(heading)
     for heading in (
         *REPORT_LABELS["en-US"].values(),
-        *_EN_LABELS.values(),
+        *STRUCTURED_REPORT_EN_LABELS.values(),
         "Pricing and Packaging",
         "Feature and Workflow Capability",
         "User Persona and Adoption",

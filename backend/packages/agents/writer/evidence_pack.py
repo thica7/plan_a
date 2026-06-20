@@ -2066,7 +2066,25 @@ def _sanitize_segment_citations(markdown: str, allowed_source_ids: set[str]) -> 
             return "".join(f"[source:{token}]" for token in canonical_parts)
         return match.group(0)
 
-    return SOURCE_CITATION_RE.sub(replace, markdown or "")
+    normalized_markdown = SOURCE_CITATION_RE.sub(replace, markdown or "")
+    return "\n".join(
+        _dedupe_source_citations_in_line(line)
+        for line in normalized_markdown.splitlines()
+    )
+
+
+def _dedupe_source_citations_in_line(line: str) -> str:
+    seen: set[str] = set()
+
+    def replace_duplicate(match: re.Match[str]) -> str:
+        raw_token = next(group for group in match.groups() if group is not None)
+        token = normalize_source_token(raw_token)
+        if token in seen:
+            return ""
+        seen.add(token)
+        return match.group(0)
+
+    return SOURCE_CITATION_RE.sub(replace_duplicate, line)
 
 
 _PLACEHOLDER_SOURCE_TOKENS = {

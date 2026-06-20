@@ -3144,6 +3144,10 @@ class WriterAgentMixin:
                         "Must include: concise source-quality, coverage, confidence, "
                         "and gap support without restarting core analysis."
                     ),
+                    (
+                        "Do not write an exact total source count unless it is copied "
+                        "from deterministic telemetry in Segment Evidence Pack JSON."
+                    ),
                     source_warning,
                 ]
             )

@@ -2276,10 +2276,8 @@ def test_segment_citation_sanitizer_normalizes_spacing_and_combined_sources() ->
 
     assert "[source: raw-source-openai-codex-pricing]" not in sanitized
     assert "[source:raw-source-openai-codex-pricing]" in sanitized
-    assert (
-        "[source:raw-source-openai-codex-pricing][source:raw-source-openai-api-pricing]"
-        in sanitized
-    )
+    assert sanitized.count("[source:raw-source-openai-codex-pricing]") == 1
+    assert "[source:raw-source-openai-api-pricing]" in sanitized
     assert (
         result.validate_segment_citations(
             sanitized,

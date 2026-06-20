@@ -14,7 +14,10 @@ from packages.agents.writer.structured_hygiene import (
     has_source_token,
     is_valid_source_id,
 )
-from packages.agents.writer.structured_renderer import _EN_LABELS, _ZH_LABELS
+from packages.agents.writer.structured_renderer import (
+    STRUCTURED_REPORT_EN_LABELS,
+    STRUCTURED_REPORT_ZH_LABELS,
+)
 from packages.agents.writer.structured_report import StructuredReport
 
 
@@ -51,23 +54,23 @@ _SUPPORT_SECTION_KEYS = (
 _EN_CORE_SECTION_HEADINGS = frozenset(
     _normalize_heading(heading)
     for heading in (
-        *(_EN_LABELS[key] for key in _CORE_SECTION_KEYS),
+        *(STRUCTURED_REPORT_EN_LABELS[key] for key in _CORE_SECTION_KEYS),
         "Battlecard",
     )
 )
 _ZH_CORE_SECTION_HEADINGS = frozenset(
-    _normalize_heading(_ZH_LABELS[key]) for key in _CORE_SECTION_KEYS
+    _normalize_heading(STRUCTURED_REPORT_ZH_LABELS[key]) for key in _CORE_SECTION_KEYS
 )
 _EN_SUPPORT_SECTION_HEADINGS = frozenset(
     _normalize_heading(heading)
     for heading in (
-        *(_EN_LABELS[key] for key in _SUPPORT_SECTION_KEYS),
+        *(STRUCTURED_REPORT_EN_LABELS[key] for key in _SUPPORT_SECTION_KEYS),
         "Source Appendix",
         "Claim Support Audit",
     )
 )
 _ZH_SUPPORT_SECTION_HEADINGS = frozenset(
-    _normalize_heading(_ZH_LABELS[key]) for key in _SUPPORT_SECTION_KEYS
+    _normalize_heading(STRUCTURED_REPORT_ZH_LABELS[key]) for key in _SUPPORT_SECTION_KEYS
 )
 _INTERNAL_TERM_PATTERNS = tuple(
     re.compile(pattern, re.IGNORECASE)
@@ -90,6 +93,7 @@ class PublicationContractIssue:
     line_number: int
     message: str
     repair_target: str
+    excerpt: str = ""
 
 
 @dataclass(frozen=True)
@@ -108,6 +112,16 @@ class PublicationContractResult:
             "repair_targets": sorted(
                 {issue.repair_target for issue in self.issues if issue.repair_target}
             ),
+            "issues": [
+                {
+                    "code": issue.code,
+                    "line_number": issue.line_number,
+                    "message": issue.message,
+                    "repair_target": issue.repair_target,
+                    "excerpt": issue.excerpt,
+                }
+                for issue in self.issues
+            ],
         }
 
 
@@ -240,6 +254,7 @@ def _validate_internal_terms(
                         "terminology."
                     ),
                     repair_target="structured_section",
+                    excerpt=_line_excerpt(line),
                 )
             )
 
@@ -332,6 +347,13 @@ def _parse_heading(line: str) -> tuple[int, str] | None:
     if match is None:
         return None
     return len(match.group(1)), match.group(2).strip()
+
+
+def _line_excerpt(line: str, limit: int = 220) -> str:
+    excerpt = re.sub(r"\s+", " ", line).strip()
+    if len(excerpt) <= limit:
+        return excerpt
+    return excerpt[: max(0, limit - 3)].rstrip() + "..."
 
 
 def _is_table_header(lines: list[str], index: int) -> bool:

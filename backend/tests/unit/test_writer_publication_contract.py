@@ -415,4 +415,15 @@ def test_telemetry_payload_returns_stable_fields() -> None:
         "issue_count": 1,
         "issue_codes": ["internal_term_leak"],
         "repair_targets": ["structured_section"],
+        "issues": [
+            {
+                "code": "internal_term_leak",
+                "line_number": 1,
+                "message": (
+                    "Markdown contains internal writer or evidence-pack terminology."
+                ),
+                "repair_target": "structured_section",
+                "excerpt": "Segment Evidence Pack JSON leaked.",
+            }
+        ],
     }
