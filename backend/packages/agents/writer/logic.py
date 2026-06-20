@@ -6,7 +6,7 @@ import math
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -220,6 +220,7 @@ def _parse_structured_section_response(
         raise ValueError("structured writer response must be a JSON object")
     try:
         payload = json.loads(cleaned_response)
+        payload = _normalize_structured_section_payload(payload)
         section = section_schema.model_validate(payload)
     except (json.JSONDecodeError, ValidationError) as exc:
         raise ValueError(f"structured writer response validation failed: {exc}") from exc
@@ -230,6 +231,24 @@ def _parse_structured_section_response(
         invalid = ", ".join(sorted(invalid_source_ids))
         raise ValueError(f"structured writer response used disallowed source_ids: {invalid}")
     return section
+
+
+def _normalize_structured_section_payload(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_normalize_structured_section_payload(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    evidence_gap_hint = value.get("evidence_gap") is True
+    normalized = {
+        key: _normalize_structured_section_payload(child)
+        for key, child in value.items()
+        if key != "evidence_gap"
+    }
+    if normalized.get("evidence_role") == "evidence_gap" or evidence_gap_hint:
+        normalized["evidence_role"] = "evidence_gap"
+        normalized["confidence"] = "low"
+    return normalized
 
 
 def _structured_section_generation_error(
@@ -1695,6 +1714,11 @@ class WriterAgentMixin:
                     "simulated interviews/surveys use simulated_research; reasoned "
                     "conclusions use inference; missing/unsupported evidence uses "
                     "evidence_gap."
+                ),
+                (
+                    "Evidence gaps are absence-of-evidence statements: set "
+                    'evidence_role="evidence_gap", confidence="low", and do not '
+                    "add legacy evidence_gap fields."
                 ),
                 f"Schema JSON: {schema_json}",
                 f"allowed_source_ids JSON: {allowed_source_ids_json}",

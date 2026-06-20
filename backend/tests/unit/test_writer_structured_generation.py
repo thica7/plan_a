@@ -615,6 +615,7 @@ def test_structured_section_prompt_includes_evidence_role_guidance() -> None:
     assert "simulated interviews/surveys" in prompt
     assert "reasoned conclusions" in prompt
     assert "missing/unsupported evidence" in prompt
+    assert 'evidence_role="evidence_gap", confidence="low"' in prompt
     assert "[source:" not in prompt
 
 
@@ -999,3 +1000,51 @@ async def test_structured_section_json_rejects_disallowed_support_appendix_sourc
             allowed_source_ids={"raw-source-a"},
             timeout_seconds=5.0,
         )
+
+
+@pytest.mark.asyncio
+async def test_structured_section_json_normalizes_high_confidence_evidence_gaps() -> None:
+    payload = {
+        "source_quality": [
+            {
+                "text": "Official pricing evidence is available.",
+                "source_ids": ["raw-source-a"],
+                "confidence": "high",
+                "evidence_role": "official_fact",
+            },
+            {
+                "text": "Direct buyer interview evidence was not collected.",
+                "source_ids": [],
+                "confidence": "high",
+                "evidence_role": "evidence_gap",
+            },
+        ],
+        "user_research_evidence": [
+            {
+                "text": "No verified user interviews were collected.",
+                "source_ids": [],
+                "confidence": "high",
+                "evidence_role": "inference",
+                "evidence_gap": True,
+            }
+        ],
+        "rag_gap_fill": [],
+        "scenario_qa": [],
+        "claim_risk": [],
+        "next_collection": [],
+        "evidence_appendix": [],
+    }
+    harness = _WriterHarness([json.dumps(payload), json.dumps(payload)])
+
+    section = await harness._writer_structured_section_json(
+        record=object(),
+        segment={"section_id": "support", "content": "Evidence"},
+        section_schema=ReportSupport,
+        allowed_source_ids={"raw-source-a"},
+        timeout_seconds=5.0,
+    )
+
+    assert section.source_quality[1].evidence_role == "evidence_gap"
+    assert section.source_quality[1].confidence == "low"
+    assert section.user_research_evidence[0].evidence_role == "evidence_gap"
+    assert section.user_research_evidence[0].confidence == "low"
