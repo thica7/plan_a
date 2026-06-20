@@ -1008,61 +1008,6 @@ async def test_structured_section_json_uses_section_completion_budget() -> None:
 
 
 @pytest.mark.asyncio
-async def test_structured_section_json_respects_lower_global_completion_budget() -> None:
-    payload = {
-        "recommendation": {
-            "text": "Choose Cursor.",
-            "source_ids": ["raw-source-a"],
-            "confidence": "high",
-            "evidence_role": "official_fact",
-        },
-        "risk_adjusted_rationale": {
-            "text": "Cursor has the clearest cited evidence.",
-            "source_ids": ["raw-source-a"],
-            "confidence": "high",
-            "evidence_role": "official_fact",
-        },
-        "competitor_postures": [
-            {
-                "competitor": "Cursor",
-                "posture": {
-                    "text": "Use Cursor as the baseline.",
-                    "source_ids": ["raw-source-a"],
-                    "confidence": "high",
-                    "evidence_role": "official_fact",
-                },
-            }
-        ],
-        "confidence_boundary": {
-            "text": "Validate security terms before purchase.",
-            "source_ids": ["raw-source-a"],
-            "confidence": "medium",
-            "evidence_role": "official_fact",
-        },
-        "next_actions": [
-            {
-                "text": "Run a procurement proof point check.",
-                "source_ids": ["raw-source-a"],
-                "confidence": "medium",
-                "evidence_role": "official_fact",
-            }
-        ],
-    }
-    harness = _WriterHarness([json.dumps(payload)])
-    harness._settings = SimpleNamespace(llm_max_tokens=1024)
-
-    await harness._writer_structured_section_json(
-        record=object(),
-        segment={"section_id": "executive_summary", "content": "Evidence"},
-        section_schema=ExecutiveSummarySection,
-        allowed_source_ids={"raw-source-a"},
-        timeout_seconds=5.0,
-    )
-
-    assert harness.max_token_requests == [1024]
-
-
-@pytest.mark.asyncio
 async def test_structured_section_json_retries_invalid_json_once() -> None:
     valid_payload = {
         "recommendation": {

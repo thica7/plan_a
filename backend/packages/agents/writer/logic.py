@@ -929,16 +929,6 @@ def _json_chars(value: object) -> int:
     return len(json.dumps(value, ensure_ascii=False))
 
 
-def _structured_section_completion_max_tokens(agent: object) -> int:
-    settings = getattr(agent, "_settings", None)
-    configured = getattr(settings, "llm_max_tokens", None)
-    try:
-        configured_tokens = int(configured)
-    except (TypeError, ValueError):
-        configured_tokens = STRUCTURED_SECTION_COMPLETION_MAX_TOKENS
-    return max(1, min(configured_tokens, STRUCTURED_SECTION_COMPLETION_MAX_TOKENS))
-
-
 def _structured_budgeted_segment_inputs(evidence_pack_result) -> list[dict[str, object]]:
     if not hasattr(evidence_pack_result, "segment_inputs"):
         return []
@@ -2033,7 +2023,6 @@ class WriterAgentMixin:
             section_schema=section_schema,
             allowed_source_ids=allowed_source_ids,
         )
-        max_tokens = _structured_section_completion_max_tokens(self)
         try:
             response = await asyncio.wait_for(
                 self._trace_llm_text(
@@ -2046,7 +2035,7 @@ class WriterAgentMixin:
                         "writing one structured report section."
                     ),
                     user=prompt,
-                    max_tokens=max_tokens,
+                    max_tokens=STRUCTURED_SECTION_COMPLETION_MAX_TOKENS,
                 ),
                 timeout=timeout_seconds,
             )
@@ -2091,7 +2080,7 @@ class WriterAgentMixin:
                             "Return valid JSON only."
                         ),
                         user=retry_prompt,
-                        max_tokens=max_tokens,
+                        max_tokens=STRUCTURED_SECTION_COMPLETION_MAX_TOKENS,
                     ),
                     timeout=timeout_seconds,
                 )
