@@ -25,6 +25,10 @@ PRICE_AMOUNT_RE = re.compile(
     r"(?P<suffix>\d+(?:\.\d+)?)\s*(?:usd|dollars?)",
     flags=re.IGNORECASE,
 )
+DATA_RETENTION_RE = re.compile(
+    r"(?P<days>\d{1,4})[-\s]*(?:day|days)\b",
+    flags=re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,8 @@ def extract_structured_fact_positions(
     """Extract deterministic fact positions such as support:sso or price:pro:month."""
     normalized = text.casefold()
     positions = _binary_fact_positions(normalized)
+    positions.extend(_privacy_fact_positions(normalized))
+    positions.extend(_retention_fact_positions(normalized))
     if "pricing" in dimension.casefold():
         positions.extend(_pricing_fact_positions(normalized))
     return positions
@@ -141,6 +147,17 @@ def _claims_from_positions(
                     position=position,
                 )
             )
+        elif claim_area.startswith(("privacy:", "retention:")):
+            claims.append(
+                _claim(
+                    source,
+                    predicate=claim_area,
+                    value=position,
+                    polarity="observed",
+                    claim_area=claim_area,
+                    position=position,
+                )
+            )
     return claims
 
 
@@ -177,6 +194,77 @@ def _pricing_fact_positions(text: str) -> list[tuple[str, str]]:
             positions.append(("support:free plan", "unsupported"))
         elif _positive_position_window(text):
             positions.append(("support:free plan", "supported"))
+    return positions
+
+
+def _privacy_fact_positions(text: str) -> list[tuple[str, str]]:
+    customer_data_terms = (
+        "customer data",
+        "customer code",
+        "user data",
+        "user prompts",
+        "prompts",
+        "source code",
+    )
+    training_terms = ("train", "training", "model training")
+    if not any(term in text for term in customer_data_terms) or not any(
+        term in text for term in training_terms
+    ):
+        return []
+    if any(
+        phrase in text
+        for phrase in (
+            "does not train on customer data",
+            "does not train on customer code",
+            "does not train on user data",
+            "does not train on user prompts",
+            "doesn't train on customer data",
+            "doesn't train on customer code",
+            "do not train on customer data",
+            "do not train on customer code",
+            "will not train on customer data",
+            "will not train on customer code",
+            "not used to train",
+            "never used to train",
+            "never train on customer data",
+            "never train on customer code",
+            "opt out of training by default",
+            "training is disabled by default",
+        )
+    ):
+        return [("privacy:data_training", "does_not_train")]
+    if any(
+        phrase in text
+        for phrase in (
+            "trains on customer data",
+            "trains on customer code",
+            "train on customer data",
+            "train on customer code",
+            "used to train",
+            "uses customer data to train",
+            "uses customer code to train",
+            "may use customer data to train",
+            "may use customer prompts to train",
+            "may use user data to train",
+            "may use user prompts to train",
+            "data may be used to train",
+            "prompts may be used to train",
+            "customer data may be used for training",
+        )
+    ):
+        return [("privacy:data_training", "trains")]
+    return []
+
+
+def _retention_fact_positions(text: str) -> list[tuple[str, str]]:
+    if not any(term in text for term in ("retention", "retain", "retains", "stored for")):
+        return []
+    positions: list[tuple[str, str]] = []
+    for match in DATA_RETENTION_RE.finditer(text):
+        window = text[max(0, match.start() - 70) : match.end() + 70]
+        if any(term in window for term in ("retention", "retain", "retains", "stored for")):
+            days = str(int(match.group("days")))
+            positions.append(("retention:data", f"{days}_days"))
     return positions
 
 

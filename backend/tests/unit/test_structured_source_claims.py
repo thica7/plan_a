@@ -90,3 +90,53 @@ def test_structured_source_conflicts_detect_price_mismatch() -> None:
         "$20/month": ["kb-price"],
         "$30/month": ["live-price"],
     }
+
+
+def test_structured_source_conflicts_detect_customer_data_training_policy() -> None:
+    conflicts = find_structured_source_conflicts(
+        [
+            _source(
+                "kb-privacy",
+                "Acme does not train on customer code or customer data.",
+                origin="rag_kb",
+                dimension="privacy",
+            ),
+            _source(
+                "live-privacy",
+                "Acme may use customer prompts to train models unless teams opt out.",
+                dimension="privacy",
+            ),
+        ],
+        dimension="privacy",
+    )
+
+    assert conflicts[0].claim_area == "privacy:data_training"
+    assert conflicts[0].source_ids_by_position == {
+        "does_not_train": ["kb-privacy"],
+        "trains": ["live-privacy"],
+    }
+
+
+def test_structured_source_conflicts_detect_data_retention_mismatch() -> None:
+    conflicts = find_structured_source_conflicts(
+        [
+            _source(
+                "kb-retention",
+                "Acme retains customer data with 30-day retention for enterprise logs.",
+                origin="rag_kb",
+                dimension="privacy",
+            ),
+            _source(
+                "live-retention",
+                "Acme customer data retention is 90 days for enterprise logs.",
+                dimension="privacy",
+            ),
+        ],
+        dimension="privacy",
+    )
+
+    assert conflicts[0].claim_area == "retention:data"
+    assert conflicts[0].source_ids_by_position == {
+        "30_days": ["kb-retention"],
+        "90_days": ["live-retention"],
+    }

@@ -72,6 +72,7 @@ RAG KB crawler 原本已经在项目里起作用，但更偏独立链路：
    - 同一 competitor/dimension 下检测 KB reused source 与 live source 的互斥声明。
    - 覆盖 SSO/SAML/SCIM/SOC 2/API/free plan/enterprise plan/self-hosted 等高风险事实项。
    - pricing 下检测同 plan/cadence 的不同价格。
+   - privacy 下检测 customer-data/model-training policy 与 data retention window 冲突。
    - 发现冲突时不让报告直接选边站，而是生成 consistency blocker，交给 collector 重新验证。
 
 ### 前端同步
@@ -134,7 +135,7 @@ git diff --check
 
 结果：
 
-1. 新增 `eval/rag-kb-quality-gate-eval.jsonl`，覆盖 pricing 变更、功能下线、官网/第三方冲突、旧 KB vs 新网页、竞品歧义、security 冲突、free plan 冲突。
+1. 新增 `eval/rag-kb-quality-gate-eval.jsonl`，覆盖 pricing 变更、功能下线、官网/第三方冲突、旧 KB vs 新网页、竞品歧义、security 冲突、free plan 冲突、privacy training 冲突、data retention 冲突。
 2. 新增 `backend/tests/unit/test_rag_kb_eval_set.py`，保证 eval set 有固定风险场景、可追溯 evidence、KB/live source mix、预期 gate。
 3. `.github/workflows/quality.yml` 新增 RAG KB targeted quality tests，避免每次依赖全量 backend unit。
 4. 本轮 targeted 测试通过：`9 passed`。

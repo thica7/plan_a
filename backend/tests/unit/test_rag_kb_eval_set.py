@@ -27,6 +27,8 @@ REQUIRED_SCENARIOS = {
     "free_plan_conflict",
     "official_third_party_conflict",
     "pricing_change",
+    "privacy_training_conflict",
+    "retention_conflict",
     "security_conflict",
     "stale_kb_vs_live",
 }

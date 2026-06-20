@@ -38,6 +38,7 @@ HIGH_RISK_CLAIM_RE = re.compile(
     r"\b("
     r"best|better|leading|leader|dominates|dominant|recommended|safest|safer|"
     r"enterprise-ready|soc\s*2|sso|saml|scim|audit log|compliance|security|"
+    r"privacy|customer data|customer code|data retention|retention|train|training|"
     r"cheapest|lowest|highest|fastest|most reliable"
     r")\b",
     flags=re.IGNORECASE,

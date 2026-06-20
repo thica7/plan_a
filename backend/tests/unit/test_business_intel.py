@@ -1627,6 +1627,91 @@ def test_claim_validator_detects_structured_pricing_conflict() -> None:
     assert report.issues[0].evidence_ids == ["evidence-pricing-conflict"]
 
 
+def test_claim_validator_detects_customer_data_training_conflict() -> None:
+    competitor = _competitor()
+    privacy_evidence = EvidenceRecord(
+        id="evidence-training-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="privacy-conflict",
+        competitor_id=competitor.id,
+        dimension="privacy",
+        source_type="webpage_verified",
+        title="Cursor privacy policy",
+        url="https://cursor.sh/privacy",
+        snippet="Cursor may use customer prompts to train models unless teams opt out.",
+        content_hash="hash-privacy-conflict",
+        reliability_score=0.92,
+        quality_label="accepted",
+    )
+    claim = ClaimRecord(
+        id="claim-training-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        competitor_id=competitor.id,
+        claim_type="privacy",
+        claim_text="Cursor does not train on customer data or customer code.",
+        evidence_ids=["evidence-training-conflict"],
+        confidence=0.9,
+    )
+
+    report = validate_project_claims(
+        project_id="project-1",
+        claims=[claim],
+        evidence=[privacy_evidence],
+    )
+
+    result = report.results[0]
+    assert result.high_risk is True
+    assert result.status == "unsupported"
+    assert result.validation_status == "conflicting"
+    assert result.recommended_action == "human_review"
+    assert report.issues[0].issue_type == "conflicting_evidence"
+    assert report.issues[0].evidence_ids == ["evidence-training-conflict"]
+
+
+def test_claim_validator_detects_data_retention_conflict() -> None:
+    competitor = _competitor()
+    retention_evidence = EvidenceRecord(
+        id="evidence-retention-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="retention-conflict",
+        competitor_id=competitor.id,
+        dimension="privacy",
+        source_type="webpage_verified",
+        title="Cursor enterprise privacy",
+        url="https://cursor.sh/privacy",
+        snippet="Cursor customer data retention is 90 days for enterprise logs.",
+        content_hash="hash-retention-conflict",
+        reliability_score=0.92,
+        quality_label="accepted",
+    )
+    claim = ClaimRecord(
+        id="claim-retention-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        competitor_id=competitor.id,
+        claim_type="privacy",
+        claim_text="Cursor retains customer data with 30-day retention for enterprise logs.",
+        evidence_ids=["evidence-retention-conflict"],
+        confidence=0.9,
+    )
+
+    report = validate_project_claims(
+        project_id="project-1",
+        claims=[claim],
+        evidence=[retention_evidence],
+    )
+
+    result = report.results[0]
+    assert result.high_risk is True
+    assert result.status == "unsupported"
+    assert result.validation_status == "conflicting"
+    assert report.issues[0].issue_type == "conflicting_evidence"
+    assert report.issues[0].evidence_ids == ["evidence-retention-conflict"]
+
+
 def test_release_gate_claim_conflict_includes_kb_audit_metadata() -> None:
     competitor = _competitor()
     evidence = EvidenceRecord(
