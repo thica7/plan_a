@@ -1341,7 +1341,7 @@ class WriterAgentMixin:
                         False,
                     )
                 )
-                if structured_enabled and not segmented_writer_required:
+                if structured_enabled:
                     try:
                         structured_report = await self._writer_structured_report(
                             record,

@@ -8292,6 +8292,7 @@ async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=10,
+            writer_structured_report_enabled=False,
         ),
     )
     sources = [
@@ -8756,6 +8757,57 @@ def test_real_schema_first_success_does_not_emit_markdown_fallback(monkeypatch) 
     assert "writer_markdown_fallback_used" not in event_types
     assert "writer_structured_report_validated" in event_types
     assert "writer_publication_contract_validated" in event_types
+
+
+def test_real_schema_first_still_uses_structured_writer_when_pack_requires_segments(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(
+        service,
+        run_id="run-schema-first-segment-required",
+        competitors=["Cursor", "Windsurf"],
+    )
+    record.detail.execution_mode = "real"
+    record.detail.output_language = "zh-CN"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+    structured_report = _structured_writer_fixture_report(record.detail)
+    structured_calls: list[object] = []
+
+    async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
+        structured_calls.append(evidence_pack_result)
+        return structured_report
+
+    async def fail_if_segmented_writer_called(self, *args, **kwargs):
+        raise AssertionError("Segmented writer must not bypass schema-first routing")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.build_writer_evidence_pack",
+        lambda detail: _SegmentedWriterFakePack(
+            allowed_source_ids=["raw-source-a", "raw-source-b", "raw-source-survey"]
+        ),
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
+        fake_structured_report,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_segmented_report_markdown",
+        fail_if_segmented_writer_called,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    assert structured_calls
+    assert structured_calls[0].metrics.segmented_writer_required is True
+    event_types = [event.type for event in record.events]
+    assert "writer_structured_report_validated" in event_types
+    assert "writer_markdown_fallback_used" not in event_types
 
 
 def test_real_schema_first_writer_fails_closed_when_structured_path_fails(
@@ -10317,6 +10369,7 @@ async def test_segmented_writer_does_not_serialize_full_evidence_pack(monkeypatc
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=10,
+            writer_structured_report_enabled=False,
         ),
     )
     detail = RunDetail(
@@ -10957,6 +11010,7 @@ async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=10,
+            writer_structured_report_enabled=False,
         ),
     )
     sources = [
@@ -11075,6 +11129,7 @@ async def test_writer_segment_sanitizes_spacing_and_combined_citations(monkeypat
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=10,
+            writer_structured_report_enabled=False,
         ),
     )
     sources = [
@@ -11196,6 +11251,7 @@ async def test_writer_segment_retry_fails_when_citations_stay_invalid(monkeypatc
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=10,
+            writer_structured_report_enabled=False,
         ),
     )
     source = RawSource(
