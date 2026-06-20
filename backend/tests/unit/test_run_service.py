@@ -8353,12 +8353,20 @@ async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch
                 "Cursor has repository-aware workflows. "
                 "[source:cursor-source-2]"
             )
-        if "segment_name=swot_matrix" in user:
+        if "segment_name=side_by_side_matrix" in user:
             return (
                 "## Side-by-Side Decision Matrix\nCursor compares favorably on "
-                "repository-aware workflows. [source:cursor-source-3]\n\n"
+                "repository-aware workflows. [source:cursor-source-3]"
+            )
+        if "segment_name=swot_analysis" in user:
+            return (
                 "## SWOT Analysis\nStrengths include adoption signal. "
                 "[source:cursor-source-3]"
+            )
+        if "segment_name=business_implications" in user:
+            return (
+                "## Business Implications\nCursor should be evaluated against "
+                "repository-aware workflow impact. [source:cursor-source-3]"
             )
         return "## Evidence Appendix\n- [source:cursor-source-0] Cursor source 0"
 
@@ -11310,11 +11318,19 @@ async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
                 "Cursor has cited evidence. "
                 "[source:cursor-pricing]"
             )
-        if "segment_name=swot_matrix" in user:
+        if "segment_name=side_by_side_matrix" in user:
             return (
                 "## Side-by-Side Decision Matrix\nCursor pricing is visible for comparison. "
-                "[source:cursor-pricing]\n\n"
+                "[source:cursor-pricing]"
+            )
+        if "segment_name=swot_analysis" in user:
+            return (
                 "## SWOT Analysis\nCursor has cited evidence. [source:cursor-pricing]"
+            )
+        if "segment_name=business_implications" in user:
+            return (
+                "## Business Implications\nCursor has cited decision implications. "
+                "[source:cursor-pricing]"
             )
         return "## Evidence Support\nCursor has cited evidence. [source:cursor-pricing]"
 
@@ -11424,11 +11440,19 @@ async def test_writer_segment_sanitizes_spacing_and_combined_citations(monkeypat
                 "Codex pricing has cited evidence. "
                 "[source:raw-source-openai-codex-pricing]"
             )
-        if "segment_name=swot_matrix" in user:
+        if "segment_name=side_by_side_matrix" in user:
             return (
                 "## Side-by-Side Decision Matrix\nCodex pricing has cited evidence. "
-                "[source:raw-source-openai-codex-pricing]\n\n"
+                "[source:raw-source-openai-codex-pricing]"
+            )
+        if "segment_name=swot_analysis" in user:
+            return (
                 "## SWOT Analysis\nCodex pricing has cited evidence. "
+                "[source:raw-source-openai-codex-pricing]"
+            )
+        if "segment_name=business_implications" in user:
+            return (
+                "## Business Implications\nCodex pricing has cited business implications. "
                 "[source:raw-source-openai-codex-pricing]"
             )
         return (

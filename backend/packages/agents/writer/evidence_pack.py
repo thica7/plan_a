@@ -158,6 +158,7 @@ class WriterEvidencePack(BaseModel):
 
     schema_version: str = SCHEMA_VERSION
     output_language: str = "zh-CN"
+    competitor_layer: str = "unknown"
     source_registry: list[WriterSourceRegistryItem] = Field(default_factory=list)
     groups: list[WriterEvidenceGroup] = Field(default_factory=list)
     quotes: list[WriterQuote] = Field(default_factory=list)
@@ -259,18 +260,19 @@ class WriterEvidencePackResult(BaseModel):
             segments.extend(
                 self._competitor_deep_dive_segments(competitor, competitor_groups)
             )
-        segments.extend(
-            self._budgeted_source_segments(
-                "swot_matrix",
-                groups=groups,
-                allowed_source_ids=all_source_ids,
-                group_projection="summary",
-                quote_projection="none",
-                matrix_projection="compact",
-                structured_competitors=[],
-                structured_projection="compact",
+        for strategic_segment_name in self._strategic_section_segment_names():
+            segments.extend(
+                self._budgeted_source_segments(
+                    strategic_segment_name,
+                    groups=groups,
+                    allowed_source_ids=all_source_ids,
+                    group_projection="summary",
+                    quote_projection="none",
+                    matrix_projection="compact",
+                    structured_competitors=[],
+                    structured_projection="compact",
+                )
             )
-        )
         segments.extend(
             self._budgeted_source_segments(
                 "support_appendix",
@@ -285,6 +287,24 @@ class WriterEvidencePackResult(BaseModel):
             )
         )
         return segments
+
+    def _strategic_section_segment_names(self) -> list[str]:
+        layer_section_by_layer = {
+            "L1": "battlecard",
+            "L2": "workflow_enterprise_risk",
+            "L3": "market_landscape",
+            "unknown": "business_implications",
+        }
+        return _unique(
+            [
+                "side_by_side_matrix",
+                "swot_analysis",
+                layer_section_by_layer.get(
+                    self.pack.competitor_layer,
+                    "business_implications",
+                ),
+            ]
+        )
 
     def repair_segment_inputs(
         self,
@@ -1196,6 +1216,7 @@ def _prompt_safe_pack_payload(pack: WriterEvidencePack) -> dict[str, object]:
     return {
         "schema_version": pack.schema_version,
         "output_language": pack.output_language,
+        "competitor_layer": pack.competitor_layer,
         "source_registry": [
             _prompt_safe_registry_item(item) for item in pack.source_registry
         ],
@@ -1220,6 +1241,12 @@ def _segment_contract_metadata(
         "decision_summary": "decision_summary",
         "user_research": "review_theme_summary",
         "competitor_deep_dives": "competitor_deep_dives",
+        "side_by_side_matrix": "side_by_side_matrix",
+        "swot_analysis": "swot_analysis",
+        "battlecard": "battlecard",
+        "workflow_enterprise_risk": "workflow_enterprise_risk",
+        "market_landscape": "market_landscape",
+        "business_implications": "business_implications",
         "swot_matrix": "swot_matrix",
         "support_appendix": "evidence_support",
     }
@@ -1469,6 +1496,7 @@ class _WriterEvidencePackBuilder:
         self._detect_pricing_conflicts()
         pack = WriterEvidencePack(
             output_language=self.detail.output_language,
+            competitor_layer=self.detail.plan.competitor_layer,
             source_registry=list(self.registry_by_id.values()),
             groups=list(self.groups.values()),
             quotes=list(self.quotes_by_key.values()),
@@ -2115,28 +2143,32 @@ def _repair_segment_names(sections: Sequence[str]) -> set[str]:
         names.add("user_research")
     if any(token in normalized for token in ("competitor", "deep", "vendor")):
         names.add("competitor_deep_dives")
+    if "swot_matrix" in normalized:
+        names.update({"side_by_side_matrix", "swot_analysis"})
+    if any(token in normalized for token in ("matrix", "side_by_side", "side-by-side")):
+        names.add("side_by_side_matrix")
     if "swot" in normalized:
-        names.add("swot_matrix")
+        names.add("swot_analysis")
+    if "battlecard" in normalized:
+        names.add("battlecard")
+    if any(token in normalized for token in ("workflow", "enterprise")):
+        names.add("workflow_enterprise_risk")
+    if "market" in normalized:
+        names.add("market_landscape")
+    if any(token in normalized for token in ("business", "implication")):
+        names.add("business_implications")
     if any(
         token in normalized
         for token in ("appendix", "evidence", "source", "support", "audit", "coverage")
     ):
         names.add("support_appendix")
-    if any(
-        token in normalized
-        for token in (
-            "executive",
-            "decision",
-            "finding",
-            "pricing",
-            "feature",
-            "security",
-            "workflow",
-            "market",
-            "battlecard",
-            "analysis",
-            "recommendation",
-        )
+    decision_tokens = ("executive", "decision", "finding", "recommendation")
+    broad_dimension_tokens = ("pricing", "feature", "security")
+    if (
+        any(token in normalized for token in decision_tokens)
+        and not names
+    ) or (
+        any(token in normalized for token in broad_dimension_tokens) and not names
     ) or ("summary" in normalized and not names):
         names.add("decision_summary")
     return names or {"decision_summary"}

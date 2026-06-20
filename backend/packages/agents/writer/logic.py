@@ -948,14 +948,14 @@ def _select_structured_evidence_segments(
     segment_inputs: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     target_segment_names = {
-        "executive_summary": {"decision_summary", "swot_matrix"},
+        "executive_summary": {"decision_summary", "side_by_side_matrix"},
         "decision_summary": {"decision_summary"},
-        "competitive_findings": {"decision_summary", "swot_matrix"},
+        "competitive_findings": {"decision_summary", "side_by_side_matrix"},
         "user_review_themes": {"user_research"},
         "competitor_deep_dive": {"competitor_deep_dives"},
-        "decision_matrix": {"decision_summary", "swot_matrix"},
-        "swot": {"swot_matrix"},
-        "battlecard": {"decision_summary", "swot_matrix"},
+        "decision_matrix": {"decision_summary", "side_by_side_matrix"},
+        "swot": {"swot_analysis"},
+        "battlecard": {"decision_summary", "battlecard"},
         "community_triangulation": {"user_research"},
         "support": {"support_appendix"},
     }.get(section_id, set())
@@ -2865,10 +2865,66 @@ class WriterAgentMixin:
             "Do not copy placeholder source IDs from examples. Use only IDs from "
             "allowed_source_ids in Segment Evidence Pack JSON."
         )
-        deep_dive_competitor = competitor or "<segment_competitor>"
 
         def h2(key: str) -> str:
             return f"## {report_label(detail.output_language, key)}"
+
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        outline_labels = {
+            "competitor_placeholder": ("<竞品>", "<competitor>"),
+            "competitor_1": ("<竞品 1>", "<competitor 1>"),
+            "competitor_2": ("<竞品 2>", "<competitor 2>"),
+            "dimension": ("维度", "Dimension"),
+            "pricing_packaging": ("定价与包装", "Pricing and Packaging"),
+            "feature_workflow": ("功能与工作流能力", "Feature and Workflow Capability"),
+            "user_persona_adoption": ("用户画像与采用", "User Persona and Adoption"),
+            "cross_risks": ("跨竞品风险与影响", "Cross-Competitor Risks and Implications"),
+            "direct_user_community": ("直接用户/社区信号", "Direct User / Community Signals"),
+            "simulated_survey": ("模拟问卷与访谈信号", "Simulated Survey and Interview Signals"),
+            "adoption_blockers": ("采用阻碍", "Adoption Blockers"),
+            "switching_triggers": ("切换触发", "Switching Triggers"),
+            "evidence_gaps": ("证据缺口", "Evidence Gaps"),
+            "official_vs_community": ("官方事实与社区观察", "Official Facts vs Community Observations"),
+            "repeated_signals": ("重复出现的信号", "Repeated Signals"),
+            "contested_signals": ("有争议或低置信信号", "Contested or Low-Confidence Signals"),
+            "positioning_core_value": ("定位与核心价值", "Positioning and Core Value"),
+            "feature_capabilities": ("功能能力", "Feature Capabilities"),
+            "community_feedback": (
+                "社区反馈、采用阻碍与切换触发",
+                "Community Feedback, Adoption Blockers, and Switching Triggers",
+            ),
+            "competitive_plays": ("竞争打法与证据缺口", "Competitive Plays and Evidence Gaps"),
+            "strengths": ("优势", "Strengths"),
+            "weaknesses": ("劣势", "Weaknesses"),
+            "opportunities": ("机会", "Opportunities"),
+            "threats": ("威胁", "Threats"),
+            "attack_point": ("攻击点", "Attack Point"),
+            "defense_rebuttal": ("防守/反驳", "Defense / Rebuttal"),
+            "best_fit_buyer": ("最适合买方场景", "Best-Fit Buyer Scenario"),
+            "proof_needed": ("使用前所需证据", "Proof Needed Before Use"),
+            "workflow_overlap": ("工作流重叠", "Workflow Overlap"),
+            "enterprise_buying_risk": ("企业采购风险", "Enterprise Buying Risk"),
+            "switching_cost_controls": ("切换成本与控制点", "Switching Cost and Controls"),
+            "category_segments": ("品类分段", "Category Segments"),
+            "strategic_clusters": ("战略集群", "Strategic Clusters"),
+            "trend_uncertainty": ("趋势信号与不确定性", "Trend Signals and Uncertainty"),
+            "decision_implications": ("决策影响", "Decision Implications"),
+            "operating_risks": ("运营风险", "Operating Risks"),
+            "next_validation": ("下一步验证任务", "Next Validation Tasks"),
+        }
+
+        def outline_label(key: str) -> str:
+            zh, en = outline_labels[key]
+            return zh if is_zh else en
+
+        def h3(key: str) -> str:
+            return f"### {outline_label(key)}"
+
+        def h4(key: str) -> str:
+            return f"#### {outline_label(key)}"
+
+        competitor_placeholder = outline_label("competitor_placeholder")
+        deep_dive_competitor = competitor or competitor_placeholder
 
         if contract.segment_kind == "evidence_shard":
             return "\n".join(
@@ -2894,10 +2950,10 @@ class WriterAgentMixin:
                     "- Recommended decision / buying posture.",
                     "- Confidence level and what must not be overstated.",
                     h2("competitive_findings"),
-                    "### Pricing and Packaging",
-                    "### Feature and Workflow Capability",
-                    "### User Persona and Adoption",
-                    "### Cross-Competitor Risks and Implications",
+                    h3("pricing_packaging"),
+                    h3("feature_workflow"),
+                    h3("user_persona_adoption"),
+                    h3("cross_risks"),
                     (
                         "Must include: at least three cited bullets and one "
                         "cross-competitor comparison."
@@ -2910,16 +2966,16 @@ class WriterAgentMixin:
                 [
                     "Required segment outline:",
                     h2("review_theme_summary"),
-                    "### <competitor>",
-                    "#### Direct User / Community Signals",
-                    "#### Simulated Survey and Interview Signals",
-                    "#### Adoption Blockers",
-                    "#### Switching Triggers",
-                    "#### Evidence Gaps",
+                    f"### {competitor_placeholder}",
+                    h4("direct_user_community"),
+                    h4("simulated_survey"),
+                    h4("adoption_blockers"),
+                    h4("switching_triggers"),
+                    h4("evidence_gaps"),
                     h2("community_evidence_triangulation"),
-                    "### Official Facts vs Community Observations",
-                    "### Repeated Signals",
-                    "### Contested or Low-Confidence Signals",
+                    h3("official_vs_community"),
+                    h3("repeated_signals"),
+                    h3("contested_signals"),
                     (
                         "Must include: separate direct user/community signals from "
                         "simulated survey/interview signals."
@@ -2933,15 +2989,112 @@ class WriterAgentMixin:
                     "Required segment outline:",
                     h2("competitor_deep_dives"),
                     f"### {deep_dive_competitor}",
-                    "#### Positioning and Core Value",
-                    "#### Pricing and Packaging",
-                    "#### Feature Capabilities",
-                    "#### User Persona and Adoption",
-                    "#### Community Feedback, Adoption Blockers, and Switching Triggers",
-                    "#### Competitive Plays and Evidence Gaps",
+                    h4("positioning_core_value"),
+                    h4("pricing_packaging"),
+                    h4("feature_capabilities"),
+                    h4("user_persona_adoption"),
+                    h4("community_feedback"),
+                    h4("competitive_plays"),
                     (
                         "Must include: exactly one competitor ownership H3 matching "
                         "segment_competitor."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "side_by_side_matrix":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("side_by_side_matrix"),
+                    (
+                        f"| {outline_label('dimension')} | "
+                        f"{outline_label('competitor_1')} | "
+                        f"{outline_label('competitor_2')} |"
+                    ),
+                    "|---|---|---|",
+                    (
+                        "Must include: one cited row per decision dimension and a short "
+                        "matrix interpretation after the table."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "swot_analysis":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("swot_analysis"),
+                    f"### {competitor_placeholder}",
+                    h4("strengths"),
+                    h4("weaknesses"),
+                    h4("opportunities"),
+                    h4("threats"),
+                    (
+                        "Must include: all four SWOT quadrants for every competitor. "
+                        "Use evidence-gap notes instead of unsupported claims."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "battlecard":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("battlecard"),
+                    f"### {competitor_placeholder}",
+                    h4("attack_point"),
+                    h4("defense_rebuttal"),
+                    h4("best_fit_buyer"),
+                    h4("proof_needed"),
+                    (
+                        "Must include: competitor-specific attack point, defense or "
+                        "objection handling, use-when scenario, and evidence risk."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "workflow_enterprise_risk":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("workflow_enterprise_risk"),
+                    h3("workflow_overlap"),
+                    h3("enterprise_buying_risk"),
+                    h3("switching_cost_controls"),
+                    (
+                        "Must include: workflow overlap, ecosystem leverage, enterprise "
+                        "controls, and risks that change the recommendation."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "market_landscape":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("market_landscape"),
+                    h3("category_segments"),
+                    h3("strategic_clusters"),
+                    h3("trend_uncertainty"),
+                    (
+                        "Must include: market segmentation, strategic options, and "
+                        "uncertainty boundaries."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "business_implications":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("business_implications"),
+                    h3("decision_implications"),
+                    h3("operating_risks"),
+                    h3("next_validation"),
+                    (
+                        "Must include: what the evidence changes for product, GTM, "
+                        "procurement, or follow-up analysis."
                     ),
                     source_warning,
                 ]
@@ -2951,14 +3104,18 @@ class WriterAgentMixin:
                 [
                     "Required segment outline:",
                     h2("side_by_side_matrix"),
-                    "| Dimension | <competitor 1> | <competitor 2> |",
+                    (
+                        f"| {outline_label('dimension')} | "
+                        f"{outline_label('competitor_1')} | "
+                        f"{outline_label('competitor_2')} |"
+                    ),
                     "|---|---|---|",
                     h2("swot_analysis"),
-                    "### <competitor>",
-                    "#### Strengths",
-                    "#### Weaknesses",
-                    "#### Opportunities",
-                    "#### Threats",
+                    f"### {competitor_placeholder}",
+                    h4("strengths"),
+                    h4("weaknesses"),
+                    h4("opportunities"),
+                    h4("threats"),
                     (
                         "Must include: matrix interpretation and all four SWOT quadrants "
                         "for every competitor."
@@ -3037,6 +3194,13 @@ class WriterAgentMixin:
             for heading in segment.get("forbidden_h2_headings", [])
             if isinstance(heading, str)
         )
+        heading_language_instruction = ""
+        if normalize_output_language(detail.output_language) == "zh-CN":
+            heading_language_instruction = (
+                "For zh-CN output, write structural H3/H4 headings and table "
+                "headers in Chinese. Keep product names, API names, model names, "
+                "and source IDs in their original language.\n"
+            )
         segment_outline = self._writer_segment_required_outline(detail, segment)
         citation_warning = ""
         if citation_error_ids:
@@ -3120,6 +3284,7 @@ class WriterAgentMixin:
                     f"{required_h2_headings or 'none'}\n"
                     "Forbidden H2 headings for this segment: "
                     f"{forbidden_h2_headings or 'none'}\n"
+                    f"{heading_language_instruction}"
                     f"{segment_outline}\n"
                     f"{citation_warning}"
                     f"{contract_warning}"

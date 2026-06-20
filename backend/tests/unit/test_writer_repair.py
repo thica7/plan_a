@@ -300,6 +300,27 @@ def test_writer_repair_maps_battlecard_watchouts_to_battlecard_only() -> None:
     assert plan.sections == ["battlecard"]
 
 
+def test_writer_repair_maps_side_by_side_decision_matrix_to_matrix_only() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-side-by-side-matrix",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        field_path="report_md.section[side_by_side_matrix]",
+        problem="Side-by-Side Decision Matrix needs fuller cited tradeoff rows.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="Repair Side-by-Side Decision Matrix only.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["side_by_side_matrix"]
+
+
 def test_apply_line_repair_removes_only_still_noisy_lines() -> None:
     markdown = "good opening\nbad line \ufffd\nkeep this cited line [source:pricing-1]\n"
     issues = [_report_line_issue(line_number=2, problem="non-publishable text noise")]

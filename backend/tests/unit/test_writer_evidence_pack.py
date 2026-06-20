@@ -569,12 +569,12 @@ def test_segment_matrix_keeps_full_matrix_cell_value() -> None:
     )
 
     result = build_writer_evidence_pack(detail)
-    swot_segment = next(
+    matrix_segment = next(
         segment
         for segment in result.segment_inputs()
-        if segment["segment_name"] == "swot_matrix"
+        if segment["segment_name"] == "side_by_side_matrix"
     )
-    cells = swot_segment["matrix"]["cells"]
+    cells = matrix_segment["matrix"]["cells"]
 
     assert len(long_value) > 240
     assert cells[0]["value"] == long_value
@@ -1117,6 +1117,101 @@ def test_segment_inputs_keep_non_core_dimensions_in_broad_segments() -> None:
 
     assert "cursor-security" in by_name["decision_summary"]["allowed_source_ids"]
     assert "cursor-security" in by_name["support_appendix"]["allowed_source_ids"]
+
+
+def test_segment_inputs_split_matrix_swot_and_l1_battlecard() -> None:
+    sources = [
+        RawSource(
+            id="cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor Pro has visible pricing for developer teams.",
+            content_hash="cursor-pricing-hash",
+            confidence=0.92,
+        ),
+        RawSource(
+            id="copilot-feature",
+            competitor="GitHub Copilot",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="GitHub Copilot feature",
+            snippet="GitHub Copilot benefits from Microsoft and GitHub workflow integration.",
+            content_hash="copilot-feature-hash",
+            confidence=0.91,
+        ),
+    ]
+    detail = _detail_with_sources(sources)
+    detail.plan.competitors = ["Cursor", "GitHub Copilot"]
+    detail.plan.dimensions = ["pricing", "feature"]
+    detail.plan.competitor_layer = "L1"
+
+    result = build_writer_evidence_pack(detail)
+    segments = result.segment_inputs()
+    by_name = {segment["segment_name"]: segment for segment in segments}
+
+    assert "swot_matrix" not in by_name
+    assert by_name["side_by_side_matrix"]["section_id"] == "side_by_side_matrix"
+    assert by_name["swot_analysis"]["section_id"] == "swot_analysis"
+    assert by_name["battlecard"]["section_id"] == "battlecard"
+    assert by_name["side_by_side_matrix"]["section_key"] == "side_by_side_matrix"
+    assert by_name["swot_analysis"]["section_key"] == "swot_analysis"
+    assert by_name["battlecard"]["section_key"] == "battlecard"
+    assert set(by_name["side_by_side_matrix"]["allowed_source_ids"]) == {
+        "cursor-pricing",
+        "copilot-feature",
+    }
+
+
+def test_repair_segment_inputs_maps_legacy_swot_matrix_to_split_sections() -> None:
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor pricing creates a buyer-facing advantage.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.92,
+    )
+    detail = _detail_with_sources([source])
+    detail.plan.competitor_layer = "L1"
+
+    result = build_writer_evidence_pack(detail)
+    payloads = result.repair_segment_inputs(["swot_matrix"])
+    segment_names = [
+        segment["segment_name"]
+        for payload in payloads
+        for segment in payload["segments"]
+    ]
+
+    assert segment_names == ["side_by_side_matrix", "swot_analysis"]
+
+
+def test_repair_segment_inputs_routes_side_by_side_decision_matrix_only() -> None:
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor pricing creates a buyer-facing advantage.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.92,
+    )
+    detail = _detail_with_sources([source])
+    detail.plan.competitor_layer = "L1"
+
+    result = build_writer_evidence_pack(detail)
+    payloads = result.repair_segment_inputs(["Side-by-Side Decision Matrix"])
+    segment_names = [
+        segment["segment_name"]
+        for payload in payloads
+        for segment in payload["segments"]
+    ]
+
+    assert segment_names == ["side_by_side_matrix"]
 
 
 def test_segment_inputs_treat_customer_dimensions_as_user_research() -> None:
@@ -2112,8 +2207,12 @@ def test_segment_inputs_include_section_key_and_layer_metadata() -> None:
     assert segments_by_name["decision_summary"]["layer"] == "core"
     assert segments_by_name["user_research"]["section_key"] == "review_theme_summary"
     assert segments_by_name["user_research"]["layer"] == "core"
-    assert segments_by_name["swot_matrix"]["section_key"] == "swot_matrix"
-    assert segments_by_name["swot_matrix"]["layer"] == "core"
+    assert segments_by_name["side_by_side_matrix"]["section_key"] == "side_by_side_matrix"
+    assert segments_by_name["side_by_side_matrix"]["layer"] == "core"
+    assert segments_by_name["swot_analysis"]["section_key"] == "swot_analysis"
+    assert segments_by_name["swot_analysis"]["layer"] == "core"
+    assert segments_by_name["business_implications"]["section_key"] == "business_implications"
+    assert segments_by_name["business_implications"]["layer"] == "core"
     assert segments_by_name["support_appendix"]["section_key"] == "evidence_support"
     assert segments_by_name["support_appendix"]["layer"] == "support"
 
