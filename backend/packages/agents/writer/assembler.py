@@ -152,13 +152,12 @@ def _assemble_report_blocks(
         if canonical_fragment_key is not None:
             canonical_bodies = [intro] if intro else []
             canonical_bodies.extend(section.body for section in sections if section.body)
-            if canonical_bodies:
-                _append_known_section(
-                    known_sections,
-                    known_counts,
-                    canonical_fragment_key,
-                    "\n\n".join(canonical_bodies),
-                )
+            _append_known_section(
+                known_sections,
+                known_counts,
+                canonical_fragment_key,
+                "\n\n".join(canonical_bodies),
+            )
             continue
         if not sections:
             if intro:
