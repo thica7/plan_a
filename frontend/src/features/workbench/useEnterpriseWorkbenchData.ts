@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { fillProjectEvidenceGaps, getDecisionReplay, getTraceSpans, updateEvidenceQuality } from "../../api/client";
+import { fillProjectEvidenceGaps, getDecisionReplay, getTraceSpans, redoRun, updateEvidenceQuality } from "../../api/client";
 import type {
   ArtifactRecord,
   EvidenceGapFillResult,
@@ -33,6 +33,12 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
   const [isFillingGaps, setFillingGaps] = useState(false);
   const [isReportActionPending, setReportActionPending] = useState(false);
   const [lastExport, setLastExport] = useState<ArtifactRecord | null>(null);
+  const [gateRedoIssueId, setGateRedoIssueId] = useState<string | null>(null);
+  const [gateRedoResult, setGateRedoResult] = useState<{
+    issueId: string;
+    runId: string;
+    status: string;
+  } | null>(null);
   const [kbRollbackIssueId, setKbRollbackIssueId] = useState<string | null>(null);
   const [kbRollbackResult, setKbRollbackResult] = useState<{
     issueId: string;
@@ -174,6 +180,21 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     }
   }
 
+  async function handleRedoGateIssue(issueId: string) {
+    if (!selectedVersion?.run_id) return;
+    setGateRedoIssueId(issueId);
+    setGateRedoResult(null);
+    setError(null);
+    try {
+      const updated = await redoRun(selectedVersion.run_id);
+      setGateRedoResult({ issueId, runId: updated.id, status: updated.status });
+      if (selectedProject) await refreshProject(selectedProject);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to trigger scoped redo");
+    } finally {
+      setGateRedoIssueId(null);
+    }
+  }
   async function handleKbRollbackIssue(issueId: string, request: KnowledgeRollbackRequest) {
     setKbRollbackIssueId(issueId);
     setKbRollbackResult(null);
@@ -236,10 +257,13 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     evidenceById,
     filteredEvidence,
     gapFillResult,
+    gateRedoIssueId,
+    gateRedoResult,
     handleEvidenceQuality,
     handleExport,
     handleGapFill,
     handleKbRollbackIssue,
+    handleRedoGateIssue,
     handleReportAction,
     isFillingGaps,
     isLoadingProject,

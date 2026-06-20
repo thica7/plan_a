@@ -96,6 +96,50 @@ describe("ReportReviewDesk release gate audit metadata", () => {
       restore_previous: true,
     });
   });
+  it("fires scoped redo for a release gate issue", () => {
+    const onRedoGateIssue = vi.fn();
+
+    render(
+      <ReportReviewDesk
+        diff={null}
+        evidenceById={new Map()}
+        isDiffLoading={false}
+        onEvidenceQuality={() => undefined}
+        onRedoGateIssue={onRedoGateIssue}
+        onSelectClaim={() => undefined}
+        onSelectEvidence={() => undefined}
+        previousVersion={null}
+        releaseGate={claimConflictGate}
+        scopedClaims={[]}
+        selectedVersion={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Redo affected branch/i }));
+
+    expect(onRedoGateIssue).toHaveBeenCalledWith("issue-claim-conflict");
+  });
+
+  it("renders scoped redo feedback for the matching issue", () => {
+    render(
+      <ReportReviewDesk
+        diff={null}
+        evidenceById={new Map()}
+        gateRedoResult={{ issueId: "issue-claim-conflict", runId: "run-123", status: "running" }}
+        isDiffLoading={false}
+        onEvidenceQuality={() => undefined}
+        onRedoGateIssue={() => undefined}
+        onSelectClaim={() => undefined}
+        onSelectEvidence={() => undefined}
+        previousVersion={null}
+        releaseGate={claimConflictGate}
+        scopedClaims={[]}
+        selectedVersion={null}
+      />,
+    );
+
+    expect(screen.getByText("Scoped redo started for run-123; current status running.")).toBeInTheDocument();
+  });
   it("builds compact audit rows from release gate metadata", () => {
     const rows = buildReleaseIssueAuditRows(claimConflictGate.issues[0]);
 

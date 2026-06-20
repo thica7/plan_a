@@ -28,6 +28,8 @@ interface ActiveViewProps {
   filteredEvidence: EvidenceRecord[];
   gapFillResult: EvidenceGapFillResult | null;
   isFillingGaps: boolean;
+  gateRedoIssueId: string | null;
+  gateRedoResult: { issueId: string; runId: string; status: string } | null;
   kbRollbackIssueId: string | null;
   kbRollbackResult: { issueId: string; result: KnowledgeRollbackResult } | null;
   isReportActionPending: boolean;
@@ -35,6 +37,7 @@ interface ActiveViewProps {
   onEvidenceQuality: (evidenceId: string, qualityLabel: EvidenceQualityLabel) => void;
   onExport: (format: ReportExportFormat) => void;
   onFillGaps: () => void;
+  onRedoGateIssue: (issueId: string) => void;
   onRollbackKbIssue: (issueId: string, request: KnowledgeRollbackRequest) => void;
   onReportAction: (action: ReportAction) => void;
   onSelectClaim: (claim: ClaimRecord) => void;
@@ -59,6 +62,8 @@ export function ActiveView({
   filteredEvidence,
   gapFillResult,
   isFillingGaps,
+  gateRedoIssueId,
+  gateRedoResult,
   kbRollbackIssueId,
   kbRollbackResult,
   isReportActionPending,
@@ -66,6 +71,7 @@ export function ActiveView({
   onEvidenceQuality,
   onExport,
   onFillGaps,
+  onRedoGateIssue,
   onRollbackKbIssue,
   onReportAction,
   onSelectClaim,
@@ -105,6 +111,8 @@ export function ActiveView({
         claims={data.claims}
         evidenceById={evidenceById}
         isPending={isReportActionPending}
+        gateRedoIssueId={gateRedoIssueId}
+        gateRedoResult={gateRedoResult}
         kbRollbackIssueId={kbRollbackIssueId}
         kbRollbackResult={kbRollbackResult}
         lastExport={lastExport}
@@ -114,6 +122,7 @@ export function ActiveView({
         onSelectEvidence={onSelectEvidence}
         onSelectReport={onSelectReport}
         onReportAction={onReportAction}
+        onRedoGateIssue={onRedoGateIssue}
         onRollbackKbIssue={onRollbackKbIssue}
         releaseGate={releaseGate}
         reportSources={reportSources}

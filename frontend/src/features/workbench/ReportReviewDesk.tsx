@@ -17,9 +17,12 @@ interface ReportReviewDeskProps {
   diff: ReportVersionDiff | null;
   evidenceById: Map<string, EvidenceRecord>;
   isDiffLoading: boolean;
+  gateRedoIssueId?: string | null;
+  gateRedoResult?: ReleaseIssueRedoResult | null;
   kbRollbackIssueId?: string | null;
   kbRollbackResult?: ReleaseIssueRollbackResult | null;
   onEvidenceQuality: (evidenceId: string, qualityLabel: EvidenceQualityLabel) => void;
+  onRedoGateIssue?: (issueId: string) => void | Promise<void>;
   onRollbackKbIssue?: (issueId: string, request: KnowledgeRollbackRequest) => void | Promise<void>;
   onSelectClaim: (claim: ClaimRecord) => void;
   onSelectEvidence: (evidence: EvidenceRecord) => void;
@@ -33,9 +36,12 @@ export function ReportReviewDesk({
   diff,
   evidenceById,
   isDiffLoading,
+  gateRedoIssueId = null,
+  gateRedoResult = null,
   kbRollbackIssueId = null,
   kbRollbackResult = null,
   onEvidenceQuality,
+  onRedoGateIssue,
   onRollbackKbIssue,
   onSelectClaim,
   onSelectEvidence,
@@ -48,8 +54,11 @@ export function ReportReviewDesk({
     <aside className="report-review-desk">
       <DiffPanel diff={diff} isLoading={isDiffLoading} previousVersion={previousVersion} />
       <ReleaseIssuesPanel
+        gateRedoIssueId={gateRedoIssueId}
+        gateRedoResult={gateRedoResult}
         kbRollbackIssueId={kbRollbackIssueId}
         kbRollbackResult={kbRollbackResult}
+        onRedoGateIssue={onRedoGateIssue}
         onRollbackKbIssue={onRollbackKbIssue}
         releaseGate={releaseGate}
       />
@@ -106,13 +115,19 @@ function DiffPanel({
 }
 
 function ReleaseIssuesPanel({
+  gateRedoIssueId,
+  gateRedoResult,
   kbRollbackIssueId,
   kbRollbackResult,
+  onRedoGateIssue,
   onRollbackKbIssue,
   releaseGate,
 }: {
+  gateRedoIssueId: string | null;
+  gateRedoResult: ReleaseIssueRedoResult | null;
   kbRollbackIssueId: string | null;
   kbRollbackResult: ReleaseIssueRollbackResult | null;
+  onRedoGateIssue?: (issueId: string) => void | Promise<void>;
   onRollbackKbIssue?: (issueId: string, request: KnowledgeRollbackRequest) => void | Promise<void>;
   releaseGate: ReportReleaseGate | null;
 }) {
@@ -124,6 +139,8 @@ function ReleaseIssuesPanel({
           {releaseGate.issues.slice(0, 5).map((issue) => {
             const auditRows = buildReleaseIssueAuditRows(issue);
             const rollbackTarget = buildReleaseIssueRollbackTarget(issue);
+            const redoResult = gateRedoResult?.issueId === issue.id ? gateRedoResult : null;
+            const isRedoing = gateRedoIssueId === issue.id;
             const rollbackResult = kbRollbackResult?.issueId === issue.id ? kbRollbackResult.result : null;
             const isRollingBack = kbRollbackIssueId === issue.id;
             return (
@@ -140,20 +157,38 @@ function ReleaseIssuesPanel({
                     ))}
                   </dl>
                 ) : null}
-                {rollbackTarget && onRollbackKbIssue ? (
+                {rollbackTarget || onRedoGateIssue ? (
                   <div className="release-issue-actions">
-                    <button
-                      className="table-action-button"
-                      disabled={Boolean(kbRollbackIssueId)}
-                      onClick={() => void onRollbackKbIssue(rollbackTarget.issueId, rollbackTarget.request)}
-                      title={`Rollback ${rollbackTarget.selectorSummary}`}
-                      type="button"
-                    >
-                      <RotateCcw size={14} aria-hidden />
-                      {isRollingBack ? "Rolling back" : "Rollback KB evidence"}
-                    </button>
-                    <span>{rollbackTarget.selectorSummary}</span>
+                    {rollbackTarget && onRollbackKbIssue ? (
+                      <button
+                        className="table-action-button"
+                        disabled={Boolean(kbRollbackIssueId)}
+                        onClick={() => void onRollbackKbIssue(rollbackTarget.issueId, rollbackTarget.request)}
+                        title={`Rollback ${rollbackTarget.selectorSummary}`}
+                        type="button"
+                      >
+                        <RotateCcw size={14} aria-hidden />
+                        {isRollingBack ? "Rolling back" : "Rollback KB evidence"}
+                      </button>
+                    ) : null}
+                    {onRedoGateIssue ? (
+                      <button
+                        className="table-action-button"
+                        disabled={Boolean(gateRedoIssueId)}
+                        onClick={() => void onRedoGateIssue(issue.id)}
+                        title="Run scoped redo for the affected branch"
+                        type="button"
+                      >
+                        {isRedoing ? "Redoing" : "Redo affected branch"}
+                      </button>
+                    ) : null}
+                    {rollbackTarget ? <span>{rollbackTarget.selectorSummary}</span> : null}
                   </div>
+                ) : null}
+                {redoResult ? (
+                  <p className="release-issue-feedback">
+                    Scoped redo started for {redoResult.runId}; current status {redoResult.status}.
+                  </p>
                 ) : null}
                 {rollbackResult ? (
                   <p className="release-issue-feedback">
@@ -176,6 +211,12 @@ function ReleaseIssuesPanel({
 export interface ReleaseIssueAuditRow {
   label: string;
   value: string;
+}
+
+export interface ReleaseIssueRedoResult {
+  issueId: string;
+  runId: string;
+  status: string;
 }
 
 export interface ReleaseIssueRollbackResult {

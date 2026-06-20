@@ -23,6 +23,8 @@ interface ReportStudioProps {
   claims: ClaimRecord[];
   evidenceById: Map<string, EvidenceRecord>;
   isPending: boolean;
+  gateRedoIssueId: string | null;
+  gateRedoResult: { issueId: string; runId: string; status: string } | null;
   kbRollbackIssueId: string | null;
   kbRollbackResult: { issueId: string; result: KnowledgeRollbackResult } | null;
   lastExport: ArtifactRecord | null;
@@ -32,6 +34,7 @@ interface ReportStudioProps {
   onSelectEvidence: (evidence: EvidenceRecord) => void;
   onSelectReport: (report: ReportVersionRecord) => void;
   onReportAction: (action: ReportAction) => void;
+  onRedoGateIssue: (issueId: string) => void;
   onRollbackKbIssue: (issueId: string, request: KnowledgeRollbackRequest) => void;
   releaseGate: ReportReleaseGate | null;
   reportSources: ReportSourceBundle;
@@ -45,6 +48,8 @@ export function ReportStudio({
   claims,
   evidenceById,
   isPending,
+  gateRedoIssueId,
+  gateRedoResult,
   kbRollbackIssueId,
   kbRollbackResult,
   lastExport,
@@ -54,6 +59,7 @@ export function ReportStudio({
   onSelectEvidence,
   onSelectReport,
   onReportAction,
+  onRedoGateIssue,
   onRollbackKbIssue,
   releaseGate,
   reportSources,
@@ -137,9 +143,12 @@ export function ReportStudio({
           diff={diff}
           evidenceById={evidenceById}
           isDiffLoading={isDiffLoading}
+          gateRedoIssueId={gateRedoIssueId}
+          gateRedoResult={gateRedoResult}
           kbRollbackIssueId={kbRollbackIssueId}
           kbRollbackResult={kbRollbackResult}
           onEvidenceQuality={onEvidenceQuality}
+          onRedoGateIssue={selectedVersion?.run_id ? onRedoGateIssue : undefined}
           onRollbackKbIssue={onRollbackKbIssue}
           onSelectClaim={onSelectClaim}
           onSelectEvidence={onSelectEvidence}
