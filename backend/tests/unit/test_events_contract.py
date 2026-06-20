@@ -40,6 +40,7 @@ EXPECTED_EVENT_TYPES = {
     "writer_structured_section_completed",
     "writer_structured_report_validated",
     "writer_publication_contract_validated",
+    "writer_schema_first_failed_closed",
     "writer_markdown_fallback_used",
 }
 

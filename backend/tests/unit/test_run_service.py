@@ -8623,7 +8623,7 @@ def test_real_writer_uses_structured_path_when_enabled(monkeypatch) -> None:
     )
 
 
-def test_real_writer_traces_markdown_fallback_when_structured_path_fails(
+def test_real_schema_first_writer_fails_closed_when_structured_path_fails(
     monkeypatch,
 ) -> None:
     service = _segmented_writer_service()
@@ -8633,18 +8633,55 @@ def test_real_writer_traces_markdown_fallback_when_structured_path_fails(
         writer_timeout_seconds=10,
     )
     record = _segmented_writer_record(service, competitors=["Cursor", "Windsurf"])
+    record.detail.execution_mode = "real"
     record.detail.output_language = "zh-CN"
     record.detail.raw_sources = _structured_writer_raw_sources()
 
     async def fake_structured_report(self, record, evidence_pack_result, timeout_seconds):
         raise ValueError("structured section failed")
 
-    async def fake_markdown_writer(self, record, evidence_pack_result, timeout_seconds):
-        return "## 执行摘要\n\nFallback report. [source:raw-source-a]\n"
+    async def fail_if_markdown_writer_called(self, record, evidence_pack_result, timeout_seconds):
+        raise AssertionError("Markdown fallback must not run for real schema-first reports")
 
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
         fake_structured_report,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_markdown_report_from_evidence_pack",
+        fail_if_markdown_writer_called,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    assert record.detail.status == "failed"
+    assert record.detail.report_md == ""
+    event_types = [event.type for event in record.events]
+    assert "writer_schema_first_failed_closed" in event_types
+    assert "writer_markdown_fallback_used" not in event_types
+
+
+def test_markdown_writer_still_runs_when_structured_flag_disabled(monkeypatch) -> None:
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=False,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(service, competitors=["Cursor", "Windsurf"])
+    record.detail.execution_mode = "real"
+    record.detail.output_language = "zh-CN"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+
+    async def fail_if_structured_writer_called(self, record, evidence_pack_result, timeout_seconds):
+        raise AssertionError("Structured writer should not run when flag is disabled")
+
+    async def fake_markdown_writer(self, record, evidence_pack_result, timeout_seconds):
+        return "## 执行摘要\n\nFallback-disabled-path report. [source:raw-source-a]\n"
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_structured_report",
+        fail_if_structured_writer_called,
     )
     monkeypatch.setattr(
         "packages.agents.writer.logic.WriterAgentMixin._writer_markdown_report_from_evidence_pack",
@@ -8653,18 +8690,8 @@ def test_real_writer_traces_markdown_fallback_when_structured_path_fails(
 
     asyncio.run(service._real_writer_step(record))
 
-    assert "Fallback report" in record.detail.report_md
-    fallback_event = next(
-        event
-        for event in record.events
-        if event.type == "writer_markdown_fallback_used"
-    )
-    assert fallback_event.payload == {"reason": "structured section failed"}
-    assert len(fallback_event.payload["reason"]) <= 500
-    assert any(
-        span.name == "writer_markdown_fallback_used"
-        for span in record.detail.trace_spans
-    )
+    assert record.detail.status != "failed"
+    assert "Fallback-disabled-path report" in record.detail.report_md
 
 
 def test_structured_repair_selection_not_emitted_when_markdown_fallback_used(
@@ -8682,6 +8709,7 @@ def test_structured_repair_selection_not_emitted_when_markdown_fallback_used(
         competitors=["Cursor", "Windsurf"],
     )
     record.detail.output_language = "zh-CN"
+    record.detail.execution_mode = "demo"
     record.detail.raw_sources = _structured_writer_raw_sources()
     _attach_structured_writer_redo(record)
 

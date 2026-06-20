@@ -264,6 +264,18 @@ def _strong_writer_source_ids(detail: RunDetail) -> set[str]:
     return strong
 
 
+def _schema_first_real_run(detail: RunDetail, structured_enabled: bool) -> bool:
+    return structured_enabled and detail.execution_mode == "real"
+
+
+def _structured_markdown_fallback_allowed(
+    detail: RunDetail, structured_enabled: bool
+) -> bool:
+    if not structured_enabled:
+        return True
+    return not _schema_first_real_run(detail, structured_enabled)
+
+
 def build_structured_writer_section_plan(
     *, competitors: list[str], dimensions: list[str]
 ) -> list[dict[str, object]]:
@@ -802,7 +814,8 @@ class WriterAgentMixin:
                     previous_report_protected=previous_report_protected,
                 )
             try:
-                if self._settings.writer_structured_report_enabled:
+                structured_enabled = self._settings.writer_structured_report_enabled
+                if structured_enabled:
                     try:
                         structured_report = await self._writer_structured_report(
                             record,
@@ -907,34 +920,77 @@ class WriterAgentMixin:
                         writer_mode = "real structured writer call"
                     except Exception as exc:  # noqa: BLE001 - structured path may be temporarily unavailable.
                         fallback_reason = str(exc)[:500]
-                        fallback_payload = {"reason": fallback_reason}
-                        await self.emit(
-                            detail.id,
-                            "writer_markdown_fallback_used",
-                            "writer",
-                            None,
-                            "Structured writer failed; using Markdown writer fallback.",
-                            fallback_payload,
-                        )
-                        self._trace_local_tool(
-                            record,
-                            agent="writer",
-                            subagent=None,
-                            name="writer_markdown_fallback_used",
-                            input_text="structured_writer_exception",
-                            output_text=fallback_reason,
-                            metadata=fallback_payload,
-                        )
-                        report_md = await self._writer_markdown_report_from_evidence_pack(
-                            record,
-                            evidence_pack_result,
-                            timeout_seconds,
-                        )
-                        writer_mode = (
-                            "real segmented LLM call"
-                            if evidence_pack_result.metrics.segmented_writer_required
-                            else "real LLM call"
-                        )
+                        if not _structured_markdown_fallback_allowed(
+                            detail,
+                            structured_enabled,
+                        ):
+                            writer_error = fallback_reason
+                            previous_report_preserved = bool(previous_report.strip())
+                            failed_closed_payload = {
+                                "reason": fallback_reason,
+                                "previous_report_preserved": previous_report_preserved,
+                                "writer_repair_mode": writer_repair_mode,
+                                "writer_repair_sections": list(writer_repair_sections),
+                            }
+                            await self.emit(
+                                detail.id,
+                                "writer_schema_first_failed_closed",
+                                "writer",
+                                None,
+                                "Schema-first writer failed; Markdown fallback disabled for real runs.",
+                                failed_closed_payload,
+                            )
+                            if previous_report_preserved:
+                                detail.report_md = self._preserve_hardened_previous_report(
+                                    detail,
+                                    previous_report,
+                                )
+                                writer_mode = (
+                                    "preserved previous report after schema-first writer error"
+                                )
+                                report_md = detail.report_md
+                            else:
+                                try:
+                                    await self._fail_writer_without_report(
+                                        record,
+                                        writer_error,
+                                        writer_repair_mode=writer_repair_mode,
+                                        writer_repair_sections=writer_repair_sections,
+                                        writer_repair_decision=writer_repair_decision,
+                                        anti_regression_reason=anti_regression_reason,
+                                        previous_report_protected=previous_report_protected,
+                                    )
+                                except RuntimeError:
+                                    return
+                        else:
+                            fallback_payload = {"reason": fallback_reason}
+                            await self.emit(
+                                detail.id,
+                                "writer_markdown_fallback_used",
+                                "writer",
+                                None,
+                                "Structured writer failed; using Markdown writer fallback.",
+                                fallback_payload,
+                            )
+                            self._trace_local_tool(
+                                record,
+                                agent="writer",
+                                subagent=None,
+                                name="writer_markdown_fallback_used",
+                                input_text="structured_writer_exception",
+                                output_text=fallback_reason,
+                                metadata=fallback_payload,
+                            )
+                            report_md = await self._writer_markdown_report_from_evidence_pack(
+                                record,
+                                evidence_pack_result,
+                                timeout_seconds,
+                            )
+                            writer_mode = (
+                                "real segmented LLM call"
+                                if evidence_pack_result.metrics.segmented_writer_required
+                                else "real LLM call"
+                            )
                 else:
                     report_md = await self._writer_markdown_report_from_evidence_pack(
                         record,
