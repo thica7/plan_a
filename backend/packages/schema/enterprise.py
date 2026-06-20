@@ -925,6 +925,7 @@ class BusinessQAFinding(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     claim_ids: list[str] = Field(default_factory=list)
     recommendation: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class BusinessQAEvaluation(BaseModel):

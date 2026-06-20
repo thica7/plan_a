@@ -768,6 +768,7 @@ def _claim_validation_issues(
     validation = validate_project_claims(project_id=project_id, claims=claims, evidence=evidence)
     claims_by_id = {claim.id: claim for claim in claims}
     validation_issues_by_id = {issue.id: issue for issue in validation.issues}
+    evidence_by_id = {item.id: item for item in evidence}
     issues: list[BusinessQAFinding] = []
     for result in validation.results:
         if result.status == "supported":
@@ -778,6 +779,27 @@ def _claim_validation_issues(
             issue.issue_type
             for issue_id in result.issue_ids
             if (issue := validation_issues_by_id.get(issue_id)) is not None
+        ]
+        claim_validation_issues = [
+            issue
+            for issue_id in result.issue_ids
+            if (issue := validation_issues_by_id.get(issue_id)) is not None
+        ]
+        conflicting_evidence_ids = sorted(
+            {
+                evidence_id
+                for issue in claim_validation_issues
+                if issue.issue_type == "conflicting_evidence"
+                for evidence_id in issue.evidence_ids
+            }
+        )
+        audit_evidence_ids = [
+            *result.usable_evidence_ids,
+            *[
+                evidence_id
+                for evidence_id in conflicting_evidence_ids
+                if evidence_id not in result.usable_evidence_ids
+            ],
         ]
         failed_checkers = [
             sample.checker for sample in result.validation_samples if sample.vote == "fail"
@@ -812,9 +834,61 @@ def _claim_validation_issues(
                     "Collect stronger independent evidence, resolve the listed claim-validation "
                     "issue types, or downgrade the claim before release."
                 ),
+                metadata={
+                    "claim_validation_status": result.validation_status,
+                    "claim_validation_issue_ids": result.issue_ids,
+                    "claim_validation_issue_types": claim_issue_types,
+                    "claim_validation_recommended_action": result.recommended_action,
+                    "claim_validation_failed_checkers": failed_checkers,
+                    "conflicting_evidence_ids": conflicting_evidence_ids,
+                    "evidence_audit_trail": _evidence_audit_trail(
+                        audit_evidence_ids, evidence_by_id
+                    ),
+                    "self_consistency_score": result.self_consistency_score,
+                    "text_support_score": result.text_support_score,
+                    "evidence_quality_score": result.evidence_quality_score,
+                    "triangulation_score": result.triangulation_score,
+                },
             )
         )
     return issues
+
+
+def _evidence_audit_trail(
+    evidence_ids: list[str],
+    evidence_by_id: dict[str, EvidenceRecord],
+) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for evidence_id in evidence_ids:
+        if evidence_id in seen:
+            continue
+        seen.add(evidence_id)
+        evidence = evidence_by_id.get(evidence_id)
+        if evidence is None:
+            continue
+        metadata = evidence.metadata
+        result.append(
+            {
+                "evidence_id": evidence.id,
+                "raw_source_id": evidence.raw_source_id,
+                "title": evidence.title,
+                "url": str(evidence.url) if evidence.url else "",
+                "quality_label": evidence.quality_label,
+                "source_type": evidence.source_type,
+                "kb_document_id": str(metadata.get("kb_document_id") or ""),
+                "kb_document_version": metadata.get("kb_document_version"),
+                "kb_document_status": str(metadata.get("kb_document_status") or ""),
+                "kb_raw_source_id": str(metadata.get("kb_raw_source_id") or ""),
+                "kb_collector_run_id": str(
+                    metadata.get("kb_collector_run_id") or ""
+                ),
+                "kb_freshness_score": metadata.get("kb_freshness_score"),
+            }
+        )
+        if len(result) >= 8:
+            break
+    return result
 
 
 def _report_citation_quality_issues(
@@ -1096,6 +1170,7 @@ def _gate_issue(
     dimension: str | None = None,
     severity: str = "blocker",
     recommendation: str,
+    metadata: dict[str, object] | None = None,
 ) -> BusinessQAFinding:
     return BusinessQAFinding(
         id=compute_release_gate_issue_id(rule_id, message, evidence_ids, claim_ids),
@@ -1109,6 +1184,7 @@ def _gate_issue(
         evidence_ids=evidence_ids or [],
         claim_ids=claim_ids or [],
         recommendation=recommendation,
+        metadata=metadata or {},
     )
 
 

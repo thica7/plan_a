@@ -73,7 +73,8 @@ jobs:
             backend/tests/unit/test_compare_real_run_quality_script.py \
             backend/tests/unit/test_llm_client.py \
             backend/tests/unit/test_business_intel.py::test_claim_validator_marks_high_risk_status_and_conflicts \
-            backend/tests/unit/test_business_intel.py::test_claim_validator_detects_structured_pricing_conflict
+            backend/tests/unit/test_business_intel.py::test_claim_validator_detects_structured_pricing_conflict \
+            backend/tests/unit/test_business_intel.py::test_release_gate_claim_conflict_includes_kb_audit_metadata
 
   backend-knowledge-acceptance:
     name: Knowledge repository acceptance shard

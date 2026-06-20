@@ -25,6 +25,7 @@ from packages.business_intel import (
 from packages.business_intel.entity_resolver import trusted_source_candidates
 from packages.business_intel.homepage import verify_homepage
 from packages.business_intel.layers import assess_competitor_layer
+from packages.quality import quality_findings_from_release_gate
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
@@ -1624,6 +1625,77 @@ def test_claim_validator_detects_structured_pricing_conflict() -> None:
     assert result.issue_ids
     assert report.issues[0].issue_type == "conflicting_evidence"
     assert report.issues[0].evidence_ids == ["evidence-pricing-conflict"]
+
+
+def test_release_gate_claim_conflict_includes_kb_audit_metadata() -> None:
+    competitor = _competitor()
+    evidence = EvidenceRecord(
+        id="evidence-pricing-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="evidence-kb-pricing-001",
+        competitor_id=competitor.id,
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.sh/pricing",
+        snippet="Cursor Pro plan costs $30 per month for developer teams.",
+        content_hash="hash-pricing-conflict",
+        reliability_score=0.92,
+        quality_label="accepted",
+        metadata={
+            "kb_sync": True,
+            "kb_document_id": "kb-doc-pricing-v3",
+            "kb_document_version": 3,
+            "kb_document_status": "active",
+            "kb_raw_source_id": "collector-raw-pricing-001",
+            "kb_collector_run_id": "collector-run-1",
+            "kb_freshness_score": 0.86,
+        },
+    )
+    claim = ClaimRecord(
+        id="claim-pricing-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        competitor_id=competitor.id,
+        claim_type="pricing",
+        claim_text="Cursor Pro plan costs $20 per month for developer teams.",
+        evidence_ids=[evidence.id],
+        confidence=0.9,
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=_report_version(evidence_ids=[evidence.id], claim_ids=[claim.id]),
+        competitors=[competitor],
+        evidence=[evidence],
+        claims=[claim],
+    )
+
+    issue = next(
+        item
+        for item in gate.issues
+        if item.rule_id == "claim_self_consistency_required" and claim.id in item.claim_ids
+    )
+    assert issue.severity == "blocker"
+    assert issue.metadata["conflicting_evidence_ids"] == [evidence.id]
+    assert issue.metadata["claim_validation_issue_types"] == ["conflicting_evidence"]
+    audit = issue.metadata["evidence_audit_trail"][0]
+    assert audit["evidence_id"] == evidence.id
+    assert audit["raw_source_id"] == "evidence-kb-pricing-001"
+    assert audit["kb_document_id"] == "kb-doc-pricing-v3"
+    assert audit["kb_document_version"] == 3
+    assert audit["kb_raw_source_id"] == "collector-raw-pricing-001"
+    assert audit["kb_collector_run_id"] == "collector-run-1"
+
+    quality_finding = next(
+        item
+        for item in quality_findings_from_release_gate(gate)
+        if item.source_id == issue.id
+    )
+    assert quality_finding.metadata["conflicting_evidence_ids"] == [evidence.id]
+    assert quality_finding.metadata["evidence_audit_trail"][0]["kb_document_id"] == "kb-doc-pricing-v3"
+
 def test_report_release_gate_warns_on_high_risk_single_source_claim() -> None:
     competitor = _competitor()
     evidence = [
