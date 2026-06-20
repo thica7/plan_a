@@ -684,6 +684,7 @@ class EnterprisePostgresStore:
         self,
         workspace_id: str | None = None,
         *,
+        project_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[NotificationRecord]:
@@ -692,6 +693,9 @@ class EnterprisePostgresStore:
         if workspace_id:
             clauses.append("workspace_id = %s")
             params.append(workspace_id)
+        if project_id:
+            clauses.append("project_id = %s")
+            params.append(project_id)
         if status:
             clauses.append("status = %s")
             params.append(status)

@@ -144,6 +144,7 @@ class EnterpriseStore(Protocol):
         self,
         workspace_id: str | None = None,
         *,
+        project_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[NotificationRecord]: ...
@@ -739,6 +740,7 @@ class EnterpriseMemoryStore:
         self,
         workspace_id: str | None = None,
         *,
+        project_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[NotificationRecord]:
@@ -746,6 +748,8 @@ class EnterpriseMemoryStore:
             records = list(self.notifications.values())
             if workspace_id:
                 records = [item for item in records if item.workspace_id == workspace_id]
+            if project_id:
+                records = [item for item in records if item.project_id == project_id]
             if status:
                 records = [item for item in records if item.status == status]
             records = sorted(records, key=lambda item: item.created_at, reverse=True)

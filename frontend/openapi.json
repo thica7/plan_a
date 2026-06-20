@@ -4715,6 +4715,22 @@
             }
           },
           {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
             "name": "status",
             "in": "query",
             "required": false,

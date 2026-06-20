@@ -42,7 +42,11 @@ export async function loadProjectCore(project: ProjectRecord): Promise<Pick<Proj
     listProjectEvidence(project.id),
     listProjectClaims(project.id),
     listProjectReportVersions(project.id),
-    listEnterpriseNotifications({ workspaceId: project.workspace_id, limit: 8 }).catch(() => []),
+    listEnterpriseNotifications({
+      workspaceId: project.workspace_id,
+      projectId: project.id,
+      limit: 8,
+    }).catch(() => []),
   ]);
 
   return {

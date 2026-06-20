@@ -380,11 +380,13 @@ export function updateWorkspaceQuota(
 
 export function listEnterpriseNotifications(params: {
   workspaceId?: string;
+  projectId?: string;
   status?: string;
   limit?: number;
 } = {}) {
   const search = new URLSearchParams();
   if (params.workspaceId) search.set("workspace_id", params.workspaceId);
+  if (params.projectId) search.set("project_id", params.projectId);
   if (params.status) search.set("status", params.status);
   if (params.limit) search.set("limit", String(params.limit));
   const query = search.toString();

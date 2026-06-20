@@ -302,12 +302,20 @@ def list_notifications(
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
     workspace_id: str | None = None,
+    project_id: str | None = None,
     status: str | None = None,
     limit: int = 100,
 ) -> list[NotificationRecord]:
     scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "notification:read")
+    if project_id is not None:
+        project = store.get_project(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if project.workspace_id != scoped_workspace_id:
+            raise HTTPException(status_code=403, detail="Project is outside workspace scope")
     return store.list_notifications(
         workspace_id=scoped_workspace_id,
+        project_id=project_id,
         status=status,
         limit=limit,
     )

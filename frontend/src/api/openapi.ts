@@ -10859,6 +10859,7 @@ export interface operations {
         parameters: {
             query?: {
                 workspace_id?: string | null;
+                project_id?: string | null;
                 status?: string | null;
                 limit?: number;
             };
