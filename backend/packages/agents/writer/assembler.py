@@ -6,6 +6,7 @@ from typing import Sequence
 
 from packages.agents.writer.segment_contract import (
     CORE_HEADING_KEYS,
+    SECTION_ALLOWED_KEYS,
     SUPPORT_HEADING_KEYS,
     heading_key_for,
 )
@@ -150,13 +151,12 @@ def _assemble_report_blocks(
         normalized_fragment_layer = _normalized_fragment_layer(fragment_layer)
         intro, sections = _parse_fragment(markdown, output_language_text)
         if canonical_fragment_key is not None:
-            canonical_bodies = [intro] if intro else []
-            canonical_bodies.extend(section.body for section in sections if section.body)
-            _append_known_section(
+            _append_canonical_fragment_sections(
                 known_sections,
                 known_counts,
                 canonical_fragment_key,
-                "\n\n".join(canonical_bodies),
+                intro,
+                sections,
             )
             continue
         if not sections:
@@ -244,6 +244,51 @@ def _append_known_section(
 ) -> None:
     known_sections.setdefault(key, []).append(body)
     known_counts[key] = known_counts.get(key, 0) + 1
+
+
+def _append_canonical_fragment_sections(
+    known_sections: dict[str, list[str]],
+    known_counts: dict[str, int],
+    canonical_fragment_key: str,
+    intro: str | None,
+    sections: Sequence[_SectionBlock],
+) -> None:
+    allowed_heading_keys = set(
+        SECTION_ALLOWED_KEYS.get(canonical_fragment_key, (canonical_fragment_key,))
+    )
+    appended = False
+    if intro:
+        _append_known_section(
+            known_sections,
+            known_counts,
+            canonical_fragment_key,
+            intro,
+        )
+        appended = True
+    for section in sections:
+        if section.key is not None and section.key in allowed_heading_keys:
+            _append_known_section(
+                known_sections,
+                known_counts,
+                section.key,
+                section.body,
+            )
+            appended = True
+        elif section.body:
+            _append_known_section(
+                known_sections,
+                known_counts,
+                canonical_fragment_key,
+                section.body,
+            )
+            appended = True
+    if not appended:
+        _append_known_section(
+            known_sections,
+            known_counts,
+            canonical_fragment_key,
+            "",
+        )
 
 
 def _canonical_fragment_key(section_key: str) -> str | None:

@@ -267,6 +267,50 @@ def test_keyed_assembler_keeps_intro_inside_canonical_section() -> None:
     assert "## Evidence & QA Support" not in assembled.markdown
 
 
+def test_keyed_assembler_distributes_allowed_headings_to_matching_markers() -> None:
+    fragments = [
+        ReportSectionFragment(
+            markdown=(
+                "## Executive Summary\n"
+                "Executive body. [source:raw-source-a]\n\n"
+                "## Decision Summary\n"
+                "Decision body. [source:raw-source-a]\n\n"
+                "## Competitive Findings\n"
+                "Findings body. [source:raw-source-a]"
+            ),
+            section_key="decision_summary",
+            layer="core",
+            segment_name="decision_summary",
+        )
+    ]
+
+    assembled = assemble_report_fragments(
+        fragments,
+        output_language="en-US",
+        competitors=["Cursor"],
+    )
+
+    index = build_report_section_index(assembled.markdown)
+    heading_to_key = {
+        section.heading: section.section_key
+        for section in index.sections
+        if section.heading
+        in {"Executive Summary", "Decision Summary", "Competitive Findings"}
+    }
+
+    assert heading_to_key == {
+        "Executive Summary": "executive_summary",
+        "Decision Summary": "decision_summary",
+        "Competitive Findings": "competitive_findings",
+    }
+    assert assembled.markdown.index("## Executive Summary") < assembled.markdown.index(
+        "## Decision Summary"
+    )
+    assert assembled.markdown.index("## Decision Summary") < assembled.markdown.index(
+        "## Competitive Findings"
+    )
+
+
 def test_keyed_assembler_treats_audit_layer_as_support_for_unknown_sections() -> None:
     fragments = [
         ReportSectionFragment(
