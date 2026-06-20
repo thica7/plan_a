@@ -30,6 +30,7 @@ from packages.knowledge.ingestion import IngestionPipeline
 from packages.knowledge.models import (
     DocumentCreate,
     KnowledgeDocument,
+    KnowledgeRollbackResult,
     RetrievalRequest,
     RetrievalResponse,
 )
@@ -133,6 +134,14 @@ class DocumentDiffResponse(BaseModel):
 
 class DocumentMergeRequest(BaseModel):
     target_document_id: str
+
+
+class DocumentRollbackRequest(BaseModel):
+    document_ids: list[str] = Field(default_factory=list, max_length=200)
+    run_id: str | None = Field(default=None, max_length=200)
+    raw_source_id: str | None = Field(default=None, max_length=200)
+    crawl_run_id: str | None = Field(default=None, max_length=200)
+    restore_previous: bool = True
 
 
 class EvalLabel(BaseModel):
@@ -321,6 +330,36 @@ async def merge_knowledge_document_version(
         raise HTTPException(status_code=404, detail="Document version not found")
     return merged
 
+
+@router.post("/knowledge/documents/rollback", response_model=KnowledgeRollbackResult)
+async def rollback_knowledge_documents(
+    request: DocumentRollbackRequest,
+    repo: RepositoryDep,
+    user: EnterpriseUserDep,
+) -> KnowledgeRollbackResult:
+    _require_kb_access(user, "memory:write")
+    if not any((request.document_ids, request.run_id, request.raw_source_id, request.crawl_run_id)):
+        raise HTTPException(status_code=400, detail="At least one rollback selector is required")
+    try:
+        result = await repo.rollback_documents(
+            document_ids=request.document_ids or None,
+            run_id=request.run_id,
+            raw_source_id=request.raw_source_id,
+            crawl_run_id=request.crawl_run_id,
+            restore_previous=request.restore_previous,
+        )
+        if result.archived_document_ids:
+            from packages.knowledge.vector_store import VectorStore
+
+            try:
+                await VectorStore().delete_by_documents(result.archived_document_ids)
+            except Exception as exc:  # pragma: no cover
+                result = result.model_copy(update={"vector_cleanup_error": str(exc)})
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 @router.post("/knowledge/search", response_model=RetrievalResponse)
 async def search_knowledge(

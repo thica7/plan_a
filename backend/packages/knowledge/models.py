@@ -34,6 +34,18 @@ class KnowledgeDocument(BaseModel):
     parent_document_id: str | None = None
 
 
+class KnowledgeRollbackResult(BaseModel):
+    """Result for rolling back polluted knowledge documents."""
+
+    matched_count: int = 0
+    rolled_back_count: int = 0
+    restored_count: int = 0
+    archived_document_ids: list[str] = Field(default_factory=list)
+    restored_document_ids: list[str] = Field(default_factory=list)
+    skipped_document_ids: list[str] = Field(default_factory=list)
+    vector_cleanup_error: str | None = None
+
+
 class DocumentCreate(BaseModel):
     """Payload to ingest a new document."""
 

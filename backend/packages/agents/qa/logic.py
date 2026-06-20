@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Literal
 from packages.business_intel.report_sections import build_report_section_index
 from packages.identity import stable_prefixed_id
 from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
+from packages.rag.structured_claims import find_structured_source_conflicts
 from packages.research.evidence import publishable_text_noise_problem
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
@@ -916,38 +917,10 @@ class QualityAgentMixin:
         sources: list[RawSource],
         dimension: str,
     ) -> list[dict[str, dict[str, list[str]] | str]]:
-        by_claim_area: dict[str, dict[str, set[str]]] = {}
-        source_by_id = {source.id: source for source in sources}
-        for source in sources:
-            for claim_area, position in self._source_contradiction_positions(source, dimension):
-                by_claim_area.setdefault(claim_area, {}).setdefault(position, set()).add(source.id)
-        conflicts: list[dict[str, dict[str, list[str]] | str]] = []
-        for claim_area, positions in by_claim_area.items():
-            if len(positions) < 2:
-                continue
-            source_ids = {source_id for ids in positions.values() for source_id in ids}
-            has_kb = any(
-                source_by_id[source_id].candidate_origin == "rag_kb"
-                or source_by_id[source_id].metadata.get("kb_retrieved")
-                for source_id in source_ids
-            )
-            has_live = any(
-                source_by_id[source_id].candidate_origin != "rag_kb"
-                and not source_by_id[source_id].metadata.get("kb_retrieved")
-                for source_id in source_ids
-            )
-            if not (has_kb and has_live):
-                continue
-            conflicts.append(
-                {
-                    "claim_area": claim_area,
-                    "source_ids_by_position": {
-                        position: sorted(ids) for position, ids in positions.items()
-                    },
-                }
-            )
-        return conflicts
-
+        return [
+            conflict.to_qa_payload()
+            for conflict in find_structured_source_conflicts(sources, dimension=dimension)
+        ]
     def _source_contradiction_positions(
         self,
         source: RawSource,
