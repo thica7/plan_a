@@ -19,6 +19,25 @@ def test_rejects_english_structural_heading_in_zh_report() -> None:
     assert result.issues[0].repair_target == "renderer"
 
 
+def test_publication_contract_rejects_english_structural_heading_from_output_language() -> None:
+    markdown = (
+        "## \u6267\u884c\u6458\u8981\n"
+        "\u5efa\u8bae\u9009\u62e9 Cursor\u3002 [source:raw-source-a]\n\n"
+        "### Direct User / Community Signals\n"
+        "\u7528\u6237\u4fe1\u53f7\u4e0d\u80fd\u4f7f\u7528\u82f1\u6587\u7ed3\u6784\u6807\u9898\u3002 [source:raw-source-a]\n"
+    )
+
+    result = validate_publication_contract(
+        markdown,
+        structured_report=None,
+        allowed_source_ids={"raw-source-a"},
+        output_language="zh-CN",
+    )
+
+    assert not result.passed
+    assert "english_structural_heading_in_zh" in result.issue_codes()
+
+
 def test_rejects_broader_renderer_style_english_headings_in_zh_report() -> None:
     markdown = (
         "### Next Actions\n\n"

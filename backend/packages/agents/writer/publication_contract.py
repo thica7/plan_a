@@ -125,10 +125,11 @@ def validate_publication_contract(
     *,
     structured_report: StructuredReport | None,
     allowed_source_ids: set[str],
+    output_language: str | None = None,
 ) -> PublicationContractResult:
     lines = markdown.splitlines()
     issues: list[PublicationContractIssue] = []
-    is_zh = _is_zh_report(structured_report)
+    is_zh = _is_zh_report(structured_report, output_language=output_language)
 
     _validate_section_marker_lines(lines, issues=issues)
     _validate_headings(lines, is_zh=is_zh, issues=issues)
@@ -144,9 +145,13 @@ def validate_publication_contract(
     return PublicationContractResult(passed=not issues, issues=issues)
 
 
-def _is_zh_report(report: StructuredReport | None) -> bool:
+def _is_zh_report(
+    report: StructuredReport | None,
+    *,
+    output_language: str | None = None,
+) -> bool:
     if report is None:
-        return False
+        return bool(output_language) and output_language.lower().startswith("zh")
     return report.output_language.lower().startswith("zh")
 
 
