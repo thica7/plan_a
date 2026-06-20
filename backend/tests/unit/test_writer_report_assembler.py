@@ -190,6 +190,30 @@ def test_keyed_assembler_wraps_body_only_fragment_with_canonical_section() -> No
     assert assembled.telemetry["fragment_section_keys"] == ["decision_summary"]
 
 
+def test_keyed_assembler_canonical_section_key_overrides_misleading_heading() -> None:
+    fragments = [
+        ReportSectionFragment(
+            markdown="## Evidence & QA Support\nThis is actually decision content. [source:raw-source-a]",
+            section_key="decision_summary",
+            layer="core",
+            segment_name="decision_summary",
+        )
+    ]
+
+    assembled = assemble_report_fragments(
+        fragments,
+        output_language="en-US",
+        competitors=["Cursor"],
+    )
+
+    assert assembled.markdown.startswith(
+        "<!-- report-section:key=decision_summary layer=core -->\n## Decision Summary"
+    )
+    assert "This is actually decision content" in assembled.markdown
+    assert "## Evidence & QA Support" not in assembled.markdown
+    assert assembled.telemetry["first_support_key"] is None
+
+
 def test_keyed_assembler_keeps_known_support_after_core_even_when_input_is_first() -> None:
     fragments = [
         ReportSectionFragment(

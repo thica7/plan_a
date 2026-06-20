@@ -160,7 +160,11 @@ def _assemble_report_blocks(
         if intro:
             intro_blocks.append(intro)
         for section in sections:
-            section_key = section.key or canonical_fragment_key
+            section_key = (
+                canonical_fragment_key
+                if canonical_fragment_key is not None
+                else section.key
+            )
             if section_key is not None:
                 _append_known_section(
                     known_sections,
