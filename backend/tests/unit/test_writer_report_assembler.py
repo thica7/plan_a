@@ -140,13 +140,13 @@ def test_keyed_assembler_uses_fragment_layer_for_unknown_sections() -> None:
     fragments = [
         ReportSectionFragment(
             markdown="## Custom Core Readout\nCore finding. [source:raw-source-a]",
-            section_key="decision_summary",
+            section_key="custom_core_readout",
             layer="core",
             segment_name="decision_summary",
         ),
         ReportSectionFragment(
             markdown="## Mystery Audit Notes\nSupport note. [source:raw-source-b]",
-            section_key="evidence_support",
+            section_key="support_appendix",
             layer="support",
             segment_name="support_appendix",
         ),
@@ -164,6 +164,30 @@ def test_keyed_assembler_uses_fragment_layer_for_unknown_sections() -> None:
     assert assembled.telemetry["unknown_core_section_count"] == 1
     assert assembled.telemetry["unknown_support_section_count"] == 1
     assert assembled.telemetry["fragment_layer_counts"] == {"core": 1, "support": 1}
+
+
+def test_keyed_assembler_wraps_body_only_fragment_with_canonical_section() -> None:
+    fragments = [
+        ReportSectionFragment(
+            markdown="Decision body without its own heading. [source:raw-source-a]",
+            section_key="decision_summary",
+            layer="core",
+            segment_name="decision_summary",
+        )
+    ]
+
+    assembled = assemble_report_fragments(
+        fragments,
+        output_language="en-US",
+        competitors=["Cursor"],
+    )
+
+    assert assembled.markdown.startswith(
+        "<!-- report-section:key=decision_summary layer=core -->\n## Decision Summary"
+    )
+    assert "Decision body without its own heading" in assembled.markdown
+    assert assembled.telemetry["output_section_count"] == 1
+    assert assembled.telemetry["fragment_section_keys"] == ["decision_summary"]
 
 
 def test_keyed_assembler_keeps_known_support_after_core_even_when_input_is_first() -> None:

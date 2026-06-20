@@ -145,14 +145,29 @@ def _assemble_report_blocks(
     unknown_support_sections: list[_SectionBlock] = []
 
     output_language_text = str(output_language)
-    for markdown, _fragment_section_key, fragment_layer in fragment_inputs:
+    for markdown, fragment_section_key, fragment_layer in fragment_inputs:
+        canonical_fragment_key = _canonical_fragment_key(fragment_section_key)
         intro, sections = _parse_fragment(markdown, output_language_text)
+        if not sections and canonical_fragment_key is not None:
+            if intro:
+                _append_known_section(
+                    known_sections,
+                    known_counts,
+                    canonical_fragment_key,
+                    intro,
+                )
+            continue
         if intro:
             intro_blocks.append(intro)
         for section in sections:
-            if section.key is not None:
-                known_sections.setdefault(section.key, []).append(section.body)
-                known_counts[section.key] = known_counts.get(section.key, 0) + 1
+            section_key = section.key or canonical_fragment_key
+            if section_key is not None:
+                _append_known_section(
+                    known_sections,
+                    known_counts,
+                    section_key,
+                    section.body,
+                )
             elif fragment_layer == "support":
                 unknown_support_sections.append(section)
             elif fragment_layer == "core":
@@ -213,6 +228,23 @@ def _assemble_report_blocks(
         "first_support_key": first_support_key,
     }
     return AssembledReport(markdown=markdown, telemetry=telemetry)
+
+
+def _append_known_section(
+    known_sections: dict[str, list[str]],
+    known_counts: dict[str, int],
+    key: str,
+    body: str,
+) -> None:
+    known_sections.setdefault(key, []).append(body)
+    known_counts[key] = known_counts.get(key, 0) + 1
+
+
+def _canonical_fragment_key(section_key: str) -> str | None:
+    key = section_key.strip()
+    if key in CANONICAL_REPORT_ORDER:
+        return key
+    return None
 
 
 def _parse_fragment(
