@@ -2356,6 +2356,8 @@ class WriterAgentMixin:
             "segment_name": segment_name,
             "segment_kind": "section_fragment",
             "section_id": section_id,
+            "section_key": section_id,
+            "layer": "support" if section_id == "evidence_support" else "core",
             "segment_competitor": segment_competitor,
             "output_language": detail.output_language,
             "segment_input_chars": 0,

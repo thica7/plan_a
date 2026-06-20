@@ -2089,6 +2089,35 @@ def test_segment_inputs_include_user_research_gap_without_user_research_sources(
     assert segment["segment_input_chars"] > 0
 
 
+def test_segment_inputs_include_section_key_and_layer_metadata() -> None:
+    sources = [
+        RawSource(
+            id="cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor pricing evidence.",
+            content_hash="cursor-pricing-hash",
+            confidence=0.96,
+        )
+    ]
+
+    result = build_writer_evidence_pack(_detail_with_sources(sources))
+    segments_by_name = {
+        str(segment["segment_name"]): segment for segment in result.segment_inputs()
+    }
+
+    assert segments_by_name["decision_summary"]["section_key"] == "decision_summary"
+    assert segments_by_name["decision_summary"]["layer"] == "core"
+    assert segments_by_name["user_research"]["section_key"] == "review_theme_summary"
+    assert segments_by_name["user_research"]["layer"] == "core"
+    assert segments_by_name["swot_matrix"]["section_key"] == "swot_matrix"
+    assert segments_by_name["swot_matrix"]["layer"] == "core"
+    assert segments_by_name["support_appendix"]["section_key"] == "evidence_support"
+    assert segments_by_name["support_appendix"]["layer"] == "support"
+
+
 def test_segment_citation_validation_rejects_unsupplied_source_id() -> None:
     source = RawSource(
         id="cursor-pricing",

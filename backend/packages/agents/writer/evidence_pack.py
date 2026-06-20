@@ -1224,10 +1224,12 @@ def _segment_contract_metadata(
         "support_appendix": "evidence_support",
     }
     section_id = section_id_by_name.get(segment_name, segment_name)
-    is_support = segment_name == "support_appendix"
+    is_support = segment_name == "support_appendix" or section_id == "evidence_support"
     return {
         "segment_kind": "support_fragment" if is_support else "section_fragment",
         "section_id": section_id,
+        "section_key": section_id,
+        "layer": "support" if is_support else "core",
         "output_language": output_language,
         "segment_essential": not is_support,
     }

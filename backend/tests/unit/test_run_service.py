@@ -9283,6 +9283,24 @@ async def test_writer_segment_preflight_emits_contract_metadata(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_writer_section_segment_from_shards_preserves_keyed_metadata() -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(service, competitors=["Cursor"])
+
+    segment = service._writer_section_segment_from_shards(
+        record.detail,
+        section_id="competitor_deep_dives",
+        segment_competitor="Cursor",
+        shard_notes=["- Cursor shard note [source:raw-source-a]"],
+        allowed_source_ids={"raw-source-a"},
+    )
+
+    assert segment["section_key"] == "competitor_deep_dives"
+    assert segment["layer"] == "core"
+    assert segment["segment_competitor"] == "Cursor"
+
+
+@pytest.mark.asyncio
 async def test_writer_segment_retries_truncated_markdown(monkeypatch) -> None:
     service = _segmented_writer_service()
     record = _segmented_writer_record(
