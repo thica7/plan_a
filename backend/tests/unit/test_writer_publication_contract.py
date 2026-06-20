@@ -254,6 +254,30 @@ def test_publication_contract_accepts_renderer_section_markers_without_citations
     assert all("[source:" not in line for line in marker_lines)
 
 
+def test_publication_contract_rejects_section_marker_heading_mismatch() -> None:
+    markdown = (
+        "<!-- report-section:key=competitor_deep_dives layer=core -->\n"
+        "## Evidence & QA Support\n"
+        "Support material is not a competitor deep dive. [source:raw-source-a]\n"
+    )
+
+    result = validate_publication_contract(
+        markdown,
+        structured_report=None,
+        allowed_source_ids={"raw-source-a"},
+        output_language="en-US",
+    )
+
+    assert "section_marker_heading_mismatch" in result.issue_codes()
+    issue = next(
+        item
+        for item in result.issues
+        if item.code == "section_marker_heading_mismatch"
+    )
+    assert issue.line_number == 1
+    assert issue.repair_target == "renderer"
+
+
 def test_rejects_internal_terms_and_unknown_sources() -> None:
     markdown = "source_registry should stay internal.\n\n正文 [source:unknown-source]\n"
 

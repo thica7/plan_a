@@ -313,6 +313,7 @@ def replace_markdown_section(
     if target is None:
         updated = f"{markdown.rstrip()}\n\n{replacement}".strip()
         return _restore_canonical_section_order(updated, output_language)
+    replacement = _strip_leading_report_section_marker(replacement)
     before = markdown[: target.start].rstrip()
     after = markdown[target.end :].lstrip()
     updated = f"{before}\n\n{replacement}\n\n{after}".strip()
@@ -631,6 +632,17 @@ def _compact_heading(value: str) -> str:
 
 def _normalize_section_replacement(replacement_markdown: str) -> str:
     return replacement_markdown.strip()
+
+
+def _strip_leading_report_section_marker(markdown: str) -> str:
+    lines = markdown.splitlines()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if lines and re.fullmatch(r"<!--\s*report-section:[^>]*-->", lines[0].strip()):
+        lines.pop(0)
+        while lines and not lines[0].strip():
+            lines.pop(0)
+    return "\n".join(lines).strip()
 
 
 USER_RESEARCH_SOURCE_TYPES = {

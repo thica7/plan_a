@@ -1342,6 +1342,7 @@ class WriterAgentMixin:
                 )
             try:
                 structured_enabled = self._settings.writer_structured_report_enabled
+                schema_contract_report_generated = False
                 segmented_writer_required = bool(
                     getattr(
                         evidence_pack_result.metrics,
@@ -1440,6 +1441,7 @@ class WriterAgentMixin:
                                 "schema-contract segment publication contract failed: "
                                 + ", ".join(publication_validation.issue_codes())
                             )
+                        schema_contract_report_generated = True
                         writer_mode = "real schema-contract segmented writer call"
                         if pending_redo is not None:
                             scoped_competitors: set[str] = set()
@@ -1626,7 +1628,13 @@ class WriterAgentMixin:
                         else "real LLM call"
                     )
                 self._require_writer_report_output(report_md)
-                hardened_report = self._harden_report_markdown(detail, report_md)
+                if schema_contract_report_generated:
+                    hardened_report = self._harden_schema_contract_report_markdown(
+                        detail,
+                        report_md,
+                    )
+                else:
+                    hardened_report = self._harden_report_markdown(detail, report_md)
                 if (
                     previous_report.strip()
                     and repair_plan is not None
@@ -2026,6 +2034,7 @@ class WriterAgentMixin:
             memory_context="\n".join(detail.plan.memory_prompt_context) or "none",
             layer_context=self._writer_layer_context(detail),
             required_sections=self._writer_required_sections(detail),
+            allow_required_section_backfill=False,
         )
 
     async def _repair_schema_contract_publication_issues(
@@ -2306,12 +2315,16 @@ class WriterAgentMixin:
         memory_context: str,
         layer_context: str,
         required_sections: str,
+        allow_required_section_backfill: bool = True,
     ) -> str:
         detail = record.detail
+        segment_inputs = list(evidence_pack_result.segment_inputs())
+        if not allow_required_section_backfill:
+            segment_inputs = self._schema_contract_segment_inputs(segment_inputs)
         sections = await self._writer_segment_markdown_parts(
             record,
             evidence_pack_result=evidence_pack_result,
-            segments=evidence_pack_result.segment_inputs(),
+            segments=segment_inputs,
             timeout_seconds=timeout_seconds,
             language_guidance=language_guidance,
             memory_context=memory_context,
@@ -2361,6 +2374,12 @@ class WriterAgentMixin:
         if preflight.passed:
             return assembled.markdown
 
+        if not allow_required_section_backfill:
+            raise RuntimeError(
+                "Schema-contract segmented report failed quality preflight: "
+                f"{', '.join(preflight.failure_reasons)}"
+            )
+
         hardened = self._harden_report_markdown(detail, assembled.markdown)
         repaired = assemble_report_sections(
             [hardened],
@@ -2387,6 +2406,29 @@ class WriterAgentMixin:
             "Writer assembled report failed quality preflight: "
             f"{', '.join(repaired_preflight.failure_reasons)}"
         )
+
+    def _schema_contract_segment_inputs(
+        self,
+        segments: Sequence[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        schema_segments: list[dict[str, object]] = []
+        for segment in segments:
+            section_id = str(
+                segment.get("section_id")
+                or segment.get("section_key")
+                or segment.get("segment_name")
+                or ""
+            )
+            if section_id == "decision_summary":
+                schema_segments.append(
+                    {
+                        **segment,
+                        "require_executive_summary": True,
+                    }
+                )
+                continue
+            schema_segments.append(dict(segment))
+        return schema_segments
 
     async def _writer_segment_markdown_parts(
         self,
@@ -4483,6 +4525,33 @@ class WriterAgentMixin:
                 self._ensure_report_required_sections(detail, repaired),
             ),
         )
+
+    def _harden_schema_contract_report_markdown(
+        self,
+        detail: RunDetail,
+        markdown: str,
+    ) -> str:
+        repaired = repair_mojibake_text(markdown)
+        repaired = self._repair_report_source_tokens(detail, repaired)
+        repaired = self._ensure_report_claim_citations(detail, repaired)
+        preflight = run_writer_quality_preflight(detail, repaired)
+        if not preflight.passed:
+            raise RuntimeError(
+                "Schema-contract report failed quality preflight after hardening: "
+                f"{', '.join(preflight.failure_reasons)}"
+            )
+        publication_validation = validate_publication_contract(
+            repaired,
+            structured_report=None,
+            allowed_source_ids={source.id for source in detail.raw_sources},
+            output_language=detail.output_language,
+        )
+        if not publication_validation.passed:
+            raise ValueError(
+                "schema-contract report failed publication contract after hardening: "
+                + ", ".join(publication_validation.issue_codes())
+            )
+        return repaired
 
     def _ensure_report_required_sections(self, detail: RunDetail, markdown: str) -> str:
         hardened = markdown.strip()

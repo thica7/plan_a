@@ -29,6 +29,7 @@ def test_quality_preflight_fails_duplicate_sections() -> None:
         _detail(),
         "\n\n".join(
             [
+                "## Executive Summary\nSummary.",
                 "## Decision Summary\nFirst.",
                 "## Decision Summary\nSecond.",
                 "## Competitive Findings\nFindings.",
@@ -51,6 +52,7 @@ def test_quality_preflight_fails_duplicate_numbered_support_headings() -> None:
         _detail(),
         "\n\n".join(
             [
+                "## Executive Summary\nSummary.",
                 "## Decision Summary\nDecision.",
                 "## Competitive Findings\nFindings.",
                 "## User Review Themes\nThemes.",
@@ -74,6 +76,7 @@ def test_quality_preflight_fails_core_after_support() -> None:
         _detail(),
         "\n\n".join(
             [
+                "## Executive Summary\nSummary.",
                 "## Decision Summary\nDecision.",
                 "## Competitive Findings\nFindings.",
                 "## User Review Themes\nThemes.",
@@ -101,6 +104,7 @@ def test_quality_preflight_passes_ordered_core_report() -> None:
         _detail(),
         "\n\n".join(
             [
+                "## Executive Takeaway\nTakeaway.",
                 "## Decision Summary\nDecision.",
                 "## Competitive Findings\nFindings.",
                 "## User Review Themes\nThemes.",
@@ -125,6 +129,7 @@ def test_quality_preflight_passes_ordered_core_report() -> None:
         "core_sections_after_support": [],
         "first_support_key": "evidence_support",
         "h2_keys": [
+            "executive_takeaway",
             "decision_summary",
             "competitive_findings",
             "review_theme_summary",
@@ -136,11 +141,32 @@ def test_quality_preflight_passes_ordered_core_report() -> None:
     }
 
 
+def test_quality_preflight_treats_executive_takeaway_as_executive_summary() -> None:
+    result = run_writer_quality_preflight(
+        _detail(),
+        "\n\n".join(
+            [
+                "## Executive Takeaway\nTakeaway.",
+                "## Decision Summary\nDecision.",
+                "## Competitive Findings\nFindings.",
+                "## User Review Themes\nThemes.",
+                "## Competitor Deep Dives\nDeep dives.",
+                "## Side-by-Side Decision Matrix\nMatrix.",
+                "## SWOT Analysis\nSWOT.",
+            ]
+        ),
+    )
+
+    assert result.passed is True
+    assert result.missing_core_sections == []
+
+
 def test_quality_preflight_passes_user_research_gap_section() -> None:
     result = run_writer_quality_preflight(
         _detail(),
         "\n\n".join(
             [
+                "## Executive Summary\nSummary.",
                 "## Decision Summary\nDecision.",
                 "## Competitive Findings\nFindings.",
                 (

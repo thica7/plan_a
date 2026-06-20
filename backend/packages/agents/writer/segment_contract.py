@@ -200,6 +200,12 @@ def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
 
     allowed_heading_keys = SECTION_ALLOWED_KEYS.get(section_id, (section_id,))
     required_heading_keys = SECTION_REQUIRED_KEYS.get(section_id, ())
+    if (
+        section_id == "decision_summary"
+        and bool(segment.get("require_executive_summary"))
+        and "executive_summary" not in required_heading_keys
+    ):
+        required_heading_keys = ("executive_summary", *required_heading_keys)
     forbidden_heading_keys = _forbidden_heading_keys(segment_kind, section_id)
     if segment_kind == "final_report":
         section_id = "final_report"

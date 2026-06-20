@@ -70,6 +70,8 @@ def test_zh_segment_contract_retries_english_structural_h3() -> None:
         {"segment_name": "decision_summary", "output_language": "zh-CN"}
     )
     markdown = (
+        f"## {report_label('zh-CN', 'executive_summary')}\n"
+        "Executive summary baseline. [source:cursor-pricing]\n\n"
         f"## {report_label('zh-CN', 'decision_summary')}\n"
         "建议以 Cursor 为基线。 [source:cursor-pricing]\n\n"
         f"## {report_label('zh-CN', 'competitive_findings')}\n"
@@ -253,6 +255,28 @@ def test_decision_summary_contract_requires_competitive_findings() -> None:
 
     assert result.status == "retry"
     assert result.missing_required_heading_keys == ["competitive_findings"]
+    assert result.errors == ["segment is missing required H2 headings"]
+
+
+def test_schema_contract_decision_summary_requires_executive_summary() -> None:
+    contract = segment_contract_for(
+        {
+            "segment_name": "decision_summary",
+            "output_language": "en-US",
+            "require_executive_summary": True,
+        }
+    )
+    markdown = (
+        f"## {report_label('en-US', 'decision_summary')}\n"
+        "Decision only.\n\n"
+        f"## {report_label('en-US', 'competitive_findings')}\n"
+        "Findings."
+    )
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert result.status == "retry"
+    assert result.missing_required_heading_keys == ["executive_summary"]
     assert result.errors == ["segment is missing required H2 headings"]
 
 

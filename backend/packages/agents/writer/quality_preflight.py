@@ -11,6 +11,7 @@ from packages.agents.writer.segment_contract import (
 from packages.schema.api_dto import RunDetail
 
 REQUIRED_CORE_KEYS: tuple[str, ...] = (
+    "executive_summary",
     "decision_summary",
     "competitive_findings",
     "review_theme_summary",
@@ -99,7 +100,9 @@ def run_writer_quality_preflight(
 
     duplicate_section_count = _duplicate_identity_count(h2_identities)
     missing_core_sections = [
-        key for key in REQUIRED_CORE_KEYS if key not in before_support_keys
+        key
+        for key in REQUIRED_CORE_KEYS
+        if not _required_core_key_present(key, before_support_keys)
     ]
     core_sections_after_support = [
         key for key in after_support_keys if key in CORE_HEADING_KEYS
@@ -129,6 +132,15 @@ def _duplicate_identity_count(h2_identities: list[str]) -> int:
     for identity in h2_identities:
         counts[identity] = counts.get(identity, 0) + 1
     return sum(count - 1 for count in counts.values() if count > 1)
+
+
+def _required_core_key_present(key: str, present_keys: list[str]) -> bool:
+    if key != "executive_summary":
+        return key in present_keys
+    return any(
+        present_key in {"executive_summary", "executive_takeaway", "executive_overview"}
+        for present_key in present_keys
+    )
 
 
 def _normalize_unknown_heading(heading: str) -> str:

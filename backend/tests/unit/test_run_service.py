@@ -9,9 +9,13 @@ import pytest
 from packages.agents import SubagentContext
 from packages.agents.writer.assembler import ReportSectionFragment
 from packages.agents.writer.repair import build_writer_repair_plan
+from packages.agents.writer.segment_contract import heading_key_for
 from packages.agents.writer.structured_report import StructuredReport
 from packages.business_intel.homepage import HomepageVerification
-from packages.business_intel.report_sections import report_section_marker
+from packages.business_intel.report_sections import (
+    build_report_section_index,
+    report_section_marker,
+)
 from packages.business_intel.report_quality import compare_run_quality
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
@@ -6075,6 +6079,7 @@ async def test_writer_timeout_preserves_previous_report_and_metrics() -> None:
             ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
             llm_timeout_seconds=10,
             llm_temperature=0.2,
+            writer_structured_report_enabled=False,
         ),
     )
 
@@ -6155,6 +6160,7 @@ async def test_writer_line_repair_preserves_protectable_report_without_llm() -> 
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
     llm_calls = 0
@@ -6344,6 +6350,7 @@ async def test_writer_assemble_repair_preserves_report_without_llm() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
     llm_calls = 0
@@ -6803,6 +6810,7 @@ async def test_writer_poor_previous_report_allows_full_rewrite() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
 
@@ -6865,6 +6873,7 @@ async def test_writer_section_repair_replaces_only_target_section() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
     captured_user = ""
@@ -6964,6 +6973,7 @@ async def test_writer_section_repair_preserves_previous_when_review_loses_user_r
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
 
@@ -7079,6 +7089,7 @@ async def test_writer_only_thin_core_finding_uses_section_repair() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
     detail = await service.create_run(
@@ -7150,6 +7161,7 @@ async def test_writer_section_repair_failure_reports_attempted_metadata() -> Non
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
 
@@ -7231,6 +7243,7 @@ async def test_writer_section_repair_preflight_failure_fails_run_with_previous_r
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
     detail = await service.create_run(
@@ -7315,6 +7328,7 @@ async def test_writer_section_repair_prompt_includes_localized_heading() -> None
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
     captured_system = ""
@@ -7452,6 +7466,7 @@ async def test_writer_full_rewrite_rejects_collapsed_review_section_when_previou
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
 
@@ -7625,6 +7640,7 @@ async def test_writer_upstream_changed_allows_full_rewrite_with_guard_metadata()
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
 
@@ -7858,6 +7874,7 @@ async def test_writer_upstream_changed_rejects_thinner_full_rewrite() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
 
@@ -7936,6 +7953,7 @@ async def test_writer_budget_timeout_fails_without_previous_report() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=0.05,
+            writer_structured_report_enabled=False,
         ),
     )
 
@@ -8015,6 +8033,7 @@ async def test_writer_empty_output_fails_without_previous_report() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
 
@@ -8072,6 +8091,7 @@ async def test_writer_uses_evidence_pack_for_llm_prompt() -> None:
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=5,
+            writer_structured_report_enabled=False,
         ),
     )
     captured_user = ""
@@ -8172,6 +8192,7 @@ async def test_writer_uses_evidence_pack_context_and_emits_preflight(monkeypatch
             llm_timeout_seconds=10,
             llm_temperature=0.2,
             writer_timeout_seconds=10,
+            writer_structured_report_enabled=False,
         ),
     )
     detail = RunDetail(
@@ -8701,6 +8722,7 @@ def _schema_contract_segmented_zh_markdown() -> str:
         "The available evidence supports a cautious Cursor-first recommendation, "
         "with Windsurf follow-up framed as a collection gap rather than a winner "
         "claim. [source:raw-source-a] [source:raw-source-b]\n\n"
+        f"{_schema_contract_minimum_core_tail('zh-CN')}\n\n"
         f"## {report_label('zh-CN', 'evidence_support')}\n"
         "The support layer lists source coverage after the core recommendation. "
         "[source:raw-source-a]\n"
@@ -8720,8 +8742,131 @@ def _schema_contract_segmented_en_markdown(
         f"## {report_label('en-US', 'competitive_findings')}\n"
         "The scoped update is handled through schema-contract segment authoring. "
         "[source:raw-source-b]\n\n"
+        f"{_schema_contract_minimum_core_tail('en-US')}\n\n"
         f"## {report_label('en-US', 'evidence_support')}\n"
         "Support material remains after the core report. [source:raw-source-a]\n"
+    )
+
+
+def _schema_contract_minimum_core_tail(output_language: str) -> str:
+    if output_language == "zh-CN":
+        review_body = "用户证据仍属于方向性信号，需要继续验证。"
+        cursor_body = "Cursor 仍是主要评估竞品。"
+        windsurf_body = "Windsurf 仍是需要观察的替代项。"
+        matrix_header = "| 维度 | Cursor | Windsurf |\n|---|---|---|"
+        matrix_row = "| 定价 | 领先 [source:raw-source-a] | 观察 [source:raw-source-b] |"
+        strength_heading = "优势"
+        risk_heading = "风险"
+        strength_body = "定价证据更清晰。"
+        risk_body = "定价需要刷新验证。"
+    else:
+        review_body = "User evidence remains directional and needs validation."
+        cursor_body = "Cursor remains the primary evaluated competitor."
+        windsurf_body = "Windsurf remains a monitored alternative."
+        matrix_header = "| Dimension | Cursor | Windsurf |\n|---|---|---|"
+        matrix_row = "| Pricing | Lead [source:raw-source-a] | Watch [source:raw-source-b] |"
+        strength_heading = "Strengths"
+        risk_heading = "Risks"
+        strength_body = "Pricing evidence is clearer."
+        risk_body = "Pricing needs refreshed validation."
+    return "\n\n".join(
+        [
+            (
+                f"## {report_label(output_language, 'review_theme_summary')}\n"
+                f"{review_body} [source:raw-source-a]"
+            ),
+            (
+                f"## {report_label(output_language, 'competitor_deep_dives')}\n"
+                "### Cursor\n"
+                f"{cursor_body} [source:raw-source-a]\n"
+                "### Windsurf\n"
+                f"{windsurf_body} [source:raw-source-b]"
+            ),
+            (
+                f"## {report_label(output_language, 'side_by_side_matrix')}\n"
+                f"{matrix_header}\n"
+                f"{matrix_row}"
+            ),
+            (
+                f"## {report_label(output_language, 'swot_analysis')}\n"
+                "### Cursor\n"
+                f"#### {strength_heading}\n"
+                f"- {strength_body} [source:raw-source-a]\n"
+                "### Windsurf\n"
+                f"#### {risk_heading}\n"
+                f"- {risk_body} [source:raw-source-b]"
+            ),
+        ]
+    )
+
+
+def _marked_schema_contract_report_in_assembler_order() -> str:
+    sections = [
+        (
+            "executive_summary",
+            "core",
+            "The executive readout recommends a cautious Cursor-first evaluation. "
+            "[source:raw-source-a]",
+        ),
+        (
+            "decision_summary",
+            "core",
+            "Cursor should lead the initial procurement discussion. "
+            "[source:raw-source-a]",
+        ),
+        (
+            "competitive_findings",
+            "core",
+            "Pricing evidence is visible enough to support a first-pass finding. "
+            "[source:raw-source-a]",
+        ),
+        (
+            "review_theme_summary",
+            "core",
+            "User research remains directional and should not drive final purchase alone. "
+            "[source:raw-source-a]",
+        ),
+        (
+            "community_evidence_triangulation",
+            "core",
+            "Community evidence is a validation layer before support materials. "
+            "[source:raw-source-a]",
+        ),
+        (
+            "competitor_deep_dives",
+            "core",
+            "### Cursor\nCursor has a visible pricing page. [source:raw-source-a]",
+        ),
+        (
+            "side_by_side_matrix",
+            "core",
+            "| Dimension | Cursor |\n|---|---|\n| Pricing | Visible [source:raw-source-a] |",
+        ),
+        (
+            "swot_analysis",
+            "core",
+            "### Cursor\n#### Strengths\n- Pricing is visible. [source:raw-source-a]",
+        ),
+        (
+            "battlecard",
+            "core",
+            "### Cursor\n#### Attack point\n- Lead with pricing clarity. [source:raw-source-a]",
+        ),
+        (
+            "evidence_support",
+            "support",
+            "Evidence support belongs after every core section. [source:raw-source-a]",
+        ),
+    ]
+    return "\n\n".join(
+        "\n".join(
+            [
+                report_section_marker(section_key, layer),
+                f"## {report_label('en-US', section_key)}",
+                body,
+            ]
+        )
+        for section_key, layer, body in sections
     )
 
 
@@ -8757,6 +8902,7 @@ def test_real_schema_contract_writer_uses_segmented_authoring_when_enabled(
         memory_context,
         layer_context,
         required_sections,
+        allow_required_section_backfill=True,
     ):
         return _schema_contract_segmented_zh_markdown()
 
@@ -8824,6 +8970,7 @@ def test_real_schema_first_success_does_not_emit_markdown_fallback(monkeypatch) 
         memory_context,
         layer_context,
         required_sections,
+        allow_required_section_backfill=True,
     ):
         return _schema_contract_segmented_zh_markdown()
 
@@ -8849,6 +8996,68 @@ def test_real_schema_first_success_does_not_emit_markdown_fallback(monkeypatch) 
     assert "writer_markdown_fallback_used" not in event_types
     assert "writer_structured_report_validated" not in event_types
     assert "writer_publication_contract_validated" in event_types
+
+
+def test_real_schema_contract_writer_preserves_section_marker_alignment(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(
+        service,
+        run_id="run-schema-contract-marker-alignment",
+        competitors=["Cursor"],
+    )
+    record.detail.execution_mode = "real"
+    record.detail.output_language = "en-US"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+
+    async def fake_segmented_report(
+        self,
+        record,
+        *,
+        evidence_pack_result,
+        timeout_seconds,
+        language_guidance,
+        memory_context,
+        layer_context,
+        required_sections,
+        allow_required_section_backfill=True,
+    ):
+        return _marked_schema_contract_report_in_assembler_order()
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_segmented_report_markdown",
+        fake_segmented_report,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    pairs = [
+        (section.section_key, heading_key_for(section.heading, "en-US"))
+        for section in build_report_section_index(record.detail.report_md).sections
+        if section.section_key is not None
+    ]
+
+    assert pairs == [
+        ("executive_summary", "executive_summary"),
+        ("decision_summary", "decision_summary"),
+        ("competitive_findings", "competitive_findings"),
+        ("review_theme_summary", "review_theme_summary"),
+        (
+            "community_evidence_triangulation",
+            "community_evidence_triangulation",
+        ),
+        ("competitor_deep_dives", "competitor_deep_dives"),
+        ("side_by_side_matrix", "side_by_side_matrix"),
+        ("swot_analysis", "swot_analysis"),
+        ("battlecard", "battlecard"),
+        ("evidence_support", "evidence_support"),
+    ]
 
 
 def test_real_schema_first_uses_segmented_writer_when_pack_requires_segments(
@@ -8888,6 +9097,7 @@ def test_real_schema_first_uses_segmented_writer_when_pack_requires_segments(
         memory_context,
         layer_context,
         required_sections,
+        allow_required_section_backfill=True,
     ):
         segmented_calls.append(evidence_pack_result)
         return _schema_contract_segmented_zh_markdown()
@@ -8949,6 +9159,7 @@ def test_real_schema_first_writer_fails_closed_when_structured_path_fails(
         memory_context,
         layer_context,
         required_sections,
+        allow_required_section_backfill=True,
     ):
         raise ValueError("schema-contract segment failed")
 
@@ -9001,6 +9212,7 @@ def test_real_schema_contract_writer_fails_closed_on_publication_contract_error(
         memory_context,
         layer_context,
         required_sections,
+        allow_required_section_backfill=True,
     ):
         return (
             "<!-- report-section:key=executive_summary layer=core --> [source:raw-source-a]\n"
@@ -9065,6 +9277,7 @@ def test_schema_contract_publication_internal_leak_repairs_target_section(
         memory_context,
         layer_context,
         required_sections,
+        allow_required_section_backfill=True,
     ):
         return (
             f"{report_section_marker('executive_summary', 'core')}\n"
@@ -9076,6 +9289,7 @@ def test_schema_contract_publication_internal_leak_repairs_target_section(
             f"{report_section_marker('competitive_findings', 'core')}\n"
             f"## {report_label('zh-CN', 'competitive_findings')}\n"
             "证据支持谨慎推进。 [source:raw-source-a]\n\n"
+            f"{_schema_contract_minimum_core_tail('zh-CN')}\n\n"
             f"{report_section_marker('evidence_support', 'support')}\n"
             f"## {report_label('zh-CN', 'evidence_support')}\n"
             "完整清单见报告开头 source_registry。 [source:raw-source-a]\n"
@@ -9407,6 +9621,7 @@ def test_structured_repair_selection_not_emitted_when_markdown_fallback_used(
         memory_context,
         layer_context,
         required_sections,
+        allow_required_section_backfill=True,
     ):
         raise ValueError("schema-contract segment failed")
 
@@ -10066,6 +10281,9 @@ async def test_segmented_writer_backfills_missing_competitive_findings(
         ):
             if "retry_count=1" in user:
                 return (
+                    "## Executive Takeaway\n"
+                    "Cursor pricing should anchor the initial evaluation. "
+                    "[source:raw-source-a][source:raw-source-b]\n\n"
                     "## Decision Summary\n"
                     "Cursor pricing is visible. "
                     "[source:raw-source-a][source:raw-source-b]\n\n"
@@ -10074,6 +10292,9 @@ async def test_segmented_writer_backfills_missing_competitive_findings(
                     "[source:raw-source-a][source:raw-source-b]"
                 )
             return (
+                "## Executive Takeaway\n"
+                "Cursor pricing should anchor the initial evaluation. "
+                "[source:raw-source-a][source:raw-source-b]\n\n"
                 "## Decision Summary\n"
                 "Cursor pricing is visible, but the segment omitted competitive "
                 "findings. [source:raw-source-a][source:raw-source-b]"
@@ -10197,6 +10418,8 @@ async def test_segmented_writer_backfills_missing_side_by_side_matrix(
         user = kwargs["user"]
         if "segment_name=decision_summary" in user:
             return (
+                "## Executive Takeaway\n"
+                "Cursor pricing should anchor the initial evaluation. [source:raw-source-a]\n\n"
                 "## Decision Summary\n"
                 "Cursor pricing is visible. [source:raw-source-a]\n\n"
                 "## Competitive Findings\n"
@@ -10517,6 +10740,8 @@ async def test_segmented_writer_assembles_duplicate_sections_before_return(
         calls.append(user)
         if "segment_name=decision_summary" in user and "sources:1" in user:
             return (
+                "## Executive Takeaway\n"
+                "Decision from sources:1 [source:raw-source-a].\n\n"
                 "## Decision Summary\n"
                 "Decision from sources:1 [source:raw-source-a].\n\n"
                 "## Competitive Findings\n"

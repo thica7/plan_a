@@ -361,6 +361,30 @@ def test_replace_markdown_section_preserves_unrelated_sections() -> None:
     assert "Thin." not in updated
 
 
+def test_replace_markdown_section_strips_replacement_marker_for_existing_section() -> None:
+    original = (
+        "<!-- report-section:key=evidence_support layer=support -->\n"
+        "## Evidence & QA Support\n"
+        "Old support. [source:pricing-1]\n"
+    )
+    replacement = (
+        "<!-- report-section:key=evidence_support layer=support -->\n"
+        "## Evidence & QA Support\n"
+        "New support. [source:pricing-1]\n"
+    )
+
+    updated = replace_markdown_section(
+        original,
+        target_section="evidence_support",
+        output_language="en-US",
+        replacement_markdown=replacement,
+    )
+
+    assert updated.count("<!-- report-section:key=evidence_support layer=support -->") == 1
+    assert "Old support" not in updated
+    assert "New support. [source:pricing-1]" in updated
+
+
 def test_replace_markdown_section_replaces_zh_cn_heading_without_duplicate() -> None:
     original = (
         "# 报告\n\n"

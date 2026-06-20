@@ -8,6 +8,7 @@ from packages.agents.writer.heading_hygiene import (
     ENGLISH_STRUCTURAL_HEADINGS,
     normalize_heading_text,
 )
+from packages.agents.writer.segment_contract import heading_key_for
 from packages.agents.writer.structured_hygiene import (
     SOURCE_TOKEN_RE,
     find_malformed_source_token_attempts,
@@ -19,6 +20,7 @@ from packages.agents.writer.structured_renderer import (
     STRUCTURED_REPORT_ZH_LABELS,
 )
 from packages.agents.writer.structured_report import StructuredReport
+from packages.business_intel.report_sections import parse_report_section_marker
 
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
@@ -28,6 +30,16 @@ _SECTION_MARKER_PREFIX_RE = re.compile(r"^<!--\s*report-section:[^>]*-->")
 
 def _normalize_heading(text: str) -> str:
     return normalize_heading_text(text)
+
+
+_STRUCTURED_TO_MARKDOWN_SECTION_KEYS = {
+    "user_review_themes": "review_theme_summary",
+    "decision_matrix": "side_by_side_matrix",
+    "swot": "swot_analysis",
+    "community_triangulation": "community_evidence_triangulation",
+    "support_materials": "evidence_support",
+    "scenario_qa": "scenario_checklist",
+}
 
 
 _CORE_SECTION_KEYS = (
@@ -137,6 +149,7 @@ def validate_publication_contract(
     is_zh = _is_zh_report(structured_report, output_language=output_language)
 
     _validate_section_marker_lines(lines, issues=issues)
+    _validate_section_marker_heading_alignment(lines, is_zh=is_zh, issues=issues)
     _validate_headings(lines, is_zh=is_zh, issues=issues)
     _validate_table_headers(lines, issues=issues)
     _validate_internal_terms(lines, issues=issues)
@@ -180,6 +193,93 @@ def _validate_section_marker_lines(
                     repair_target="renderer",
                 )
             )
+
+
+def _validate_section_marker_heading_alignment(
+    lines: list[str],
+    *,
+    is_zh: bool,
+    issues: list[PublicationContractIssue],
+) -> None:
+    output_language = "zh-CN" if is_zh else "en-US"
+    for index, line in enumerate(lines):
+        marker = parse_report_section_marker(line.strip())
+        if marker is None or marker.section_key is None:
+            continue
+        heading_line_index = _next_nonblank_line_index(lines, index + 1)
+        if heading_line_index is None:
+            _append_section_marker_heading_mismatch(
+                issues,
+                line_number=index + 1,
+                marker_key=marker.section_key,
+                heading="",
+            )
+            continue
+        heading = _parse_heading(lines[heading_line_index])
+        if heading is None:
+            _append_section_marker_heading_mismatch(
+                issues,
+                line_number=index + 1,
+                marker_key=marker.section_key,
+                heading=lines[heading_line_index].strip(),
+            )
+            continue
+        _level, heading_text = heading
+        heading_key = _publication_heading_key_for(heading_text, output_language)
+        if heading_key != marker.section_key:
+            _append_section_marker_heading_mismatch(
+                issues,
+                line_number=index + 1,
+                marker_key=marker.section_key,
+                heading=heading_text,
+            )
+
+
+def _next_nonblank_line_index(lines: list[str], start_index: int) -> int | None:
+    for index in range(start_index, len(lines)):
+        if lines[index].strip():
+            return index
+    return None
+
+
+def _append_section_marker_heading_mismatch(
+    issues: list[PublicationContractIssue],
+    *,
+    line_number: int,
+    marker_key: str,
+    heading: str,
+) -> None:
+    issues.append(
+        PublicationContractIssue(
+            code="section_marker_heading_mismatch",
+            line_number=line_number,
+            message=(
+                "Section marker key must match the canonical key for the following "
+                "Markdown heading."
+            ),
+            repair_target="renderer",
+            excerpt=f"marker={marker_key}; heading={heading}",
+        )
+    )
+
+
+def _publication_heading_key_for(heading: str, output_language: str) -> str | None:
+    key = heading_key_for(heading, output_language)
+    if key is not None:
+        return key
+    normalized = _normalize_heading(heading)
+    labels = (
+        STRUCTURED_REPORT_ZH_LABELS
+        if output_language.lower().startswith("zh")
+        else STRUCTURED_REPORT_EN_LABELS
+    )
+    for structured_key, label in labels.items():
+        if _normalize_heading(label) == normalized:
+            return _STRUCTURED_TO_MARKDOWN_SECTION_KEYS.get(
+                structured_key,
+                structured_key,
+            )
+    return None
 
 
 def _validate_headings(
