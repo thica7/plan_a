@@ -38,6 +38,29 @@ def test_publication_contract_rejects_english_structural_heading_from_output_lan
     assert "english_structural_heading_in_zh" in result.issue_codes()
 
 
+def test_publication_contract_rejects_report_label_english_headings_in_zh() -> None:
+    markdown = (
+        "### Side-by-Side Decision Matrix\n"
+        "矩阵小标题不能使用英文报告标签。 [source:raw-source-a]\n\n"
+        "#### Evidence & QA Support\n"
+        "支撑材料小标题也不能使用英文报告标签。 [source:raw-source-a]\n"
+    )
+
+    result = validate_publication_contract(
+        markdown,
+        structured_report=None,
+        allowed_source_ids={"raw-source-a"},
+        output_language="zh-CN",
+    )
+
+    matching_issues = [
+        issue
+        for issue in result.issues
+        if issue.code == "english_structural_heading_in_zh"
+    ]
+    assert [issue.line_number for issue in matching_issues] == [1, 4]
+
+
 def test_rejects_broader_renderer_style_english_headings_in_zh_report() -> None:
     markdown = (
         "### Next Actions\n\n"

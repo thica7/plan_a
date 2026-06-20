@@ -4,6 +4,10 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from packages.agents.writer.heading_hygiene import (
+    ENGLISH_STRUCTURAL_HEADINGS,
+    normalize_heading_text,
+)
 from packages.agents.writer.structured_hygiene import (
     SOURCE_TOKEN_RE,
     find_malformed_source_token_attempts,
@@ -15,27 +19,14 @@ from packages.agents.writer.structured_report import StructuredReport
 
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
-_WHITESPACE_RE = re.compile(r"\s+")
 _SECTION_MARKER_RE = re.compile(r"^<!--\s*report-section:[^>]*-->\s*$")
 _SECTION_MARKER_PREFIX_RE = re.compile(r"^<!--\s*report-section:[^>]*-->")
 
 
 def _normalize_heading(text: str) -> str:
-    return _WHITESPACE_RE.sub(" ", text).strip().casefold()
+    return normalize_heading_text(text)
 
 
-_ENGLISH_STRUCTURAL_HEADINGS = frozenset(
-    _normalize_heading(heading)
-    for heading in (
-        *_EN_LABELS.values(),
-        "Feature and Workflow Capability",
-        "Direct User / Community Signals",
-        "Simulated Survey and Interview Signals",
-        "Battlecard",
-        "Source Appendix",
-        "Claim Support Audit",
-    )
-)
 _CORE_SECTION_KEYS = (
     "executive_summary",
     "decision_summary",
@@ -201,7 +192,7 @@ def _validate_headings(
 
         if is_zh and level in {2, 3, 4}:
             clean_text = SOURCE_TOKEN_RE.sub("", text)
-            if _normalize_heading(clean_text) in _ENGLISH_STRUCTURAL_HEADINGS:
+            if _normalize_heading(clean_text) in ENGLISH_STRUCTURAL_HEADINGS:
                 issues.append(
                     PublicationContractIssue(
                         code="english_structural_heading_in_zh",
