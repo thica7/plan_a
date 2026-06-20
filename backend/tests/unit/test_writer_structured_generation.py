@@ -11,7 +11,11 @@ from packages.agents.writer.logic import (
     build_structured_writer_section_plan,
     _structured_section_inputs,
 )
-from packages.agents.writer.structured_report import ExecutiveSummarySection, ReportSupport
+from packages.agents.writer.structured_report import (
+    BattlecardSection,
+    ExecutiveSummarySection,
+    ReportSupport,
+)
 from packages.agents.writer.structured_sections import StructuredSectionGenerationError
 from packages.orchestrator.service import RunRecord
 from packages.schema.api_dto import RunDetail
@@ -632,6 +636,24 @@ def test_structured_section_prompt_requires_requested_output_language() -> None:
 
     assert "Write every narrative text field in Simplified Chinese" in prompt
     assert "product names, source IDs, URLs, and technical terms" in prompt
+
+
+def test_battlecard_prompt_requires_cited_derivative_talk_tracks() -> None:
+    prompt = _WriterHarness([])._structured_section_prompt(
+        segment={
+            "section_id": "battlecard",
+            "content": "Decision matrix and SWOT evidence",
+            "output_language": "zh-CN",
+        },
+        section_schema=BattlecardSection,
+        allowed_source_ids={"raw-source-a", "raw-source-b"},
+    )
+
+    assert "BattlecardSection is a cited derivative section" in prompt
+    assert "use_when, attack_points, defense_points" in prompt
+    assert "rebuttal_talk_tracks" in prompt
+    assert "Do not output inference with empty source_ids" in prompt
+    assert "proof_needed_before_external_use or evidence_limits" in prompt
 
 
 @pytest.mark.asyncio

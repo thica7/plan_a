@@ -251,6 +251,28 @@ def _normalize_structured_section_payload(value: Any) -> Any:
     return normalized
 
 
+def _structured_section_contract_instructions(
+    section_schema: type[BaseModel],
+) -> list[str]:
+    if section_schema is BattlecardSection:
+        return [
+            (
+                "BattlecardSection is a cited derivative section. Every CitedText "
+                "in use_when, attack_points, defense_points, likely_objections, "
+                "and rebuttal_talk_tracks must include 1-3 source_ids inherited "
+                "from the source-backed matrix, SWOT, deep-dive, user, or "
+                "community evidence supporting that talk track."
+            ),
+            (
+                "Do not output inference with empty source_ids. If a talk track "
+                "cannot be cited from allowed_source_ids, move it to "
+                "proof_needed_before_external_use or evidence_limits as "
+                'evidence_role="evidence_gap", confidence="low".'
+            ),
+        ]
+    return []
+
+
 def _structured_section_generation_error(
     segment: Mapping[str, object],
     section_schema: type[BaseModel],
@@ -1697,35 +1719,39 @@ class WriterAgentMixin:
             "[source token:",
         )
         language_guidance = _structured_section_language_instruction(segment)
-        return "\n".join(
+        instructions = [
+            "Return JSON only.",
+            "Do not write Markdown headings.",
+            language_guidance,
+            "Do not include markdown citation tokens inside text fields.",
+            "Put citations only in source_ids.",
+            "Use only allowed_source_ids.",
+            (
+                "Choose evidence_role precisely: official/product/vendor facts use "
+                "official_fact only when the cited source_registry item has "
+                "authority_role=vendor_official; third-party webpage_verified "
+                "sources are not official by default. user/community/forum signals "
+                "use community_signal; "
+                "simulated interviews/surveys use simulated_research; reasoned "
+                "conclusions use inference; missing/unsupported evidence uses "
+                "evidence_gap."
+            ),
+            (
+                "Evidence gaps are absence-of-evidence statements: set "
+                'evidence_role="evidence_gap", confidence="low", and do not '
+                "add legacy evidence_gap fields."
+            ),
+        ]
+        instructions.extend(_structured_section_contract_instructions(section_schema))
+        instructions.extend(
             [
-                "Return JSON only.",
-                "Do not write Markdown headings.",
-                language_guidance,
-                "Do not include markdown citation tokens inside text fields.",
-                "Put citations only in source_ids.",
-                "Use only allowed_source_ids.",
-                (
-                    "Choose evidence_role precisely: official/product/vendor facts use "
-                    "official_fact only when the cited source_registry item has "
-                    "authority_role=vendor_official; third-party webpage_verified "
-                    "sources are not official by default. user/community/forum signals "
-                    "use community_signal; "
-                    "simulated interviews/surveys use simulated_research; reasoned "
-                    "conclusions use inference; missing/unsupported evidence uses "
-                    "evidence_gap."
-                ),
-                (
-                    "Evidence gaps are absence-of-evidence statements: set "
-                    'evidence_role="evidence_gap", confidence="low", and do not '
-                    "add legacy evidence_gap fields."
-                ),
                 f"Schema JSON: {schema_json}",
                 f"allowed_source_ids JSON: {allowed_source_ids_json}",
                 f"Segment JSON: {segment_json}",
                 f"Previous validation error: {previous_error}",
             ]
         )
+        return "\n".join(instructions)
 
     async def _writer_segmented_report_markdown(
         self,
