@@ -8968,6 +8968,69 @@ def test_real_schema_first_writer_fails_closed_when_structured_path_fails(
     assert "writer_markdown_fallback_used" not in event_types
 
 
+def test_real_schema_contract_writer_fails_closed_on_publication_contract_error(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(service, competitors=["Cursor"])
+    record.detail.execution_mode = "real"
+    record.detail.output_language = "zh-CN"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+
+    async def fake_segmented_report(
+        self,
+        record,
+        *,
+        evidence_pack_result,
+        timeout_seconds,
+        language_guidance,
+        memory_context,
+        layer_context,
+        required_sections,
+    ):
+        return (
+            "<!-- report-section:key=executive_summary layer=core --> [source:raw-source-a]\n"
+            "## 执行摘要\n"
+            "建议优先选择 Cursor。 [source:raw-source-a]\n\n"
+            "### Direct User / Community Signals\n"
+            "英文结构标题应被 publication contract 拦截。 [source:raw-source-a]\n"
+        )
+
+    async def fail_if_markdown_writer_called(self, record, evidence_pack_result, timeout_seconds):
+        raise AssertionError("Markdown fallback must not run for publication contract errors")
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_segmented_report_markdown",
+        fake_segmented_report,
+    )
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_markdown_report_from_evidence_pack",
+        fail_if_markdown_writer_called,
+    )
+
+    asyncio.run(service._real_writer_step(record))
+
+    assert record.detail.status == "failed"
+    assert record.detail.report_md == ""
+    event_types = [event.type for event in record.events]
+    assert "writer_schema_first_failed_closed" in event_types
+    assert "writer_markdown_fallback_used" not in event_types
+    failed_closed_event = next(
+        event
+        for event in record.events
+        if event.type == "writer_schema_first_failed_closed"
+    )
+    assert (
+        "schema-contract segment publication contract failed"
+        in failed_closed_event.payload["reason"]
+    )
+
+
 def test_schema_contract_segment_scoped_redo_uses_segment_authoring(
     monkeypatch,
 ) -> None:
