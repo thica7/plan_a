@@ -194,9 +194,7 @@ def test_decision_cards_do_not_copy_raw_matrix_text_as_evidence() -> None:
         fallback_used=False,
     )
 
-    text = "\n".join(
-        f"{card.recommendation}\n{card.rationale}" for card in bundle.cards
-    )
+    text = "\n".join(f"{card.recommendation}\n{card.rationale}" for card in bundle.cards)
     assert "RAW MATRIX ONLY TEXT SHOULD NOT APPEAR" not in text
     assert all(card.source_ids == claim.source_ids for card in bundle.cards)
 
@@ -276,9 +274,7 @@ def test_overall_recommendation_is_not_strong_for_mixed_dimension_strength() -> 
         fallback_used=False,
     )
 
-    overall = next(
-        card for card in bundle.cards if card.decision_type == "overall_recommendation"
-    )
+    overall = next(card for card in bundle.cards if card.decision_type == "overall_recommendation")
     assert overall.evidence_strength != "strong"
     assert overall.posture != "strong"
 
@@ -323,9 +319,7 @@ def test_no_overall_recommendation_for_cross_dimension_tie() -> None:
     )
 
     assert bundle.recommendation_card_id is None
-    assert not any(
-        card.decision_type == "overall_recommendation" for card in bundle.cards
-    )
+    assert not any(card.decision_type == "overall_recommendation" for card in bundle.cards)
     assert bundle.producer_context["overall_winner_tie"] is True
 
 
@@ -379,14 +373,100 @@ def test_no_overall_recommendation_for_non_tied_split_support() -> None:
     )
 
     assert bundle.recommendation_card_id is None
-    assert not any(
-        card.decision_type == "overall_recommendation" for card in bundle.cards
-    )
+    assert not any(card.decision_type == "overall_recommendation" for card in bundle.cards)
     assert bundle.producer_context["overall_winner_split"] is True
     assert bundle.producer_context["overall_winner_counts"] == {
         "Cursor": 2,
         "GitHub Copilot": 1,
     }
+
+
+def test_tie_dimensions_are_preserved_as_risk_adjusted_decision_cards() -> None:
+    cursor_pricing_claim = _claim("1", "Cursor", "pricing", strength="moderate")
+    copilot_pricing_claim = _claim("2", "GitHub Copilot", "pricing", strength="moderate")
+    windsurf_feature_claim = _claim(
+        "3", "Windsurf", "feature", strength="moderate", confidence=0.82
+    )
+    cursor_persona_claim = _claim("4", "Cursor", "persona", strength="moderate")
+    windsurf_persona_claim = _claim("5", "Windsurf", "persona", strength="moderate")
+    matrix = ComparisonMatrix(
+        competitors=["Cursor", "GitHub Copilot", "Windsurf"],
+        dimensions=["pricing", "feature", "persona"],
+        cells=[
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="pricing",
+                value="Cursor pricing evidence",
+                source_ids=cursor_pricing_claim.source_ids,
+                confidence=0.86,
+            ),
+            ComparisonCell(
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                value="Copilot pricing evidence",
+                source_ids=copilot_pricing_claim.source_ids,
+                confidence=0.84,
+            ),
+            ComparisonCell(
+                competitor="Windsurf",
+                dimension="feature",
+                value="Windsurf feature evidence",
+                source_ids=windsurf_feature_claim.source_ids,
+                confidence=0.82,
+            ),
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="persona",
+                value="Cursor persona evidence",
+                source_ids=cursor_persona_claim.source_ids,
+                confidence=0.76,
+            ),
+            ComparisonCell(
+                competitor="Windsurf",
+                dimension="persona",
+                value="Windsurf persona evidence",
+                source_ids=windsurf_persona_claim.source_ids,
+                confidence=0.76,
+            ),
+        ],
+        winner_by_dimension={
+            "pricing": "tie",
+            "feature": "Windsurf",
+            "persona": "tie",
+        },
+        summary=[],
+    )
+
+    bundle = build_decision_card_bundle(
+        run_id="run-1",
+        claim_bundles=[
+            _bundle("Cursor", "pricing", [cursor_pricing_claim]),
+            _bundle("GitHub Copilot", "pricing", [copilot_pricing_claim]),
+            _bundle("Windsurf", "feature", [windsurf_feature_claim]),
+            _bundle("Cursor", "persona", [cursor_persona_claim]),
+            _bundle("Windsurf", "persona", [windsurf_persona_claim]),
+        ],
+        matrix=matrix,
+        fallback_used=False,
+    )
+
+    cards_by_subject = {card.subject: card for card in bundle.cards}
+    assert cards_by_subject["pricing"].decision_type == "risk_adjusted_recommendation"
+    assert cards_by_subject["pricing"].winner is None
+    assert set(cards_by_subject["pricing"].claim_card_ids) == {
+        cursor_pricing_claim.id,
+        copilot_pricing_claim.id,
+    }
+    assert cards_by_subject["persona"].decision_type == "risk_adjusted_recommendation"
+    assert cards_by_subject["feature"].decision_type == "dimension_winner"
+    assert not any(card.decision_type == "overall_recommendation" for card in bundle.cards)
+    overall = next(
+        card
+        for card in bundle.cards
+        if card.decision_type == "risk_adjusted_recommendation" and card.subject == "overall"
+    )
+    assert bundle.recommendation_card_id == overall.id
+    assert overall.winner is None
 
 
 def test_decision_card_bundle_message_payload_has_schema_name() -> None:
@@ -414,8 +494,6 @@ def test_decision_card_bundle_message_payload_has_schema_name() -> None:
     )
 
     payload_model = AGENT_MESSAGE_PAYLOAD_SCHEMAS["DecisionCardBundle"]
-    payload = payload_model.model_validate(
-        {"bundle": bundle.model_dump(mode="json")}
-    )
+    payload = payload_model.model_validate({"bundle": bundle.model_dump(mode="json")})
 
     assert payload.schema_name == "DecisionCardBundle"

@@ -4,8 +4,8 @@ import pytest
 
 from packages.agents.writer.artifact_assembler import assemble_report_artifact_v2
 from packages.agents.writer.logic import WriterAgentMixin
-from packages.observability.tracing import build_run_event
 from packages.business_intel.report_sections import report_section_marker
+from packages.observability.tracing import build_run_event
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import AnalysisPlan, RawSource, RevisionRecord
 from packages.schema.report_artifact import (
@@ -183,12 +183,15 @@ def test_assemble_report_artifact_v2_splits_layers_and_render_cache() -> None:
 
     assert artifact.run_id == detail.id
     assert artifact.core_report.markdown == core_markdown
-    assert artifact.support_appendix.markdown == support_markdown
+    assert artifact.support_appendix.markdown.startswith(support_markdown)
+    assert "Claim card coverage" in artifact.support_appendix.markdown
     assert artifact.audit_log.markdown == ""
     assert artifact.render_cache.core_markdown == artifact.core_report.markdown
     assert artifact.render_cache.support_markdown == artifact.support_appendix.markdown
     assert artifact.render_cache.audit_markdown == artifact.audit_log.markdown
-    assert artifact.render_cache.full_markdown == f"{core_markdown}\n\n{support_markdown}"
+    assert artifact.render_cache.full_markdown == (
+        f"{core_markdown}\n\n{artifact.support_appendix.markdown}"
+    )
     assert artifact.legacy.source == "report_artifact_v2"
     assert artifact.legacy.report_md_alias is True
     assert artifact.quality.core_gate["status"] == "not_run"
@@ -230,6 +233,55 @@ def test_assemble_report_artifact_v2_carries_cards_briefs_and_section_metadata()
     assert support_section.claim_card_ids == ["claim-cursor-pricing"]
 
 
+def test_assemble_report_artifact_v2_appends_deterministic_support_index() -> None:
+    detail = _detail_with_cards_and_briefs()
+    core_markdown = (
+        f"{report_section_marker('decision_summary', 'core')}\n"
+        "## Decision Summary\n"
+        "Cursor is recommended. [source:raw-source-cursor-pricing]"
+    )
+    placeholder_support = (
+        f"{report_section_marker('evidence_support', 'support')}\n"
+        "## Evidence Support\n"
+        "Evidence support will be audited from registered cards and sources."
+    )
+
+    artifact = assemble_report_artifact_v2(
+        detail,
+        {
+            "decision_summary": core_markdown,
+            "evidence_support": placeholder_support,
+        },
+    )
+
+    support = artifact.support_appendix.markdown
+    assert "claim-cursor-pricing" in support
+    assert "decision-overall" in support
+    assert "raw-source-cursor-pricing" in support
+    assert "Claim card coverage" in support
+
+
+def test_assemble_report_artifact_v2_localizes_deterministic_support_index() -> None:
+    detail = _detail_with_cards_and_briefs()
+    detail.output_language = "zh-CN"
+    core_markdown = (
+        f"{report_section_marker('decision_summary', 'core')}\n"
+        "## \u51b3\u7b56\u6458\u8981\n"
+        "Cursor is recommended. [source:raw-source-cursor-pricing]"
+    )
+
+    artifact = assemble_report_artifact_v2(
+        detail,
+        {
+            "decision_summary": core_markdown,
+        },
+    )
+
+    support = artifact.support_appendix.markdown
+    assert "### \u58f0\u660e\u5361\u8986\u76d6" in support
+    assert "### Claim card coverage" not in support
+
+
 def test_assemble_report_artifact_v2_can_split_final_markdown_by_existing_markers() -> None:
     detail = _detail_with_cards_and_briefs()
     core_markdown = (
@@ -250,8 +302,10 @@ def test_assemble_report_artifact_v2_can_split_final_markdown_by_existing_marker
     )
 
     assert artifact.core_report.markdown == core_markdown
-    assert artifact.support_appendix.markdown == support_markdown
-    assert artifact.render_cache.full_markdown == final_markdown
+    assert artifact.support_appendix.markdown.startswith(support_markdown)
+    assert artifact.render_cache.full_markdown == (
+        f"{core_markdown}\n\n{artifact.support_appendix.markdown}"
+    )
 
 
 def test_assemble_report_artifact_v2_honors_explicit_audit_marker_layer() -> None:
@@ -273,7 +327,7 @@ def test_assemble_report_artifact_v2_honors_explicit_audit_marker_layer() -> Non
     )
 
     assert artifact.core_report.markdown == core_markdown
-    assert artifact.support_appendix.markdown == ""
+    assert "Claim card coverage" in artifact.support_appendix.markdown
     assert artifact.audit_log.markdown == audit_markdown
     assert artifact.audit_log.sections[0].section_key == "generation_notes"
 
@@ -334,9 +388,7 @@ async def test_writer_schema_contract_publication_sets_report_artifact_alias() -
     assert detail.report_artifact is not None
     assert detail.report_artifact.render_cache.full_markdown == detail.report_md
     assert detail.report_artifact.legacy.source == "report_artifact_v2"
-    assert harness.emitted_events[0].type == (
-        "writer_report_artifact_v2_publication_validated"
-    )
+    assert harness.emitted_events[0].type == ("writer_report_artifact_v2_publication_validated")
     assert harness.emitted_events[0].payload["passed"] is True
 
 

@@ -15,7 +15,6 @@ from packages.schema.report_artifact import (
     DecisionCardBundle,
 )
 
-
 _EVIDENCE_RANK = {
     "insufficient": 0,
     "weak": 1,
@@ -34,12 +33,39 @@ def build_decision_card_bundle(
     fallback_used: bool,
 ) -> DecisionCardBundle:
     supported_claims_by_key = _supported_claims_by_key(claim_bundles)
+    supported_claims_by_dimension = _supported_claims_by_dimension(supported_claims_by_key)
     cell_by_key = {(cell.dimension, cell.competitor): cell for cell in matrix.cells}
     cards: list[DecisionCard] = []
 
     for dimension in matrix.dimensions:
         winner = matrix.winner_by_dimension.get(dimension)
-        if not winner or winner.casefold() == "tie":
+        if not winner:
+            claims = supported_claims_by_dimension.get(dimension, [])
+            if claims:
+                cards.append(
+                    _dimension_risk_adjusted_card(
+                        run_id=run_id,
+                        dimension=dimension,
+                        winner=winner,
+                        claims=claims,
+                        competitors=matrix.competitors,
+                        fallback_used=fallback_used,
+                    )
+                )
+            continue
+        if winner.casefold() == "tie":
+            claims = supported_claims_by_dimension.get(dimension, [])
+            if claims:
+                cards.append(
+                    _dimension_risk_adjusted_card(
+                        run_id=run_id,
+                        dimension=dimension,
+                        winner=None,
+                        claims=claims,
+                        competitors=matrix.competitors,
+                        fallback_used=fallback_used,
+                    )
+                )
             continue
         claims = supported_claims_by_key.get((winner, dimension), [])
         if not claims:
@@ -56,18 +82,32 @@ def build_decision_card_bundle(
             )
         )
 
-    winner_counts = _winner_counts(cards)
+    dimension_winner_cards = [card for card in cards if card.decision_type == "dimension_winner"]
+    winner_counts = _winner_counts(dimension_winner_cards)
     recommendation_card_id: str | None = None
-    overall = _overall_recommendation_card(
-        run_id=run_id,
-        matrix=matrix,
-        dimension_cards=cards,
-        winner_counts=winner_counts,
-        fallback_used=fallback_used,
-    )
+    overall = None
+    if not _has_tied_or_unresolved_dimensions(matrix):
+        overall = _overall_recommendation_card(
+            run_id=run_id,
+            matrix=matrix,
+            dimension_cards=dimension_winner_cards,
+            winner_counts=winner_counts,
+            fallback_used=fallback_used,
+        )
     if overall is not None:
         recommendation_card_id = overall.id
         cards.append(overall)
+    else:
+        risk_adjusted = _overall_risk_adjusted_card(
+            run_id=run_id,
+            matrix=matrix,
+            dimension_cards=cards,
+            winner_counts=winner_counts,
+            fallback_used=fallback_used,
+        )
+        if risk_adjusted is not None:
+            recommendation_card_id = risk_adjusted.id
+            cards.append(risk_adjusted)
 
     return DecisionCardBundle(
         run_id=run_id,
@@ -150,6 +190,92 @@ def _dimension_winner_card(
     )
 
 
+def _dimension_risk_adjusted_card(
+    *,
+    run_id: str,
+    dimension: str,
+    winner: str | None,
+    claims: Sequence[ClaimCard],
+    competitors: Sequence[str],
+    fallback_used: bool,
+) -> DecisionCard:
+    claim_card_ids = [claim.id for claim in claims]
+    source_ids = merge_ordered_refs(source_id for claim in claims for source_id in claim.source_ids)
+    evidence_strength = _aggregate_evidence_strength(claims)
+    confidence = _cap_confidence(
+        _average(claim.confidence for claim in claims),
+        fallback_used=fallback_used,
+    )
+    posture = _posture_for_decision(
+        evidence_strength=evidence_strength,
+        confidence=confidence,
+        fallback_used=fallback_used,
+    )
+    if winner and winner.casefold() != "tie":
+        recommendation = (
+            f"Treat {dimension} as unresolved because {winner} lacks enough "
+            "supported decision-card evidence."
+        )
+        rationale = (
+            f"The matrix names {winner} for {dimension}, but the comparator cannot "
+            "support a winner card from analyst claim cards."
+        )
+    else:
+        recommendation = (
+            f"Do not treat {dimension} as a single-vendor win; compare the tied "
+            "competitors against buyer-specific constraints."
+        )
+        rationale = (
+            f"{dimension} is tied or unresolved, but {len(claim_card_ids)} supported "
+            "analyst claim cards are available for risk-adjusted comparison."
+        )
+    represented_competitors = list(dict.fromkeys(claim.competitor for claim in claims))
+    alternatives = [
+        competitor for competitor in competitors if competitor in represented_competitors
+    ]
+    return DecisionCard(
+        id=_decision_card_id(
+            run_id,
+            "risk_adjusted_recommendation",
+            dimension,
+            winner or "tie",
+        ),
+        run_id=run_id,
+        decision_type="risk_adjusted_recommendation",
+        subject=dimension,
+        recommendation=recommendation,
+        posture=posture,
+        rationale=rationale,
+        claim_card_ids=claim_card_ids,
+        source_ids=source_ids,
+        winner=None if not winner or winner.casefold() == "tie" else winner,
+        alternatives=alternatives,
+        why_not={
+            competitor: f"No supported {dimension} win over the compared alternatives."
+            for competitor in alternatives
+        },
+        risk_factors=_risk_factors(
+            evidence_strength=evidence_strength,
+            fallback_used=fallback_used,
+            source_count=len(source_ids),
+        )
+        + [
+            "Dimension is tied or unresolved; avoid over-weighting it in the "
+            "overall recommendation."
+        ],
+        evidence_strength=evidence_strength,
+        confidence=confidence,
+        produced_by="comparator",
+        producer_stage="comparator",
+        metadata={
+            "dimension": dimension,
+            "fallback_used": fallback_used,
+            "matrix_winner": winner,
+            "risk_adjusted_reason": "dimension_tie_or_unresolved",
+        },
+    )
+
+
 def _overall_recommendation_card(
     *,
     run_id: str,
@@ -196,8 +322,7 @@ def _overall_recommendation_card(
         decision_type="overall_recommendation",
         subject="overall",
         recommendation=(
-            f"Use {winner} as the leading recommendation across "
-            f"{', '.join(supported_dimensions)}."
+            f"Use {winner} as the leading recommendation across {', '.join(supported_dimensions)}."
         ),
         posture=posture,
         rationale=(
@@ -230,6 +355,101 @@ def _overall_recommendation_card(
     )
 
 
+def _overall_risk_adjusted_card(
+    *,
+    run_id: str,
+    matrix: ComparisonMatrix,
+    dimension_cards: Sequence[DecisionCard],
+    winner_counts: Counter[str],
+    fallback_used: bool,
+) -> DecisionCard | None:
+    if not dimension_cards:
+        return None
+    tied_or_unresolved_dimensions = [
+        dimension
+        for dimension in matrix.dimensions
+        if (matrix.winner_by_dimension.get(dimension) or "").casefold() == "tie"
+        or not matrix.winner_by_dimension.get(dimension)
+    ]
+    if not tied_or_unresolved_dimensions:
+        return None
+    claim_card_ids = merge_ordered_refs(
+        claim_card_id for card in dimension_cards for claim_card_id in card.claim_card_ids
+    )
+    if not claim_card_ids:
+        return None
+    source_ids = merge_ordered_refs(
+        source_id for card in dimension_cards for source_id in card.source_ids
+    )
+    decisive_winners = [
+        winner
+        for winner, count in winner_counts.items()
+        if count == max(winner_counts.values(), default=0)
+    ]
+    winner = decisive_winners[0] if len(decisive_winners) == 1 else None
+    evidence_strength = _overall_evidence_strength(dimension_cards)
+    confidence = _cap_confidence(
+        _average(card.confidence for card in dimension_cards),
+        fallback_used=fallback_used,
+    )
+    recommendation = (
+        "Do not make a single-tool recommendation yet; at least one requested "
+        "dimension is tied or unresolved."
+    )
+    if winner:
+        recommendation = (
+            f"Treat {winner} as a dimension-limited lead, not an overall winner, "
+            "because other requested dimensions are tied or unresolved."
+        )
+    return DecisionCard(
+        id=_decision_card_id(
+            run_id,
+            "risk_adjusted_recommendation",
+            "overall",
+            winner or "tie",
+        ),
+        run_id=run_id,
+        decision_type="risk_adjusted_recommendation",
+        subject="overall",
+        recommendation=recommendation,
+        posture="tentative",
+        rationale=(
+            "The comparator has supported claim cards, but requested dimensions "
+            f"remain tied or unresolved: {', '.join(tied_or_unresolved_dimensions)}."
+        ),
+        claim_card_ids=claim_card_ids,
+        source_ids=source_ids,
+        winner=None,
+        alternatives=list(matrix.competitors),
+        why_not={
+            competitor: (
+                "Overall recommendation is withheld because requested dimensions "
+                "are tied or unresolved."
+            )
+            for competitor in matrix.competitors
+        },
+        risk_factors=_risk_factors(
+            evidence_strength=evidence_strength,
+            fallback_used=fallback_used,
+            source_count=len(source_ids),
+        )
+        + [
+            "At least one requested dimension is tied or unresolved.",
+            "A single decisive dimension is insufficient for an overall recommendation.",
+        ],
+        evidence_strength=evidence_strength,
+        confidence=confidence,
+        produced_by="comparator",
+        producer_stage="comparator",
+        metadata={
+            "fallback_used": fallback_used,
+            "dimension_card_ids": [card.id for card in dimension_cards],
+            "tied_or_unresolved_dimensions": tied_or_unresolved_dimensions,
+            "winner_counts": dict(winner_counts),
+        },
+    )
+
+
 def _supported_claims_by_key(
     claim_bundles: Sequence[ClaimCardBundle],
 ) -> dict[tuple[str, str], list[ClaimCard]]:
@@ -242,6 +462,15 @@ def _supported_claims_by_key(
     return claims_by_key
 
 
+def _supported_claims_by_dimension(
+    supported_claims_by_key: dict[tuple[str, str], list[ClaimCard]],
+) -> dict[str, list[ClaimCard]]:
+    claims_by_dimension: dict[str, list[ClaimCard]] = {}
+    for (_, dimension), claims in supported_claims_by_key.items():
+        claims_by_dimension.setdefault(dimension, []).extend(claims)
+    return claims_by_dimension
+
+
 def _coverage_by_dimension(
     *,
     matrix: ComparisonMatrix,
@@ -250,14 +479,22 @@ def _coverage_by_dimension(
     coverage: dict[str, Any] = {}
     for dimension in matrix.dimensions:
         winner = matrix.winner_by_dimension.get(dimension)
-        winner_claims = supported_claims_by_key.get((winner or "", dimension), [])
+        if winner and winner.casefold() != "tie":
+            dimension_claims = supported_claims_by_key.get((winner, dimension), [])
+        else:
+            dimension_claims = [
+                claim
+                for (competitor, claim_dimension), claims in supported_claims_by_key.items()
+                if claim_dimension == dimension
+                for claim in claims
+            ]
         coverage[dimension] = {
             "winner": winner,
-            "supported_claim_card_count": len(winner_claims),
+            "supported_claim_card_count": len(dimension_claims),
             "source_ids": merge_ordered_refs(
-                source_id for claim in winner_claims for source_id in claim.source_ids
+                source_id for claim in dimension_claims for source_id in claim.source_ids
             ),
-            "decision_card_eligible": bool(winner_claims and winner and winner.casefold() != "tie"),
+            "decision_card_eligible": bool(dimension_claims),
         }
     return coverage
 
@@ -295,6 +532,14 @@ def _has_top_count_tie(winner_counts: Counter[str]) -> bool:
 
 def _has_winner_split(winner_counts: Counter[str]) -> bool:
     return len(winner_counts) > 1
+
+
+def _has_tied_or_unresolved_dimensions(matrix: ComparisonMatrix) -> bool:
+    return any(
+        not matrix.winner_by_dimension.get(dimension)
+        or (matrix.winner_by_dimension.get(dimension) or "").casefold() == "tie"
+        for dimension in matrix.dimensions
+    )
 
 
 def _decision_confidence(claims: Sequence[ClaimCard], cell: ComparisonCell | None) -> float:
@@ -339,8 +584,7 @@ def _overall_posture_for_decision(
         fallback_used=fallback_used,
     )
     if posture == "strong" and not all(
-        card.evidence_strength == "strong" and card.posture == "strong"
-        for card in supporting_cards
+        card.evidence_strength == "strong" and card.posture == "strong" for card in supporting_cards
     ):
         return "tentative"
     return posture
