@@ -40,6 +40,7 @@ RunEventType = Literal[
     "writer_structured_section_failed",
     "writer_structured_report_validated",
     "writer_publication_contract_validated",
+    "writer_report_artifact_v2_publication_validated",
     "writer_publication_contract_repair_selected",
     "writer_publication_contract_repaired",
     "writer_recommendation_delta_checked",

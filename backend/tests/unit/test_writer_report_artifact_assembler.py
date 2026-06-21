@@ -1,0 +1,365 @@
+from __future__ import annotations
+
+import pytest
+
+from packages.agents.writer.artifact_assembler import assemble_report_artifact_v2
+from packages.agents.writer.logic import WriterAgentMixin
+from packages.observability.tracing import build_run_event
+from packages.business_intel.report_sections import report_section_marker
+from packages.schema.api_dto import RunDetail
+from packages.schema.models import AnalysisPlan, RawSource, RevisionRecord
+from packages.schema.report_artifact import (
+    ClaimCard,
+    ClaimCardBundle,
+    DecisionCard,
+    DecisionCardBundle,
+    SectionBrief,
+)
+
+
+def _source(source_id: str) -> RawSource:
+    return RawSource(
+        id=source_id,
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title=f"{source_id} source",
+        snippet="Pricing evidence for Cursor.",
+        content_hash=f"{source_id}-hash",
+        confidence=0.9,
+    )
+
+
+def _detail_with_cards_and_briefs() -> RunDetail:
+    claim = ClaimCard(
+        id="claim-cursor-pricing",
+        run_id="run-artifact",
+        competitor="Cursor",
+        dimension="pricing",
+        claim_type="dimension_claim",
+        claim="Cursor has transparent pricing.",
+        source_ids=["raw-source-cursor-pricing"],
+        confidence=0.86,
+        evidence_strength="strong",
+        support_level="official",
+        scope="pricing",
+        caveats=[],
+        conflicts=[],
+        applicability="pricing",
+        producer_stage="analyst:pricing:Cursor",
+        derived_from=["raw-source-cursor-pricing"],
+    )
+    decision = DecisionCard(
+        id="decision-overall",
+        run_id="run-artifact",
+        decision_type="overall_recommendation",
+        subject="overall",
+        recommendation="Use Cursor as the baseline recommendation.",
+        posture="strong",
+        rationale="Cursor has stronger pricing evidence for the target buyer.",
+        claim_card_ids=[claim.id],
+        source_ids=["raw-source-cursor-pricing"],
+        winner="Cursor",
+        alternatives=["GitHub Copilot"],
+        evidence_strength="strong",
+        confidence=0.84,
+    )
+    detail = RunDetail(
+        id="run-artifact",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        output_language="en-US",
+        created_at="2026-06-21T00:00:00",
+        updated_at="2026-06-21T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing"],
+            competitor_layer="L1",
+        ),
+        raw_sources=[_source("raw-source-cursor-pricing")],
+        revisions=[
+            RevisionRecord(
+                id="revision-1",
+                iteration=1,
+                stage="writer",
+                before_md="before",
+                after_md="after",
+                issue_ids=["tighten-recommendation"],
+            )
+        ],
+        claim_card_bundles=[
+            ClaimCardBundle(
+                run_id="run-artifact",
+                competitor="Cursor",
+                dimension="pricing",
+                cards=[claim],
+                source_ids=["raw-source-cursor-pricing"],
+            )
+        ],
+        decision_card_bundle=DecisionCardBundle(
+            run_id="run-artifact",
+            cards=[decision],
+            recommendation_card_id=decision.id,
+        ),
+    )
+    detail.section_briefs = [
+        SectionBrief(
+            id="brief-decision-summary",
+            section_key="decision_summary",
+            layer="core",
+            allowed_claim_card_ids=[claim.id],
+            allowed_decision_card_ids=[decision.id],
+            allowed_source_ids=["raw-source-cursor-pricing"],
+        ),
+        SectionBrief(
+            id="brief-evidence-support",
+            section_key="evidence_support",
+            layer="support",
+            allowed_claim_card_ids=[claim.id],
+            allowed_decision_card_ids=[decision.id],
+            allowed_source_ids=["raw-source-cursor-pricing"],
+        ),
+    ]
+    return detail
+
+
+class _WriterHarness(WriterAgentMixin):
+    def __init__(self) -> None:
+        self.emitted_events = []
+        self.traces: list[dict[str, object]] = []
+
+    async def emit(
+        self,
+        run_id: str,
+        event_type: str,
+        node: str | None,
+        subagent: str | None,
+        message: str,
+        payload: dict[str, object] | None = None,
+    ) -> None:
+        self.emitted_events.append(
+            build_run_event(
+                event_id=len(self.emitted_events) + 1,
+                run_id=run_id,
+                event_type=event_type,
+                agent=node,
+                subagent=subagent,
+                message=message,
+                payload=payload or {},
+            )
+        )
+
+    def _trace_local_tool(self, record, **kwargs: object) -> None:
+        self.traces.append(kwargs)
+
+
+class _Record:
+    def __init__(self, detail: RunDetail) -> None:
+        self.detail = detail
+
+
+def test_assemble_report_artifact_v2_splits_layers_and_render_cache() -> None:
+    detail = _detail_with_cards_and_briefs()
+    core_markdown = (
+        f"{report_section_marker('decision_summary', 'core')}\n"
+        "## Decision Summary\n"
+        "Cursor is the recommended baseline. [source:raw-source-cursor-pricing]"
+    )
+    support_markdown = (
+        f"{report_section_marker('evidence_support', 'support')}\n"
+        "## Evidence Support\n"
+        "Pricing evidence is official. [source:raw-source-cursor-pricing]"
+    )
+
+    artifact = assemble_report_artifact_v2(
+        detail,
+        {
+            "decision_summary": core_markdown,
+            "evidence_support": support_markdown,
+        },
+    )
+
+    assert artifact.run_id == detail.id
+    assert artifact.core_report.markdown == core_markdown
+    assert artifact.support_appendix.markdown == support_markdown
+    assert artifact.audit_log.markdown == ""
+    assert artifact.render_cache.core_markdown == artifact.core_report.markdown
+    assert artifact.render_cache.support_markdown == artifact.support_appendix.markdown
+    assert artifact.render_cache.audit_markdown == artifact.audit_log.markdown
+    assert artifact.render_cache.full_markdown == f"{core_markdown}\n\n{support_markdown}"
+    assert artifact.legacy.source == "report_artifact_v2"
+    assert artifact.legacy.report_md_alias is True
+    assert artifact.quality.core_gate["status"] == "not_run"
+    assert artifact.quality.revision_count == 1
+
+
+def test_assemble_report_artifact_v2_carries_cards_briefs_and_section_metadata() -> None:
+    detail = _detail_with_cards_and_briefs()
+    artifact = assemble_report_artifact_v2(
+        detail,
+        {
+            "decision_summary": (
+                f"{report_section_marker('decision_summary', 'core')}\n"
+                "## Decision Summary\n"
+                "Cursor is recommended.\n"
+                "The reasoning is concise. [source:raw-source-cursor-pricing]"
+            ),
+            "evidence_support": (
+                f"{report_section_marker('evidence_support', 'support')}\n"
+                "## Evidence Support\n"
+                "Official pricing page support. [source:raw-source-cursor-pricing]"
+            ),
+        },
+    )
+
+    assert artifact.claim_card_bundles == detail.claim_card_bundles
+    assert artifact.decision_card_bundle == detail.decision_card_bundle
+    assert artifact.section_briefs == detail.section_briefs
+    core_section = artifact.core_report.sections[0]
+    support_section = artifact.support_appendix.sections[0]
+    assert core_section.section_key == "decision_summary"
+    assert core_section.heading == "Decision Summary"
+    assert core_section.start_line == 1
+    assert core_section.end_line == 4
+    assert core_section.claim_card_ids == ["claim-cursor-pricing"]
+    assert core_section.decision_card_ids == ["decision-overall"]
+    assert core_section.source_ids == ["raw-source-cursor-pricing"]
+    assert support_section.section_key == "evidence_support"
+    assert support_section.claim_card_ids == ["claim-cursor-pricing"]
+
+
+def test_assemble_report_artifact_v2_can_split_final_markdown_by_existing_markers() -> None:
+    detail = _detail_with_cards_and_briefs()
+    core_markdown = (
+        f"{report_section_marker('decision_summary', 'core')}\n"
+        "## Decision Summary\n"
+        "Cursor is recommended. [source:raw-source-cursor-pricing]"
+    )
+    support_markdown = (
+        f"{report_section_marker('evidence_support', 'support')}\n"
+        "## Evidence Support\n"
+        "Official pricing page support. [source:raw-source-cursor-pricing]"
+    )
+    final_markdown = f"{core_markdown}\n\n{support_markdown}"
+
+    artifact = assemble_report_artifact_v2(
+        detail,
+        {"final_report": final_markdown},
+    )
+
+    assert artifact.core_report.markdown == core_markdown
+    assert artifact.support_appendix.markdown == support_markdown
+    assert artifact.render_cache.full_markdown == final_markdown
+
+
+def test_assemble_report_artifact_v2_honors_explicit_audit_marker_layer() -> None:
+    detail = _detail_with_cards_and_briefs()
+    core_markdown = (
+        f"{report_section_marker('decision_summary', 'core')}\n"
+        "## Decision Summary\n"
+        "Cursor is recommended. [source:raw-source-cursor-pricing]"
+    )
+    audit_markdown = (
+        f"{report_section_marker('generation_notes', 'audit')}\n"
+        "## Generation Notes\n"
+        "Deterministic validation metadata only."
+    )
+
+    artifact = assemble_report_artifact_v2(
+        detail,
+        {"final_report": f"{core_markdown}\n\n{audit_markdown}"},
+    )
+
+    assert artifact.core_report.markdown == core_markdown
+    assert artifact.support_appendix.markdown == ""
+    assert artifact.audit_log.markdown == audit_markdown
+    assert artifact.audit_log.sections[0].section_key == "generation_notes"
+
+
+def test_assemble_report_artifact_v2_metadata_section_keys_are_input_order_independent() -> None:
+    detail = _detail_with_cards_and_briefs()
+    core_markdown = (
+        f"{report_section_marker('decision_summary', 'core')}\n"
+        "## Decision Summary\n"
+        "Cursor is recommended. [source:raw-source-cursor-pricing]"
+    )
+    support_markdown = (
+        f"{report_section_marker('evidence_support', 'support')}\n"
+        "## Evidence Support\n"
+        "Official pricing page support. [source:raw-source-cursor-pricing]"
+    )
+
+    first = assemble_report_artifact_v2(
+        detail,
+        {
+            "decision_summary": core_markdown,
+            "evidence_support": support_markdown,
+        },
+    )
+    second = assemble_report_artifact_v2(
+        detail,
+        {
+            "evidence_support": support_markdown,
+            "decision_summary": core_markdown,
+        },
+    )
+
+    assert first.metadata["section_keys"] == second.metadata["section_keys"]
+    assert first.render_cache.full_markdown == second.render_cache.full_markdown
+
+
+@pytest.mark.asyncio
+async def test_writer_schema_contract_publication_sets_report_artifact_alias() -> None:
+    detail = _detail_with_cards_and_briefs()
+    core_markdown = (
+        f"{report_section_marker('decision_summary', 'core')}\n"
+        "## Decision Summary\n"
+        "Cursor is recommended. [source:raw-source-cursor-pricing]"
+    )
+    support_markdown = (
+        f"{report_section_marker('evidence_support', 'support')}\n"
+        "## Evidence Support\n"
+        "Official pricing page support. [source:raw-source-cursor-pricing]"
+    )
+    detail.report_md = f"{core_markdown}\n\n{support_markdown}"
+    harness = _WriterHarness()
+
+    await harness._publish_schema_contract_report_artifact_if_current(
+        _Record(detail),
+        schema_contract_final_report_md=detail.report_md,
+    )
+
+    assert detail.report_artifact is not None
+    assert detail.report_artifact.render_cache.full_markdown == detail.report_md
+    assert detail.report_artifact.legacy.source == "report_artifact_v2"
+    assert harness.emitted_events[0].type == (
+        "writer_report_artifact_v2_publication_validated"
+    )
+    assert harness.emitted_events[0].payload["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_writer_schema_contract_publication_skips_preserved_previous_output() -> None:
+    detail = _detail_with_cards_and_briefs()
+    generated_markdown = (
+        f"{report_section_marker('decision_summary', 'core')}\n"
+        "## Decision Summary\n"
+        "Generated schema output. [source:raw-source-cursor-pricing]"
+    )
+    detail.report_md = "## Previous Report\n\nPreserved older report."
+    detail.report_artifact = assemble_report_artifact_v2(
+        detail,
+        {"final_report": generated_markdown},
+    )
+    harness = _WriterHarness()
+
+    published = await harness._publish_schema_contract_report_artifact_if_current(
+        _Record(detail),
+        schema_contract_final_report_md=generated_markdown,
+    )
+
+    assert published is False
+    assert detail.report_artifact is None
+    assert harness.emitted_events == []

@@ -41,6 +41,7 @@ EXPECTED_EVENT_TYPES = {
     "writer_structured_section_failed",
     "writer_structured_report_validated",
     "writer_publication_contract_validated",
+    "writer_report_artifact_v2_publication_validated",
     "writer_publication_contract_repair_selected",
     "writer_publication_contract_repaired",
     "writer_recommendation_delta_checked",
@@ -104,3 +105,21 @@ def test_run_event_to_sse_round_trips_payload() -> None:
     assert sse["id"] == "1"
     assert sse["event"] == "qa_issue"
     assert data["payload"]["issue"]["id"] == "missing-pricing"
+
+
+def test_report_artifact_validation_event_to_sse_round_trips_payload() -> None:
+    event = RunEvent(
+        id=2,
+        run_id="run-1",
+        type="writer_report_artifact_v2_publication_validated",
+        agent="writer",
+        message="Writer ReportArtifactV2 publication contract validated.",
+        payload={"passed": True, "issue_count": 0},
+    )
+
+    sse = event.to_sse()
+    data = json.loads(sse["data"])
+
+    assert sse["id"] == "2"
+    assert sse["event"] == "writer_report_artifact_v2_publication_validated"
+    assert data["payload"]["passed"] is True

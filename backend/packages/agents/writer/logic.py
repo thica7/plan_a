@@ -15,6 +15,10 @@ from packages.agents.writer.assembler import (
     assemble_report_fragments,
     assemble_report_sections,
 )
+from packages.agents.writer.artifact_assembler import assemble_report_artifact_v2
+from packages.agents.writer.artifact_publication_contract import (
+    validate_report_artifact_publication,
+)
 from packages.agents.writer.evidence_pack import (
     SEGMENT_INPUT_TARGET_CHARS,
     build_writer_evidence_pack,
@@ -1693,6 +1697,18 @@ class WriterAgentMixin:
                     writer_mode = "preserved previous report after writer anti-regression"
                 else:
                     detail.report_md = hardened_report
+                    schema_contract_final_report_md = (
+                        hardened_report
+                        if (
+                            schema_contract_report_generated
+                            and not structured_recommendation_guard_preserved
+                        )
+                        else None
+                    )
+                    await self._publish_schema_contract_report_artifact_if_current(
+                        record,
+                        schema_contract_final_report_md=schema_contract_final_report_md,
+                    )
             except TimeoutError as exc:
                 timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
                 writer_error = timeout_reason
@@ -1804,6 +1820,74 @@ class WriterAgentMixin:
     def _require_writer_report_output(self, report_md: str) -> None:
         if not report_md.strip():
             raise RuntimeError("Writer returned empty report content")
+
+    async def _publish_schema_contract_report_artifact_if_current(
+        self,
+        record: RunRecord,
+        *,
+        schema_contract_final_report_md: str | None,
+    ) -> bool:
+        detail = record.detail
+        if (
+            not schema_contract_final_report_md
+            or detail.report_md != schema_contract_final_report_md
+        ):
+            self._clear_stale_report_artifact(detail)
+            return False
+        await self._publish_schema_contract_report_artifact(record)
+        return True
+
+    async def _publish_schema_contract_report_artifact(self, record: RunRecord) -> None:
+        detail = record.detail
+        artifact = assemble_report_artifact_v2(
+            detail,
+            {"final_report": detail.report_md},
+        )
+        validation = validate_report_artifact_publication(
+            artifact,
+            allowed_source_ids={source.id for source in detail.raw_sources},
+        )
+        validation_payload = validation.telemetry_payload()
+        await self.emit(
+            detail.id,
+            "writer_report_artifact_v2_publication_validated",
+            "writer",
+            None,
+            "Writer ReportArtifactV2 publication contract validated.",
+            validation_payload,
+        )
+        self._trace_local_tool(
+            record,
+            agent="writer",
+            subagent=None,
+            name="writer_report_artifact_v2_publication_validated",
+            input_text="schema_contract_report_artifact_v2",
+            output_text=json.dumps(
+                validation_payload,
+                ensure_ascii=False,
+                default=str,
+            ),
+            metadata={
+                "passed": validation.passed,
+                "issue_count": len(validation.issues),
+            },
+        )
+        if not validation.passed:
+            raise ValueError(
+                "report artifact v2 publication contract failed: "
+                + ", ".join(validation.issue_codes())
+            )
+        detail.report_artifact = artifact
+        detail.report_md = artifact.render_cache.full_markdown
+
+    def _clear_stale_report_artifact(self, detail: RunDetail) -> None:
+        artifact = detail.report_artifact
+        if artifact is None:
+            return
+        if artifact.legacy.source != "report_artifact_v2":
+            return
+        if artifact.render_cache.full_markdown != detail.report_md:
+            detail.report_artifact = None
 
     async def _writer_structured_report(
         self,
@@ -3845,7 +3929,11 @@ class WriterAgentMixin:
         detail: RunDetail,
         previous_report: str,
     ) -> str:
-        return self._harden_report_markdown(detail, previous_report)
+        preserved_report = self._harden_report_markdown(detail, previous_report)
+        if detail.report_md != preserved_report:
+            detail.report_md = preserved_report
+        self._clear_stale_report_artifact(detail)
+        return preserved_report
 
     def _backfill_layer_sections(
         self,
