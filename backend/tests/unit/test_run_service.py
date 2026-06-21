@@ -8,6 +8,7 @@ import pytest
 
 from packages.agents import SubagentContext
 from packages.agents.writer.assembler import ReportSectionFragment
+from packages.agents.writer.publication_contract import validate_publication_contract
 from packages.agents.writer.repair import build_writer_repair_plan
 from packages.agents.writer.segment_contract import heading_key_for
 from packages.agents.writer.structured_report import StructuredReport
@@ -2992,6 +2993,169 @@ def test_final_qa_sync_adds_rag_gap_fill_for_collector_warnings() -> None:
     assert "## Final QA Gate Status" not in detail.report_md
     assert "Status: passed with warnings" not in detail.report_md
     assert "Status: blocked for review" not in detail.report_md
+
+
+def test_final_qa_sync_preserves_schema_contract_section_markers() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    source = RawSource(
+        id="raw-source-a",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://example.com/cursor-pricing",
+        snippet="Cursor has a public pricing page.",
+        content_hash="pricing-a",
+        confidence=0.9,
+    )
+
+    def section(section_key: str, layer: str, body: str) -> str:
+        return (
+            f"{report_section_marker(section_key, layer)}\n"
+            f"## {report_label('en-US', section_key)}\n"
+            f"{body}"
+        )
+
+    markdown = "\n\n".join(
+        [
+            section(
+                "executive_summary",
+                "core",
+                "- Cursor is the near-term recommendation. [source:raw-source-a]",
+            ),
+            section(
+                "decision_summary",
+                "core",
+                "- Buy Cursor only after procurement validates limits. [source:raw-source-a]",
+            ),
+            section(
+                "competitive_findings",
+                "core",
+                "- Pricing clarity matters most in this comparison. [source:raw-source-a]",
+            ),
+            section(
+                "review_theme_summary",
+                "core",
+                "- Users value integrated workflows. [source:raw-source-a]",
+            ),
+            section(
+                "community_evidence_triangulation",
+                "core",
+                "- Community evidence is directional only. [source:raw-source-a]",
+            ),
+            section(
+                "competitor_deep_dives",
+                "core",
+                "- Cursor needs pricing-limit validation. [source:raw-source-a]",
+            ),
+            section(
+                "side_by_side_matrix",
+                "core",
+                "| Dimension | Cursor |\n"
+                "| --- | --- |\n"
+                "| Pricing | Public plan evidence. [source:raw-source-a] |",
+            ),
+            section(
+                "swot_analysis",
+                "core",
+                "- Strength: clear pricing. [source:raw-source-a]",
+            ),
+            section(
+                "battlecard",
+                "core",
+                "- Attack point: validate limits before rollout. [source:raw-source-a]",
+            ),
+            section(
+                "evidence_support",
+                "support",
+                "- Supporting evidence remains auditable. [source:raw-source-a]",
+            ),
+            section(
+                "source_quality",
+                "support",
+                "- Source coverage is sufficient for this fixture. [source:raw-source-a]",
+            ),
+            section(
+                "user_research_evidence",
+                "support",
+                "- No primary user interviews are included. [source:raw-source-a]",
+            ),
+            section(
+                "rag_gap_fill",
+                "support",
+                "- No RAG gaps are required. [source:raw-source-a]",
+            ),
+            section(
+                "scenario_checklist",
+                "support",
+                "- Validate pricing and limits. [source:raw-source-a]",
+            ),
+            section(
+                "confidence_notes",
+                "support",
+                "- Confidence is medium. [source:raw-source-a]",
+            ),
+            section(
+                "claim_risk",
+                "support",
+                "- Do not overstate procurement readiness. [source:raw-source-a]",
+            ),
+            section(
+                "next_collection",
+                "support",
+                "- Collect procurement evidence next. [source:raw-source-a]",
+            ),
+            section(
+                "evidence_appendix",
+                "support",
+                "- raw-source-a: Cursor pricing. [source:raw-source-a]",
+            ),
+        ]
+    )
+    detail = RunDetail(
+        id="run-schema-contract-sync",
+        topic="AI Coding Agent",
+        status="running",
+        execution_mode="real",
+        output_language="en-US",
+        created_at="2026-05-23T00:00:00",
+        updated_at="2026-05-23T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI Coding Agent",
+            competitors=["Cursor"],
+            dimensions=["pricing", "feature", "persona"],
+        ),
+        report_md=markdown,
+        raw_sources=[source],
+    )
+    before = validate_publication_contract(
+        detail.report_md,
+        structured_report=None,
+        allowed_source_ids={source.id},
+        output_language=detail.output_language,
+    )
+    assert before.passed
+
+    service._sync_report_with_final_qa(detail)
+
+    after = validate_publication_contract(
+        detail.report_md,
+        structured_report=None,
+        allowed_source_ids={source.id},
+        output_language=detail.output_language,
+    )
+    assert after.passed
+    assert detail.report_md == markdown
 
 
 def test_qa_marks_phantom_citation_as_writer_only_blocker() -> None:
