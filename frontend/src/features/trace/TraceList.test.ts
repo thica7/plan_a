@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { DecisionReplayEvent } from "../../api/types";
+import type { DecisionReplayEvent, TraceSpan } from "../../api/types";
 import { formatDecisionPayload } from "./TraceList";
-import { formatModuleExecutionStatus } from "./traceModel";
+import { formatModuleExecutionStatus, formatRagKbWarmStartSpan, formatSpanMeta } from "./traceModel";
 
 describe("TraceList decision replay formatting", () => {
   it("summarizes QA blocker issue identity and reason", () => {
@@ -118,5 +118,64 @@ describe("TraceList decision replay formatting", () => {
         fallback: { used: false },
       }),
     ).toBe("LLM");
+  });
+
+  it("summarizes rejected RAG KB warm-start hits from trace output", () => {
+    const span: TraceSpan = {
+      id: "span-kb",
+      trace_id: "trace-1",
+      otel_span_id: "otel-span-1",
+      parent_span_id: null,
+      traceparent: "00-trace-otel-01",
+      kind: "tool",
+      agent: "collector",
+      subagent: "feature::Acme",
+      name: "rag_kb_warm_start",
+      status: "ok",
+      model: null,
+      provider: null,
+      duration_ms: 12,
+      input_chars: 10,
+      output_chars: 10,
+      input_tokens_estimate: 2,
+      output_tokens_estimate: 2,
+      cost_estimate_usd: 0,
+      input_preview: "{}",
+      output_preview: "",
+      full_input: "{}",
+      full_output: JSON.stringify({
+        hit_count: 3,
+        source_ids: ["raw-source-feature-1"],
+        rejections: [
+          {
+            rank: 0,
+            reason: "missing_text",
+            document_id: "kb-doc-empty",
+            chunk_id: "kb-chunk-empty",
+            source_type: "webpage_verified",
+          },
+          {
+            rank: 1,
+            reason: "disallowed_source_type",
+            document_id: "kb-doc-search",
+            source_type: "web_search_result",
+          },
+        ],
+      }),
+      metadata: {
+        hit_count: 3,
+        source_count: 1,
+        rejection_count: 2,
+        top_rejection_reason: "missing_text",
+      },
+      created_at: "2026-05-31T00:00:00Z",
+    };
+
+    const summary = formatRagKbWarmStartSpan(span);
+
+    expect(summary).toBe(
+      "3 KB hits / 1 accepted / 2 rejected / rejections missing_text@0 kb-doc-empty webpage_verified; disallowed_source_type@1 kb-doc-search web_search_result",
+    );
+    expect(formatSpanMeta(span)).toContain(summary);
   });
 });

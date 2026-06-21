@@ -61,6 +61,17 @@ USER_RESEARCH_SOURCE_TYPES = {
     "manual",
 }
 
+
+def _metadata_number(value: object) -> float | None:
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
 KB_INGEST_ALLOWED_SOURCE_TYPES = {
     "official",
     "official_site",
@@ -594,6 +605,16 @@ class CollectorAgentMixin:
             if not isinstance(hit, dict):
                 rejections.append({"rank": rank, "reason": "invalid_hit"})
                 continue
+            rejection_reason = self._kb_hit_rejection_reason(hit)
+            if rejection_reason is not None:
+                rejections.append(
+                    self._kb_hit_rejection_diagnostic(
+                        hit,
+                        rank=rank,
+                        reason=rejection_reason,
+                    )
+                )
+                continue
             source = self._raw_source_from_kb_hit(
                 detail,
                 competitor,
@@ -603,7 +624,13 @@ class CollectorAgentMixin:
                 query=query,
             )
             if source is None:
-                rejections.append({"rank": rank, "reason": "unusable_hit"})
+                rejections.append(
+                    self._kb_hit_rejection_diagnostic(
+                        hit,
+                        rank=rank,
+                        reason="raw_source_build_failed",
+                    )
+                )
                 continue
             if self._candidate_already_collected(
                 detail,
@@ -613,22 +640,24 @@ class CollectorAgentMixin:
                 url=str(source.url) if source.url else None,
             ):
                 rejections.append(
-                    {
-                        "rank": rank,
-                        "reason": "duplicate_source",
-                        "source_id": source.id,
-                    }
+                    self._kb_hit_rejection_diagnostic(
+                        hit,
+                        rank=rank,
+                        reason="duplicate_source",
+                        source_id=source.id,
+                    )
                 )
                 continue
             problem = self._source_quality_problem(source)
             if problem is not None:
                 rejections.append(
-                    {
-                        "rank": rank,
-                        "reason": "source_quality_problem",
-                        "source_id": source.id,
-                        "detail": problem,
-                    }
+                    self._kb_hit_rejection_diagnostic(
+                        hit,
+                        rank=rank,
+                        reason="source_quality_problem",
+                        source_id=source.id,
+                        detail=problem,
+                    )
                 )
                 continue
             sources.append(source)
@@ -654,9 +683,83 @@ class CollectorAgentMixin:
                 "hit_count": len(hits),
                 "source_count": len(sources),
                 "rejection_count": len(rejections),
+                "top_rejection_reason": self._top_kb_rejection_reason(rejections),
             },
         )
         return sources
+
+    @staticmethod
+    def _kb_hit_rejection_reason(hit: dict[str, object]) -> str | None:
+        text = str(hit.get("text") or "").strip()
+        url = str(hit.get("url") or "").strip()
+        source_type = str(hit.get("source_type") or "webpage_verified").strip()
+        if not text:
+            return "missing_text"
+        if not url:
+            return "missing_url"
+        if not url.startswith(("http://", "https://")):
+            return "non_http_url"
+        if source_type in {"llm_public_knowledge", "web_search_result"}:
+            return "disallowed_source_type"
+        return None
+
+    @staticmethod
+    def _kb_hit_rejection_diagnostic(
+        hit: dict[str, object],
+        *,
+        rank: int,
+        reason: str,
+        source_id: str | None = None,
+        detail: str | None = None,
+    ) -> dict[str, object]:
+        diagnostic: dict[str, object] = {"rank": rank, "reason": reason}
+        field_map = {
+            "document_id": "document_id",
+            "chunk_id": "chunk_id",
+            "source_type": "source_type",
+            "url": "url",
+            "title": "title",
+            "status": "status",
+            "competitor": "competitor",
+            "dimension": "dimension",
+        }
+        for source_key, target_key in field_map.items():
+            value = hit.get(source_key)
+            if value not in (None, ""):
+                diagnostic[target_key] = str(value)
+        score = _metadata_number(hit.get("rerank_score"))
+        if score is None:
+            score = _metadata_number(hit.get("score"))
+        if score is not None:
+            diagnostic["score"] = score
+        if source_id:
+            diagnostic["source_id"] = source_id
+        if detail:
+            diagnostic["detail"] = detail[:300]
+        hit_metadata = hit.get("metadata")
+        if isinstance(hit_metadata, dict):
+            raw_source_id = hit_metadata.get("raw_source_id") or hit_metadata.get(
+                "kb_raw_source_id"
+            )
+            collector_run_id = hit_metadata.get("run_id") or hit_metadata.get(
+                "kb_collector_run_id"
+            )
+            if raw_source_id not in (None, ""):
+                diagnostic["kb_raw_source_id"] = str(raw_source_id)
+            if collector_run_id not in (None, ""):
+                diagnostic["kb_collector_run_id"] = str(collector_run_id)
+        return diagnostic
+
+    @staticmethod
+    def _top_kb_rejection_reason(rejections: list[dict[str, object]]) -> str | None:
+        counts: dict[str, int] = {}
+        for item in rejections:
+            reason = str(item.get("reason") or "").strip()
+            if reason:
+                counts[reason] = counts.get(reason, 0) + 1
+        if not counts:
+            return None
+        return max(counts.items(), key=lambda item: item[1])[0]
 
     @staticmethod
     def _copy_kb_source_metadata(

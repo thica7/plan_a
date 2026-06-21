@@ -171,7 +171,7 @@ jobs:
 
       - name: Test report source trace
         working-directory: frontend
-        run: pnpm test -- src/features/report/ReportSourceTrace.test.tsx src/features/report/sourceBundle.test.ts src/stores/knowledgeStore.test.ts src/features/workbench/ReportReviewDesk.test.tsx src/features/workbench/ReleaseGateReviewQueue.test.tsx src/features/workbench/NotificationStream.test.tsx src/features/workbench/dataLoaders.test.ts
+        run: pnpm test -- src/features/report/ReportSourceTrace.test.tsx src/features/report/sourceBundle.test.ts src/stores/knowledgeStore.test.ts src/features/workbench/ReportReviewDesk.test.tsx src/features/workbench/ReleaseGateReviewQueue.test.tsx src/features/workbench/NotificationStream.test.tsx src/features/workbench/dataLoaders.test.ts src/features/trace/TraceList.test.ts
 
       - name: Build frontend
         working-directory: frontend

@@ -49,12 +49,38 @@ export function formatSpanMeta(span: TraceSpan) {
   if (provider) parts.push(String(provider));
   const contextId = span.metadata.context_id;
   if (typeof contextId === "string") parts.push(contextId.split(":").slice(-2).join(":"));
+  const kbWarmStartSummary = formatRagKbWarmStartSpan(span);
+  if (kbWarmStartSummary) parts.push(kbWarmStartSummary);
   const resultCount = span.metadata.result_count;
   if (typeof resultCount === "number") parts.push(`${resultCount} results`);
   const validCount = span.metadata.valid_count;
   const unknownCount = span.metadata.unknown_count;
   if (typeof validCount === "number") parts.push(`${validCount} valid refs`);
   if (typeof unknownCount === "number" && unknownCount > 0) parts.push(`${unknownCount} unknown refs`);
+  return parts.join(" / ");
+}
+
+export function formatRagKbWarmStartSpan(span: TraceSpan) {
+  if (span.name !== "rag_kb_warm_start") return "";
+  const hitCount = numberMetaOrNull(span, "hit_count");
+  const sourceCount = numberMetaOrNull(span, "source_count");
+  const rejectionCount = numberMetaOrNull(span, "rejection_count");
+  const output = parseSpanOutput(span);
+  const rejections = arrayValue(output?.rejections);
+  const rejectionSummary = rejections.map(formatKbRejection).filter(Boolean).slice(0, 3);
+  const hiddenRejections =
+    rejectionCount !== null ? Math.max(0, rejectionCount - rejectionSummary.length) : 0;
+  const parts: string[] = [];
+  if (hitCount !== null) parts.push(`${hitCount} KB hits`);
+  if (sourceCount !== null) parts.push(`${sourceCount} accepted`);
+  if (rejectionCount !== null) parts.push(`${rejectionCount} rejected`);
+  if (rejectionSummary.length > 0) {
+    parts.push(
+      `rejections ${rejectionSummary.join("; ")}${hiddenRejections > 0 ? ` +${hiddenRejections}` : ""}`,
+    );
+  }
+  const topReason = stringValue(span.metadata.top_rejection_reason);
+  if (rejectionSummary.length === 0 && topReason) parts.push(`top rejection ${topReason}`);
   return parts.join(" / ");
 }
 
@@ -218,7 +244,7 @@ function objectPayload(event: DecisionReplayEvent, key: string) {
 
 function arrayPayload(event: DecisionReplayEvent, key: string) {
   const value = event.payload[key];
-  return Array.isArray(value) ? value : [];
+  return arrayValue(value);
 }
 
 function stringArrayPayload(event: DecisionReplayEvent, key: string) {
@@ -241,6 +267,10 @@ function objectValue(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
+function arrayValue(value: unknown) {
+  return Array.isArray(value) ? value : [];
+}
+
 function clipPayloadText(value: string) {
   return value.length > 140 ? `${value.slice(0, 137)}...` : value;
 }
@@ -248,4 +278,34 @@ function clipPayloadText(value: string) {
 function numberMeta(span: TraceSpan, key: string) {
   const value = span.metadata[key];
   return typeof value === "number" ? value : 0;
+}
+
+function numberMetaOrNull(span: TraceSpan, key: string) {
+  const value = span.metadata[key];
+  return typeof value === "number" ? value : null;
+}
+
+function parseSpanOutput(span: TraceSpan) {
+  const text = span.full_output || span.output_preview;
+  if (!text) return null;
+  try {
+    return objectValue(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+
+function formatKbRejection(value: unknown) {
+  const item = objectValue(value);
+  if (!item) return "";
+  const reason = stringValue(item.reason) || "rejected";
+  const rank = numberValue(item.rank);
+  const documentId = stringValue(item.document_id);
+  const chunkId = stringValue(item.chunk_id);
+  const sourceType = stringValue(item.source_type);
+  const locator = documentId || chunkId;
+  const parts = [`${reason}${rank !== null ? `@${rank}` : ""}`];
+  if (locator) parts.push(locator);
+  if (sourceType) parts.push(sourceType);
+  return parts.join(" ");
 }
