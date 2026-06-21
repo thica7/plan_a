@@ -11541,6 +11541,130 @@ async def test_writer_segment_prompt_includes_competitor_deep_dive_template(
 
 
 @pytest.mark.asyncio
+async def test_writer_segment_prompt_hides_internal_card_ids(monkeypatch) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-prompt-card-ids",
+    )
+    captured: dict[str, str] = {}
+    segment = _segmented_writer_segment(
+        segment_name="decision_summary",
+        section_id="decision_summary",
+        allowed_source_id="raw-source-cursor-pricing",
+    )
+    segment.update(
+        {
+            "allowed_claim_card_ids": ["claim-cursor-pricing"],
+            "allowed_decision_card_ids": [
+                "decision-risk-adjusted-recommendation-overall-cursor"
+            ],
+            "section_brief": {
+                "allowed_claim_card_ids": ["claim-cursor-pricing"],
+                "allowed_decision_card_ids": [
+                    "decision-risk-adjusted-recommendation-overall-cursor"
+                ],
+                "allowed_source_ids": ["raw-source-cursor-pricing"],
+            },
+            "claim_cards": [
+                {
+                    "id": "claim-cursor-pricing",
+                    "claim": "Cursor pricing is visible.",
+                    "source_ids": ["raw-source-cursor-pricing"],
+                }
+            ],
+            "decision_cards": [
+                {
+                    "id": "decision-risk-adjusted-recommendation-overall-cursor",
+                    "recommendation": "Treat Cursor as the risk-adjusted baseline.",
+                    "claim_card_ids": ["claim-cursor-pricing"],
+                    "source_ids": ["raw-source-cursor-pricing"],
+                }
+            ],
+        }
+    )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return (
+            "## Decision Summary\n"
+            "Cursor pricing is visible. [source:raw-source-cursor-pricing]\n\n"
+            "## Competitive Findings\n"
+            "Cursor has cited evidence. [source:raw-source-cursor-pricing]"
+        )
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="",
+        retry_count=0,
+    )
+
+    prompt = captured["user"]
+    marker = "Segment Evidence Pack JSON: "
+    payload = prompt.split(marker, 1)[1].split("\n\nRequired sections", 1)[0]
+    assert "raw-source-cursor-pricing" in payload
+    assert "claim-cursor-pricing" not in payload
+    assert "decision-risk-adjusted-recommendation-overall-cursor" not in payload
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_retry_prompt_hides_internal_citation_ids(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-retry-prompt-card-ids",
+    )
+    captured: dict[str, str] = {}
+    segment = _segmented_writer_segment(
+        segment_name="decision_summary",
+        section_id="decision_summary",
+        allowed_source_id="raw-source-cursor-pricing",
+    )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["user"] = kwargs["user"]
+        return (
+            "## Decision Summary\n"
+            "Cursor pricing is visible. [source:raw-source-cursor-pricing]\n\n"
+            "## Competitive Findings\n"
+            "Cursor has cited evidence. [source:raw-source-cursor-pricing]"
+        )
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="",
+        retry_count=1,
+        citation_error_ids=[
+            "decision-risk-adjusted-recommendation-overall-cursor",
+            "claim-cursor-pricing",
+            "missing-source",
+        ],
+    )
+
+    prompt = captured["user"]
+    assert "Previous segment cited source IDs outside this segment" in prompt
+    assert "missing-source" in prompt
+    assert "claim-cursor-pricing" not in prompt
+    assert "decision-risk-adjusted-recommendation-overall-cursor" not in prompt
+
+
+@pytest.mark.asyncio
 async def test_writer_segment_prompt_prefers_explicit_section_id_over_legacy_name(
     monkeypatch,
 ) -> None:

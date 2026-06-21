@@ -744,6 +744,61 @@ def _compact_section_source_registry_item(
     }
 
 
+def _prompt_safe_writer_segment(segment: Mapping[str, object]) -> dict[str, object]:
+    payload = dict(segment)
+    payload.pop("allowed_claim_card_ids", None)
+    payload.pop("allowed_decision_card_ids", None)
+
+    section_brief = payload.get("section_brief")
+    if isinstance(section_brief, Mapping):
+        safe_brief = dict(section_brief)
+        safe_brief.pop("allowed_claim_card_ids", None)
+        safe_brief.pop("allowed_decision_card_ids", None)
+        payload["section_brief"] = safe_brief
+
+    claim_cards = payload.get("claim_cards")
+    if isinstance(claim_cards, list):
+        payload["claim_cards"] = [
+            _prompt_safe_claim_card(card)
+            for card in claim_cards
+            if isinstance(card, Mapping)
+        ]
+
+    decision_cards = payload.get("decision_cards")
+    if isinstance(decision_cards, list):
+        payload["decision_cards"] = [
+            _prompt_safe_decision_card(card)
+            for card in decision_cards
+            if isinstance(card, Mapping)
+        ]
+    return payload
+
+
+def _prompt_safe_claim_card(card: Mapping[str, object]) -> dict[str, object]:
+    payload = dict(card)
+    payload.pop("id", None)
+    return payload
+
+
+def _prompt_safe_decision_card(card: Mapping[str, object]) -> dict[str, object]:
+    payload = dict(card)
+    payload.pop("id", None)
+    payload.pop("claim_card_ids", None)
+    return payload
+
+
+def _prompt_safe_citation_error_ids(source_ids: Sequence[str]) -> list[str]:
+    return [
+        source_id
+        for source_id in _string_values(source_ids)
+        if not _is_internal_writer_reference_id(source_id)
+    ]
+
+
+def _is_internal_writer_reference_id(value: str) -> bool:
+    return value.startswith(("claim-", "decision-", "fact:", "signal:", "kb:"))
+
+
 def _compact_section_group_payload(
     group: Mapping[str, object],
     *,
@@ -3464,7 +3519,10 @@ class WriterAgentMixin:
         contract_missing_required_heading_keys: list[str] | None = None,
     ) -> str:
         detail = record.detail
-        segment_json = json.dumps(segment, ensure_ascii=False)
+        segment_json = json.dumps(
+            _prompt_safe_writer_segment(segment),
+            ensure_ascii=False,
+        )
         allowed_h2_headings = ", ".join(
             heading
             for heading in segment.get("allowed_h2_headings", [])
@@ -3490,9 +3548,18 @@ class WriterAgentMixin:
         segment_outline = self._writer_segment_required_outline(detail, segment)
         citation_warning = ""
         if citation_error_ids:
-            citation_warning = (
+            safe_error_ids = _prompt_safe_citation_error_ids(citation_error_ids)
+            citation_error_summary = (
                 "Previous segment cited source IDs outside this segment: "
-                f"{', '.join(citation_error_ids)}. Rewrite using only allowed_source_ids. "
+                f"{', '.join(safe_error_ids)}."
+                if safe_error_ids
+                else (
+                    "Previous segment cited non-source internal IDs that cannot be "
+                    "used as citations."
+                )
+            )
+            citation_warning = (
+                f"{citation_error_summary} Rewrite using only allowed_source_ids. "
                 "Use exact [source:ID] syntax with no space after source:. Do not put "
                 "multiple source IDs inside one [source:...] token; cite multiple "
                 "sources as consecutive citations such as [source:A][source:B].\n"
