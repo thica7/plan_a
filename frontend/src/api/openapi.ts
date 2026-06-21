@@ -2592,6 +2592,12 @@ export interface components {
         ArtifactPreview: {
             artifact: components["schemas"]["ArtifactRecord"];
             /**
+             * Preview Type
+             * @default unavailable
+             * @enum {string}
+             */
+            preview_type: "text" | "image" | "pdf" | "external" | "unavailable";
+            /**
              * Preview Available
              * @default false
              */
@@ -2601,6 +2607,21 @@ export interface components {
              * @default
              */
             content_text: string;
+            /**
+             * Content Base64
+             * @default
+             */
+            content_base64: string;
+            /**
+             * Data Url
+             * @default
+             */
+            data_url: string;
+            /**
+             * Media Type
+             * @default
+             */
+            media_type: string;
             /**
              * Truncated
              * @default false

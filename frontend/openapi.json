@@ -12957,6 +12957,18 @@
           "artifact": {
             "$ref": "#/components/schemas/ArtifactRecord"
           },
+          "preview_type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "image",
+              "pdf",
+              "external",
+              "unavailable"
+            ],
+            "title": "Preview Type",
+            "default": "unavailable"
+          },
           "preview_available": {
             "type": "boolean",
             "title": "Preview Available",
@@ -12965,6 +12977,21 @@
           "content_text": {
             "type": "string",
             "title": "Content Text",
+            "default": ""
+          },
+          "content_base64": {
+            "type": "string",
+            "title": "Content Base64",
+            "default": ""
+          },
+          "data_url": {
+            "type": "string",
+            "title": "Data Url",
+            "default": ""
+          },
+          "media_type": {
+            "type": "string",
+            "title": "Media Type",
             "default": ""
           },
           "truncated": {

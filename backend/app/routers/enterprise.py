@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import csv
 import html
 import io
@@ -202,6 +203,8 @@ RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 
 _KB_SYNC_JOBS: dict[str, KnowledgeEvidenceSyncJobRecord] = {}
 _KB_SYNC_JOBS_LOCK = RLock()
+_ARTIFACT_TEXT_PREVIEW_BYTES = 200_000
+_ARTIFACT_BINARY_PREVIEW_BYTES = 2_000_000
 
 
 @router.get("/enterprise/workspaces", response_model=list[WorkspaceRecord])
@@ -2104,20 +2107,39 @@ def get_artifact_preview(
         raise HTTPException(status_code=404, detail="Artifact not found")
     _require_workspace_access(user, artifact.workspace_id, "artifact:read")
     try:
-        preview = artifact_storage.read_text(artifact)
+        preview_type = _artifact_preview_type(artifact)
+        if preview_type == "text":
+            preview = artifact_storage.read_text(
+                artifact,
+                max_bytes=_ARTIFACT_TEXT_PREVIEW_BYTES,
+            )
+        elif preview_type in {"image", "pdf"}:
+            preview_bytes = artifact_storage.read_bytes(
+                artifact,
+                max_bytes=_ARTIFACT_BINARY_PREVIEW_BYTES,
+            )
+            preview = _binary_artifact_preview(artifact, preview_bytes, preview_type)
+        else:
+            preview = None
     except ArtifactStorageError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if isinstance(preview, ArtifactPreview):
+        return preview
     if preview is None:
+        preview_type = "external" if artifact.storage_backend != "local" else "unavailable"
         return ArtifactPreview(
             artifact=artifact,
+            preview_type=preview_type,
             preview_available=False,
             external_uri=artifact.uri if artifact.storage_backend != "local" else None,
         )
     content_text, truncated = preview
     return ArtifactPreview(
         artifact=artifact,
+        preview_type="text",
         preview_available=True,
         content_text=content_text,
+        media_type=artifact.media_type,
         truncated=truncated,
     )
 
@@ -2325,6 +2347,60 @@ def _enforce_artifact_report_scope(
     if evidence_id is not None and evidence_id not in version.evidence_ids:
         raise HTTPException(status_code=400, detail="Artifact evidence is not linked to report")
     return version
+
+
+def _artifact_preview_type(artifact: ArtifactRecord) -> str:
+    media_type = artifact.media_type.casefold().strip()
+    if media_type.startswith("text/") or media_type in {
+        "application/json",
+        "application/ld+json",
+        "application/xml",
+        "application/xhtml+xml",
+        "application/javascript",
+    }:
+        return "text"
+    if artifact.artifact_type in {
+        "web_snapshot",
+        "raw_text",
+        "interview_record",
+        "survey_response",
+        "manual_transcript",
+    }:
+        return "text"
+    if media_type.startswith("image/"):
+        return "image"
+    if media_type == "application/pdf" or artifact.artifact_type == "pdf":
+        return "pdf"
+    return "unavailable"
+
+
+def _binary_artifact_preview(
+    artifact: ArtifactRecord,
+    preview_bytes: tuple[bytes, bool] | None,
+    preview_type: str,
+) -> ArtifactPreview | None:
+    if preview_bytes is None:
+        return None
+    payload, truncated = preview_bytes
+    if truncated:
+        return ArtifactPreview(
+            artifact=artifact,
+            preview_type=preview_type,
+            preview_available=False,
+            media_type=artifact.media_type,
+            truncated=True,
+        )
+    content_base64 = base64.b64encode(payload).decode("ascii")
+    data_url = f"data:{artifact.media_type};base64,{content_base64}"
+    return ArtifactPreview(
+        artifact=artifact,
+        preview_type=preview_type,
+        preview_available=True,
+        content_base64=content_base64,
+        data_url=data_url,
+        media_type=artifact.media_type,
+        truncated=False,
+    )
 
 
 def _scoped_artifacts(

@@ -121,8 +121,12 @@ describe("KnowledgePage deep links", () => {
               created_at: "2026-06-20T00:01:00.000Z",
               metadata: {},
             },
+            preview_type: "text",
             preview_available: true,
             content_text: "<html>Source snapshot: Acme security page captured SSO support.</html>",
+            content_base64: "",
+            data_url: "",
+            media_type: "text/html",
             truncated: false,
             external_uri: null,
           }),
@@ -157,6 +161,87 @@ describe("KnowledgePage deep links", () => {
       "/api/enterprise/artifacts/artifact-security-snapshot/preview",
       expect.any(Object),
     );
+  });
+
+  it("renders visual screenshot artifact previews", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/knowledge/documents?page=1&page_size=10") {
+        return Promise.resolve(jsonResponse([linkedDocument], { "X-Total-Count": "1" }));
+      }
+      if (url === "/api/knowledge/documents/kb-doc-security-v2") {
+        return Promise.resolve(jsonResponse(linkedDocument));
+      }
+      if (url === "/api/knowledge/documents/kb-doc-security-v2/chunks") {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url === "/api/enterprise/artifacts?raw_source_id=kb-security-sso") {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              id: "artifact-security-screenshot",
+              workspace_id: "workspace-a",
+              project_id: "project-a",
+              artifact_type: "screenshot",
+              filename: "security-screenshot.png",
+              media_type: "image/png",
+              storage_backend: "local",
+              uri: "local://workspace-a/artifact-security-screenshot/security-screenshot.png",
+              byte_size: 120,
+              content_hash: "artifact-hash",
+              created_at: "2026-06-20T00:01:00.000Z",
+              metadata: {
+                raw_source_id: "kb-security-sso",
+                snapshot_kind: "screenshot",
+              },
+            },
+          ]),
+        );
+      }
+      if (url === "/api/enterprise/artifacts/artifact-security-screenshot/preview") {
+        return Promise.resolve(
+          jsonResponse({
+            artifact: {
+              id: "artifact-security-screenshot",
+              workspace_id: "workspace-a",
+              project_id: "project-a",
+              artifact_type: "screenshot",
+              filename: "security-screenshot.png",
+              media_type: "image/png",
+              storage_backend: "local",
+              uri: "local://workspace-a/artifact-security-screenshot/security-screenshot.png",
+              byte_size: 120,
+              content_hash: "artifact-hash",
+              created_at: "2026-06-20T00:01:00.000Z",
+              metadata: {},
+            },
+            preview_type: "image",
+            preview_available: true,
+            content_text: "",
+            content_base64: "cG5nLWJ5dGVz",
+            data_url: "data:image/png;base64,cG5nLWJ5dGVz",
+            media_type: "image/png",
+            truncated: false,
+            external_uri: null,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse(null));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/knowledge?document_id=kb-doc-security-v2&raw_source_id=kb-security-sso",
+        ]}
+      >
+        <KnowledgePage />
+      </MemoryRouter>,
+    );
+
+    const preview = await screen.findByAltText("Source snapshot security-screenshot.png");
+    expect(preview).toHaveAttribute("src", "data:image/png;base64,cG5nLWJ5dGVz");
   });
 });
 

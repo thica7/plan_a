@@ -37,6 +37,13 @@ class ArtifactStorage(Protocol):
         max_bytes: int = 200_000,
     ) -> tuple[str, bool] | None: ...
 
+    def read_bytes(
+        self,
+        artifact: ArtifactRecord,
+        *,
+        max_bytes: int = 2_000_000,
+    ) -> tuple[bytes, bool] | None: ...
+
 
 class LocalArtifactStorage:
     def __init__(self, root: str | Path) -> None:
@@ -106,6 +113,18 @@ class LocalArtifactStorage:
         *,
         max_bytes: int = 200_000,
     ) -> tuple[str, bool] | None:
+        result = self.read_bytes(artifact, max_bytes=max_bytes)
+        if result is None:
+            return None
+        payload, truncated = result
+        return payload.decode("utf-8", errors="replace"), truncated
+
+    def read_bytes(
+        self,
+        artifact: ArtifactRecord,
+        *,
+        max_bytes: int = 2_000_000,
+    ) -> tuple[bytes, bool] | None:
         if not artifact.uri.startswith("local://"):
             return None
         relative_path = Path(artifact.uri.removeprefix("local://"))
@@ -120,7 +139,7 @@ class LocalArtifactStorage:
         truncated = len(payload) > limit
         if truncated:
             payload = payload[:limit]
-        return payload.decode("utf-8", errors="replace"), truncated
+        return payload, truncated
 
 
 class ExternalArtifactStorage:
@@ -153,6 +172,14 @@ class ExternalArtifactStorage:
         *,
         max_bytes: int = 200_000,
     ) -> tuple[str, bool] | None:
+        return None
+
+    def read_bytes(
+        self,
+        artifact: ArtifactRecord,
+        *,
+        max_bytes: int = 2_000_000,
+    ) -> tuple[bytes, bool] | None:
         return None
 
 

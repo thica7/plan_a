@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -404,6 +405,20 @@ def test_h10_enterprise_routes_are_callable() -> None:
             },
         },
     )
+    screenshot_response = client.post(
+        "/api/enterprise/artifacts",
+        json={
+            "workspace_id": context.workspace_id,
+            "project_id": context.project_id,
+            "run_id": "run-1",
+            "report_version_id": report_version_id,
+            "artifact_type": "screenshot",
+            "filename": "security-screenshot.png",
+            "media_type": "image/png",
+            "content_base64": base64.b64encode(b"png-bytes").decode("ascii"),
+            "metadata": {"raw_source_id": "raw-source-screenshot"},
+        },
+    )
     report_artifacts = client.get(
         "/api/enterprise/artifacts",
         params={"workspace_id": context.workspace_id, "report_version_id": report_version_id},
@@ -451,10 +466,21 @@ def test_h10_enterprise_routes_are_callable() -> None:
     assert [item["id"] for item in raw_source_artifacts.json()] == [interview_artifact["id"]]
     assert interview_preview.status_code == 200
     assert interview_preview.json()["preview_available"] is True
+    assert interview_preview.json()["preview_type"] == "text"
     assert (
         "Interview: buyer needs security review and workflow fit."
         in interview_preview.json()["content_text"]
     )
+    assert screenshot_response.status_code == 200
+    screenshot_artifact = screenshot_response.json()["artifact"]
+    screenshot_preview = client.get(
+        f"/api/enterprise/artifacts/{screenshot_artifact['id']}/preview"
+    )
+    assert screenshot_preview.status_code == 200
+    assert screenshot_preview.json()["preview_available"] is True
+    assert screenshot_preview.json()["preview_type"] == "image"
+    assert screenshot_preview.json()["data_url"].startswith("data:image/png;base64,")
+    assert screenshot_preview.json()["content_text"] == ""
     assert report_artifacts.status_code == 200
     assert {item["id"] for item in report_artifacts.json()} >= {
         export_artifact["id"],

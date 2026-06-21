@@ -104,6 +104,7 @@ def test_local_artifact_storage_reads_text_preview_with_truncation(
 
     assert storage.read_text(artifact, max_bytes=100) == ("abcdef", False)
     assert storage.read_text(artifact, max_bytes=3) == ("abc", True)
+    assert storage.read_bytes(artifact, max_bytes=100) == (b"abcdef", False)
 
 
 def test_external_artifact_storage_records_s3_pointer() -> None:

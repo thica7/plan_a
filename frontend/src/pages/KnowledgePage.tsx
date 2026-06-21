@@ -479,7 +479,19 @@ function FocusedLocatorPanel({
           </div>
           {artifactLoading ? (
             <p className="text-base-content/60">Loading source snapshot...</p>
-          ) : artifactPreview?.preview_available ? (
+          ) : artifactPreview?.preview_available && artifactPreview.preview_type === 'image' && artifactPreview.data_url ? (
+            <img
+              alt={`Source snapshot ${artifactPreview.artifact.filename}`}
+              className="max-h-64 w-full rounded bg-base-100 object-contain"
+              src={artifactPreview.data_url}
+            />
+          ) : artifactPreview?.preview_available && artifactPreview.preview_type === 'pdf' && artifactPreview.data_url ? (
+            <iframe
+              className="h-64 w-full rounded bg-base-100"
+              src={artifactPreview.data_url}
+              title={`Source snapshot ${artifactPreview.artifact.filename}`}
+            />
+          ) : artifactPreview?.preview_available && artifactPreview.preview_type === 'text' ? (
             <>
               <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-base-100 p-3 text-xs">
                 {artifactPreview.content_text}
@@ -488,6 +500,8 @@ function FocusedLocatorPanel({
                 <p className="mt-2 text-xs text-base-content/60">Preview truncated.</p>
               ) : null}
             </>
+          ) : artifactPreview?.truncated ? (
+            <p className="text-base-content/60">Source snapshot is too large for inline preview.</p>
           ) : artifactPreview?.external_uri ? (
             <code className="block overflow-x-auto rounded bg-base-100 p-2 text-xs">
               {artifactPreview.external_uri}

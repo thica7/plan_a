@@ -1625,8 +1625,12 @@ export interface ArtifactCreateResult {
 
 export interface ArtifactPreview {
   artifact: ArtifactRecord;
+  preview_type: "text" | "image" | "pdf" | "external" | "unavailable";
   preview_available: boolean;
   content_text: string;
+  content_base64: string;
+  data_url: string;
+  media_type: string;
   truncated: boolean;
   external_uri?: string | null;
 }
