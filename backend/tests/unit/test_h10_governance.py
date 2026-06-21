@@ -437,6 +437,24 @@ def test_h10_enterprise_routes_are_callable() -> None:
     assert interview_artifact["artifact_type"] == "interview_record"
     assert interview_artifact["report_version_id"] == report_version_id
     assert interview_response.json()["evidence_id"]
+    interview_raw_source_id = interview_artifact["metadata"]["artifact_lifecycle"]["links"][
+        "raw_source_id"
+    ]
+    raw_source_artifacts = client.get(
+        "/api/enterprise/artifacts",
+        params={"workspace_id": context.workspace_id, "raw_source_id": interview_raw_source_id},
+    )
+    interview_preview = client.get(
+        f"/api/enterprise/artifacts/{interview_artifact['id']}/preview"
+    )
+    assert raw_source_artifacts.status_code == 200
+    assert [item["id"] for item in raw_source_artifacts.json()] == [interview_artifact["id"]]
+    assert interview_preview.status_code == 200
+    assert interview_preview.json()["preview_available"] is True
+    assert (
+        "Interview: buyer needs security review and workflow fit."
+        in interview_preview.json()["content_text"]
+    )
     assert report_artifacts.status_code == 200
     assert {item["id"] for item in report_artifacts.json()} >= {
         export_artifact["id"],

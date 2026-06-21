@@ -89,6 +89,23 @@ def test_local_artifact_storage_rejects_empty_payload() -> None:
         raise AssertionError("Artifact storage accepted a request without content.")
 
 
+def test_local_artifact_storage_reads_text_preview_with_truncation(
+    tmp_path: Path,
+) -> None:
+    storage = LocalArtifactStorage(tmp_path)
+    artifact = storage.store(
+        ArtifactCreateRequest(
+            workspace_id="workspace-a",
+            project_id="project-a",
+            filename="snapshot.txt",
+            content_text="abcdef",
+        )
+    )
+
+    assert storage.read_text(artifact, max_bytes=100) == ("abcdef", False)
+    assert storage.read_text(artifact, max_bytes=3) == ("abc", True)
+
+
 def test_external_artifact_storage_records_s3_pointer() -> None:
     storage = ExternalArtifactStorage("s3")
     request = ArtifactCreateRequest(

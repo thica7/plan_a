@@ -1767,6 +1767,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/artifacts/{artifact_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Artifact Preview */
+        get: operations["get_artifact_preview_api_enterprise_artifacts__artifact_id__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/artifacts/{artifact_id}": {
         parameters: {
             query?: never;
@@ -2570,6 +2587,27 @@ export interface components {
             };
             /** Items */
             items?: components["schemas"]["ArtifactLifecycleItem"][];
+        };
+        /** ArtifactPreview */
+        ArtifactPreview: {
+            artifact: components["schemas"]["ArtifactRecord"];
+            /**
+             * Preview Available
+             * @default false
+             */
+            preview_available: boolean;
+            /**
+             * Content Text
+             * @default
+             */
+            content_text: string;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+            /** External Uri */
+            external_uri?: string | null;
         };
         /** ArtifactRecord */
         ArtifactRecord: {
@@ -12604,6 +12642,7 @@ export interface operations {
                 project_id?: string | null;
                 evidence_id?: string | null;
                 report_version_id?: string | null;
+                raw_source_id?: string | null;
             };
             header?: {
                 "X-User-Id"?: string | null;
@@ -12679,6 +12718,7 @@ export interface operations {
                 project_id?: string | null;
                 evidence_id?: string | null;
                 report_version_id?: string | null;
+                raw_source_id?: string | null;
             };
             header?: {
                 "X-User-Id"?: string | null;
@@ -12734,6 +12774,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceSnapshotResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artifact_preview_api_enterprise_artifacts__artifact_id__preview_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactPreview"];
                 };
             };
             /** @description Validation Error */

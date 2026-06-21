@@ -456,6 +456,16 @@ class ArtifactCreateResult(BaseModel):
     artifact: ArtifactRecord
 
 
+class ArtifactPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact: ArtifactRecord
+    preview_available: bool = False
+    content_text: str = ""
+    truncated: bool = False
+    external_uri: str | None = None
+
+
 class SourceSnapshotCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

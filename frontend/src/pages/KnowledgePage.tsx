@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useKnowledgeStore, type KnowledgeChunk, type KnowledgeRollbackResult } from '../stores/knowledgeStore';
+import { getArtifactPreview, listArtifacts } from '../api/client';
+import type { ArtifactPreview, ArtifactRecord } from '../api/types';
 import { SourceCard } from '../components/SourceCard';
 import { UploadDrawer } from '../features/upload/UploadDrawer';
 import { VersionDrawer } from '../features/version/VersionDrawer';
@@ -42,6 +44,9 @@ export default function KnowledgePage() {
   const [linkedDocument, setLinkedDocument] = useState<typeof documents[number] | null>(null);
   const [documentChunks, setDocumentChunks] = useState<KnowledgeChunk[]>([]);
   const [chunksLoading, setChunksLoading] = useState(false);
+  const [sourceArtifacts, setSourceArtifacts] = useState<ArtifactRecord[]>([]);
+  const [artifactPreview, setArtifactPreview] = useState<ArtifactPreview | null>(null);
+  const [artifactLoading, setArtifactLoading] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -51,6 +56,41 @@ export default function KnowledgePage() {
   useEffect(() => {
     if (!focusRawSourceId) return;
     setRollbackForm((current) => ({ ...current, raw_source_id: focusRawSourceId }));
+  }, [focusRawSourceId]);
+
+  useEffect(() => {
+    if (!focusRawSourceId) {
+      setSourceArtifacts([]);
+      setArtifactPreview(null);
+      return;
+    }
+    let active = true;
+    setArtifactLoading(true);
+    setSourceArtifacts([]);
+    setArtifactPreview(null);
+    listArtifacts({ rawSourceId: focusRawSourceId })
+      .then((artifacts) => {
+        if (!active) return null;
+        const orderedArtifacts = prioritizeSourceSnapshotArtifacts(artifacts);
+        setSourceArtifacts(orderedArtifacts);
+        const primaryArtifact = orderedArtifacts[0];
+        if (!primaryArtifact) return null;
+        return getArtifactPreview(primaryArtifact.id).then((preview) => {
+          if (active) setArtifactPreview(preview);
+          return preview;
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setSourceArtifacts([]);
+        setArtifactPreview(null);
+      })
+      .finally(() => {
+        if (active) setArtifactLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [focusRawSourceId]);
 
   useEffect(() => {
@@ -356,6 +396,9 @@ export default function KnowledgePage() {
                 <>
                   {focusChunkId || focusRawSourceId ? (
                     <FocusedLocatorPanel
+                      artifact={sourceArtifacts[0] ?? null}
+                      artifactLoading={artifactLoading}
+                      artifactPreview={artifactPreview}
                       chunkId={focusChunkId}
                       chunk={focusedChunk}
                       chunksLoading={chunksLoading}
@@ -392,11 +435,17 @@ export default function KnowledgePage() {
 }
 
 function FocusedLocatorPanel({
+  artifact,
+  artifactLoading,
+  artifactPreview,
   chunk,
   chunkId,
   chunksLoading,
   rawSourceId,
 }: {
+  artifact: ArtifactRecord | null;
+  artifactLoading: boolean;
+  artifactPreview: ArtifactPreview | null;
   chunk: KnowledgeChunk | null;
   chunkId: string;
   chunksLoading: boolean;
@@ -421,8 +470,64 @@ function FocusedLocatorPanel({
       ) : (
         <p className="text-base-content/60">Use the raw source selector above to rollback or inspect related evidence.</p>
       )}
+      {rawSourceId ? (
+        <div className="mt-3 border-t border-primary/20 pt-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="font-medium">Source snapshot</span>
+            {artifact ? <span className="badge badge-outline badge-sm">{artifact.artifact_type}</span> : null}
+            {artifact ? <span className="badge badge-ghost badge-sm">{artifact.filename}</span> : null}
+          </div>
+          {artifactLoading ? (
+            <p className="text-base-content/60">Loading source snapshot...</p>
+          ) : artifactPreview?.preview_available ? (
+            <>
+              <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-base-100 p-3 text-xs">
+                {artifactPreview.content_text}
+              </pre>
+              {artifactPreview.truncated ? (
+                <p className="mt-2 text-xs text-base-content/60">Preview truncated.</p>
+              ) : null}
+            </>
+          ) : artifactPreview?.external_uri ? (
+            <code className="block overflow-x-auto rounded bg-base-100 p-2 text-xs">
+              {artifactPreview.external_uri}
+            </code>
+          ) : artifact ? (
+            <p className="text-base-content/60">No readable local preview is available for this artifact.</p>
+          ) : (
+            <p className="text-base-content/60">No source snapshot artifact is linked to this raw source.</p>
+          )}
+        </div>
+      ) : null}
     </section>
   );
+}
+
+function prioritizeSourceSnapshotArtifacts(artifacts: ArtifactRecord[]) {
+  return [...artifacts].sort((left, right) => {
+    const leftRank = sourceSnapshotArtifactRank(left);
+    const rightRank = sourceSnapshotArtifactRank(right);
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+  });
+}
+
+function sourceSnapshotArtifactRank(artifact: ArtifactRecord) {
+  if (metadataText(artifact.metadata, 'snapshot_kind')) return 0;
+  if (
+    [
+      'web_snapshot',
+      'pdf',
+      'screenshot',
+      'raw_text',
+      'interview_record',
+      'survey_response',
+      'manual_transcript',
+    ].includes(artifact.artifact_type)
+  ) {
+    return 1;
+  }
+  return 2;
 }
 
 function showDetailDialog(dialog: HTMLDialogElement | null) {

@@ -2,6 +2,7 @@ import type {
   AgentMessage,
   ArtifactCreateRequest,
   ArtifactCreateResult,
+  ArtifactPreview,
   ArtifactRecord,
   AuditLogRecord,
   BusinessIntelPlan,
@@ -412,11 +413,13 @@ export function listArtifacts(params: {
   workspaceId?: string;
   projectId?: string;
   evidenceId?: string;
+  rawSourceId?: string;
 } = {}) {
   const search = new URLSearchParams();
   if (params.workspaceId) search.set("workspace_id", params.workspaceId);
   if (params.projectId) search.set("project_id", params.projectId);
   if (params.evidenceId) search.set("evidence_id", params.evidenceId);
+  if (params.rawSourceId) search.set("raw_source_id", params.rawSourceId);
   const query = search.toString();
   return request<ArtifactRecord[]>(`/enterprise/artifacts${query ? `?${query}` : ""}`);
 }
@@ -449,6 +452,12 @@ export function upsertSourceRegistry(record: SourceRegistryRecord) {
 
 export function getArtifact(artifactId: string) {
   return request<ArtifactRecord>(`/enterprise/artifacts/${encodeURIComponent(artifactId)}`);
+}
+
+export function getArtifactPreview(artifactId: string) {
+  return request<ArtifactPreview>(
+    `/enterprise/artifacts/${encodeURIComponent(artifactId)}/preview`,
+  );
 }
 
 export function getProjectKnowledgeGraph(projectId: string) {

@@ -9253,6 +9253,22 @@
             }
           },
           {
+            "name": "raw_source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Raw Source Id"
+            }
+          },
+          {
             "name": "X-User-Id",
             "in": "header",
             "required": false,
@@ -9491,6 +9507,22 @@
             }
           },
           {
+            "name": "raw_source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Raw Source Id"
+            }
+          },
+          {
             "name": "X-User-Id",
             "in": "header",
             "required": false,
@@ -9637,6 +9669,96 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SourceSnapshotResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enterprise/artifacts/{artifact_id}/preview": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Artifact Preview",
+        "operationId": "get_artifact_preview_api_enterprise_artifacts__artifact_id__preview_get",
+        "parameters": [
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Artifact Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactPreview"
                 }
               }
             }
@@ -12829,6 +12951,45 @@
         "additionalProperties": false,
         "type": "object",
         "title": "ArtifactLifecycleReport"
+      },
+      "ArtifactPreview": {
+        "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/ArtifactRecord"
+          },
+          "preview_available": {
+            "type": "boolean",
+            "title": "Preview Available",
+            "default": false
+          },
+          "content_text": {
+            "type": "string",
+            "title": "Content Text",
+            "default": ""
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          },
+          "external_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Uri"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "artifact"
+        ],
+        "title": "ArtifactPreview"
       },
       "ArtifactRecord": {
         "properties": {

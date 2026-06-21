@@ -120,6 +120,7 @@ from packages.schema.api_dto import (
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
     ArtifactCreateResult,
+    ArtifactPreview,
     ArtifactRecord,
     AuditLogRecord,
     BusinessIntelPlan,
@@ -1977,6 +1978,7 @@ def list_artifacts(
     project_id: str | None = None,
     evidence_id: str | None = None,
     report_version_id: str | None = None,
+    raw_source_id: str | None = None,
 ) -> list[ArtifactRecord]:
     artifacts, _ = _scoped_artifacts(
         store=store,
@@ -1985,6 +1987,7 @@ def list_artifacts(
         project_id=project_id,
         evidence_id=evidence_id,
         report_version_id=report_version_id,
+        raw_source_id=raw_source_id,
     )
     return artifacts
 
@@ -1997,6 +2000,7 @@ def get_artifact_lifecycle_report(
     project_id: str | None = None,
     evidence_id: str | None = None,
     report_version_id: str | None = None,
+    raw_source_id: str | None = None,
 ) -> ArtifactLifecycleReport:
     artifacts, scoped_workspace_id = _scoped_artifacts(
         store=store,
@@ -2005,6 +2009,7 @@ def get_artifact_lifecycle_report(
         project_id=project_id,
         evidence_id=evidence_id,
         report_version_id=report_version_id,
+        raw_source_id=raw_source_id,
     )
     return build_artifact_lifecycle_report(
         artifacts,
@@ -2085,6 +2090,36 @@ def create_source_snapshot(
         )
     except ArtifactStorageError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/enterprise/artifacts/{artifact_id}/preview", response_model=ArtifactPreview)
+def get_artifact_preview(
+    artifact_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    artifact_storage: ArtifactStorageDep,
+) -> ArtifactPreview:
+    artifact = store.get_artifact(artifact_id)
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    _require_workspace_access(user, artifact.workspace_id, "artifact:read")
+    try:
+        preview = artifact_storage.read_text(artifact)
+    except ArtifactStorageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if preview is None:
+        return ArtifactPreview(
+            artifact=artifact,
+            preview_available=False,
+            external_uri=artifact.uri if artifact.storage_backend != "local" else None,
+        )
+    content_text, truncated = preview
+    return ArtifactPreview(
+        artifact=artifact,
+        preview_available=True,
+        content_text=content_text,
+        truncated=truncated,
+    )
 
 
 @router.get("/enterprise/artifacts/{artifact_id}", response_model=ArtifactRecord)
@@ -2300,6 +2335,7 @@ def _scoped_artifacts(
     project_id: str | None,
     evidence_id: str | None,
     report_version_id: str | None,
+    raw_source_id: str | None,
 ) -> tuple[list[ArtifactRecord], str | None]:
     scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "artifact:read")
     version: ReportVersionRecord | None = None
@@ -2328,6 +2364,7 @@ def _scoped_artifacts(
             project_id=project_id,
             evidence_id=evidence_id,
             report_version_id=report_version_id,
+            raw_source_id=raw_source_id,
         ),
         scoped_workspace_id,
     )

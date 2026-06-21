@@ -1575,6 +1575,9 @@ export type ArtifactType =
   | "screenshot"
   | "raw_text"
   | "report_export"
+  | "survey_response"
+  | "interview_record"
+  | "manual_transcript"
   | "other";
 
 export interface ArtifactRecord {
@@ -1583,6 +1586,7 @@ export interface ArtifactRecord {
   project_id: string;
   evidence_id?: string | null;
   run_id?: string | null;
+  report_version_id?: string | null;
   artifact_type: ArtifactType;
   filename: string;
   media_type: string;
@@ -1593,6 +1597,8 @@ export interface ArtifactRecord {
   source_url?: string | null;
   created_by?: string | null;
   created_at: string;
+  retention_policy?: string;
+  compliance_metadata?: Record<string, unknown>;
   metadata: Record<string, unknown>;
 }
 
@@ -1608,11 +1614,21 @@ export interface ArtifactCreateRequest {
   content_base64?: string | null;
   external_uri?: string | null;
   source_url?: string | null;
+  retention_policy?: string;
+  compliance_metadata?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 
 export interface ArtifactCreateResult {
   artifact: ArtifactRecord;
+}
+
+export interface ArtifactPreview {
+  artifact: ArtifactRecord;
+  preview_available: boolean;
+  content_text: string;
+  truncated: boolean;
+  external_uri?: string | null;
 }
 
 export interface SourceRegistryRecord {
@@ -1652,6 +1668,8 @@ export interface SourceSnapshotCreateRequest {
   display_name?: string;
   trust_level?: "official" | "verified" | "community" | "synthetic" | "unknown";
   robots_status?: "unknown" | "allowed" | "blocked" | "error";
+  retention_policy?: string;
+  compliance_metadata?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 

@@ -1270,6 +1270,7 @@ class EnterprisePostgresStore:
         project_id: str | None = None,
         evidence_id: str | None = None,
         report_version_id: str | None = None,
+        raw_source_id: str | None = None,
     ) -> list[ArtifactRecord]:
         sql = "SELECT * FROM artifacts"
         params: list[str] = []
@@ -1286,6 +1287,25 @@ class EnterprisePostgresStore:
         if report_version_id:
             clauses.append("report_version_id = %s")
             params.append(report_version_id)
+        if raw_source_id:
+            clauses.append(
+                "("
+                "metadata->>'raw_source_id' = %s OR "
+                "metadata->>'kb_raw_source_id' = %s OR "
+                "metadata->'artifact_lifecycle'->'links'->>'raw_source_id' = %s OR "
+                "metadata->'artifact_lifecycle'->'links'->>'kb_raw_source_id' = %s OR "
+                "metadata->'source_tokens' ? %s"
+                ")"
+            )
+            params.extend(
+                [
+                    raw_source_id,
+                    raw_source_id,
+                    raw_source_id,
+                    raw_source_id,
+                    raw_source_id,
+                ]
+            )
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY created_at DESC"

@@ -238,6 +238,7 @@ class EnterpriseStore(Protocol):
         project_id: str | None = None,
         evidence_id: str | None = None,
         report_version_id: str | None = None,
+        raw_source_id: str | None = None,
     ) -> list[ArtifactRecord]: ...
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None: ...
@@ -1076,6 +1077,7 @@ class EnterpriseMemoryStore:
         project_id: str | None = None,
         evidence_id: str | None = None,
         report_version_id: str | None = None,
+        raw_source_id: str | None = None,
     ) -> list[ArtifactRecord]:
         with self._lock:
             records = list(self.artifacts.values())
@@ -1087,6 +1089,10 @@ class EnterpriseMemoryStore:
                 records = [item for item in records if item.evidence_id == evidence_id]
             if report_version_id:
                 records = [item for item in records if item.report_version_id == report_version_id]
+            if raw_source_id:
+                records = [
+                    item for item in records if _artifact_matches_raw_source(item, raw_source_id)
+                ]
             return sorted(records, key=lambda item: item.created_at, reverse=True)
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
@@ -1709,6 +1715,28 @@ def source_registry_from_evidence(evidence: EvidenceRecord) -> SourceRegistryRec
             "last_dimension": evidence.dimension,
         },
     )
+
+
+def _artifact_matches_raw_source(artifact: ArtifactRecord, raw_source_id: str) -> bool:
+    expected = raw_source_id.strip()
+    if not expected:
+        return True
+    metadata = artifact.metadata
+    for key in ("raw_source_id", "kb_raw_source_id"):
+        value = metadata.get(key)
+        if value is not None and str(value).strip() == expected:
+            return True
+    lifecycle = metadata.get("artifact_lifecycle")
+    if isinstance(lifecycle, dict):
+        links = lifecycle.get("links")
+        if isinstance(links, dict):
+            value = links.get("raw_source_id") or links.get("kb_raw_source_id")
+            if value is not None and str(value).strip() == expected:
+                return True
+    source_tokens = metadata.get("source_tokens")
+    if isinstance(source_tokens, list):
+        return expected in {str(item).strip() for item in source_tokens if item is not None}
+    return False
 
 
 def _source_location(evidence: EvidenceRecord) -> tuple[str, str | None]:
