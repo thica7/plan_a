@@ -17,7 +17,7 @@ from packages.schema.models import (
     ReflectionRecord,
     ToolCallMessage,
 )
-from packages.schema.report_artifact import ClaimCardBundle
+from packages.schema.report_artifact import ClaimCardBundle, DecisionCardBundle
 from packages.schema.survey import SurveyEvidenceBundle
 
 
@@ -125,6 +125,11 @@ class ClaimCardBundleReadyMessagePayload(_MessagePayload):
     bundle: ClaimCardBundle
 
 
+class DecisionCardBundleReadyMessagePayload(_MessagePayload):
+    schema_name: Literal["DecisionCardBundle"] = "DecisionCardBundle"
+    bundle: DecisionCardBundle
+
+
 class CompetitorKBDigestMessagePayload(_MessagePayload):
     dimensions: list[str]
     competitors: list[str]
@@ -204,6 +209,7 @@ AGENT_MESSAGE_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "CompetitorKBDigest": CompetitorKBDigestMessagePayload,
     "CompetitorKnowledge": CompetitorKnowledgeMessagePayload,
     "ComparisonMatrix": ComparisonMatrixMessagePayload,
+    "DecisionCardBundle": DecisionCardBundleReadyMessagePayload,
     "HitlLifecyclePayload": HitlLifecycleMessagePayload,
     "HitlMemoryFeedbackPayload": HitlMemoryFeedbackMessagePayload,
     "KBCacheEntry": KBCacheEntryMessagePayload,

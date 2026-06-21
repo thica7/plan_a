@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from packages.agents.comparator.decision_cards import build_decision_card_bundle
 from packages.refs import merge_ordered_refs
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
@@ -75,6 +76,12 @@ class ComparatorAgentMixin:
             fallback_used=bool(fallback.get("used")),
         )
         self._refresh_swot_analyses(detail)
+        detail.decision_card_bundle = build_decision_card_bundle(
+            run_id=detail.id,
+            claim_bundles=detail.claim_card_bundles,
+            matrix=detail.comparison_matrix,
+            fallback_used=bool(fallback.get("used")),
+        )
         self._append_agent_message(
             record,
             from_agent="comparator",
@@ -85,6 +92,16 @@ class ComparatorAgentMixin:
                 "comparison_matrix": detail.comparison_matrix.model_dump(mode="json"),
                 "module_status": module_status,
                 "fallback": fallback,
+            },
+        )
+        self._append_agent_message(
+            record,
+            from_agent="comparator",
+            to_agent="reflector",
+            message_type="decision_card_bundle_ready",
+            payload_schema="DecisionCardBundle",
+            payload={
+                "bundle": detail.decision_card_bundle.model_dump(mode="json"),
             },
         )
         detail.updated_at = datetime.utcnow()

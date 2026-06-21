@@ -63,6 +63,7 @@ from packages.schema.models import (
     ToolCallMessage,
     TraceSpan,
 )
+from packages.schema.report_artifact import DecisionCardBundle
 from packages.search import SearchResult
 from packages.skills.registry import SkillRegistry
 from packages.tools.evidence_fetch import EvidenceFetchResult
@@ -3887,9 +3888,37 @@ async def test_reflector_prompt_includes_comparison_matrix_digest() -> None:
         winner_by_dimension={"pricing": "tie"},
         summary=["[majority-vote:pricing] winner=tie; evidence=tie"],
     )
+    comparison_message = service._append_agent_message(
+        record,
+        from_agent="comparator",
+        to_agent="reflector",
+        message_type="comparison_matrix_ready",
+        payload_schema="ComparisonMatrix",
+        payload={
+            "comparison_matrix": record.detail.comparison_matrix.model_dump(mode="json"),
+            "module_status": "llm",
+            "fallback": {"used": False},
+        },
+    )
+    decision_message = service._append_agent_message(
+        record,
+        from_agent="comparator",
+        to_agent="reflector",
+        message_type="decision_card_bundle_ready",
+        payload_schema="DecisionCardBundle",
+        payload={
+            "bundle": DecisionCardBundle(run_id=record.detail.id).model_dump(
+                mode="json"
+            ),
+        },
+    )
 
     await service._real_reflector_step(record)
 
+    assert comparison_message.status == "consumed"
+    assert comparison_message.consumed_by == "reflector"
+    assert decision_message.status == "consumed"
+    assert decision_message.consumed_by == "reflector"
     assert "Comparison Matrix JSON:" in captured_user
     assert '"source_ids": ["pricing-a"]' in captured_user
     assert record.detail.reflections[-1].cross_competitor_gaps == []
@@ -5371,9 +5400,13 @@ async def test_comparator_llm_error_retries_before_visible_deterministic_matrix(
     assert completed.payload["fallback"]["max_attempts"] == 3
     assert completed.payload["fallback"]["deterministic_fallback"] is True
     assert "LLM returned empty content" in completed.payload["fallback"]["error"]
-    last_message = record.detail.agent_messages[-1]
-    assert last_message.message_type == "comparison_matrix_ready"
-    assert last_message.payload["module_status"] == "fallback"
+    comparison_message = record.detail.agent_messages[-2]
+    assert comparison_message.message_type == "comparison_matrix_ready"
+    assert comparison_message.payload["module_status"] == "fallback"
+    decision_message = record.detail.agent_messages[-1]
+    assert decision_message.message_type == "decision_card_bundle_ready"
+    assert decision_message.payload_schema == "DecisionCardBundle"
+    assert decision_message.payload["bundle"]["run_id"] == record.detail.id
 
 
 @pytest.mark.asyncio

@@ -25,7 +25,7 @@ class ReflectorAgentMixin:
             record,
             to_agent="reflector",
             consumer_agent="reflector",
-            message_types={"comparison_matrix_ready"},
+            message_types={"comparison_matrix_ready", "decision_card_bundle_ready"},
         )
         await self.emit(detail.id, "node_started", "reflector", None, "Calling reflector.")
         fallback: dict[str, object] = {"used": False, "deterministic_fallback": False}
