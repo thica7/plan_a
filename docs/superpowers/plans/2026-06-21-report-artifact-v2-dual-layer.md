@@ -1,5 +1,9 @@
 # Hybrid Report Artifact v2 Implementation Plan
 
+> Superseded by
+> [Hybrid Report Artifact v2 Implementation Plan](2026-06-21-hybrid-report-artifact-v2.md).
+> Kept for history only. Do not implement this plan as the active plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the hybrid Report Artifact v2 pipeline: evidence becomes claim cards, claim cards become decision cards, cards become section briefs, the natural writer writes from briefs, and the final artifact stores core/support/audit layers separately instead of one overloaded `report_md` string.

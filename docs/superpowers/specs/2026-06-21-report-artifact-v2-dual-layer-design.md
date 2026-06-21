@@ -1,5 +1,9 @@
 # Report Artifact v2 Dual-Layer Design
 
+> Superseded by
+> [Hybrid Report Artifact v2 Design](2026-06-21-hybrid-report-artifact-v2-design.md).
+> Kept for history only. Do not implement this design as the active plan.
+
 ## Status
 
 Draft written after auditing the current `report_md` writer path and
