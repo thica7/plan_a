@@ -280,6 +280,158 @@ def test_schema_contract_decision_summary_requires_executive_summary() -> None:
     assert result.errors == ["segment is missing required H2 headings"]
 
 
+def test_section_brief_segment_contract_honors_section_identity() -> None:
+    contract = segment_contract_for(
+        {
+            "segment_name": "brief-summary",
+            "segment_kind": "section_fragment",
+            "section_id": "side_by_side_matrix",
+            "section_key": "side_by_side_matrix",
+            "output_language": "en-US",
+            "schema_contract_source": "section_brief",
+            "section_brief": {
+                "id": "brief-side-by-side-matrix",
+                "section_key": "side_by_side_matrix",
+                "layer": "core",
+            },
+        }
+    )
+    markdown = f"## {report_label('en-US', 'side_by_side_matrix')}\nMatrix body."
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert contract.segment_name == "brief-summary"
+    assert contract.segment_kind == "section_fragment"
+    assert contract.section_id == "side_by_side_matrix"
+    assert contract.allowed_heading_keys == ("side_by_side_matrix",)
+    assert contract.required_heading_keys == ("side_by_side_matrix",)
+    assert result.status == "pass"
+
+
+def test_section_brief_segment_contract_requires_brief_object() -> None:
+    try:
+        segment_contract_for(
+            {
+                "segment_name": "brief-summary",
+                "segment_kind": "section_fragment",
+                "section_id": "decision_summary",
+                "schema_contract_source": "section_brief",
+            }
+        )
+    except ValueError as exc:
+        assert "section_brief" in str(exc)
+    else:
+        raise AssertionError("section_brief-backed segments must include section_brief")
+
+
+def test_section_brief_segment_contract_rejects_section_key_mismatch() -> None:
+    try:
+        segment_contract_for(
+            {
+                "segment_name": "brief-summary",
+                "segment_kind": "section_fragment",
+                "section_id": "side_by_side_matrix",
+                "section_key": "side_by_side_matrix",
+                "schema_contract_source": "section_brief",
+                "section_brief": {
+                    "id": "brief-swot",
+                    "section_key": "swot_analysis",
+                    "layer": "core",
+                },
+            }
+        )
+    except ValueError as exc:
+        assert "section_key" in str(exc)
+    else:
+        raise AssertionError("section_brief section_key must match segment section")
+
+
+def test_section_brief_segment_contract_rejects_segment_identity_disagreement() -> None:
+    try:
+        segment_contract_for(
+            {
+                "segment_name": "brief-summary",
+                "segment_kind": "section_fragment",
+                "section_id": "decision_summary",
+                "section_key": "swot_analysis",
+                "schema_contract_source": "section_brief",
+                "section_brief": {
+                    "id": "brief-decision-summary",
+                    "section_key": "decision_summary",
+                    "layer": "core",
+                },
+            }
+        )
+    except ValueError as exc:
+        assert "section_id" in str(exc)
+    else:
+        raise AssertionError("segment section_id and section_key must agree")
+
+
+def test_section_brief_segment_contract_requires_brief_section_key() -> None:
+    try:
+        segment_contract_for(
+            {
+                "segment_name": "brief-summary",
+                "segment_kind": "section_fragment",
+                "section_id": "side_by_side_matrix",
+                "section_key": "side_by_side_matrix",
+                "schema_contract_source": "section_brief",
+                "section_brief": {
+                    "id": "brief-side-by-side-matrix",
+                    "layer": "core",
+                },
+            }
+        )
+    except ValueError as exc:
+        assert "section_key" in str(exc)
+    else:
+        raise AssertionError("section_brief-backed segments require section_key")
+
+
+def test_section_brief_segment_contract_requires_segment_section_key() -> None:
+    try:
+        segment_contract_for(
+            {
+                "segment_name": "brief-summary",
+                "segment_kind": "section_fragment",
+                "section_id": "side_by_side_matrix",
+                "schema_contract_source": "section_brief",
+                "section_brief": {
+                    "id": "brief-side-by-side-matrix",
+                    "section_key": "side_by_side_matrix",
+                    "layer": "core",
+                },
+            }
+        )
+    except ValueError as exc:
+        assert "segment section_key" in str(exc)
+    else:
+        raise AssertionError("section_brief-backed segments require segment section_key")
+
+
+def test_section_brief_segment_contract_rejects_blank_segment_section_key() -> None:
+    try:
+        segment_contract_for(
+            {
+                "segment_name": "brief-summary",
+                "segment_kind": "section_fragment",
+                "section_id": "side_by_side_matrix",
+                "section_key": "  ",
+                "schema_contract_source": "section_brief",
+                "section_brief": {
+                    "id": "brief-side-by-side-matrix",
+                    "section_key": "side_by_side_matrix",
+                    "layer": "core",
+                },
+            }
+        )
+    except ValueError as exc:
+        assert "segment section_key" in str(exc)
+    else:
+        raise AssertionError("section_brief-backed segments reject blank section_key")
+
+
 def test_swot_matrix_contract_requires_side_by_side_matrix_and_swot() -> None:
     contract = segment_contract_for(
         {"segment_name": "swot_matrix", "output_language": "en-US"}

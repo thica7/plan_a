@@ -43,6 +43,10 @@ from packages.agents.writer.segment_contract import (
     segment_contract_for,
     validate_segment_contract,
 )
+from packages.agents.writer.section_briefs import (
+    build_section_briefs,
+    segment_payloads_from_briefs,
+)
 from packages.agents.writer.structured_report import (
     BattlecardSection,
     CitedText,
@@ -2026,6 +2030,9 @@ class WriterAgentMixin:
         timeout_seconds: float,
     ) -> str:
         detail = record.detail
+        section_briefs = build_section_briefs(detail)
+        detail.section_briefs = section_briefs
+        brief_segments = segment_payloads_from_briefs(detail, section_briefs)
         return await self._writer_segmented_report_markdown(
             record,
             evidence_pack_result=evidence_pack_result,
@@ -2034,6 +2041,7 @@ class WriterAgentMixin:
             memory_context="\n".join(detail.plan.memory_prompt_context) or "none",
             layer_context=self._writer_layer_context(detail),
             required_sections=self._writer_required_sections(detail),
+            segments_override=brief_segments,
             allow_required_section_backfill=False,
         )
 
@@ -2315,10 +2323,15 @@ class WriterAgentMixin:
         memory_context: str,
         layer_context: str,
         required_sections: str,
+        segments_override: Sequence[dict[str, object]] | None = None,
         allow_required_section_backfill: bool = True,
     ) -> str:
         detail = record.detail
-        segment_inputs = list(evidence_pack_result.segment_inputs())
+        segment_inputs = (
+            [dict(segment) for segment in segments_override]
+            if segments_override is not None
+            else list(evidence_pack_result.segment_inputs())
+        )
         if not allow_required_section_backfill:
             segment_inputs = self._schema_contract_segment_inputs(segment_inputs)
         sections = await self._writer_segment_markdown_parts(
@@ -3412,13 +3425,29 @@ class WriterAgentMixin:
                 "Rewrite only this segment and obey the segment contract exactly.\n"
             )
         user_research_gap_instruction = ""
+        section_id = str(
+            segment.get("section_id")
+            or segment.get("section_key")
+            or segment.get("segment_name")
+            or ""
+        )
+        section_brief = segment.get("section_brief")
+        repair_targets = segment.get("repair_targets")
+        if not isinstance(repair_targets, Mapping) and isinstance(
+            section_brief, Mapping
+        ):
+            repair_targets = section_brief.get("repair_targets")
+        scoped_empty = (
+            isinstance(repair_targets, Mapping)
+            and repair_targets.get("scoped_card_status") == "empty"
+        )
         if (
-            segment.get("segment_name") == "user_research"
+            (section_id == "review_theme_summary" or scoped_empty)
             and not segment.get("groups")
             and not segment.get("allowed_source_ids")
         ):
             user_research_gap_instruction = (
-                "This user_research segment has no groups or allowed sources; write "
+                "This review-theme segment has no groups or allowed sources; write "
                 "the section as an evidence gap/absence note and do not invent user "
                 "research findings.\n"
             )

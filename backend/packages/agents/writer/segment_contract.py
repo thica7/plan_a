@@ -179,6 +179,8 @@ def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
     segment_kind = _segment_kind(segment.get("segment_kind"))
     segment_name = _segment_name_for(segment, segment_kind)
     section_id = _section_id_for(segment)
+    if segment.get("schema_contract_source") == "section_brief":
+        _validate_section_brief_contract_identity(segment, section_id)
     segment_competitor = _string_value(segment.get("segment_competitor"))
     essential = bool(segment.get("segment_essential", True))
 
@@ -472,6 +474,35 @@ def _segment_kind(value: object) -> SegmentKind:
     }:
         return value  # type: ignore[return-value]
     return "section_fragment"
+
+
+def _validate_section_brief_contract_identity(
+    segment: Mapping[str, object],
+    section_id: str,
+) -> None:
+    section_brief = segment.get("section_brief")
+    if not isinstance(section_brief, Mapping) or not section_brief:
+        raise ValueError(
+            "schema_contract_source='section_brief' requires a truthy section_brief Mapping"
+        )
+    brief_section_key = _string_value(section_brief.get("section_key"))
+    if not brief_section_key:
+        raise ValueError(
+            "schema_contract_source='section_brief' requires section_brief.section_key"
+        )
+    segment_section_key = _string_value(segment.get("section_key"))
+    if not segment_section_key:
+        raise ValueError(
+            "schema_contract_source='section_brief' requires segment section_key"
+        )
+    if segment_section_key != section_id:
+        raise ValueError(
+            "section_brief-backed segment section_id and section_key must agree"
+        )
+    if brief_section_key != section_id:
+        raise ValueError(
+            "section_brief section_key must match segment section_id"
+        )
 
 
 def _string_value(value: object) -> str | None:
