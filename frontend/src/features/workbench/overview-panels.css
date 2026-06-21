@@ -214,6 +214,70 @@
   font-size: 15px;
 }
 
+.kb-warm-start-strip {
+  background: #f8fafc;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.kb-warm-start-metrics,
+.kb-warm-start-rejections {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.kb-warm-start-metrics span,
+.kb-warm-start-rejections span {
+  background: #ffffff;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--muted);
+  display: grid;
+  font-size: 11px;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.kb-warm-start-metrics strong,
+.kb-warm-start-rejections strong {
+  color: var(--text);
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-warm-start-rejections {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+}
+
+.kb-warm-start-rejections em,
+.kb-warm-start-rejections code {
+  font-style: normal;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.kb-warm-start-rejections em {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.kb-warm-start-rejections code {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .trace-event-list {
   display: grid;
   gap: 8px;
