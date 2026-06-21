@@ -40,24 +40,33 @@ gate records blockers. The architecture lets these disagreements exist.
 
 ## Goal
 
-Create a first-class Report Artifact v2 with separate reader, support, and audit
-layers:
+Create a first-class Report Artifact v2 with a hybrid evidence-to-report
+pipeline:
 
-1. Store and serve the core report separately from support appendix and audit
+1. Convert evidence into structured claim cards before report writing.
+2. Convert cross-competitor claims into structured decision cards before report
+   writing.
+3. Feed section briefs, not raw source soup, to the natural segment writer.
+4. Store and serve the core report separately from support appendix and audit
    material.
-2. Make release gate evaluate core business claims, not support checklist text.
-3. Keep complete source, QA, repair, and traceability data available for audit.
-4. Keep legacy runs readable through a compatibility adapter.
-5. Move current writer Markdown-hardening patches out of the main path once the
-   dual-layer artifact is authoritative.
+5. Make release gate evaluate core business claims and decision cards, not
+   support checklist text.
+6. Keep complete source, card, QA, repair, and traceability data available for
+   support/audit review.
+7. Keep legacy runs readable through a compatibility adapter.
+8. Move current writer Markdown-hardening patches out of the main path once the
+   hybrid artifact is authoritative.
 
 ## Non-Goals
 
-- Do not redesign collector, analyst, comparator, or evidence pack semantics in
-  this project.
+- Do not redesign raw collection, crawling, or source identity semantics in this
+  project.
 - Do not try to solve pricing/persona fact normalization in this spec. The new
   artifact should expose where those upstream facts are mixed, but the deeper
   upstream schema work is a later project.
+- Do not make the writer the owner of facts or recommendations. Analyst-owned
+  claim cards and comparator-owned decision cards are the reasoning boundary;
+  writer output is narrative expression over those cards.
 - Do not make the frontend a full report editor. It only needs reader tabs,
   source trace, export choices, and quality visibility.
 - Do not delete legacy Markdown support immediately. Existing runs and report
@@ -180,6 +189,9 @@ ReportArtifactV2
   output_language
   competitors[]
   dimensions[]
+  claim_cards[]
+  decision_cards[]
+  section_briefs[]
   core_report
   support_appendix
   audit_log
@@ -187,6 +199,70 @@ ReportArtifactV2
   quality_result
   render_cache
 ```
+
+### Claim Cards
+
+`claim_cards` are analyst-owned atomic judgments derived from evidence.
+
+They are not final prose and they are not writer-authored. They describe what
+the system is allowed to say.
+
+Each claim card includes:
+
+- stable card ID;
+- competitor;
+- dimension;
+- claim text;
+- source IDs;
+- confidence;
+- evidence role;
+- evidence strength;
+- conflict notes;
+- applicability scope;
+- known caveats;
+- producing agent and timestamp.
+
+Claim cards may be rendered in the support appendix, but they are not stored
+only as support prose. Core report claims should reference claim card IDs so the
+reader-facing narrative can be audited back to the structured judgment.
+
+### Decision Cards
+
+`decision_cards` are comparator-owned cross-competitor judgments derived from
+claim cards.
+
+They include:
+
+- recommendation;
+- recommendation strength, such as strong, tentative, or watchlist;
+- winning and losing competitors by decision context;
+- why-not alternatives;
+- risk-adjusted rationale;
+- evidence gaps that limit the decision;
+- source claim card IDs;
+- confidence and conflict notes.
+
+Writer may not change the recommendation posture unless comparator emits a new
+decision card or the repair path explicitly downgrades the recommendation.
+
+### Section Briefs
+
+`section_briefs` are writer-facing contracts generated from claim and decision
+cards.
+
+Each brief includes:
+
+- target report section;
+- required claim card IDs;
+- required decision card IDs;
+- questions the section must answer;
+- forbidden overclaims;
+- required caveats;
+- citation requirements;
+- output language and tone constraints.
+
+The natural segment writer consumes section briefs. It does not receive
+unbounded raw source dumps as its primary authority.
 
 ### Core Report
 
@@ -217,6 +293,8 @@ Core claims must carry:
 
 - text;
 - source IDs;
+- claim card IDs;
+- decision card IDs when applicable;
 - confidence;
 - evidence role;
 - claim kind;
@@ -239,6 +317,10 @@ Support appendix entries are not release-gate business claims by default. If a
 support entry is promoted into a core claim, it must be copied into `core_report`
 with explicit source IDs and confidence.
 
+The support appendix should render claim cards, decision cards, and section
+brief provenance in reader-friendly tables. These tables are audit/support
+material; the authoritative card data remains on the artifact itself.
+
 ### Audit Log
 
 `audit_log` is operational traceability.
@@ -259,11 +341,12 @@ quality rules.
 ### Structured Report
 
 `structured_report` keeps the existing typed content object, extended or wrapped
-as needed.
+as needed during migration.
 
-It is the authoring output used to build `core_report` and `support_appendix`.
-It is not sufficient by itself because V2 also needs lifecycle metadata,
-quality_result, render caches, and compatibility fields.
+It is no longer the final reasoning boundary. Claim cards and decision cards are
+the reasoning boundary; `structured_report` is an optional authoring/rendering
+object used to build `core_report` and `support_appendix` while the writer is
+migrating.
 
 ### Quality Result
 
@@ -355,21 +438,33 @@ Migration rule:
 ### Main Path
 
 1. Build Writer Evidence Pack.
-2. Generate typed section outputs or schema-contract fragments.
-3. Convert authoring output into `ReportArtifactV2`.
-4. Validate artifact schema.
-5. Validate core claims against allowed source IDs.
-6. Render deterministic caches.
-7. Store artifact on `RunDetail` and project to `ReportVersionRecord`.
-8. Emit a single quality result.
+2. Analyst layer converts evidence groups into claim cards.
+3. Comparator layer converts claim cards into decision cards.
+4. Writer planner converts claim and decision cards into section briefs.
+5. Natural segment writer writes section prose from section briefs.
+6. Deterministic assembler builds `ReportArtifactV2` with cards, briefs,
+   core/support/audit layers, and render caches.
+7. Validate artifact schema.
+8. Validate core claims against claim cards, decision cards, and allowed source
+   IDs.
+9. Store artifact on `RunDetail` and project to `ReportVersionRecord`.
+10. Emit a single quality result.
 
 The writer should not use one combined Markdown document as the internal repair
 surface.
+
+During migration, step 5 may still use the current schema-contract segmented
+Markdown writer. That is an authoring detail only. The generated Markdown must
+be promoted into `ReportArtifactV2`, and the artifact's cards and briefs remain
+the source of truth for facts, recommendations, citations, and repair scope.
 
 ### Repair Path
 
 Repair targets are artifact paths:
 
+- `claim_cards[claim-card-id]`
+- `decision_cards[decision-card-id]`
+- `section_briefs[section-key]`
 - `core_report.sections.executive_summary`
 - `core_report.sections.competitor_deep_dives[Cursor]`
 - `support_appendix.source_quality`
@@ -381,6 +476,11 @@ If a repair changes only support/audit material, it must not rewrite the core
 report. If a repair changes one core section, it must not rewrite unrelated
 core sections unless the quality result explicitly says the whole core is
 invalid.
+
+If a repair is about evidence strength, factual support, pricing facts, persona
+signals, or recommendation drift, it must repair or regenerate the relevant
+claim cards or decision cards first. The writer may then regenerate only the
+affected section brief and section prose.
 
 ### Redo Convergence
 
@@ -401,12 +501,16 @@ to 13 or 14 and still replaces the previous report.
 
 Core quality rules inspect:
 
+- claim cards referenced by the core report;
+- decision cards referenced by the core report;
 - `core_report.claims`;
 - `core_report.sections`;
 - core rendered text only when needed for readability checks.
 
 Support rules inspect:
 
+- unreferenced claim and decision cards;
+- section brief coverage;
 - source appendix completeness;
 - RAG gaps;
 - next collection;
@@ -481,26 +585,44 @@ Compatibility adapter:
 
 This should be delivered in phases, but as one coherent design:
 
-1. Add V2 schema models and compatibility adapter.
-2. Add persistence fields to run detail and report version models.
-3. Add Postgres migration and store support.
-4. Change enterprise projection to write V2 fields.
-5. Change writer to emit/store V2 artifact while keeping `report_md` derived.
-6. Change release gate and quality accounting to read core artifact plus single
-   quality result.
-7. Add frontend tabs and export scopes.
-8. Move old Markdown hardening and repair paths behind legacy guards.
+1. Add claim card, decision card, section brief, V2 artifact schema models, and
+   compatibility adapter.
+2. Add deterministic card builders that can derive initial cards from the
+   current evidence pack, competitor knowledge, and comparison matrix.
+3. Add section brief builder that converts cards into writer-facing section
+   contracts.
+4. Add persistence fields to run detail and report version models.
+5. Add Postgres migration and store support for artifact/card data.
+6. Change enterprise projection to write V2 fields.
+7. Change writer to consume section briefs, emit/store V2 artifact, and keep
+   `report_md` derived.
+8. Change release gate and quality accounting to read core artifact plus claim
+   and decision cards plus single quality result.
+9. Add frontend tabs and export scopes, including support views for cards.
+10. Move old Markdown hardening and repair paths behind legacy guards.
 
 ## Acceptance Criteria
 
 - New real runs have `detail.report_artifact.artifact_version == "2"`.
+- New real runs have non-empty `claim_cards`, `decision_cards`, and
+  `section_briefs`.
 - `detail.report_md` is derived, not the authoritative report product.
 - ReportVersionRecord stores core/support/audit/full fields.
+- ReportVersionRecord stores the artifact with cards and briefs.
+- Writer section prose references claim or decision cards for material business
+  claims.
+- Writer cannot change recommendation posture unless the relevant decision card
+  changes or is explicitly downgraded.
 - Release gate blockers cannot be produced from support checklist lines.
+- Release gate blockers can be produced from unsupported core claims or weak
+  decision cards.
 - Final QA, enterprise projection, revision records, and run status all report
   the same issue counts.
-- Writer repair targets artifact paths, not Markdown lines, for V2 reports.
+- Writer repair targets cards, briefs, or artifact paths, not Markdown lines,
+  for V2 reports.
 - Frontend opens on the core report tab and exposes support/QA/audit separately.
+- Frontend Evidence tab exposes claim cards and decision cards as support
+  material.
 - Exports can produce core-only and full-audit reports.
 - Legacy runs still render.
 - Current marker/section-order fixes are either removed from V2 main path or
@@ -519,7 +641,10 @@ This should be delivered in phases, but as one coherent design:
 
 Proceed with Report Artifact v2.
 
-The current schema-contract segmented Markdown writer may remain as an authoring
-implementation detail during transition, but it must stop being the storage,
-QA, release, and frontend product boundary.
+Proceed with the hybrid Report Artifact v2 architecture.
 
+The current schema-contract segmented Markdown writer may remain as an authoring
+implementation detail during transition, but it must stop being the reasoning,
+storage, QA, release, and frontend product boundary. Claim cards and decision
+cards are the reasoning boundary. Report Artifact v2 is the product/publication
+boundary. Markdown is only rendered output.

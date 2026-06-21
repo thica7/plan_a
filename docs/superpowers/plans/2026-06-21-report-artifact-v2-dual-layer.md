@@ -1,10 +1,10 @@
-# Report Artifact v2 Dual-Layer Implementation Plan
+# Hybrid Report Artifact v2 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build Report Artifact v2 so the reader-facing core report, evidence appendix, and operational audit are stored, gated, rendered, exported, and displayed as separate layers instead of one overloaded `report_md` string.
+**Goal:** Build the hybrid Report Artifact v2 pipeline: evidence becomes claim cards, claim cards become decision cards, cards become section briefs, the natural writer writes from briefs, and the final artifact stores core/support/audit layers separately instead of one overloaded `report_md` string.
 
-**Architecture:** Keep the current schema-contract segmented writer as an authoring mechanism for the first implementation pass, but stop treating its combined Markdown as the product boundary. Convert writer output into a `ReportArtifactV2`, persist it on `RunDetail` and `ReportVersionRecord`, evaluate release quality against the core layer, and let frontend/export choose explicit artifact scopes. Existing Markdown hardening and section repair remain only for legacy runs or legacy exports.
+**Architecture:** Claim cards and decision cards are the reasoning boundary. Section briefs are the writer contract. The current schema-contract segmented writer may remain as a transition authoring mechanism, but it consumes briefs and cannot invent facts or recommendations. `ReportArtifactV2` is the product/publication boundary: it persists cards, briefs, core report, support appendix, audit log, quality account, and render caches. Existing Markdown hardening and section repair remain only for legacy runs or legacy exports.
 
 **Tech Stack:** Python 3.11, Pydantic v2, FastAPI, in-memory enterprise store, Postgres SQL schema file, React 18, TypeScript, Vitest, pytest.
 
@@ -15,7 +15,13 @@
 Create or modify these files only for this feature:
 
 - Create: `backend/packages/schema/report_artifact.py`
-  - Owns `ReportArtifactV2`, layer models, render cache, quality account, and legacy adapter helpers.
+  - Owns `ReportArtifactV2`, layer models, render cache, quality account, card references, and legacy adapter helpers.
+- Create: `backend/packages/schema/report_cards.py`
+  - Owns `ClaimCard`, `DecisionCard`, and `SectionBrief` contracts.
+- Create: `backend/packages/business_intel/report_card_builder.py`
+  - Builds initial claim cards and decision cards from existing evidence, competitor knowledge, and comparison matrix.
+- Create: `backend/packages/business_intel/section_brief_builder.py`
+  - Builds writer-facing section briefs from claim and decision cards.
 - Modify: `backend/packages/schema/__init__.py`
   - Exports the new artifact models.
 - Modify: `backend/packages/schema/api_dto.py`
@@ -25,9 +31,9 @@ Create or modify these files only for this feature:
 - Modify: `backend/packages/agents/writer/structured_renderer.py`
   - Adds split render helpers: core, support, audit, full.
 - Create: `backend/packages/agents/writer/artifact_builder.py`
-  - Converts either schema-contract Markdown or `StructuredReport` into `ReportArtifactV2`.
+  - Converts cards, briefs, and authoring output into `ReportArtifactV2`; schema-contract Markdown parsing is a migration adapter, not the fact source.
 - Modify: `backend/packages/agents/writer/logic.py`
-  - Stores `detail.report_artifact`, derives `detail.report_md`, and avoids V2 main-path Markdown publication repair.
+  - Builds cards/briefs before writing, stores `detail.report_artifact`, derives `detail.report_md`, and avoids V2 main-path Markdown publication repair.
 - Modify: `backend/packages/enterprise/projection.py`
   - Projects V2 artifact fields into `ReportVersionRecord`.
 - Modify: `backend/packages/enterprise/store.py`
@@ -60,6 +66,7 @@ Create or modify these files only for this feature:
   - Builds outline for the active layer only.
 - Add or modify focused tests in:
   - `backend/tests/unit/test_report_artifact_v2.py`
+  - `backend/tests/unit/test_report_cards.py`
   - `backend/tests/unit/test_writer_report_artifact_v2.py`
   - `backend/tests/unit/test_enterprise_projection.py`
   - `backend/tests/unit/test_enterprise_store.py`
@@ -83,6 +90,407 @@ These current mechanisms must not be used as V2 main-path correctness:
 - `logic.py::_harden_schema_contract_report_markdown()`: legacy export hardening only.
 - `logic.py::_repair_schema_contract_publication_issues()`: not called for V2 artifacts.
 - `apply_release_gate_warning_report_repair()`: not allowed to mutate V2 rendered Markdown. It may only produce audit follow-up metadata for V2.
+
+## Task 0: Claim Cards, Decision Cards, And Section Brief Contracts
+
+**Files:**
+- Create: `backend/packages/schema/report_cards.py`
+- Create: `backend/packages/business_intel/report_card_builder.py`
+- Create: `backend/packages/business_intel/section_brief_builder.py`
+- Modify: `backend/packages/schema/__init__.py`
+- Test: `backend/tests/unit/test_report_cards.py`
+
+- [ ] **Step 1: Write failing card contract tests**
+
+Create `backend/tests/unit/test_report_cards.py`:
+
+```python
+from __future__ import annotations
+
+import pytest
+
+from packages.business_intel.report_card_builder import (
+    build_claim_cards_from_run_detail,
+    build_decision_cards_from_claim_cards,
+)
+from packages.business_intel.section_brief_builder import build_section_briefs
+from packages.schema.api_dto import RunDetail
+from packages.schema.models import AnalysisPlan
+from packages.schema.report_cards import ClaimCard, DecisionCard
+
+
+def _detail() -> RunDetail:
+    return RunDetail(
+        id="run-cards",
+        idempotency_key="run-cards",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        topic="AI coding tools",
+        status="completed",
+        execution_mode="real",
+        output_language="en-US",
+        created_at="2026-06-21T00:00:00",
+        updated_at="2026-06-21T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding tools",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+        ),
+    )
+
+
+def test_claim_card_requires_source_ids_unless_gap() -> None:
+    with pytest.raises(ValueError, match="source_ids"):
+        ClaimCard(
+            id="claim-1",
+            competitor="Cursor",
+            dimension="pricing",
+            claim="Cursor publishes paid pricing.",
+            confidence=0.82,
+            evidence_role="official_fact",
+            evidence_strength="medium",
+        )
+
+    gap = ClaimCard(
+        id="claim-gap",
+        competitor="Cursor",
+        dimension="persona",
+        claim="Direct buyer interviews are missing.",
+        confidence=0.4,
+        evidence_role="evidence_gap",
+        evidence_strength="gap",
+    )
+    assert gap.source_ids == []
+
+
+def test_decision_card_references_claim_cards() -> None:
+    card = DecisionCard(
+        id="decision-primary",
+        decision_type="primary_recommendation",
+        recommendation="Use Cursor as the primary trial candidate.",
+        recommendation_strength="tentative",
+        winner="Cursor",
+        alternatives=["GitHub Copilot"],
+        why_not={"GitHub Copilot": "Feature evidence is weaker for the target workflow."},
+        rationale="Cursor has stronger workflow evidence, but buyer evidence remains incomplete.",
+        claim_card_ids=["claim-cursor-feature"],
+        confidence=0.72,
+        risk_notes=["Validate enterprise controls before procurement."],
+    )
+
+    assert card.claim_card_ids == ["claim-cursor-feature"]
+    assert card.recommendation_strength == "tentative"
+
+
+def test_builders_create_cards_and_section_briefs_from_current_run_shape() -> None:
+    detail = _detail()
+
+    claim_cards = build_claim_cards_from_run_detail(detail)
+    decision_cards = build_decision_cards_from_claim_cards(detail, claim_cards)
+    briefs = build_section_briefs(detail, claim_cards, decision_cards)
+
+    assert claim_cards
+    assert decision_cards
+    assert briefs
+    assert {brief.section_key for brief in briefs} >= {
+        "executive_summary",
+        "decision_summary",
+        "competitor_deep_dives",
+    }
+    assert briefs[0].required_claim_card_ids or briefs[0].required_decision_card_ids
+```
+
+- [ ] **Step 2: Run test and verify it fails**
+
+Run:
+
+```bash
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend/tests/unit/test_report_cards.py -q
+```
+
+Expected:
+
+```text
+ImportError: cannot import name 'ClaimCard'
+```
+
+- [ ] **Step 3: Add card schema models**
+
+Create `backend/packages/schema/report_cards.py`:
+
+```python
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+EvidenceRole = Literal[
+    "official_fact",
+    "community_signal",
+    "simulated_research",
+    "inference",
+    "evidence_gap",
+]
+EvidenceStrength = Literal["strong", "medium", "weak", "gap"]
+RecommendationStrength = Literal["strong", "tentative", "watchlist", "insufficient_evidence"]
+
+
+class ClaimCard(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    competitor: str = ""
+    dimension: str = ""
+    claim: str = Field(min_length=1)
+    source_ids: list[str] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0)
+    evidence_role: EvidenceRole
+    evidence_strength: EvidenceStrength
+    conflict_notes: list[str] = Field(default_factory=list)
+    applicability_scope: str = ""
+    caveats: list[str] = Field(default_factory=list)
+    produced_by: str = "analyst"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @field_validator("source_ids")
+    @classmethod
+    def _clean_source_ids(cls, value: list[str]) -> list[str]:
+        cleaned = [item.strip() for item in value if item.strip()]
+        if len(cleaned) != len(set(cleaned)):
+            raise ValueError("source_ids must not contain duplicates")
+        return cleaned
+
+    @model_validator(mode="after")
+    def _source_ids_required_except_gap(self) -> "ClaimCard":
+        if self.evidence_role != "evidence_gap" and not self.source_ids:
+            raise ValueError("source_ids are required unless evidence_role is evidence_gap")
+        if self.evidence_role == "evidence_gap" and self.evidence_strength != "gap":
+            raise ValueError("evidence_gap claim cards must use evidence_strength='gap'")
+        return self
+
+
+class DecisionCard(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    decision_type: str = Field(min_length=1)
+    recommendation: str = Field(min_length=1)
+    recommendation_strength: RecommendationStrength
+    winner: str = ""
+    alternatives: list[str] = Field(default_factory=list)
+    why_not: dict[str, str] = Field(default_factory=dict)
+    rationale: str = Field(min_length=1)
+    claim_card_ids: list[str] = Field(min_length=1)
+    confidence: float = Field(ge=0.0, le=1.0)
+    risk_notes: list[str] = Field(default_factory=list)
+    produced_by: str = "comparator"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SectionBrief(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    section_key: str = Field(min_length=1)
+    required_claim_card_ids: list[str] = Field(default_factory=list)
+    required_decision_card_ids: list[str] = Field(default_factory=list)
+    questions: list[str] = Field(min_length=1)
+    forbidden_overclaims: list[str] = Field(default_factory=list)
+    required_caveats: list[str] = Field(default_factory=list)
+    citation_requirements: list[str] = Field(default_factory=list)
+    output_language: str = "en-US"
+    tone: str = "professional competitive intelligence"
+
+    @model_validator(mode="after")
+    def _requires_some_card(self) -> "SectionBrief":
+        if not self.required_claim_card_ids and not self.required_decision_card_ids:
+            raise ValueError("section brief must reference at least one claim or decision card")
+        return self
+```
+
+- [ ] **Step 4: Add deterministic first-pass card builders**
+
+Create `backend/packages/business_intel/report_card_builder.py`:
+
+```python
+from __future__ import annotations
+
+from packages.identity import stable_prefixed_id
+from packages.schema.api_dto import RunDetail
+from packages.schema.report_cards import ClaimCard, DecisionCard
+
+
+def build_claim_cards_from_run_detail(detail: RunDetail) -> list[ClaimCard]:
+    cards: list[ClaimCard] = []
+    for competitor in detail.plan.competitors:
+        for dimension in detail.plan.dimensions:
+            source_ids = [
+                source.id
+                for source in detail.raw_sources
+                if source.competitor == competitor and source.dimension == dimension
+            ]
+            if source_ids:
+                cards.append(
+                    ClaimCard(
+                        id=_card_id("claim", detail.id, competitor, dimension, "evidence"),
+                        competitor=competitor,
+                        dimension=dimension,
+                        claim=f"{competitor} has collected {dimension} evidence available for report analysis.",
+                        source_ids=source_ids[:8],
+                        confidence=0.72,
+                        evidence_role="inference",
+                        evidence_strength="medium",
+                        applicability_scope=f"{dimension} comparison for {detail.topic}",
+                        produced_by="analyst",
+                    )
+                )
+            else:
+                cards.append(
+                    ClaimCard(
+                        id=_card_id("claim", detail.id, competitor, dimension, "gap"),
+                        competitor=competitor,
+                        dimension=dimension,
+                        claim=f"{competitor} lacks collected {dimension} evidence for a strong conclusion.",
+                        confidence=0.35,
+                        evidence_role="evidence_gap",
+                        evidence_strength="gap",
+                        caveats=["Treat related conclusions as tentative until evidence is collected."],
+                        applicability_scope=f"{dimension} comparison for {detail.topic}",
+                        produced_by="analyst",
+                    )
+                )
+    return cards
+
+
+def build_decision_cards_from_claim_cards(
+    detail: RunDetail,
+    claim_cards: list[ClaimCard],
+) -> list[DecisionCard]:
+    supported = [card for card in claim_cards if card.source_ids]
+    winner = supported[0].competitor if supported else (detail.plan.competitors[0] if detail.plan.competitors else "")
+    alternatives = [item for item in detail.plan.competitors if item != winner]
+    strength = "tentative" if supported else "insufficient_evidence"
+    rationale = (
+        f"{winner} has the earliest available supported claim cards, but the recommendation remains evidence-weighted."
+        if supported
+        else "No supported claim cards are available, so no strong recommendation is allowed."
+    )
+    return [
+        DecisionCard(
+            id=_card_id("decision", detail.id, "primary", winner or "none"),
+            decision_type="primary_recommendation",
+            recommendation=(
+                f"Prioritize {winner} for the current evaluation."
+                if winner
+                else "Do not issue a primary recommendation."
+            ),
+            recommendation_strength=strength,
+            winner=winner,
+            alternatives=alternatives,
+            why_not={name: "Lower or less direct card support in the current run." for name in alternatives},
+            rationale=rationale,
+            claim_card_ids=[card.id for card in supported[:12]] or [claim_cards[0].id],
+            confidence=0.68 if supported else 0.3,
+            risk_notes=["Recommendation strength must be downgraded if card support is weak or conflicted."],
+            produced_by="comparator",
+        )
+    ] if claim_cards else []
+
+
+def _card_id(prefix: str, *parts: str) -> str:
+    return stable_prefixed_id(prefix, "|".join(parts), length=16)
+```
+
+- [ ] **Step 5: Add section brief builder**
+
+Create `backend/packages/business_intel/section_brief_builder.py`:
+
+```python
+from __future__ import annotations
+
+from packages.schema.api_dto import RunDetail
+from packages.schema.report_cards import ClaimCard, DecisionCard, SectionBrief
+
+
+def build_section_briefs(
+    detail: RunDetail,
+    claim_cards: list[ClaimCard],
+    decision_cards: list[DecisionCard],
+) -> list[SectionBrief]:
+    claim_ids = [card.id for card in claim_cards]
+    decision_ids = [card.id for card in decision_cards]
+    return [
+        SectionBrief(
+            section_key="executive_summary",
+            required_claim_card_ids=claim_ids[:6],
+            required_decision_card_ids=decision_ids,
+            questions=[
+                "What should the reader do next?",
+                "How strong is the recommendation?",
+                "Which evidence gaps limit the decision?",
+            ],
+            forbidden_overclaims=["Do not upgrade tentative recommendations to strong recommendations."],
+            required_caveats=["State evidence limits when confidence is below 0.8."],
+            citation_requirements=["Every material claim must cite the underlying claim card sources."],
+            output_language=detail.output_language,
+        ),
+        SectionBrief(
+            section_key="decision_summary",
+            required_claim_card_ids=claim_ids,
+            required_decision_card_ids=decision_ids,
+            questions=["Why this recommendation, and why not the alternatives?"],
+            forbidden_overclaims=["Do not invent a winner outside decision cards."],
+            required_caveats=["Mention conflicts and weak evidence."],
+            citation_requirements=["Tie recommendation prose to decision card claim_card_ids."],
+            output_language=detail.output_language,
+        ),
+        SectionBrief(
+            section_key="competitor_deep_dives",
+            required_claim_card_ids=claim_ids,
+            required_decision_card_ids=[],
+            questions=["What does each competitor prove, imply, and still lack?"],
+            forbidden_overclaims=["Do not convert evidence gaps into product weaknesses."],
+            required_caveats=["Separate direct evidence from inference."],
+            citation_requirements=["Each competitor subsection must cite its claim cards."],
+            output_language=detail.output_language,
+        ),
+    ]
+```
+
+- [ ] **Step 6: Export card models**
+
+Modify `backend/packages/schema/__init__.py`:
+
+```python
+from packages.schema.report_cards import ClaimCard, DecisionCard, SectionBrief
+```
+
+Add `ClaimCard`, `DecisionCard`, and `SectionBrief` to `__all__`.
+
+- [ ] **Step 7: Run card tests**
+
+Run:
+
+```bash
+D:\Anaconda\envs\bd-competiscope-v2\python.exe -m pytest backend/tests/unit/test_report_cards.py -q
+```
+
+Expected:
+
+```text
+3 passed
+```
+
+- [ ] **Step 8: Commit Task 0**
+
+Run:
+
+```bash
+git add backend/packages/schema/report_cards.py backend/packages/business_intel/report_card_builder.py backend/packages/business_intel/section_brief_builder.py backend/packages/schema/__init__.py backend/tests/unit/test_report_cards.py
+git commit -m "feat: add report claim and decision cards"
+```
 
 ## Task 1: Artifact Schema, Split Renderer, And Legacy Adapter
 
@@ -109,6 +517,7 @@ from packages.schema.report_artifact import (
     ReportLayer,
     build_legacy_report_artifact,
 )
+from packages.schema.report_cards import ClaimCard, DecisionCard, SectionBrief
 from test_writer_structured_renderer import _report
 
 
@@ -127,6 +536,34 @@ def test_structured_renderer_splits_core_and_support_layers() -> None:
 
 
 def test_report_artifact_v2_derives_compatibility_markdown() -> None:
+    claim = ClaimCard(
+        id="claim-cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        claim="Cursor has pricing evidence.",
+        source_ids=["raw-1"],
+        confidence=0.82,
+        evidence_role="official_fact",
+        evidence_strength="medium",
+    )
+    decision = DecisionCard(
+        id="decision-primary",
+        decision_type="primary_recommendation",
+        recommendation="Use Cursor as the primary trial candidate.",
+        recommendation_strength="tentative",
+        winner="Cursor",
+        alternatives=[],
+        why_not={},
+        rationale="Cursor has the strongest available claim card support.",
+        claim_card_ids=[claim.id],
+        confidence=0.74,
+    )
+    brief = SectionBrief(
+        section_key="executive_summary",
+        required_claim_card_ids=[claim.id],
+        required_decision_card_ids=[decision.id],
+        questions=["What should the reader do next?"],
+    )
     artifact = ReportArtifactV2(
         run_id="run-1",
         workspace_id="workspace-1",
@@ -135,6 +572,9 @@ def test_report_artifact_v2_derives_compatibility_markdown() -> None:
         output_language="en-US",
         competitors=["Cursor"],
         dimensions=["pricing"],
+        claim_cards=[claim],
+        decision_cards=[decision],
+        section_briefs=[brief],
         core_report=ReportLayer(markdown="# Core\n\nDecision."),
         support_appendix=ReportLayer(markdown="# Evidence\n\nSource table."),
         audit_log=ReportLayer(markdown="# QA\n\nNo blockers."),
@@ -146,6 +586,9 @@ def test_report_artifact_v2_derives_compatibility_markdown() -> None:
     assert artifact.render_cache.audit_markdown == "# QA\n\nNo blockers."
     assert artifact.render_cache.full_markdown.count("# Core") == 1
     assert artifact.render_cache.full_markdown.count("# Evidence") == 1
+    assert artifact.claim_cards[0].id == "claim-cursor-pricing"
+    assert artifact.decision_cards[0].claim_card_ids == ["claim-cursor-pricing"]
+    assert artifact.section_briefs[0].section_key == "executive_summary"
     assert artifact.compatibility_report_md() == artifact.render_cache.full_markdown
 
 
@@ -191,6 +634,8 @@ from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from packages.schema.report_cards import ClaimCard, DecisionCard, SectionBrief
 
 
 ArtifactVersion = Literal["2", "legacy"]
@@ -252,6 +697,9 @@ class ReportArtifactV2(BaseModel):
     output_language: str = "en-US"
     competitors: list[str] = Field(default_factory=list)
     dimensions: list[str] = Field(default_factory=list)
+    claim_cards: list[ClaimCard] = Field(default_factory=list)
+    decision_cards: list[DecisionCard] = Field(default_factory=list)
+    section_briefs: list[SectionBrief] = Field(default_factory=list)
     core_report: ReportLayer = Field(default_factory=ReportLayer)
     support_appendix: ReportLayer = Field(default_factory=ReportLayer)
     audit_log: ReportLayer = Field(default_factory=ReportLayer)
@@ -537,6 +985,50 @@ export interface ReportClaimRef {
   risk_note: string;
 }
 
+export interface ClaimCard {
+  id: string;
+  competitor: string;
+  dimension: string;
+  claim: string;
+  source_ids: string[];
+  confidence: number;
+  evidence_role: string;
+  evidence_strength: string;
+  conflict_notes: string[];
+  applicability_scope: string;
+  caveats: string[];
+  produced_by: string;
+  created_at: string;
+}
+
+export interface DecisionCard {
+  id: string;
+  decision_type: string;
+  recommendation: string;
+  recommendation_strength: string;
+  winner: string;
+  alternatives: string[];
+  why_not: Record<string, string>;
+  rationale: string;
+  claim_card_ids: string[];
+  confidence: number;
+  risk_notes: string[];
+  produced_by: string;
+  created_at: string;
+}
+
+export interface SectionBrief {
+  section_key: string;
+  required_claim_card_ids: string[];
+  required_decision_card_ids: string[];
+  questions: string[];
+  forbidden_overclaims: string[];
+  required_caveats: string[];
+  citation_requirements: string[];
+  output_language: OutputLanguage;
+  tone: string;
+}
+
 export interface ReportLayer {
   markdown: string;
   claims: ReportClaimRef[];
@@ -573,6 +1065,9 @@ export interface ReportArtifactV2 {
   output_language: OutputLanguage;
   competitors: string[];
   dimensions: string[];
+  claim_cards: ClaimCard[];
+  decision_cards: DecisionCard[];
+  section_briefs: SectionBrief[];
   core_report: ReportLayer;
   support_appendix: ReportLayer;
   audit_log: ReportLayer;
@@ -828,9 +1323,38 @@ Create `backend/tests/unit/test_writer_report_artifact_v2.py`:
 from __future__ import annotations
 
 from packages.agents.writer.artifact_builder import build_report_artifact_v2_from_markdown
+from packages.schema.report_cards import ClaimCard, DecisionCard, SectionBrief
 
 
 def test_markdown_builder_splits_core_support_and_audit_by_markers() -> None:
+    claim = ClaimCard(
+        id="claim-1",
+        competitor="Cursor",
+        dimension="pricing",
+        claim="Cursor pricing is supported.",
+        source_ids=["raw-1"],
+        confidence=0.82,
+        evidence_role="official_fact",
+        evidence_strength="medium",
+    )
+    decision = DecisionCard(
+        id="decision-1",
+        decision_type="primary_recommendation",
+        recommendation="Use Cursor as the primary trial candidate.",
+        recommendation_strength="tentative",
+        winner="Cursor",
+        alternatives=[],
+        why_not={},
+        rationale="Cursor has the strongest available claim card support.",
+        claim_card_ids=[claim.id],
+        confidence=0.74,
+    )
+    brief = SectionBrief(
+        section_key="executive_summary",
+        required_claim_card_ids=[claim.id],
+        required_decision_card_ids=[decision.id],
+        questions=["What should the reader do next?"],
+    )
     markdown = "\n".join(
         [
             "# Topic",
@@ -855,6 +1379,9 @@ def test_markdown_builder_splits_core_support_and_audit_by_markers() -> None:
         output_language="en-US",
         competitors=["Cursor"],
         dimensions=["pricing"],
+        claim_cards=[claim],
+        decision_cards=[decision],
+        section_briefs=[brief],
     )
 
     assert artifact.artifact_version == "2"
@@ -864,6 +1391,9 @@ def test_markdown_builder_splits_core_support_and_audit_by_markers() -> None:
     assert "Audit row" in artifact.audit_log.markdown
     assert "Core claim" in artifact.render_cache.full_markdown
     assert "Evidence row" in artifact.render_cache.full_markdown
+    assert artifact.claim_cards == [claim]
+    assert artifact.decision_cards == [decision]
+    assert artifact.section_briefs == [brief]
 ```
 
 Add to `backend/tests/unit/test_enterprise_projection.py`:
@@ -936,6 +1466,7 @@ from packages.schema.report_artifact import (
     ReportLayer,
     ReportRenderCache,
 )
+from packages.schema.report_cards import ClaimCard, DecisionCard, SectionBrief
 
 
 def build_report_artifact_v2_from_structured_report(
@@ -944,6 +1475,9 @@ def build_report_artifact_v2_from_structured_report(
     run_id: str,
     workspace_id: str,
     project_id: str,
+    claim_cards: list[ClaimCard],
+    decision_cards: list[DecisionCard],
+    section_briefs: list[SectionBrief],
 ) -> ReportArtifactV2:
     core = render_structured_report_core(report)
     support = render_structured_report_support(report)
@@ -957,6 +1491,9 @@ def build_report_artifact_v2_from_structured_report(
         output_language=report.output_language,
         competitors=list(report.competitors),
         dimensions=list(report.dimensions),
+        claim_cards=claim_cards,
+        decision_cards=decision_cards,
+        section_briefs=section_briefs,
         core_report=ReportLayer(markdown=core, section_keys=_section_keys(core)),
         support_appendix=ReportLayer(markdown=support, section_keys=_section_keys(support)),
         audit_log=ReportLayer(markdown=audit, section_keys=["quality_audit"]),
@@ -980,6 +1517,9 @@ def build_report_artifact_v2_from_markdown(
     output_language: str,
     competitors: Iterable[str],
     dimensions: Iterable[str],
+    claim_cards: list[ClaimCard],
+    decision_cards: list[DecisionCard],
+    section_briefs: list[SectionBrief],
 ) -> ReportArtifactV2:
     layers = _split_markdown_layers(report_md)
     core = layers["core"].strip()
@@ -997,6 +1537,9 @@ def build_report_artifact_v2_from_markdown(
         output_language=output_language,
         competitors=list(competitors),
         dimensions=list(dimensions),
+        claim_cards=claim_cards,
+        decision_cards=decision_cards,
+        section_briefs=section_briefs,
         core_report=ReportLayer(markdown=core, section_keys=_section_keys(core)),
         support_appendix=ReportLayer(markdown=support, section_keys=_section_keys(support)),
         audit_log=ReportLayer(markdown=audit, section_keys=_section_keys(audit)),
@@ -1033,6 +1576,21 @@ def _section_keys(markdown: str) -> list[str]:
 Modify `_build_report_version()` in `backend/packages/enterprise/projection.py` before `ReportVersionRecord(...)`:
 
 ```python
+    claim_cards = (
+        list(detail.report_artifact.claim_cards)
+        if detail.report_artifact is not None
+        else build_claim_cards_from_run_detail(detail)
+    )
+    decision_cards = (
+        list(detail.report_artifact.decision_cards)
+        if detail.report_artifact is not None
+        else build_decision_cards_from_claim_cards(detail, claim_cards)
+    )
+    section_briefs = (
+        list(detail.report_artifact.section_briefs)
+        if detail.report_artifact is not None
+        else build_section_briefs(detail, claim_cards, decision_cards)
+    )
     artifact = detail.report_artifact or build_report_artifact_v2_from_markdown(
         report_md=normalized_report.report_md,
         run_id=detail.id,
@@ -1042,8 +1600,21 @@ Modify `_build_report_version()` in `backend/packages/enterprise/projection.py` 
         output_language=detail.output_language,
         competitors=detail.plan.competitors,
         dimensions=detail.plan.dimensions,
+        claim_cards=claim_cards,
+        decision_cards=decision_cards,
+        section_briefs=section_briefs,
     )
     report_md = artifact.compatibility_report_md()
+```
+
+Add imports:
+
+```python
+from packages.business_intel.report_card_builder import (
+    build_claim_cards_from_run_detail,
+    build_decision_cards_from_claim_cards,
+)
+from packages.business_intel.section_brief_builder import build_section_briefs
 ```
 
 Then set these fields on `ReportVersionRecord`:
@@ -1119,6 +1690,9 @@ async def test_writer_report_updated_event_includes_report_artifact_v2(monkeypat
 
     assert record.detail.report_artifact is not None
     assert record.detail.report_artifact.artifact_version == "2"
+    assert record.detail.report_artifact.claim_cards
+    assert record.detail.report_artifact.decision_cards
+    assert record.detail.report_artifact.section_briefs
     assert "Core claim" in record.detail.report_artifact.core_report.markdown
     report_events = [event for event in record.events if event.type == "report_updated"]
     assert report_events
@@ -1164,7 +1738,25 @@ In `backend/packages/agents/writer/logic.py`, import:
 
 ```python
 from packages.agents.writer.artifact_builder import build_report_artifact_v2_from_markdown
+from packages.business_intel.report_card_builder import (
+    build_claim_cards_from_run_detail,
+    build_decision_cards_from_claim_cards,
+)
+from packages.business_intel.section_brief_builder import build_section_briefs
 ```
+
+Before the natural/schema-contract segment writer is called, build cards and
+briefs:
+
+```python
+        claim_cards = build_claim_cards_from_run_detail(detail)
+        decision_cards = build_decision_cards_from_claim_cards(detail, claim_cards)
+        section_briefs = build_section_briefs(detail, claim_cards, decision_cards)
+```
+
+Pass `section_briefs` into the segment writer prompt context. At minimum, add
+their JSON to the writer context and instruct the writer that recommendations
+and material claims must not exceed card content.
 
 After `hardened_report` is selected and before agent message append:
 
@@ -1178,6 +1770,9 @@ After `hardened_report` is selected and before agent message append:
             output_language=detail.output_language,
             competitors=detail.plan.competitors,
             dimensions=detail.plan.dimensions,
+            claim_cards=claim_cards,
+            decision_cards=decision_cards,
+            section_briefs=section_briefs,
         )
         detail.report_artifact = artifact
         detail.report_md = artifact.compatibility_report_md()
@@ -1486,6 +2081,47 @@ describe("RunReportReviewStudio artifact tabs", () => {
             output_language: "en-US",
             competitors: ["Cursor"],
             dimensions: ["pricing"],
+            claim_cards: [{
+              id: "claim-1",
+              competitor: "Cursor",
+              dimension: "pricing",
+              claim: "Cursor pricing is supported.",
+              source_ids: ["raw-1"],
+              confidence: 0.82,
+              evidence_role: "official_fact",
+              evidence_strength: "medium",
+              conflict_notes: [],
+              applicability_scope: "pricing comparison",
+              caveats: [],
+              produced_by: "analyst",
+              created_at: "2026-06-21T00:00:00",
+            }],
+            decision_cards: [{
+              id: "decision-1",
+              decision_type: "primary_recommendation",
+              recommendation: "Use Cursor as the primary trial candidate.",
+              recommendation_strength: "tentative",
+              winner: "Cursor",
+              alternatives: [],
+              why_not: {},
+              rationale: "Cursor has the strongest available claim card support.",
+              claim_card_ids: ["claim-1"],
+              confidence: 0.74,
+              risk_notes: [],
+              produced_by: "comparator",
+              created_at: "2026-06-21T00:00:00",
+            }],
+            section_briefs: [{
+              section_key: "executive_summary",
+              required_claim_card_ids: ["claim-1"],
+              required_decision_card_ids: ["decision-1"],
+              questions: ["What should the reader do next?"],
+              forbidden_overclaims: [],
+              required_caveats: [],
+              citation_requirements: [],
+              output_language: "en-US",
+              tone: "professional competitive intelligence",
+            }],
             core_report: { markdown: "# Core\n\nCore decision", claims: [], section_keys: [], metadata: {} },
             support_appendix: { markdown: "# Evidence\n\nEvidence text", claims: [], section_keys: [], metadata: {} },
             audit_log: { markdown: "# QA\n\nWarn count: 0", claims: [], section_keys: [], metadata: {} },
@@ -1668,6 +2304,32 @@ function artifactMarkdown(detail: RunDetailRecord, tab: ReportLayerTab) {
   if (tab === "evidence") return artifact.render_cache.support_markdown || artifact.support_appendix.markdown;
   if (tab === "qa") return artifact.render_cache.audit_markdown || artifact.audit_log.markdown;
   return artifact.render_cache.full_markdown || detail.report_md || "";
+}
+```
+
+For the Evidence tab, render support markdown and a compact cards panel:
+
+```tsx
+function ArtifactCardsPanel({ artifact }: { artifact: ReportArtifactV2 }) {
+  return (
+    <aside className="artifact-cards-panel">
+      <h3>Claim cards</h3>
+      {artifact.claim_cards.map((card) => (
+        <article key={card.id}>
+          <strong>{card.competitor || "General"} / {card.dimension || "general"}</strong>
+          <p>{card.claim}</p>
+          <span>{card.evidence_strength} / {Math.round(card.confidence * 100)}%</span>
+        </article>
+      ))}
+      <h3>Decision cards</h3>
+      {artifact.decision_cards.map((card) => (
+        <article key={card.id}>
+          <strong>{card.recommendation_strength}</strong>
+          <p>{card.recommendation}</p>
+        </article>
+      ))}
+    </aside>
+  );
 }
 ```
 
@@ -1948,10 +2610,14 @@ Inspect the generated run detail JSON and confirm:
 
 ```text
 detail.report_artifact.artifact_version == "2"
+detail.report_artifact.claim_cards is not empty
+detail.report_artifact.decision_cards is not empty
+detail.report_artifact.section_briefs is not empty
 detail.report_md == detail.report_artifact.render_cache.full_markdown
 detail.enterprise_projection.report_version.core_report_md is not empty
 detail.enterprise_projection.report_version.support_appendix_md is not empty
 detail.enterprise_projection.report_version.report_artifact.artifact_version == "2"
+the core recommendation can be traced to a decision card
 release_gate issue scan does not flag support checklist lines as core claims
 report_updated SSE payload includes report_artifact
 frontend report tab opens on core report
@@ -1978,6 +2644,7 @@ command before changing code. Do not make an unplanned verification commit.
 ## Self-Review Checklist
 
 - Spec coverage:
+  - Claim cards, decision cards, and section briefs: Task 0.
   - V2 schema: Task 1.
   - RunDetail and ReportVersionRecord fields: Task 2.
   - Postgres migration and store support: Task 3.
@@ -1992,6 +2659,9 @@ command before changing code. Do not make an unplanned verification commit.
   - Support checklist text is not scanned as a core business claim.
   - Markdown line targets are not V2 repair targets.
 - Boundary check:
-  - Collector, analyst, comparator, evidence pack semantics are not redesigned.
+  - Raw collection and source identity semantics are not redesigned.
+  - Claim cards are analyst-owned reasoning artifacts.
+  - Decision cards are comparator-owned recommendation artifacts.
+  - Section briefs are writer-facing contracts.
   - Current schema-contract segmented writer can remain an authoring detail.
   - `report_md` remains only as a compatibility/render cache field.
