@@ -251,7 +251,13 @@ export function buildSourceAuditRows(source: RawSource): SourceAuditRow[] {
 
   const metadata = source.metadata;
   const status = metadataText(metadata, "kb_document_status");
+  const documentId = metadataText(metadata, "kb_document_id");
   const version = metadataText(metadata, "kb_document_version");
+  const chunkId = metadataText(metadata, "kb_chunk_id");
+  const chunkIds = metadataStringList(metadata, "kb_chunk_ids");
+  const retrievalQuery = metadataText(metadata, "kb_retrieval_query");
+  const hitScore = metadataNumber(metadata, "kb_hit_score");
+  const rerankScore = metadataNumber(metadata, "kb_rerank_score");
   const rawSourceId = metadataText(metadata, "kb_raw_source_id");
   const collectorRunId = metadataText(metadata, "kb_collector_run_id");
   const fetchedAt = metadataDate(metadata, "kb_fetched_at");
@@ -259,7 +265,15 @@ export function buildSourceAuditRows(source: RawSource): SourceAuditRow[] {
   const freshnessScore = metadataNumber(metadata, "kb_freshness_score");
 
   if (status) rows.push({ label: "KB status", value: status });
-  if (version) rows.push({ label: "KB document", value: `v${version}` });
+  if (documentId) rows.push({ label: "KB document", value: documentId });
+  if (version) rows.push({ label: "KB version", value: `v${version}` });
+  if (chunkId) rows.push({ label: "KB chunk", value: chunkId });
+  if (!chunkId && chunkIds.length > 0) {
+    rows.push({ label: "KB chunks", value: formatList(chunkIds, 3) });
+  }
+  if (retrievalQuery) rows.push({ label: "KB query", value: compactText(retrievalQuery, 120) });
+  if (hitScore !== null) rows.push({ label: "KB hit", value: formatScore(hitScore) });
+  if (rerankScore !== null) rows.push({ label: "KB rerank", value: formatScore(rerankScore) });
   if (rawSourceId) rows.push({ label: "KB raw source", value: rawSourceId });
   if (collectorRunId) rows.push({ label: "Collector run", value: collectorRunId });
   if (fetchedAt) rows.push({ label: "Fetched", value: fetchedAt });
@@ -274,6 +288,10 @@ export function isKbSource(source: RawSource) {
   return Boolean(
     source.candidate_origin === "rag_kb" ||
       metadataBoolean(metadata, "kb_sync") ||
+      metadataBoolean(metadata, "kb_retrieved") ||
+      metadataText(metadata, "kb_document_id") ||
+      metadataText(metadata, "kb_chunk_id") ||
+      metadataStringList(metadata, "kb_chunk_ids").length > 0 ||
       metadataText(metadata, "kb_raw_source_id") ||
       metadataText(metadata, "kb_document_status") ||
       metadataText(metadata, "kb_document_version"),
@@ -304,6 +322,15 @@ function metadataNumber(metadata: Record<string, unknown>, key: string): number 
   return null;
 }
 
+function metadataStringList(metadata: Record<string, unknown>, key: string): string[] {
+  const value = metadata[key];
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  const text = metadataText(metadata, key);
+  return text ? [text] : [];
+}
+
 function metadataBoolean(metadata: Record<string, unknown>, key: string): boolean {
   const value = metadata[key];
   if (typeof value === "boolean") return value;
@@ -321,4 +348,19 @@ function metadataDate(metadata: Record<string, unknown>, key: string): string | 
 
 function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+function formatScore(value: number) {
+  return value <= 1 ? formatPercent(value) : value.toFixed(2);
+}
+
+function formatList(values: string[], limit: number) {
+  const visible = values.slice(0, limit);
+  const suffix = values.length > limit ? ` +${values.length - limit}` : "";
+  return `${visible.join(", ")}${suffix}`;
+}
+
+function compactText(value: string, maxChars: number) {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
 }
