@@ -145,6 +145,86 @@ def test_build_section_briefs_scopes_core_summary_to_cards_and_sources() -> None
     assert any("business recommendations" in rule for rule in support.must_not_claim)
 
 
+def test_decision_cards_do_not_replace_section_claim_scope() -> None:
+    cursor_pricing = _claim("Cursor", "pricing", "raw-source-cursor-pricing")
+    copilot_pricing = _claim(
+        "GitHub Copilot",
+        "pricing",
+        "raw-source-copilot-pricing",
+    )
+    decision = DecisionCard(
+        id="decision-cursor-overall",
+        run_id="run-briefs",
+        decision_type="overall_recommendation",
+        subject="overall",
+        recommendation="Use Cursor as the baseline recommendation.",
+        posture="strong",
+        rationale="Cursor has stronger pricing evidence for the target buyer.",
+        claim_card_ids=[cursor_pricing.id],
+        source_ids=cursor_pricing.source_ids,
+        winner="Cursor",
+        alternatives=["GitHub Copilot"],
+        evidence_strength="strong",
+        confidence=0.84,
+    )
+    detail = RunDetail(
+        id="run-briefs",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="real",
+        output_language="en-US",
+        created_at="2026-06-21T00:00:00",
+        updated_at="2026-06-21T00:00:00",
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing"],
+            competitor_layer="L1",
+        ),
+        claim_card_bundles=[
+            ClaimCardBundle(
+                run_id="run-briefs",
+                competitor=cursor_pricing.competitor,
+                dimension=cursor_pricing.dimension,
+                cards=[cursor_pricing],
+                source_ids=cursor_pricing.source_ids,
+            ),
+            ClaimCardBundle(
+                run_id="run-briefs",
+                competitor=copilot_pricing.competitor,
+                dimension=copilot_pricing.dimension,
+                cards=[copilot_pricing],
+                source_ids=copilot_pricing.source_ids,
+            ),
+        ],
+        decision_card_bundle=DecisionCardBundle(
+            run_id="run-briefs",
+            cards=[decision],
+            recommendation_card_id=decision.id,
+        ),
+        raw_sources=[
+            _source("raw-source-cursor-pricing", competitor="Cursor"),
+            _source(
+                "raw-source-copilot-pricing",
+                competitor="GitHub Copilot",
+            ),
+        ],
+    )
+
+    briefs = build_section_briefs(detail)
+
+    summary = {brief.section_key: brief for brief in briefs}["decision_summary"]
+    assert summary.allowed_decision_card_ids == [decision.id]
+    assert set(summary.allowed_claim_card_ids) == {
+        cursor_pricing.id,
+        copilot_pricing.id,
+    }
+    assert set(summary.allowed_source_ids) == {
+        "raw-source-cursor-pricing",
+        "raw-source-copilot-pricing",
+    }
+
+
 def test_segment_payloads_from_briefs_preserve_schema_contract_fields() -> None:
     detail = _detail_with_cards()
     briefs = build_section_briefs(detail)

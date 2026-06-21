@@ -53,14 +53,6 @@ _SECTION_DECISION_TYPES: dict[str, tuple[str, ...]] = {
     ),
 }
 
-_DECISION_CLAIM_SCOPED_SECTIONS = {
-    "decision_summary",
-    "side_by_side_matrix",
-    "workflow_enterprise_risk",
-    "market_landscape",
-    "business_implications",
-}
-
 _SUPPORT_NO_NEW_RECOMMENDATIONS_RULE = (
     "Do not add new business recommendations in support/audit material; only explain "
     "evidence coverage, confidence, gaps, and provenance for recommendations already "
@@ -445,11 +437,7 @@ def _claim_ids_for_section(
     raw_sources_by_id: Mapping[str, RawSource],
     plan_dimensions: Sequence[str],
 ) -> list[str]:
-    if section_key in _DECISION_CLAIM_SCOPED_SECTIONS and section_decisions:
-        return _unique(
-            claim_id for decision in section_decisions for claim_id in decision.claim_card_ids
-        )
-    return [
+    section_claim_ids = [
         card.id
         for card in _claims_for_section(
             section_key,
@@ -458,6 +446,10 @@ def _claim_ids_for_section(
             plan_dimensions=plan_dimensions,
         )
     ]
+    decision_claim_ids = [
+        claim_id for decision in section_decisions for claim_id in decision.claim_card_ids
+    ]
+    return _unique([*section_claim_ids, *decision_claim_ids])
 
 
 def _all_source_ids(
