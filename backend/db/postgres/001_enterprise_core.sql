@@ -325,6 +325,11 @@ CREATE TABLE IF NOT EXISTS report_versions (
     status TEXT NOT NULL DEFAULT 'draft'
         CHECK (status IN ('draft', 'in_review', 'approved', 'rejected', 'published', 'archived')),
     report_md TEXT NOT NULL DEFAULT '',
+    core_report_md TEXT NOT NULL DEFAULT '',
+    support_appendix_md TEXT NOT NULL DEFAULT '',
+    audit_log_md TEXT NOT NULL DEFAULT '',
+    full_report_md TEXT NOT NULL DEFAULT '',
+    report_artifact JSONB NOT NULL DEFAULT '{}'::jsonb,
     claim_ids TEXT[] NOT NULL DEFAULT '{}',
     evidence_ids TEXT[] NOT NULL DEFAULT '{}',
     quality_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -473,6 +478,16 @@ ALTER TABLE evidence_records ADD COLUMN IF NOT EXISTS last_seen_run_id TEXT REFE
 ALTER TABLE evidence_records ADD COLUMN IF NOT EXISTS seen_count INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE report_versions
     ADD COLUMN IF NOT EXISTS quality_metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE report_versions
+    ADD COLUMN IF NOT EXISTS core_report_md TEXT NOT NULL DEFAULT '';
+ALTER TABLE report_versions
+    ADD COLUMN IF NOT EXISTS support_appendix_md TEXT NOT NULL DEFAULT '';
+ALTER TABLE report_versions
+    ADD COLUMN IF NOT EXISTS audit_log_md TEXT NOT NULL DEFAULT '';
+ALTER TABLE report_versions
+    ADD COLUMN IF NOT EXISTS full_report_md TEXT NOT NULL DEFAULT '';
+ALTER TABLE report_versions
+    ADD COLUMN IF NOT EXISTS report_artifact JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE projects
     ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE source_registry

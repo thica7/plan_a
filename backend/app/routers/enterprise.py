@@ -2232,13 +2232,22 @@ def export_report_version(
     user: EnterpriseUserDep,
     artifact_storage: ArtifactStorageDep,
     format: str = "markdown",
+    scope: str | None = None,
 ) -> ArtifactCreateResult:
     version = _report_version_or_404(version_id, store, user, "report:read")
     _require_workspace_access(user, version.workspace_id, "artifact:write")
     project = _project_or_404(version.project_id, store, user, "artifact:write")
     if project.workspace_id != version.workspace_id:
         raise HTTPException(status_code=400, detail="Report workspace does not match project")
-    body, filename, media_type = _report_export_payload(version, format)
+    body, filename, media_type = _report_export_payload(version, format, scope=scope)
+    metadata = {
+        "report_version_id": version.id,
+        "report_version_number": version.version_number,
+        "report_status": version.status,
+        "export_format": _normalize_report_export_format(format),
+    }
+    if scope is not None:
+        metadata["report_scope"] = _normalize_report_export_scope(scope)
     request = ArtifactCreateRequest(
         workspace_id=version.workspace_id,
         project_id=version.project_id,
@@ -2253,12 +2262,7 @@ def export_report_version(
             "report_status": version.status,
         },
         content_text=body,
-        metadata={
-            "report_version_id": version.id,
-            "report_version_number": version.version_number,
-            "report_status": version.status,
-            "export_format": _normalize_report_export_format(format),
-        },
+        metadata=metadata,
     )
     try:
         artifact = artifact_storage.store(request, actor_id=user.user_id)
@@ -2741,14 +2745,40 @@ def _normalize_report_export_format(value: str) -> str:
     )
 
 
-def _report_export_payload(version: ReportVersionRecord, format: str) -> tuple[str, str, str]:
+def _normalize_report_export_scope(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized in {"core", "support", "audit", "full"}:
+        return normalized
+    raise HTTPException(
+        status_code=400,
+        detail="Unsupported report export scope. Use core, support, audit, or full.",
+    )
+
+
+def _report_markdown_for_scope(version: ReportVersionRecord, scope: str) -> str:
+    normalized = _normalize_report_export_scope(scope)
+    if normalized == "core":
+        return version.core_report_md or version.report_md
+    if normalized == "support":
+        return version.support_appendix_md
+    if normalized == "audit":
+        return version.audit_log_md
+    return version.full_report_md or version.report_md
+
+
+def _report_export_payload(
+    version: ReportVersionRecord,
+    format: str,
+    scope: str | None = None,
+) -> tuple[str, str, str]:
     normalized = _normalize_report_export_format(format)
+    report_md = version.report_md if scope is None else _report_markdown_for_scope(version, scope)
     filename_base = f"report-v{version.version_number}-{version.id}"
     if normalized == "markdown":
-        return version.report_md, f"{filename_base}.md", "text/markdown"
+        return report_md, f"{filename_base}.md", "text/markdown"
     if normalized == "html":
         title = html.escape(f"Report v{version.version_number} / {version.topic_normalized}")
-        body = html.escape(version.report_md)
+        body = html.escape(report_md)
         return (
             (
                 "<!doctype html>\n"
@@ -2776,7 +2806,7 @@ def _report_export_payload(version: ReportVersionRecord, format: str) -> tuple[s
     writer.writerow(["topic_normalized", version.topic_normalized])
     writer.writerow([])
     writer.writerow(["line_number", "text"])
-    for index, line in enumerate(version.report_md.splitlines(), start=1):
+    for index, line in enumerate(report_md.splitlines(), start=1):
         writer.writerow([index, line])
     return output.getvalue(), f"{filename_base}.csv", "text/csv"
 

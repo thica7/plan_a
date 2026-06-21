@@ -133,19 +133,174 @@ def normalize_report_version_sources(
     version: ReportVersionRecord,
     evidence: Iterable[EvidenceRecord],
 ) -> ReportVersionRecord:
+    evidence_list = list(evidence)
+    if _has_layered_report_content(version):
+        return _normalize_layered_report_version_sources(version, evidence_list)
     normalization = normalize_report_source_tokens(
         version.report_md,
-        evidence,
+        evidence_list,
         scoped_evidence_ids=version.evidence_ids,
     )
     metadata = dict(version.quality_metadata)
-    metadata["source_reconciliation"] = normalization.reconciliation(evidence)
+    metadata["source_reconciliation"] = normalization.reconciliation(evidence_list)
     return version.model_copy(
         update={
             "report_md": normalization.report_md,
             "evidence_ids": normalization.evidence_ids,
             "quality_metadata": metadata,
         }
+    )
+
+
+def preserve_existing_report_layers_for_legacy_upsert(
+    version: ReportVersionRecord,
+    existing: ReportVersionRecord | None,
+) -> ReportVersionRecord:
+    if existing is None or version.id != existing.id:
+        return version
+    if not _has_preservable_layered_report_data(existing) or _has_layered_report_content(version):
+        return version
+    return version.model_copy(
+        update={
+            "core_report_md": existing.core_report_md,
+            "support_appendix_md": existing.support_appendix_md,
+            "audit_log_md": existing.audit_log_md,
+            "full_report_md": existing.full_report_md,
+            "report_artifact": existing.report_artifact,
+        }
+    )
+
+
+def _has_preservable_layered_report_data(version: ReportVersionRecord) -> bool:
+    return bool(
+        version.report_artifact is not None
+        or version.support_appendix_md
+        or version.audit_log_md
+        or (
+            version.core_report_md
+            and version.full_report_md
+            and version.core_report_md != version.full_report_md
+        )
+    )
+
+
+def _has_layered_report_content(version: ReportVersionRecord) -> bool:
+    return bool(
+        version.report_artifact is not None
+        or version.core_report_md
+        or version.support_appendix_md
+        or version.audit_log_md
+        or version.full_report_md
+    )
+
+
+def _normalize_layered_report_version_sources(
+    version: ReportVersionRecord,
+    evidence: list[EvidenceRecord],
+) -> ReportVersionRecord:
+    artifact = version.report_artifact
+    artifact_cache = artifact.render_cache if artifact is not None else None
+    scoped_evidence_ids = version.evidence_ids
+    core_report_md = _normalize_report_layer_markdown(
+        version.core_report_md
+        or (artifact_cache.core_markdown if artifact_cache is not None else ""),
+        evidence,
+        scoped_evidence_ids,
+    )
+    support_appendix_md = _normalize_report_layer_markdown(
+        version.support_appendix_md
+        or (artifact_cache.support_markdown if artifact_cache is not None else ""),
+        evidence,
+        scoped_evidence_ids,
+    )
+    audit_log_md = _normalize_report_layer_markdown(
+        version.audit_log_md
+        or (artifact_cache.audit_markdown if artifact_cache is not None else ""),
+        evidence,
+        scoped_evidence_ids,
+    )
+    joined_full_report_md = "\n\n".join(
+        markdown
+        for markdown in (core_report_md, support_appendix_md, audit_log_md)
+        if markdown
+    )
+    if not joined_full_report_md:
+        joined_full_report_md = _normalize_report_layer_markdown(
+            version.full_report_md or version.report_md,
+            evidence,
+            scoped_evidence_ids,
+        )
+    normalization = normalize_report_source_tokens(
+        joined_full_report_md,
+        evidence,
+        scoped_evidence_ids=scoped_evidence_ids,
+    )
+    metadata = dict(version.quality_metadata)
+    metadata["source_reconciliation"] = normalization.reconciliation(evidence)
+    full_report_md = normalization.report_md
+    report_artifact = _normalized_report_artifact_copy(
+        artifact,
+        core_report_md=core_report_md,
+        support_appendix_md=support_appendix_md,
+        audit_log_md=audit_log_md,
+        full_report_md=full_report_md,
+    )
+    return version.model_copy(
+        update={
+            "report_md": full_report_md,
+            "core_report_md": core_report_md,
+            "support_appendix_md": support_appendix_md,
+            "audit_log_md": audit_log_md,
+            "full_report_md": full_report_md,
+            "report_artifact": report_artifact,
+            "evidence_ids": normalization.evidence_ids,
+            "quality_metadata": metadata,
+        }
+    )
+
+
+def _normalize_report_layer_markdown(
+    markdown: str,
+    evidence: list[EvidenceRecord],
+    scoped_evidence_ids: Iterable[str],
+) -> str:
+    return normalize_report_source_tokens(
+        markdown,
+        evidence,
+        scoped_evidence_ids=scoped_evidence_ids,
+    ).report_md
+
+
+def _normalized_report_artifact_copy(
+    artifact: Any,
+    *,
+    core_report_md: str,
+    support_appendix_md: str,
+    audit_log_md: str,
+    full_report_md: str,
+) -> Any:
+    if artifact is None:
+        return None
+    return artifact.__class__.model_validate(
+        artifact.model_copy(
+            update={
+                "core_report": artifact.core_report.model_copy(
+                    update={"markdown": core_report_md}
+                ),
+                "support_appendix": artifact.support_appendix.model_copy(
+                    update={"markdown": support_appendix_md}
+                ),
+                "audit_log": artifact.audit_log.model_copy(update={"markdown": audit_log_md}),
+                "render_cache": artifact.render_cache.model_copy(
+                    update={
+                        "core_markdown": core_report_md,
+                        "support_markdown": support_appendix_md,
+                        "audit_markdown": audit_log_md,
+                        "full_markdown": full_report_md,
+                    }
+                ),
+            }
+        ).model_dump(mode="json")
     )
 
 

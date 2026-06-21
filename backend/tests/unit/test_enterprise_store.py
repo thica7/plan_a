@@ -1,9 +1,11 @@
 import asyncio
+import json
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.deps import get_artifact_storage, get_enterprise_store, get_preference_memory
@@ -14,15 +16,18 @@ from app.routers.enterprise import (
     _pydantic_ai_runtime_warn_count,
     _quality_agent_pydantic_ai_metadata,
     _quality_finding_groups,
+    _report_export_payload,
     _report_release_gate_scope,
     _with_gap_fill_release_gate_delta,
     _with_pydantic_ai_execution_metadata,
 )
 from packages.agents.executor import AgentExecutionResult
+from packages.auth import EnterpriseUserContext
 from packages.artifacts import LocalArtifactStorage
 from packages.config import Settings
 from packages.enterprise import (
     EnterpriseMemoryStore,
+    EnterprisePostgresStore,
     WorkspaceQuotaExceededError,
     build_enterprise_projection,
     build_report_scope,
@@ -32,16 +37,27 @@ from packages.i18n.language import report_label
 from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.service import RunService
 from packages.refs import audit_relationship_resource_id
+from packages.runtime.commands import ReviseReportCommand
+from packages.runtime.service import RuntimeCommandService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
     ArtifactRecord,
+    EvidenceRecord,
     EvidenceGapFillResult,
     EvidenceGapReport,
+    ManualReportRevisionRequest,
     NotificationRecord,
+    ReportVersionRecord,
     SchemaEvolutionSuggestion,
     UserFeedbackRecord,
     WorkspaceMemberRecord,
     WorkspaceQuotaUpdateRequest,
+)
+from packages.schema.report_artifact import (
+    ReportArtifactLegacyInfo,
+    ReportArtifactRenderCache,
+    ReportArtifactV2,
+    ReportLayer,
 )
 from packages.schema.models import (
     AnalysisPlan,
@@ -100,6 +116,563 @@ def test_quality_finding_groups_cover_h7_axes() -> None:
     assert group_index[("source_agent", "ClaimValidator")].count == 1
     assert group_index[("severity", "blocker")].blocker_count == 1
     assert group_index[("required_action", "rewrite_claim")].warn_count == 1
+
+
+def test_report_export_payload_selects_layered_scope_and_metadata() -> None:
+    version = ReportVersionRecord(
+        id="report-layered",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-1",
+        version_number=3,
+        topic_normalized="layered-report",
+        competitor_set_hash="hash",
+        report_md="Full markdown",
+        core_report_md="Core markdown",
+        support_appendix_md="Support markdown",
+        audit_log_md="Audit markdown",
+        full_report_md="Full markdown",
+    )
+
+    markdown, markdown_filename, markdown_media_type = _report_export_payload(
+        version,
+        "markdown",
+        scope="support",
+    )
+    html_body, html_filename, html_media_type = _report_export_payload(
+        version,
+        "html",
+        scope="audit",
+    )
+    csv_body, csv_filename, csv_media_type = _report_export_payload(
+        version,
+        "csv",
+        scope="full",
+    )
+
+    assert markdown == "Support markdown"
+    assert markdown_filename == "report-v3-report-layered.md"
+    assert markdown_media_type == "text/markdown"
+    assert "<title>Report v3 / layered-report</title>" in html_body
+    assert "<h1>Report v3 / layered-report</h1>" in html_body
+    assert "<pre>Audit markdown</pre>" in html_body
+    assert "/ audit" not in html_body
+    assert html_filename == "report-v3-report-layered.html"
+    assert html_media_type == "text/html"
+    assert "report_scope" not in csv_body
+    assert "version_number,3" in csv_body
+    assert "status,draft" in csv_body
+    assert "1,Full markdown" in csv_body
+    assert csv_filename == "report-v3-report-layered.csv"
+    assert csv_media_type == "text/csv"
+
+    core_markdown, core_filename, _ = _report_export_payload(
+        version,
+        "markdown",
+        scope="core",
+    )
+    assert core_markdown == "Core markdown"
+    assert core_filename == "report-v3-report-layered.md"
+
+    default_markdown, default_filename, _ = _report_export_payload(version, "markdown")
+    assert default_markdown == "Full markdown"
+    assert default_filename == "report-v3-report-layered.md"
+
+    with pytest.raises(HTTPException) as exc_info:
+        _report_export_payload(version, "markdown", scope="unknown")
+
+    assert getattr(exc_info.value, "status_code") == 400
+    assert "Unsupported report export scope" in str(getattr(exc_info.value, "detail"))
+
+
+def test_postgres_report_version_row_validates_layered_artifact_json() -> None:
+    artifact_payload = {
+        "artifact_version": 2,
+        "run_id": "run-1",
+        "core_report": {"layer": "core", "markdown": "Core markdown"},
+        "support_appendix": {"layer": "support", "markdown": "Support markdown"},
+        "audit_log": {"layer": "audit", "markdown": "Audit markdown"},
+        "render_cache": {
+            "core_markdown": "Core markdown",
+            "support_markdown": "Support markdown",
+            "audit_markdown": "Audit markdown",
+            "full_markdown": "Core markdown\n\nSupport markdown\n\nAudit markdown",
+        },
+        "legacy": {"source": "report_artifact_v2", "report_md_alias": True},
+    }
+
+    version = EnterprisePostgresStore._model_from_mapping(
+        ReportVersionRecord,
+        {
+            "id": "report-layered",
+            "workspace_id": "workspace-1",
+            "project_id": "project-1",
+            "run_id": "run-1",
+            "version_number": 1,
+            "topic_normalized": "layered-report",
+            "competitor_layer": "L1",
+            "competitor_set_hash": "hash",
+            "status": "draft",
+            "report_md": "Core markdown\n\nSupport markdown\n\nAudit markdown",
+            "core_report_md": "Core markdown",
+            "support_appendix_md": "Support markdown",
+            "audit_log_md": "Audit markdown",
+            "full_report_md": "Core markdown\n\nSupport markdown\n\nAudit markdown",
+            "report_artifact": json.dumps(artifact_payload),
+            "claim_ids": [],
+            "evidence_ids": [],
+            "quality_metadata": {},
+        },
+    )
+    legacy_version = EnterprisePostgresStore._model_from_mapping(
+        ReportVersionRecord,
+        {
+            "id": "report-legacy",
+            "workspace_id": "workspace-1",
+            "project_id": "project-1",
+            "version_number": 1,
+            "topic_normalized": "legacy-report",
+            "competitor_set_hash": "hash",
+            "report_artifact": "{}",
+        },
+    )
+
+    assert version.report_artifact is not None
+    assert version.report_artifact.render_cache.full_markdown.endswith("Audit markdown")
+    assert version.core_report_md == "Core markdown"
+    assert version.support_appendix_md == "Support markdown"
+    assert version.audit_log_md == "Audit markdown"
+    assert version.full_report_md.endswith("Audit markdown")
+    assert legacy_version.report_artifact is None
+
+
+def test_postgres_report_version_upsert_preserves_same_id_legacy_layered_artifact() -> None:
+    class FakeCursor:
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+        def commit(self) -> None:
+            return None
+
+    evidence = EvidenceRecord(
+        id="evidence-pricing-1",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-1",
+        raw_source_id="pricing-1",
+        competitor_id="cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor has published pricing.",
+        content_hash="hash-pricing-1",
+        reliability_score=0.9,
+        freshness_score=1.0,
+        quality_label="accepted",
+    )
+    artifact = ReportArtifactV2(
+        artifact_version=2,
+        run_id="run-1",
+        core_report=ReportLayer(layer="core", markdown="Postgres core. [source:pricing-1]"),
+        support_appendix=ReportLayer(
+            layer="support",
+            markdown="Postgres support. [source:pricing-1]",
+        ),
+        audit_log=ReportLayer(layer="audit", markdown="Postgres audit. [source:pricing-1]"),
+        render_cache=ReportArtifactRenderCache(
+            core_markdown="Postgres core. [source:pricing-1]",
+            support_markdown="Postgres support. [source:pricing-1]",
+            audit_markdown="Postgres audit. [source:pricing-1]",
+            full_markdown=(
+                "Postgres core. [source:pricing-1]\n\n"
+                "Postgres support. [source:pricing-1]\n\n"
+                "Postgres audit. [source:pricing-1]"
+            ),
+        ),
+        legacy=ReportArtifactLegacyInfo(source="report_artifact_v2", report_md_alias=True),
+    )
+    existing = ReportVersionRecord(
+        id="report-layered-existing",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-1",
+        version_number=1,
+        topic_normalized="layered-report",
+        competitor_set_hash="hash",
+        report_md=artifact.render_cache.full_markdown,
+        core_report_md=artifact.render_cache.core_markdown,
+        support_appendix_md=artifact.render_cache.support_markdown,
+        audit_log_md=artifact.render_cache.audit_markdown,
+        full_report_md=artifact.render_cache.full_markdown,
+        report_artifact=artifact,
+        evidence_ids=[evidence.id],
+    )
+    legacy_update = existing.model_copy(
+        update={
+            "status": "approved",
+            "report_md": "Legacy Postgres body without layered fields. [source:pricing-1]",
+            "core_report_md": "",
+            "support_appendix_md": "",
+            "audit_log_md": "",
+            "full_report_md": "",
+            "report_artifact": None,
+        }
+    )
+    captured: dict[str, ReportVersionRecord] = {}
+    store = EnterprisePostgresStore.__new__(EnterprisePostgresStore)
+    store.database_url = "postgresql://example"
+    store._dict_row = object()
+    store._connect = lambda *args, **kwargs: FakeConnection()
+    store.get_report_version = lambda version_id: existing
+    store._report_scope_evidence = lambda version: [evidence]
+    store._upsert_report_version = lambda cur, version: captured.setdefault("version", version)
+    store._append_audit = lambda *args, **kwargs: None
+
+    updated = EnterprisePostgresStore.upsert_report_version(store, legacy_update)
+
+    assert updated.status == "approved"
+    assert updated.core_report_md == existing.core_report_md
+    assert updated.support_appendix_md == existing.support_appendix_md
+    assert updated.audit_log_md == existing.audit_log_md
+    assert updated.full_report_md == existing.full_report_md
+    assert updated.report_md == existing.report_md
+    assert updated.report_artifact is not None
+    assert captured["version"].report_artifact is not None
+    assert (
+        captured["version"].report_artifact.render_cache.full_markdown
+        == existing.full_report_md
+    )
+
+
+def test_report_version_upsert_normalizes_layered_artifact_sources_for_scoped_exports() -> None:
+    store = EnterpriseMemoryStore()
+    evidence = store.upsert_evidence(
+        EvidenceRecord(
+            id="evidence-pricing-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id="run-1",
+            raw_source_id="pricing-1",
+            competitor_id="cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor has published pricing.",
+            content_hash="hash-pricing-1",
+            reliability_score=0.9,
+            freshness_score=1.0,
+            quality_label="accepted",
+        )
+    )
+    artifact = ReportArtifactV2(
+        artifact_version=2,
+        run_id="run-1",
+        core_report=ReportLayer(
+            layer="core",
+            markdown="Core markdown. [source:pricing-1#core]",
+        ),
+        support_appendix=ReportLayer(
+            layer="support",
+            markdown="Support markdown. [source:pricing-1#support]",
+        ),
+        audit_log=ReportLayer(
+            layer="audit",
+            markdown="Audit markdown. [source:pricing-1#audit]",
+        ),
+        render_cache=ReportArtifactRenderCache(
+            core_markdown="Core markdown. [source:pricing-1#core]",
+            support_markdown="Support markdown. [source:pricing-1#support]",
+            audit_markdown="Audit markdown. [source:pricing-1#audit]",
+            full_markdown=(
+                "Core markdown. [source:pricing-1#core]\n\n"
+                "Support markdown. [source:pricing-1#support]\n\n"
+                "Audit markdown. [source:pricing-1#audit]"
+            ),
+        ),
+        legacy=ReportArtifactLegacyInfo(source="report_artifact_v2", report_md_alias=True),
+    )
+    version = ReportVersionRecord(
+        id="report-direct-layered",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-1",
+        version_number=1,
+        topic_normalized="layered-report",
+        competitor_set_hash="hash",
+        report_md=artifact.render_cache.full_markdown,
+        core_report_md=artifact.render_cache.core_markdown,
+        support_appendix_md=artifact.render_cache.support_markdown,
+        audit_log_md=artifact.render_cache.audit_markdown,
+        full_report_md=artifact.render_cache.full_markdown,
+        report_artifact=artifact,
+        evidence_ids=[evidence.id],
+    )
+
+    stored = store.upsert_report_version(version)
+
+    expected_core = "Core markdown. [source:pricing-1]"
+    expected_support = "Support markdown. [source:pricing-1]"
+    expected_audit = "Audit markdown. [source:pricing-1]"
+    expected_full = f"{expected_core}\n\n{expected_support}\n\n{expected_audit}"
+    assert stored.core_report_md == expected_core
+    assert stored.support_appendix_md == expected_support
+    assert stored.audit_log_md == expected_audit
+    assert stored.full_report_md == expected_full
+    assert stored.report_md == expected_full
+    assert stored.report_artifact is not None
+    assert stored.report_artifact.render_cache.core_markdown == expected_core
+    assert stored.report_artifact.render_cache.support_markdown == expected_support
+    assert stored.report_artifact.render_cache.audit_markdown == expected_audit
+    assert stored.report_artifact.render_cache.full_markdown == expected_full
+    assert stored.report_artifact.core_report.markdown == expected_core
+    assert stored.report_artifact.support_appendix.markdown == expected_support
+    assert stored.report_artifact.audit_log.markdown == expected_audit
+    reconciliation = stored.quality_metadata["source_reconciliation"]
+    assert reconciliation["report_source_tokens"] == ["pricing-1"]
+    assert reconciliation["canonical_report_source_tokens"] == ["pricing-1"]
+    assert reconciliation["scoped_evidence_ids"] == [evidence.id]
+    assert reconciliation["unresolved_report_source_tokens"] == []
+    assert _report_export_payload(stored, "markdown", scope="support")[0] == expected_support
+
+
+def test_same_id_legacy_report_upsert_preserves_existing_layered_artifact() -> None:
+    store = EnterpriseMemoryStore()
+    evidence = store.upsert_evidence(
+        EvidenceRecord(
+            id="evidence-pricing-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id="run-1",
+            raw_source_id="pricing-1",
+            competitor_id="cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor has published pricing.",
+            content_hash="hash-pricing-1",
+            reliability_score=0.9,
+            freshness_score=1.0,
+            quality_label="accepted",
+        )
+    )
+    artifact = ReportArtifactV2(
+        artifact_version=2,
+        run_id="run-1",
+        core_report=ReportLayer(layer="core", markdown="Core original. [source:pricing-1]"),
+        support_appendix=ReportLayer(
+            layer="support",
+            markdown="Support original. [source:pricing-1]",
+        ),
+        audit_log=ReportLayer(layer="audit", markdown="Audit original. [source:pricing-1]"),
+        render_cache=ReportArtifactRenderCache(
+            core_markdown="Core original. [source:pricing-1]",
+            support_markdown="Support original. [source:pricing-1]",
+            audit_markdown="Audit original. [source:pricing-1]",
+            full_markdown=(
+                "Core original. [source:pricing-1]\n\n"
+                "Support original. [source:pricing-1]\n\n"
+                "Audit original. [source:pricing-1]"
+            ),
+        ),
+        legacy=ReportArtifactLegacyInfo(source="report_artifact_v2", report_md_alias=True),
+    )
+    stored = store.upsert_report_version(
+        ReportVersionRecord(
+            id="report-layered-existing",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id="run-1",
+            version_number=1,
+            topic_normalized="layered-report",
+            competitor_set_hash="hash",
+            report_md=artifact.render_cache.full_markdown,
+            core_report_md=artifact.render_cache.core_markdown,
+            support_appendix_md=artifact.render_cache.support_markdown,
+            audit_log_md=artifact.render_cache.audit_markdown,
+            full_report_md=artifact.render_cache.full_markdown,
+            report_artifact=artifact,
+            evidence_ids=[evidence.id],
+        )
+    )
+    legacy_update = stored.model_copy(
+        update={
+            "status": "in_review",
+            "report_md": "Legacy client body without layered fields. [source:pricing-1]",
+            "core_report_md": "",
+            "support_appendix_md": "",
+            "audit_log_md": "",
+            "full_report_md": "",
+            "report_artifact": None,
+        }
+    )
+
+    updated = store.upsert_report_version(legacy_update)
+
+    assert updated.status == "in_review"
+    assert updated.core_report_md == stored.core_report_md
+    assert updated.support_appendix_md == stored.support_appendix_md
+    assert updated.audit_log_md == stored.audit_log_md
+    assert updated.full_report_md == stored.full_report_md
+    assert updated.report_md == stored.report_md
+    assert updated.report_artifact is not None
+    assert updated.report_artifact.render_cache.core_markdown == stored.core_report_md
+    assert updated.report_artifact.render_cache.support_markdown == stored.support_appendix_md
+    assert updated.report_artifact.render_cache.audit_markdown == stored.audit_log_md
+    assert updated.report_artifact.render_cache.full_markdown == stored.full_report_md
+    assert _report_export_payload(updated, "markdown", scope="core")[0] == stored.core_report_md
+
+
+def test_same_id_legacy_report_upsert_updates_existing_legacy_alias_record() -> None:
+    store = EnterpriseMemoryStore()
+    existing = store.upsert_report_version(
+        ReportVersionRecord(
+            id="report-legacy-existing",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id="run-1",
+            version_number=1,
+            topic_normalized="legacy-report",
+            competitor_set_hash="hash",
+            report_md="Original legacy markdown",
+            core_report_md="Original legacy markdown",
+            full_report_md="Original legacy markdown",
+        )
+    )
+    legacy_update = existing.model_copy(
+        update={
+            "report_md": "Updated legacy markdown",
+            "core_report_md": "",
+            "support_appendix_md": "",
+            "audit_log_md": "",
+            "full_report_md": "",
+            "report_artifact": None,
+        }
+    )
+
+    updated = store.upsert_report_version(legacy_update)
+
+    assert updated.report_md == "Updated legacy markdown"
+    assert updated.core_report_md == ""
+    assert updated.support_appendix_md == ""
+    assert updated.audit_log_md == ""
+    assert updated.full_report_md == ""
+    assert updated.report_artifact is None
+
+
+def test_manual_revision_of_layered_report_preserves_edited_full_markdown() -> None:
+    store = EnterpriseMemoryStore()
+    memory = PreferenceMemoryStore.in_memory()
+    evidence = store.upsert_evidence(
+        EvidenceRecord(
+            id="evidence-pricing-1",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id="run-1",
+            raw_source_id="pricing-1",
+            competitor_id="cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor has published pricing.",
+            content_hash="hash-pricing-1",
+            reliability_score=0.9,
+            freshness_score=1.0,
+            quality_label="accepted",
+        )
+    )
+    artifact = ReportArtifactV2(
+        artifact_version=2,
+        run_id="run-1",
+        core_report=ReportLayer(layer="core", markdown="Old core. [source:pricing-1]"),
+        support_appendix=ReportLayer(
+            layer="support",
+            markdown="Old support. [source:pricing-1]",
+        ),
+        audit_log=ReportLayer(layer="audit", markdown="Old audit. [source:pricing-1]"),
+        render_cache=ReportArtifactRenderCache(
+            core_markdown="Old core. [source:pricing-1]",
+            support_markdown="Old support. [source:pricing-1]",
+            audit_markdown="Old audit. [source:pricing-1]",
+            full_markdown=(
+                "Old core. [source:pricing-1]\n\n"
+                "Old support. [source:pricing-1]\n\n"
+                "Old audit. [source:pricing-1]"
+            ),
+        ),
+        legacy=ReportArtifactLegacyInfo(source="report_artifact_v2", report_md_alias=True),
+    )
+    source = store.upsert_report_version(
+        ReportVersionRecord(
+            id="report-layered-source",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id="run-1",
+            version_number=1,
+            topic_normalized="layered-report",
+            competitor_set_hash="hash",
+            report_md=artifact.render_cache.full_markdown,
+            core_report_md=artifact.render_cache.core_markdown,
+            support_appendix_md=artifact.render_cache.support_markdown,
+            audit_log_md=artifact.render_cache.audit_markdown,
+            full_report_md=artifact.render_cache.full_markdown,
+            report_artifact=artifact,
+            evidence_ids=[evidence.id],
+        )
+    )
+    service = RuntimeCommandService(
+        settings=_settings(),
+        run_service=object(),
+        workflow_service=object(),
+        enterprise_store=store,
+        preference_memory=memory,
+    )
+    edited_report_md = (
+        "Manual edited full body. [source:pricing-1#manual]\n\n"
+        "Reviewer correction must survive."
+    )
+
+    result = service.revise_report(
+        ReviseReportCommand(
+            report_version_id=source.id,
+            request=ManualReportRevisionRequest(
+                report_md=edited_report_md,
+                note="Manual full-body edit.",
+            ),
+        ),
+        actor=EnterpriseUserContext(
+            user_id="reviewer-1",
+            role="owner",
+            workspace_id="workspace-1",
+        ),
+    )
+
+    revision = result.payload
+    expected_report_md = (
+        "Manual edited full body. [source:pricing-1]\n\n"
+        "Reviewer correction must survive."
+    )
+    assert revision.report_md == expected_report_md
+    assert revision.core_report_md == ""
+    assert revision.support_appendix_md == ""
+    assert revision.audit_log_md == ""
+    assert revision.full_report_md == ""
+    assert revision.report_artifact is None
+    assert revision.parent_version_id == source.id
+    assert store.get_report_version(revision.id).report_md == expected_report_md
+    assert _report_export_payload(revision, "markdown")[0] == expected_report_md
 
 
 def _detail() -> RunDetail:

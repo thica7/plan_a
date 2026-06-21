@@ -58,7 +58,10 @@ from packages.schema.enterprise import (
     WorkspaceRecord,
     WorkspaceUsageSummary,
 )
-from packages.sources import normalize_report_version_sources
+from packages.sources import (
+    normalize_report_version_sources,
+    preserve_existing_report_layers_for_legacy_upsert,
+)
 
 DEFAULT_WORKSPACE_ID = "default-workspace"
 DEFAULT_USER_ID = "system-user"
@@ -1182,11 +1185,12 @@ class EnterpriseMemoryStore:
 
     def upsert_report_version(self, version: ReportVersionRecord) -> ReportVersionRecord:
         with self._lock:
+            before_record = self.report_versions.get(version.id)
+            version = preserve_existing_report_layers_for_legacy_upsert(version, before_record)
             version = normalize_report_version_sources(
                 version,
                 self._report_scope_evidence_locked(version),
             )
-            before_record = self.report_versions.get(version.id)
             self.report_versions[version.id] = version
             self._append_audit(
                 workspace_id=version.workspace_id,

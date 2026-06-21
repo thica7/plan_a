@@ -11,6 +11,12 @@ from packages.schema.models import (
     RunMetrics,
     UserPersonaModel,
 )
+from packages.schema.report_artifact import (
+    ReportArtifactLegacyInfo,
+    ReportArtifactRenderCache,
+    ReportArtifactV2,
+    ReportLayer,
+)
 
 
 def test_build_enterprise_projection_links_evidence_claims_and_report() -> None:
@@ -100,6 +106,151 @@ def test_build_enterprise_projection_links_evidence_claims_and_report() -> None:
     assert reconciliation["canonical_report_md_changed"] is False
     assert reconciliation["unresolved_report_source_tokens"] == []
     assert reconciliation["evidence_source_aliases"][evidence.id] == [evidence.id]
+
+
+def test_build_enterprise_projection_prefers_report_artifact_layers() -> None:
+    artifact = ReportArtifactV2(
+        artifact_version=2,
+        run_id="run-artifact",
+        core_report=ReportLayer(
+            layer="core",
+            markdown="Core artifact narrative. [source:pricing-1]",
+        ),
+        support_appendix=ReportLayer(
+            layer="support",
+            markdown="Support appendix detail. [source:pricing-1]",
+        ),
+        audit_log=ReportLayer(layer="audit", markdown="Audit trail detail."),
+        render_cache=ReportArtifactRenderCache(
+            core_markdown="Core artifact narrative. [source:pricing-1]",
+            support_markdown="Support appendix detail. [source:pricing-1]",
+            audit_markdown="Audit trail detail.",
+            full_markdown=(
+                "Core artifact narrative. [source:pricing-1]\n\n"
+                "Support appendix detail. [source:pricing-1]\n\n"
+                "Audit trail detail."
+            ),
+        ),
+        legacy=ReportArtifactLegacyInfo(source="report_artifact_v2", report_md_alias=True),
+    )
+    detail = RunDetail(
+        id="run-artifact",
+        topic="AI coding assistant comparison",
+        status="completed",
+        execution_mode="real",
+        created_at="2026-05-28T00:00:00",
+        updated_at="2026-05-28T00:05:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        report_md="Legacy report markdown. [source:pricing-1]",
+        report_artifact=artifact,
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.sh/pricing",
+                snippet="Cursor has published pricing.",
+                content_hash="hash-1",
+                confidence=0.9,
+            )
+        ],
+    )
+
+    projection = build_enterprise_projection(detail)
+
+    report = projection.report_version
+    assert report.core_report_md == "Core artifact narrative. [source:pricing-1]"
+    assert report.support_appendix_md == "Support appendix detail. [source:pricing-1]"
+    assert report.audit_log_md == "Audit trail detail."
+    assert report.full_report_md == artifact.render_cache.full_markdown
+    assert report.report_md == artifact.render_cache.full_markdown
+    assert report.report_artifact == artifact
+    assert report.evidence_ids == [projection.evidence_records[0].id]
+
+
+def test_build_enterprise_projection_normalizes_report_artifact_layers() -> None:
+    artifact = ReportArtifactV2(
+        artifact_version=2,
+        run_id="run-artifact-normalized",
+        core_report=ReportLayer(
+            layer="core",
+            markdown="Core artifact narrative. [source:pricing-1#quote]",
+        ),
+        support_appendix=ReportLayer(
+            layer="support",
+            markdown="Support appendix detail. [source:pricing-1#appendix]",
+        ),
+        audit_log=ReportLayer(
+            layer="audit",
+            markdown="Audit trail detail. [source:pricing-1#audit]",
+        ),
+        render_cache=ReportArtifactRenderCache(
+            core_markdown="Core artifact narrative. [source:pricing-1#quote]",
+            support_markdown="Support appendix detail. [source:pricing-1#appendix]",
+            audit_markdown="Audit trail detail. [source:pricing-1#audit]",
+            full_markdown=(
+                "Core artifact narrative. [source:pricing-1#quote]\n\n"
+                "Support appendix detail. [source:pricing-1#appendix]\n\n"
+                "Audit trail detail. [source:pricing-1#audit]"
+            ),
+        ),
+        legacy=ReportArtifactLegacyInfo(source="report_artifact_v2", report_md_alias=True),
+    )
+    detail = RunDetail(
+        id="run-artifact-normalized",
+        topic="AI coding assistant comparison",
+        status="completed",
+        execution_mode="real",
+        created_at="2026-05-28T00:00:00",
+        updated_at="2026-05-28T00:05:00",
+        plan=AnalysisPlan(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        report_md=artifact.render_cache.full_markdown,
+        report_artifact=artifact,
+        raw_sources=[
+            RawSource(
+                id="pricing-1",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                url="https://cursor.sh/pricing",
+                snippet="Cursor has published pricing.",
+                content_hash="hash-1",
+                confidence=0.9,
+            )
+        ],
+    )
+
+    projection = build_enterprise_projection(detail)
+
+    report = projection.report_version
+    expected_core = "Core artifact narrative. [source:pricing-1]"
+    expected_support = "Support appendix detail. [source:pricing-1]"
+    expected_audit = "Audit trail detail. [source:pricing-1]"
+    expected_full = f"{expected_core}\n\n{expected_support}\n\n{expected_audit}"
+    assert report.core_report_md == expected_core
+    assert report.support_appendix_md == expected_support
+    assert report.audit_log_md == expected_audit
+    assert report.full_report_md == expected_full
+    assert report.report_md == expected_full
+    assert report.report_artifact is not None
+    assert report.report_artifact.core_report.markdown == expected_core
+    assert report.report_artifact.support_appendix.markdown == expected_support
+    assert report.report_artifact.audit_log.markdown == expected_audit
+    assert report.report_artifact.render_cache.core_markdown == expected_core
+    assert report.report_artifact.render_cache.support_markdown == expected_support
+    assert report.report_artifact.render_cache.audit_markdown == expected_audit
+    assert report.report_artifact.render_cache.full_markdown == expected_full
 
 
 def test_projection_carries_run_quality_metadata() -> None:

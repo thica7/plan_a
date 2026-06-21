@@ -57,6 +57,32 @@ def test_report_versions_schema_allows_rejected_approval_status() -> None:
     ) in sql
 
 
+def test_report_versions_schema_has_idempotent_report_artifact_columns() -> None:
+    sql = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
+
+    expected_columns = [
+        "core_report_md TEXT NOT NULL DEFAULT ''",
+        "support_appendix_md TEXT NOT NULL DEFAULT ''",
+        "audit_log_md TEXT NOT NULL DEFAULT ''",
+        "full_report_md TEXT NOT NULL DEFAULT ''",
+        "report_artifact JSONB NOT NULL DEFAULT '{}'::jsonb",
+    ]
+
+    for column in expected_columns:
+        assert column in sql
+
+    expected_alters = [
+        "ADD COLUMN IF NOT EXISTS core_report_md TEXT NOT NULL DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS support_appendix_md TEXT NOT NULL DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS audit_log_md TEXT NOT NULL DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS full_report_md TEXT NOT NULL DEFAULT ''",
+        "ADD COLUMN IF NOT EXISTS report_artifact JSONB NOT NULL DEFAULT '{}'::jsonb",
+    ]
+
+    for alter in expected_alters:
+        assert alter in sql
+
+
 def test_phase4_workspace_members_schema_is_present() -> None:
     sql = Path("backend/db/postgres/001_enterprise_core.sql").read_text(encoding="utf-8")
 
