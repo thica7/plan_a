@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from packages.agents.writer.publication_contract import validate_publication_contract
 from packages.agents.writer.repair import (
     apply_line_repair,
     build_writer_repair_plan,
@@ -9,6 +10,7 @@ from packages.agents.writer.repair import (
     report_regression_problem,
     section_regression_problem,
 )
+from packages.business_intel.report_sections import report_section_marker
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     AnalysisPlan,
@@ -383,6 +385,57 @@ def test_replace_markdown_section_strips_replacement_marker_for_existing_section
     assert updated.count("<!-- report-section:key=evidence_support layer=support -->") == 1
     assert "Old support" not in updated
     assert "New support. [source:pricing-1]" in updated
+
+
+def test_replace_markdown_section_preserves_schema_contract_marker_alignment() -> None:
+    original = "\n\n".join(
+        [
+            f"{report_section_marker('executive_summary', 'core')}\n"
+            "## Executive Summary\n"
+            "Keep summary. [source:raw-source-a]",
+            f"{report_section_marker('community_evidence_triangulation', 'core')}\n"
+            "## Community Evidence Triangulation\n"
+            "Community notes. [source:raw-source-a]",
+            f"{report_section_marker('side_by_side_matrix', 'core')}\n"
+            "## Side-by-Side Decision Matrix\n"
+            "| Dimension | Cursor |\n"
+            "| --- | --- |\n"
+            "| Pricing | Cited cell. [source:raw-source-a] |",
+            f"{report_section_marker('competitor_deep_dives', 'core')}\n"
+            "## Competitor Deep Dives\n"
+            "Deep dive. [source:raw-source-a]",
+            f"{report_section_marker('swot_analysis', 'core')}\n"
+            "## SWOT Analysis\n"
+            "SWOT. [source:raw-source-a]",
+            f"{report_section_marker('evidence_support', 'support')}\n"
+            "## Evidence & QA Support\n"
+            "Support. [source:raw-source-a]",
+            f"{report_section_marker('evidence_appendix', 'support')}\n"
+            "## Evidence Appendix\n"
+            "Old appendix. [source:raw-source-a]",
+        ]
+    )
+    replacement = (
+        "## Evidence Appendix\n"
+        "New appendix without internal terms. [source:raw-source-a]\n"
+    )
+
+    updated = replace_markdown_section(
+        original,
+        target_section="evidence_appendix",
+        output_language="en-US",
+        replacement_markdown=replacement,
+    )
+    result = validate_publication_contract(
+        updated,
+        structured_report=None,
+        allowed_source_ids={"raw-source-a"},
+        output_language="en-US",
+    )
+
+    assert result.passed
+    assert "Old appendix" not in updated
+    assert "New appendix without internal terms. [source:raw-source-a]" in updated
 
 
 def test_replace_markdown_section_replaces_zh_cn_heading_without_duplicate() -> None:

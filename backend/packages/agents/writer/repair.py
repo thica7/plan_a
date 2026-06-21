@@ -313,7 +313,10 @@ def replace_markdown_section(
     if target is None:
         updated = f"{markdown.rstrip()}\n\n{replacement}".strip()
         return _restore_canonical_section_order(updated, output_language)
+    target_marker = _leading_report_section_marker(markdown[target.start : target.end])
     replacement = _strip_leading_report_section_marker(replacement)
+    if target_marker:
+        replacement = f"{target_marker}\n{replacement}"
     before = markdown[: target.start].rstrip()
     after = markdown[target.end :].lstrip()
     updated = f"{before}\n\n{replacement}\n\n{after}".strip()
@@ -583,18 +586,31 @@ def _section_key_for_heading(heading: str, output_language: str) -> str | None:
 
 def _sections(markdown: str) -> list[MarkdownSection]:
     matches = list(re.finditer(r"^\s*##(?!#)\s+(.+?)\s*#*\s*$", markdown, flags=re.MULTILINE))
+    starts = [_section_start_with_marker(markdown, match.start()) for match in matches]
     sections: list[MarkdownSection] = []
     for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
+        start = starts[index]
+        end = starts[index + 1] if index + 1 < len(starts) else len(markdown)
         sections.append(
             MarkdownSection(
                 heading=match.group(1).strip(),
                 body=markdown[match.end() : end].strip(),
-                start=match.start(),
+                start=start,
                 end=end,
             )
         )
     return sections
+
+
+def _section_start_with_marker(markdown: str, heading_start: int) -> int:
+    marker_line_end = heading_start
+    while marker_line_end > 0 and markdown[marker_line_end - 1] in " \t\r\n":
+        marker_line_end -= 1
+    marker_line_start = markdown.rfind("\n", 0, marker_line_end) + 1
+    marker_line = markdown[marker_line_start:marker_line_end].strip()
+    if re.fullmatch(r"<!--\s*report-section:[^>]*-->", marker_line):
+        return marker_line_start
+    return heading_start
 
 
 def _section_aliases(section_key: str, output_language: str) -> tuple[str, ...]:
@@ -643,6 +659,15 @@ def _strip_leading_report_section_marker(markdown: str) -> str:
         while lines and not lines[0].strip():
             lines.pop(0)
     return "\n".join(lines).strip()
+
+
+def _leading_report_section_marker(markdown: str) -> str | None:
+    lines = markdown.splitlines()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if lines and re.fullmatch(r"<!--\s*report-section:[^>]*-->", lines[0].strip()):
+        return lines[0].strip()
+    return None
 
 
 USER_RESEARCH_SOURCE_TYPES = {
