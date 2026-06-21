@@ -890,7 +890,7 @@ def test_hitl_router_delegates_manual_redo_guard_to_runtime_command() -> None:
     app.dependency_overrides[get_run_service] = lambda: run_service
     client = TestClient(app)
 
-    response = client.post(f"/api/runs/{detail.id}/redo")
+    response = client.post(f"/api/runs/{detail.id}/redo", json={})
 
     assert response.status_code == 409
     assert response.json()["detail"] == "No eligible QA findings or redo limit reached."

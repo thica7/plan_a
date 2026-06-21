@@ -68,6 +68,12 @@ class HitlResumeRequest(BaseModel):
     competitor_edits: list[CompetitorEdit] = Field(default_factory=list, max_length=32)
 
 
+class RunRedoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    issue_ids: list[str] = Field(default_factory=list, max_length=16)
+
+
 class RunSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

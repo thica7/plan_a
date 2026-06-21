@@ -77,6 +77,10 @@ import type {
 } from "./types";
 import type { RunEvent } from "./sse_types";
 
+export interface RunRedoRequest {
+  issue_ids?: string[];
+}
+
 const AUTH_TOKEN_STORAGE_KEY = "competiscope.authToken";
 const USER_ID_STORAGE_KEY = "competiscope.userId";
 const USER_ROLE_STORAGE_KEY = "competiscope.userRole";
@@ -278,9 +282,10 @@ export function resumeRun(runId: string, payload: HitlResumePayload) {
   });
 }
 
-export function redoRun(runId: string) {
+export function redoRun(runId: string, payload?: RunRedoRequest) {
   return request<RunDetail>(`/runs/${runId}/redo`, {
     method: "POST",
+    body: JSON.stringify(payload ?? {}),
   });
 }
 

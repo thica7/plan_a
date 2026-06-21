@@ -7315,6 +7315,11 @@ export interface components {
             /** Blocking Metric Names */
             blocking_metric_names?: string[];
         };
+        /** RunRedoRequest */
+        RunRedoRequest: {
+            /** Issue Ids */
+            issue_ids?: string[];
+        };
         /** RunSummary */
         RunSummary: {
             /** Id */
@@ -9114,7 +9119,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunRedoRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

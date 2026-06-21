@@ -11,6 +11,7 @@ import type {
 import { useKnowledgeStore, type KnowledgeRollbackRequest, type KnowledgeRollbackResult } from "../../stores/knowledgeStore";
 import { loadProjectCore, loadProjectSignals, loadReleaseGate, loadWorkbenchProjects } from "./dataLoaders";
 import { exportReportArtifact, performReportAction, type ReportAction, type ReportExportFormat } from "./reportOperations";
+import { buildReleaseIssueRedoTarget } from "./releaseGateReview";
 import {
   buildCompetitorMap,
   buildEvidenceMap,
@@ -186,7 +187,9 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     setGateRedoResult(null);
     setError(null);
     try {
-      const updated = await redoRun(selectedVersion.run_id);
+      const issue = releaseGate?.issues.find((item) => item.id === issueId) ?? null;
+      const redoTarget = issue ? buildReleaseIssueRedoTarget(issue) : null;
+      const updated = await redoRun(selectedVersion.run_id, redoTarget ? { issue_ids: redoTarget.issueIds } : undefined);
       setGateRedoResult({ issueId, runId: updated.id, status: updated.status });
       if (selectedProject) await refreshProject(selectedProject);
     } catch (err) {

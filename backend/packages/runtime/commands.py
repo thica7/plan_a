@@ -114,6 +114,7 @@ class RequestRedoCommand(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     run_id: str = Field(min_length=1, max_length=200)
+    issue_ids: list[str] = Field(default_factory=list, max_length=16)
 
 
 class RequestApprovalCommand(BaseModel):

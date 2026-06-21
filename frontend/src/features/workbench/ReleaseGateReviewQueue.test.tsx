@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ReportReleaseGate, ReportVersionRecord } from "../../api/types";
 import { ReleaseGateReviewQueue } from "./ReleaseGateReviewQueue";
-import { buildReleaseGateReviewTasks } from "./releaseGateReview";
+import { buildReleaseGateReviewTasks, buildReleaseIssueRedoTarget } from "./releaseGateReview";
 
 const gateWithKbBlocker = {
   allowed: false,
@@ -92,6 +92,7 @@ const gateWithRunQaEvidencePair = {
             kb_document_status: "active",
           },
         ],
+        run_qa_finding_id: "qa-security-1",
       },
     },
   ],
@@ -175,5 +176,12 @@ describe("ReleaseGateReviewQueue", () => {
     ).toHaveAttribute("href", "/knowledge?document_id=kb-doc-security-v2&raw_source_id=kb-security-sso");
     expect(screen.getByText("Freshness gate")).toBeInTheDocument();
     expect(screen.getByText("121d old / 90d policy / source_age")).toBeInTheDocument();
+  });
+
+  it("builds redo targets with release gate and run QA identifiers", () => {
+    expect(buildReleaseIssueRedoTarget(gateWithRunQaEvidencePair.issues[0])).toEqual({
+      issueId: "issue-run-qa-conflict",
+      issueIds: ["issue-run-qa-conflict", "qa-security-1"],
+    });
   });
 });

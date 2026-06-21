@@ -694,10 +694,22 @@ class RunService(
             return messages or None
         return None
 
-    def can_start_redo(self, run_id: str) -> bool:
+    def can_start_redo(
+        self,
+        run_id: str,
+        *,
+        preferred_issue_ids: list[str] | None = None,
+    ) -> bool:
         record = self._runs.get(run_id)
+        if not record or not record.detail.qa_findings or self._redo_limit_reached(record.detail):
+            return False
+        if not preferred_issue_ids:
+            return True
         return bool(
-            record and record.detail.qa_findings and not self._redo_limit_reached(record.detail)
+            self._select_redo_issues(
+                record.detail,
+                preferred_issue_ids=preferred_issue_ids,
+            )
         )
 
     def has_pending_interrupt(self, run_id: str) -> bool:
@@ -1086,7 +1098,13 @@ class RunService(
             )
         return record.detail
 
-    async def run_scoped_redo(self, run_id: str, *, auto_continue: bool = False) -> None:
+    async def run_scoped_redo(
+        self,
+        run_id: str,
+        *,
+        auto_continue: bool = False,
+        preferred_issue_ids: list[str] | None = None,
+    ) -> None:
         record = self._runs.get(run_id)
         if record is None:
             return
@@ -1109,7 +1127,17 @@ class RunService(
             await self.emit(run_id, "node_completed", "hitl", None, "No QA findings to redo.")
             return
 
-        issues = self._select_redo_issues(detail)
+        issues = self._select_redo_issues(detail, preferred_issue_ids=preferred_issue_ids)
+        if not issues:
+            await self.emit(
+                run_id,
+                "node_completed",
+                "hitl",
+                None,
+                "Requested redo issue is no longer active.",
+                {"issue_ids": preferred_issue_ids or []},
+            )
+            return
         scope = self._merge_redo_scopes(issues)
         before_report = detail.report_md
         before_issue_count = len(detail.qa_findings)
@@ -1128,6 +1156,7 @@ class RunService(
             {
                 "redo_scope": scope.model_dump(mode="json"),
                 "issues": [item.model_dump(mode="json") for item in issues],
+                "requested_issue_ids": preferred_issue_ids or [],
             },
         )
         self._append_agent_message(
@@ -1142,6 +1171,7 @@ class RunService(
                 "redo_scope": scope.model_dump(mode="json"),
                 "issues": [item.model_dump(mode="json") for item in issues],
                 "issue_ids": selected_issue_ids,
+                "requested_issue_ids": preferred_issue_ids or [],
             },
         )
 
@@ -2826,6 +2856,11 @@ class RunService(
                     problem=gap.reason,
                     redo_scope=scope,
                     self_found=True,
+                    metadata={
+                        "release_gate_issue_id": gap.metadata.get("release_gate_issue_id"),
+                        "release_gate_gap_id": gap.id,
+                        "release_gate_task_id": task.id,
+                    },
                 )
             )
 
@@ -3128,12 +3163,38 @@ class RunService(
 
         return sorted(detail.qa_findings, key=rank)[0]
 
-    def _select_redo_issues(self, detail: RunDetail) -> list[QCIssue]:
+    def _select_redo_issues(
+        self,
+        detail: RunDetail,
+        *,
+        preferred_issue_ids: list[str] | None = None,
+    ) -> list[QCIssue]:
+        if preferred_issue_ids:
+            requested = {issue_id.strip() for issue_id in preferred_issue_ids if issue_id.strip()}
+            matched = [
+                issue
+                for issue in detail.qa_findings
+                if self._issue_selection_keys(issue) & requested
+            ]
+            if not matched:
+                return []
+            if len(matched) == 1:
+                return matched
+            primary = self._select_redo_issue_from_pool(matched)
+            return self._expand_redo_issue_batch(primary, matched)
+
         clustered = self._select_largest_batchable_redo_cluster(detail)
         if clustered:
             return clustered
 
         primary = self._select_redo_issue(detail)
+        return self._expand_redo_issue_batch(primary, detail.qa_findings)
+
+    def _expand_redo_issue_batch(
+        self,
+        primary: QCIssue,
+        candidates: list[QCIssue],
+    ) -> list[QCIssue]:
         primary_scope = primary.redo_scope
         if primary_scope.kind not in {"collector", "analyst"} or not primary_scope.target_subagent:
             return [primary]
@@ -3145,7 +3206,7 @@ class RunService(
             for competitor in [primary_scope.target_competitor, *primary_scope.target_competitors]
             if competitor
         }
-        for candidate in sorted(detail.qa_findings, key=lambda issue: issue.id):
+        for candidate in sorted(candidates, key=lambda issue: issue.id):
             if candidate.id in selected_ids:
                 continue
             scope = candidate.redo_scope
@@ -3169,6 +3230,35 @@ class RunService(
             if len(selected) >= 3:
                 break
         return selected
+
+    def _select_redo_issue_from_pool(self, issues: list[QCIssue]) -> QCIssue:
+        if len(issues) == 1:
+            return issues[0]
+        kind_rank = {
+            "collector": 0,
+            "analyst": 1,
+            "comparator": 2,
+            "writer_only": 3,
+            "full": 4,
+        }
+        return sorted(
+            issues,
+            key=lambda issue: (
+                {"blocker": 0, "warn": 1, "info": 2}.get(issue.severity, 3),
+                0 if issue.redo_scope.target_competitor else 1,
+                kind_rank.get(issue.redo_scope.kind, 5),
+                0 if issue.detected_by in {"schema", "citation", "coverage"} else 1,
+                issue.id,
+            ),
+        )[0]
+
+    def _issue_selection_keys(self, issue: QCIssue) -> set[str]:
+        keys = {issue.id}
+        for key in ("release_gate_issue_id", "run_qa_finding_id", "release_gate_task_id"):
+            value = issue.metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                keys.add(value.strip())
+        return keys
 
     def _select_largest_batchable_redo_cluster(self, detail: RunDetail) -> list[QCIssue]:
         if not detail.qa_findings:

@@ -13,6 +13,11 @@ export interface ReleaseIssueRollbackTarget {
   selectorSummary: string;
 }
 
+export interface ReleaseIssueRedoTarget {
+  issueId: string;
+  issueIds: string[];
+}
+
 export interface ReleaseGateReviewTask {
   id: string;
   issue: BusinessQAFinding;
@@ -190,6 +195,15 @@ export function buildReleaseIssueRollbackTarget(issue: BusinessQAFinding): Relea
   }
 
   return null;
+}
+
+export function buildReleaseIssueRedoTarget(issue: BusinessQAFinding): ReleaseIssueRedoTarget {
+  const metadata = issue.metadata ?? {};
+  const issueIds = uniqueStrings([issue.id, metadataText(metadata, "run_qa_finding_id") ?? ""]);
+  return {
+    issueId: issue.id,
+    issueIds,
+  };
 }
 
 export function releaseReviewPhaseLabel(phase: ReleaseGateReviewTask["phase"]): string {

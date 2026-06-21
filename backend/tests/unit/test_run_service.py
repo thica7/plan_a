@@ -13362,6 +13362,9 @@ async def test_release_gate_sync_creates_scoped_qa_repair_issue() -> None:
     assert issues[0].redo_scope.kind == "collector"
     assert issues[0].redo_scope.target_subagent == "pricing"
     assert issues[0].redo_scope.target_competitor == "Claude"
+    assert issues[0].metadata["release_gate_issue_id"] == "release-issue-1"
+    assert issues[0].metadata["release_gate_gap_id"]
+    assert issues[0].metadata["release_gate_task_id"]
     assert record.detail.qa_findings == issues
 
 
