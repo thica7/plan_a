@@ -195,6 +195,7 @@ describe("ReportReviewDesk release gate audit metadata", () => {
 
     expect(rows).toContainEqual({ label: "Claim issue", value: "conflicting_evidence" });
     expect(rows).toContainEqual({
+      href: "/knowledge?document_id=kb-doc-pricing-v3&raw_source_id=collector-raw-pricing-001",
       label: "KB document",
       value: "kb-doc-pricing-v3 / v3 / active",
     });
@@ -206,6 +207,7 @@ describe("ReportReviewDesk release gate audit metadata", () => {
 
     expect(rows).toContainEqual({ label: "Conflict fact", value: "support:sso" });
     expect(rows).toContainEqual({
+      href: "/knowledge?document_id=kb-doc-security-v2&raw_source_id=kb-security-sso",
       label: "Evidence pair",
       value: "kb-security-sso (supported) [kb-doc-security-v2] vs live-security-sso (unsupported)",
     });

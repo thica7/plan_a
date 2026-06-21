@@ -113,7 +113,7 @@ function ReleaseGateReviewTaskCard({
           {task.auditRows.slice(0, 6).map((row) => (
             <div key={`${task.id}-${row.label}-${row.value}`}>
               <dt>{row.label}</dt>
-              <dd>{row.value}</dd>
+              <dd>{row.href ? <a className="link link-primary" href={row.href}>{row.value}</a> : row.value}</dd>
             </div>
           ))}
         </dl>

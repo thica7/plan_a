@@ -157,7 +157,7 @@ function ReleaseIssuesPanel({
                     {auditRows.map((row) => (
                       <div key={`${row.label}-${row.value}`}>
                         <dt>{row.label}</dt>
-                        <dd>{row.value}</dd>
+                        <dd>{row.href ? <a className="link link-primary" href={row.href}>{row.value}</a> : row.value}</dd>
                       </div>
                     ))}
                   </dl>

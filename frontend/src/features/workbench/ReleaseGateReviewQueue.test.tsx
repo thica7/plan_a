@@ -168,6 +168,11 @@ describe("ReleaseGateReviewQueue", () => {
     expect(
       screen.getByText("kb-security-sso (supported) [kb-doc-security-v2] vs live-security-sso (unsupported)"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "kb-security-sso (supported) [kb-doc-security-v2] vs live-security-sso (unsupported)",
+      }),
+    ).toHaveAttribute("href", "/knowledge?document_id=kb-doc-security-v2&raw_source_id=kb-security-sso");
     expect(screen.getByText("Freshness gate")).toBeInTheDocument();
     expect(screen.getByText("121d old / 90d policy / source_age")).toBeInTheDocument();
   });

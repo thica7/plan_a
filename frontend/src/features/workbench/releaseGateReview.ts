@@ -2,6 +2,7 @@ import type { BusinessQAFinding, ReportReleaseGate } from "../../api/types";
 import type { KnowledgeRollbackRequest } from "../../stores/knowledgeStore";
 
 export interface ReleaseIssueAuditRow {
+  href?: string;
   label: string;
   value: string;
 }
@@ -82,10 +83,19 @@ export function buildReleaseIssueAuditRows(issue: BusinessQAFinding): ReleaseIss
       rows.push({
         label: "KB document",
         value: [kbDocumentId, kbVersion ? `v${kbVersion}` : "", kbStatus].filter(Boolean).join(" / "),
+        href: knowledgeLocatorHref({
+          chunkId: metadataText(item, "kb_chunk_id"),
+          documentId: kbDocumentId,
+          rawSourceId: kbRawSourceId || rawSourceId,
+        }),
       });
     }
     if (kbRawSourceId) {
-      rows.push({ label: "KB raw source", value: kbRawSourceId });
+      rows.push({
+        label: "KB raw source",
+        value: kbRawSourceId,
+        href: knowledgeLocatorHref({ rawSourceId: kbRawSourceId }),
+      });
     }
     if (collectorRunId) {
       rows.push({ label: "Collector run", value: collectorRunId });
@@ -115,6 +125,7 @@ function buildEvidencePairRow(pair: Record<string, unknown>): ReleaseIssueAuditR
   const kbSourceId = metadataText(pair, "kb_source_id");
   const kbPosition = metadataText(pair, "kb_position");
   const kbDocumentId = metadataText(pair, "kb_document_id");
+  const kbChunkId = metadataText(pair, "kb_chunk_id");
   const liveSourceId = metadataText(pair, "live_source_id");
   const livePosition = metadataText(pair, "live_position");
   if (!kbSourceId && !liveSourceId) return null;
@@ -122,7 +133,28 @@ function buildEvidencePairRow(pair: Record<string, unknown>): ReleaseIssueAuditR
     .filter(Boolean)
     .join(" ");
   const live = [liveSourceId, livePosition ? `(${livePosition})` : ""].filter(Boolean).join(" ");
-  return { label: "Evidence pair", value: `${kb || "KB source"} vs ${live || "live source"}` };
+  return {
+    href: knowledgeLocatorHref({ chunkId: kbChunkId, documentId: kbDocumentId, rawSourceId: kbSourceId }),
+    label: "Evidence pair",
+    value: `${kb || "KB source"} vs ${live || "live source"}`,
+  };
+}
+
+function knowledgeLocatorHref({
+  chunkId,
+  documentId,
+  rawSourceId,
+}: {
+  chunkId?: string | null;
+  documentId?: string | null;
+  rawSourceId?: string | null;
+}): string | undefined {
+  const params = new URLSearchParams();
+  if (documentId) params.set("document_id", documentId);
+  if (chunkId) params.set("chunk_id", chunkId);
+  if (rawSourceId) params.set("raw_source_id", rawSourceId);
+  const query = params.toString();
+  return query ? `/knowledge?${query}` : undefined;
 }
 
 export function buildReleaseIssueRollbackTarget(issue: BusinessQAFinding): ReleaseIssueRollbackTarget | null {

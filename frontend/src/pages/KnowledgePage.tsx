@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useKnowledgeStore, type KnowledgeRollbackResult } from '../stores/knowledgeStore';
 import { SourceCard } from '../components/SourceCard';
 import { UploadDrawer } from '../features/upload/UploadDrawer';
@@ -24,6 +25,10 @@ const EMPTY_ROLLBACK_FORM: RollbackFormState = {
 
 export default function KnowledgePage() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
+  const focusDocumentId = searchParams.get('document_id')?.trim() || '';
+  const focusChunkId = searchParams.get('chunk_id')?.trim() || '';
+  const focusRawSourceId = searchParams.get('raw_source_id')?.trim() || '';
   const {
     documents, loading, error, filters, page, pageSize, totalCount,
     fetchDocuments, deleteDocument, rollbackDocuments, rollbackLoading, rollbackResult, setFilter, setPage,
@@ -34,20 +39,52 @@ export default function KnowledgePage() {
   const [detailTab, setDetailTab] = useState<DetailTab>('content');
   const [uploadOpen, setUploadOpen] = useState(false);
   const [rollbackForm, setRollbackForm] = useState<RollbackFormState>(EMPTY_ROLLBACK_FORM);
+  const [linkedDocument, setLinkedDocument] = useState<typeof documents[number] | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments]);
 
-  const sorted = [...documents].sort((a, b) => {
+  useEffect(() => {
+    if (!focusRawSourceId) return;
+    setRollbackForm((current) => ({ ...current, raw_source_id: focusRawSourceId }));
+  }, [focusRawSourceId]);
+
+  useEffect(() => {
+    if (!focusDocumentId || documents.some((doc) => doc.id === focusDocumentId)) {
+      setLinkedDocument(null);
+      return;
+    }
+    let active = true;
+    fetch(`/api/knowledge/documents/${encodeURIComponent(focusDocumentId)}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((document) => {
+        if (active) setLinkedDocument(document);
+      })
+      .catch(() => {
+        if (active) setLinkedDocument(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [documents, focusDocumentId]);
+
+  const visibleDocuments =
+    linkedDocument && !documents.some((doc) => doc.id === linkedDocument.id)
+      ? [linkedDocument, ...documents]
+      : documents;
+  const sorted = [...visibleDocuments].sort((a, b) => {
     if (sortBy === 'title') return a.title.localeCompare(b.title);
     if (sortBy === 'source_type') return a.source_type.localeCompare(b.source_type);
     return new Date(b.fetched_at).getTime() - new Date(a.fetched_at).getTime();
   });
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const selectedDoc = documents.find((d) => d.id === selectedDocId) ?? null;
+  const selectedDoc = visibleDocuments.find((d) => d.id === selectedDocId) ?? null;
+  const focusedDoc = focusDocumentId
+    ? visibleDocuments.find((doc) => doc.id === focusDocumentId) ?? null
+    : null;
   const canRollbackBySelector = Boolean(
     rollbackForm.run_id.trim() || rollbackForm.raw_source_id.trim() || rollbackForm.crawl_run_id.trim(),
   );
@@ -55,8 +92,15 @@ export default function KnowledgePage() {
   const openDetail = (id: string) => {
     setSelectedDocId(id);
     setDetailTab('content');
-    dialogRef.current?.showModal();
+    showDetailDialog(dialogRef.current);
   };
+
+  useEffect(() => {
+    if (!focusDocumentId || !focusedDoc) return;
+    setSelectedDocId(focusDocumentId);
+    setDetailTab('content');
+    showDetailDialog(dialogRef.current);
+  }, [focusedDoc, focusDocumentId]);
 
   const updateRollbackField = (key: keyof RollbackFormState, value: string | boolean) => {
     setRollbackForm((current) => ({ ...current, [key]: value }));
@@ -177,7 +221,14 @@ export default function KnowledgePage() {
         <>
           <div className="grid gap-4">
             {sorted.map((doc) => (
-              <div key={doc.id} className="relative group">
+              <div
+                key={doc.id}
+                className={`relative group ${documentMatchesLocator(doc, {
+                  chunkId: focusChunkId,
+                  documentId: focusDocumentId,
+                  rawSourceId: focusRawSourceId,
+                }) ? 'ring-2 ring-primary rounded-lg' : ''}`}
+              >
                 <div onClick={() => openDetail(doc.id)} className="cursor-pointer">
                   <SourceCard
                     title={doc.title}
@@ -299,6 +350,42 @@ export default function KnowledgePage() {
       />
     </div>
   );
+}
+
+function showDetailDialog(dialog: HTMLDialogElement | null) {
+  if (!dialog || dialog.open || typeof dialog.showModal !== 'function') return;
+  dialog.showModal();
+}
+
+function documentMatchesLocator(
+  document: {
+    id: string;
+    metadata: Record<string, unknown>;
+  },
+  locator: {
+    chunkId: string;
+    documentId: string;
+    rawSourceId: string;
+  },
+) {
+  if (locator.documentId && document.id === locator.documentId) return true;
+  if (locator.rawSourceId && metadataText(document.metadata, 'raw_source_id') === locator.rawSourceId) return true;
+  if (locator.rawSourceId && metadataText(document.metadata, 'kb_raw_source_id') === locator.rawSourceId) return true;
+  if (locator.chunkId && metadataStringList(document.metadata, 'chunk_ids').includes(locator.chunkId)) return true;
+  if (locator.chunkId && metadataStringList(document.metadata, 'kb_chunk_ids').includes(locator.chunkId)) return true;
+  return false;
+}
+
+function metadataText(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  if (value === null || value === undefined || value === '') return '';
+  return String(value);
+}
+
+function metadataStringList(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item || '').trim()).filter(Boolean);
 }
 
 function RollbackResult({ result }: { result: KnowledgeRollbackResult }) {
