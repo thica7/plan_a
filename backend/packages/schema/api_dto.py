@@ -20,6 +20,12 @@ from packages.schema.models import (
     ToolCallMessage,
     TraceSpan,
 )
+from packages.schema.report_artifact import (
+    ClaimCardBundle,
+    DecisionCardBundle,
+    ReportArtifactV2,
+    SectionBrief,
+)
 
 RunStatus = Literal[
     "queued",
@@ -217,6 +223,10 @@ class RunDetail(RunSummary):
     hitl_enabled: bool = False
     active_run_fingerprint: str | None = None
     report_md: str = ""
+    claim_card_bundles: list[ClaimCardBundle] = Field(default_factory=list)
+    decision_card_bundle: DecisionCardBundle | None = None
+    section_briefs: list[SectionBrief] = Field(default_factory=list)
+    report_artifact: ReportArtifactV2 | None = None
     raw_sources: list[RawSource] = Field(default_factory=list)
     competitor_kbs: dict[str, CompetitorKB] = Field(default_factory=dict)
     competitor_knowledge: dict[str, CompetitorKnowledge] = Field(default_factory=dict)
