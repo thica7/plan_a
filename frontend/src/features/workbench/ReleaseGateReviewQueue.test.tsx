@@ -51,6 +51,52 @@ const selectedVersion = {
   evidence_ids: ["evidence-pricing-conflict"],
 } as unknown as ReportVersionRecord;
 
+const gateWithRunQaEvidencePair = {
+  allowed: false,
+  status: "blocked",
+  readiness: { score: 40 },
+  issue_count: 1,
+  blocker_count: 1,
+  warn_count: 0,
+  issues: [
+    {
+      id: "issue-run-qa-conflict",
+      rule_id: "run_qa_findings_unresolved",
+      rule_name: "Run QA finding unresolved",
+      severity: "blocker",
+      message: "Report release requires clean run-level QA.",
+      evidence_ids: ["kb-security-sso", "live-security-sso"],
+      claim_ids: [],
+      recommendation: "Run scoped redo for security.",
+      metadata: {
+        issue_kind: "source_contradiction",
+        claim_area: "support:sso",
+        source_age_days: 121,
+        freshness_policy_days: 90,
+        freshness_basis: "source_age",
+        source_evidence_pairs: [
+          {
+            claim_area: "support:sso",
+            kb_source_id: "kb-security-sso",
+            kb_position: "supported",
+            kb_document_id: "kb-doc-security-v2",
+            live_source_id: "live-security-sso",
+            live_position: "unsupported",
+          },
+        ],
+        evidence_audit_trail: [
+          {
+            raw_source_id: "kb-security-sso",
+            kb_document_id: "kb-doc-security-v2",
+            kb_document_version: 2,
+            kb_document_status: "active",
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as ReportReleaseGate;
+
 describe("ReleaseGateReviewQueue", () => {
   it("builds reviewer tasks with KB rollback context", () => {
     const [task] = buildReleaseGateReviewTasks(gateWithKbBlocker);
@@ -104,5 +150,25 @@ describe("ReleaseGateReviewQueue", () => {
 
     expect(screen.queryByRole("button", { name: /Scoped redo/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Rollback KB/i })).toBeInTheDocument();
+  });
+
+  it("renders run QA evidence pairs for reviewer triage", () => {
+    render(
+      <ReleaseGateReviewQueue
+        onRedoGateIssue={() => undefined}
+        onRollbackKbIssue={() => undefined}
+        releaseGate={gateWithRunQaEvidencePair}
+        selectedVersion={selectedVersion}
+      />,
+    );
+
+    expect(screen.getByText("Conflict fact")).toBeInTheDocument();
+    expect(screen.getByText("support:sso")).toBeInTheDocument();
+    expect(screen.getByText("Evidence pair")).toBeInTheDocument();
+    expect(
+      screen.getByText("kb-security-sso (supported) [kb-doc-security-v2] vs live-security-sso (unsupported)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Freshness gate")).toBeInTheDocument();
+    expect(screen.getByText("121d old / 90d policy / source_age")).toBeInTheDocument();
   });
 });

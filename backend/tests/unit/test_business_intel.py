@@ -1886,6 +1886,33 @@ def test_report_release_gate_warns_on_unresolved_run_qa_metadata() -> None:
                         "target_competitors": ["Cursor"],
                         "rationale": "Collect verified pricing tier evidence.",
                     },
+                    "metadata": {
+                        "issue_kind": "source_contradiction",
+                        "claim_area": "price:pro:month",
+                        "source_ids": ["kb-pricing", "live-pricing"],
+                        "source_evidence_pairs": [
+                            {
+                                "claim_area": "price:pro:month",
+                                "kb_source_id": "kb-pricing",
+                                "kb_position": "$20/month",
+                                "kb_document_id": "kb-doc-pricing-v3",
+                                "live_source_id": "live-pricing",
+                                "live_position": "$30/month",
+                            }
+                        ],
+                        "evidence_audit_trail": [
+                            {
+                                "raw_source_id": "kb-pricing",
+                                "kb_document_id": "kb-doc-pricing-v3",
+                                "kb_document_version": 3,
+                                "kb_document_status": "active",
+                            },
+                            {
+                                "raw_source_id": "live-pricing",
+                                "source_type": "webpage_verified",
+                            },
+                        ],
+                    },
                 }
             ]
         }
@@ -1905,7 +1932,19 @@ def test_report_release_gate_warns_on_unresolved_run_qa_metadata() -> None:
     assert issue.severity == "warn"
     assert issue.competitor_name == "Cursor"
     assert issue.dimension == "pricing"
+    assert issue.evidence_ids == ["kb-pricing", "live-pricing"]
+    assert issue.metadata["run_qa_finding_id"] == "qa-1"
+    assert issue.metadata["issue_kind"] == "source_contradiction"
+    assert issue.metadata["claim_area"] == "price:pro:month"
+    assert issue.metadata["source_evidence_pairs"][0]["kb_document_id"] == "kb-doc-pricing-v3"
+    assert issue.metadata["evidence_audit_trail"][0]["kb_document_id"] == "kb-doc-pricing-v3"
     assert issue.recommendation == "Collect verified pricing tier evidence."
+    quality_finding = next(
+        item
+        for item in quality_findings_from_release_gate(gate)
+        if item.source_id == issue.id
+    )
+    assert quality_finding.metadata["source_evidence_pairs"][0]["live_source_id"] == "live-pricing"
 
 
 def test_report_release_gate_blocks_blocker_run_qa_metadata() -> None:

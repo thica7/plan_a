@@ -41,6 +41,56 @@ const claimConflictGate = {
   ],
 } as unknown as ReportReleaseGate;
 
+const runQaConflictGate = {
+  allowed: false,
+  status: "blocked",
+  readiness: { score: 40 },
+  issue_count: 1,
+  blocker_count: 1,
+  warn_count: 0,
+  issues: [
+    {
+      id: "issue-run-qa-conflict",
+      rule_id: "run_qa_findings_unresolved",
+      rule_name: "Run QA finding unresolved",
+      severity: "blocker",
+      message: "Report release requires clean run-level QA.",
+      evidence_ids: ["kb-security-sso", "live-security-sso"],
+      claim_ids: [],
+      recommendation: "Run scoped redo for security.",
+      metadata: {
+        issue_kind: "source_contradiction",
+        claim_area: "support:sso",
+        source_age_days: 121,
+        freshness_policy_days: 90,
+        freshness_basis: "source_age",
+        source_evidence_pairs: [
+          {
+            claim_area: "support:sso",
+            kb_source_id: "kb-security-sso",
+            kb_position: "supported",
+            kb_document_id: "kb-doc-security-v2",
+            live_source_id: "live-security-sso",
+            live_position: "unsupported",
+          },
+        ],
+        evidence_audit_trail: [
+          {
+            raw_source_id: "kb-security-sso",
+            kb_document_id: "kb-doc-security-v2",
+            kb_document_version: 2,
+            kb_document_status: "active",
+          },
+          {
+            raw_source_id: "live-security-sso",
+            source_type: "webpage_verified",
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as ReportReleaseGate;
+
 describe("ReportReviewDesk release gate audit metadata", () => {
   it("renders KB audit trail rows for claim validation issues", () => {
     useI18n.getState().setLocale("en-US");
@@ -149,6 +199,20 @@ describe("ReportReviewDesk release gate audit metadata", () => {
       value: "kb-doc-pricing-v3 / v3 / active",
     });
     expect(rows).toContainEqual({ label: "Freshness", value: "86%" });
+  });
+
+  it("builds run QA evidence-pair audit rows from structured metadata", () => {
+    const rows = buildReleaseIssueAuditRows(runQaConflictGate.issues[0]);
+
+    expect(rows).toContainEqual({ label: "Conflict fact", value: "support:sso" });
+    expect(rows).toContainEqual({
+      label: "Evidence pair",
+      value: "kb-security-sso (supported) [kb-doc-security-v2] vs live-security-sso (unsupported)",
+    });
+    expect(rows).toContainEqual({
+      label: "Freshness gate",
+      value: "121d old / 90d policy / source_age",
+    });
   });
 
   it("builds a rollback target from KB audit metadata", () => {

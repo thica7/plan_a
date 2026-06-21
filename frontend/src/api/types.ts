@@ -54,6 +54,7 @@ export interface QCIssue {
   problem: string;
   redo_scope: RedoScope;
   self_found: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface RawSource {

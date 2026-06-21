@@ -20507,6 +20507,11 @@
             "type": "boolean",
             "title": "Self Found",
             "default": false
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
           }
         },
         "additionalProperties": false,

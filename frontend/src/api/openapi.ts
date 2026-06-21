@@ -5903,6 +5903,10 @@ export interface components {
              * @default false
              */
             self_found: boolean;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
         };
         /** QualityAgentMatrix */
         QualityAgentMatrix: {

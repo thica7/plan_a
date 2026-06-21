@@ -1046,6 +1046,7 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
         problem = str(_mapping_value(item, "problem") or _mapping_value(item, "id") or "")
         issue_id = str(_mapping_value(item, "id") or "unknown")
         recommendation = _run_qa_recommendation(item)
+        metadata = _run_qa_metadata(item, issue_id=issue_id, original_severity=original_severity)
         issues.append(
             _gate_issue(
                 "run_qa_findings_unresolved",
@@ -1056,8 +1057,10 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
                 ),
                 competitor_name=_run_qa_competitor(item),
                 dimension=_run_qa_dimension(item),
+                evidence_ids=_run_qa_evidence_ids(item, metadata),
                 severity="blocker" if original_severity == "blocker" else "warn",
                 recommendation=recommendation,
+                metadata=metadata,
             )
         )
     return issues
@@ -1094,6 +1097,45 @@ def _run_qa_recommendation(finding: object) -> str:
         if isinstance(rationale, str) and rationale.strip():
             return rationale.strip()
     return "Run scoped redo for the affected branch before publishing."
+
+
+def _run_qa_metadata(
+    finding: object,
+    *,
+    issue_id: str,
+    original_severity: str,
+) -> dict[str, object]:
+    raw_metadata = _mapping_value(finding, "metadata")
+    metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+    metadata.update(
+        {
+            "run_qa_finding_id": issue_id,
+            "run_qa_original_severity": original_severity,
+            "run_qa_detected_by": _mapping_value(finding, "detected_by") or "",
+            "run_qa_field_path": _mapping_value(finding, "field_path") or "",
+            "run_qa_target_agent": _mapping_value(finding, "target_agent") or "",
+            "run_qa_target_subagent": _run_qa_dimension(finding) or "",
+            "run_qa_target_competitor": _run_qa_competitor(finding) or "",
+        }
+    )
+    redo_scope = _mapping_value(finding, "redo_scope")
+    if isinstance(redo_scope, dict):
+        metadata["run_qa_redo_scope"] = redo_scope
+    return {key: value for key, value in metadata.items() if value not in ("", None, [])}
+
+
+def _run_qa_evidence_ids(finding: object, metadata: dict[str, object]) -> list[str]:
+    candidates: list[str] = []
+    for key in ("evidence_ids", "source_ids", "raw_source_ids"):
+        candidates.extend(_string_list(_mapping_value(finding, key)))
+        candidates.extend(_string_list(metadata.get(key)))
+    for item in _mapping_object_list(metadata.get("evidence_audit_trail")):
+        for key in ("evidence_id", "raw_source_id", "source_id"):
+            value = item.get(key)
+            if value is not None and str(value).strip():
+                candidates.append(str(value).strip())
+                break
+    return _unique_strings(candidates)
 
 
 def _readiness_issues(readiness: ProjectReadinessScore) -> list[BusinessQAFinding]:
@@ -1196,6 +1238,24 @@ def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item).strip()]
+
+
+def _unique_strings(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
+
+
+def _mapping_object_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
 
 
 def _online_failure_summary(value: object) -> str:

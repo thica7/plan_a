@@ -461,6 +461,7 @@ def _build_quality_metadata(
                 "field_path": issue.field_path,
                 "problem": issue.problem,
                 "redo_scope": issue.redo_scope.model_dump(mode="json"),
+                "metadata": issue.metadata,
             }
             for issue in run_quality_findings
         ],

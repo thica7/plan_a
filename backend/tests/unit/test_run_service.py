@@ -12509,7 +12509,11 @@ def test_collect_qa_flags_stale_kb_reused_source_for_refresh() -> None:
                 candidate_origin="rag_kb",
                 metadata={
                     "kb_retrieved": True,
+                    "kb_document_id": "kb-doc-pricing-v3",
                     "kb_document_status": "active",
+                    "kb_chunk_id": "kb-chunk-pricing-7",
+                    "kb_raw_source_id": "collector-raw-pricing-001",
+                    "kb_collector_run_id": "collector-run-1",
                     "kb_fetched_at": (_now() - timedelta(days=120)).isoformat(),
                 },
             )
@@ -12526,6 +12530,16 @@ def test_collect_qa_flags_stale_kb_reused_source_for_refresh() -> None:
     assert freshness[0].target_agent == "collector"
     assert freshness[0].redo_scope.kind == "collector"
     assert "45-day freshness policy" in freshness[0].problem
+    assert freshness[0].metadata["issue_kind"] == "source_freshness"
+    assert freshness[0].metadata["freshness_policy_days"] == 45
+    assert freshness[0].metadata["source_ids"] == ["stale-kb-pricing"]
+    assert int(freshness[0].metadata["source_age_days"]) >= 119
+    audit = freshness[0].metadata["evidence_audit_trail"][0]
+    assert audit["raw_source_id"] == "stale-kb-pricing"
+    assert audit["kb_document_id"] == "kb-doc-pricing-v3"
+    assert audit["kb_chunk_id"] == "kb-chunk-pricing-7"
+    assert audit["kb_raw_source_id"] == "collector-raw-pricing-001"
+    assert audit["kb_collector_run_id"] == "collector-run-1"
 
 
 def test_collect_qa_flags_kb_live_source_contradiction() -> None:
@@ -12566,7 +12580,9 @@ def test_collect_qa_flags_kb_live_source_contradiction() -> None:
                 candidate_origin="rag_kb",
                 metadata={
                     "kb_retrieved": True,
+                    "kb_document_id": "kb-doc-security-v2",
                     "kb_document_status": "active",
+                    "kb_chunk_id": "kb-chunk-security-4",
                     "kb_fetched_at": _now().isoformat(),
                 },
             ),
@@ -12587,7 +12603,9 @@ def test_collect_qa_flags_kb_live_source_contradiction() -> None:
 
     issues = service._build_collect_qa_issues(detail)
     contradictions = [
-        issue for issue in issues if issue.field_path == "raw_sources[security][Acme].contradictions"
+        issue
+        for issue in issues
+        if issue.field_path == "raw_sources[security][Acme].contradictions"
     ]
 
     assert contradictions
@@ -12595,6 +12613,24 @@ def test_collect_qa_flags_kb_live_source_contradiction() -> None:
     assert contradictions[0].detected_by == "consistency"
     assert contradictions[0].redo_scope.kind == "collector"
     assert "support:sso" in contradictions[0].problem
+    assert contradictions[0].metadata["issue_kind"] == "source_contradiction"
+    assert contradictions[0].metadata["claim_area"] == "support:sso"
+    assert contradictions[0].metadata["source_ids_by_position"] == {
+        "supported": ["kb-security-sso"],
+        "unsupported": ["live-security-sso"],
+    }
+    pair = contradictions[0].metadata["source_evidence_pairs"][0]
+    assert pair["kb_source_id"] == "kb-security-sso"
+    assert pair["kb_position"] == "supported"
+    assert pair["kb_document_id"] == "kb-doc-security-v2"
+    assert pair["live_source_id"] == "live-security-sso"
+    assert pair["live_position"] == "unsupported"
+    audit_by_id = {
+        item["raw_source_id"]: item
+        for item in contradictions[0].metadata["evidence_audit_trail"]
+    }
+    assert audit_by_id["kb-security-sso"]["kb_chunk_id"] == "kb-chunk-security-4"
+    assert audit_by_id["live-security-sso"]["is_kb_reuse"] is False
 
 
 @pytest.mark.asyncio

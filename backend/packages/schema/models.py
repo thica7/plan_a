@@ -36,6 +36,7 @@ class QCIssue(BaseModel):
     problem: str
     redo_scope: RedoScope
     self_found: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class RedoScopeSeedCase(BaseModel):

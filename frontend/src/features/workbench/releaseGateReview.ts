@@ -51,6 +51,18 @@ export function buildReleaseIssueAuditRows(issue: BusinessQAFinding): ReleaseIss
   if (conflictIds.length > 0) {
     rows.push({ label: "Conflict evidence", value: conflictIds.join(", ") });
   }
+  const claimArea = metadataText(metadata, "claim_area");
+  if (claimArea) {
+    rows.push({ label: "Conflict fact", value: claimArea });
+  }
+  const freshnessRow = buildFreshnessGateRow(metadata);
+  if (freshnessRow) {
+    rows.push(freshnessRow);
+  }
+  for (const pair of metadataObjectList(metadata["source_evidence_pairs"]).slice(0, 2)) {
+    const pairRow = buildEvidencePairRow(pair);
+    if (pairRow) rows.push(pairRow);
+  }
 
   const trail = metadataObjectList(metadata["evidence_audit_trail"]);
   for (const item of trail.slice(0, 2)) {
@@ -84,6 +96,33 @@ export function buildReleaseIssueAuditRows(issue: BusinessQAFinding): ReleaseIss
   }
 
   return rows.slice(0, 10);
+}
+
+function buildFreshnessGateRow(metadata: Record<string, unknown>): ReleaseIssueAuditRow | null {
+  const ageDays = metadataNumber(metadata, "source_age_days");
+  const policyDays = metadataNumber(metadata, "freshness_policy_days");
+  const basis = metadataText(metadata, "freshness_basis");
+  if (ageDays === null && policyDays === null && !basis) return null;
+  const parts = [
+    ageDays !== null ? `${ageDays}d old` : "",
+    policyDays !== null ? `${policyDays}d policy` : "",
+    basis ?? "",
+  ].filter(Boolean);
+  return { label: "Freshness gate", value: parts.join(" / ") };
+}
+
+function buildEvidencePairRow(pair: Record<string, unknown>): ReleaseIssueAuditRow | null {
+  const kbSourceId = metadataText(pair, "kb_source_id");
+  const kbPosition = metadataText(pair, "kb_position");
+  const kbDocumentId = metadataText(pair, "kb_document_id");
+  const liveSourceId = metadataText(pair, "live_source_id");
+  const livePosition = metadataText(pair, "live_position");
+  if (!kbSourceId && !liveSourceId) return null;
+  const kb = [kbSourceId, kbPosition ? `(${kbPosition})` : "", kbDocumentId ? `[${kbDocumentId}]` : ""]
+    .filter(Boolean)
+    .join(" ");
+  const live = [liveSourceId, livePosition ? `(${livePosition})` : ""].filter(Boolean).join(" ");
+  return { label: "Evidence pair", value: `${kb || "KB source"} vs ${live || "live source"}` };
 }
 
 export function buildReleaseIssueRollbackTarget(issue: BusinessQAFinding): ReleaseIssueRollbackTarget | null {
