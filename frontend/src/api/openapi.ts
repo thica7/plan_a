@@ -431,6 +431,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/documents/{document_id}/chunks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Knowledge Document Chunks */
+        get: operations["get_knowledge_document_chunks_api_knowledge_documents__document_id__chunks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/knowledge/documents/{document_id}/versions": {
         parameters: {
             query?: never;
@@ -4723,6 +4740,35 @@ export interface components {
             use_cases?: string[];
             /** Content Hash */
             content_hash: string;
+        };
+        /**
+         * KnowledgeChunk
+         * @description A text chunk vectorised and stored in Qdrant.
+         */
+        KnowledgeChunk: {
+            /** Id */
+            id: string;
+            /** Document Id */
+            document_id: string;
+            /** Chunk Index */
+            chunk_index: number;
+            /** Text */
+            text: string;
+            /** Token Count */
+            token_count: number;
+            /** Embedding Model */
+            embedding_model: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Crawl Run Id */
+            crawl_run_id?: string | null;
+            /**
+             * Metadata
+             * @default {}
+             */
+            metadata: {
+                [key: string]: unknown;
+            };
         };
         /** KnowledgeClaim */
         KnowledgeClaim: {
@@ -9588,6 +9634,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_knowledge_document_chunks_api_knowledge_documents__document_id__chunks_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeChunk"][];
+                };
             };
             /** @description Validation Error */
             422: {

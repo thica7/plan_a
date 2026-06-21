@@ -29,6 +29,7 @@ from packages.knowledge.eval import RetrievalLabel, evaluate_retrieval
 from packages.knowledge.ingestion import IngestionPipeline
 from packages.knowledge.models import (
     DocumentCreate,
+    KnowledgeChunk,
     KnowledgeDocument,
     KnowledgeRollbackResult,
     RetrievalRequest,
@@ -255,6 +256,24 @@ async def get_knowledge_document(
         if document is None:
             raise HTTPException(status_code=404, detail="Document not found")
         return document
+    except HTTPException:
+        raise
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/knowledge/documents/{document_id}/chunks", response_model=list[KnowledgeChunk])
+async def get_knowledge_document_chunks(
+    document_id: str,
+    repo: RepositoryDep,
+    user: EnterpriseUserDep,
+) -> list[KnowledgeChunk]:
+    _require_kb_access(user, "memory:read")
+    try:
+        document = await repo.get_document(document_id)
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return await repo.get_chunks_for_document(document_id)
     except HTTPException:
         raise
     except RuntimeError as exc:

@@ -50,7 +50,22 @@ describe("KnowledgePage deep links", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse([linkedDocument], { "X-Total-Count": "1" }))
-      .mockResolvedValueOnce(jsonResponse(linkedDocument));
+      .mockResolvedValueOnce(jsonResponse(linkedDocument))
+      .mockResolvedValueOnce(
+        jsonResponse([
+          {
+            id: "kb-chunk-security-4",
+            document_id: "kb-doc-security-v2",
+            chunk_index: 4,
+            text: "Focused chunk: Acme supports SSO in the active security docs.",
+            token_count: 10,
+            embedding_model: "hash",
+            content_hash: "hash-chunk",
+            crawl_run_id: null,
+            metadata: {},
+          },
+        ]),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     render(
@@ -64,9 +79,11 @@ describe("KnowledgePage deep links", () => {
     );
 
     expect(await screen.findAllByText("Acme security docs")).not.toHaveLength(0);
+    expect(await screen.findByText(/Focused chunk: Acme supports SSO/)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Raw source ID")).toHaveValue("kb-security-sso"));
     expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents?page=1&page_size=10");
     expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents/kb-doc-security-v2");
+    expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents/kb-doc-security-v2/chunks");
   });
 });
 

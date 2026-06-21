@@ -16,6 +16,18 @@ export interface KnowledgeDocument {
   metadata: Record<string, unknown>;
 }
 
+export interface KnowledgeChunk {
+  id: string;
+  document_id: string;
+  chunk_index: number;
+  text: string;
+  token_count: number;
+  embedding_model: string;
+  content_hash: string;
+  crawl_run_id?: string | null;
+  metadata: Record<string, unknown>;
+}
+
 export interface KnowledgeRollbackRequest {
   document_ids?: string[];
   run_id?: string | null;

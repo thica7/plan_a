@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useKnowledgeStore, type KnowledgeRollbackResult } from '../stores/knowledgeStore';
+import { useKnowledgeStore, type KnowledgeChunk, type KnowledgeRollbackResult } from '../stores/knowledgeStore';
 import { SourceCard } from '../components/SourceCard';
 import { UploadDrawer } from '../features/upload/UploadDrawer';
 import { VersionDrawer } from '../features/version/VersionDrawer';
@@ -40,6 +40,8 @@ export default function KnowledgePage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [rollbackForm, setRollbackForm] = useState<RollbackFormState>(EMPTY_ROLLBACK_FORM);
   const [linkedDocument, setLinkedDocument] = useState<typeof documents[number] | null>(null);
+  const [documentChunks, setDocumentChunks] = useState<KnowledgeChunk[]>([]);
+  const [chunksLoading, setChunksLoading] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -102,6 +104,29 @@ export default function KnowledgePage() {
     showDetailDialog(dialogRef.current);
   }, [focusedDoc, focusDocumentId]);
 
+  useEffect(() => {
+    if (!selectedDocId) {
+      setDocumentChunks([]);
+      return;
+    }
+    let active = true;
+    setChunksLoading(true);
+    fetch(`/api/knowledge/documents/${encodeURIComponent(selectedDocId)}/chunks`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then((chunks) => {
+        if (active) setDocumentChunks(Array.isArray(chunks) ? chunks : []);
+      })
+      .catch(() => {
+        if (active) setDocumentChunks([]);
+      })
+      .finally(() => {
+        if (active) setChunksLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedDocId]);
+
   const updateRollbackField = (key: keyof RollbackFormState, value: string | boolean) => {
     setRollbackForm((current) => ({ ...current, [key]: value }));
   };
@@ -118,6 +143,10 @@ export default function KnowledgePage() {
       restore_previous: rollbackForm.restore_previous,
     });
   };
+
+  const focusedChunk = focusChunkId
+    ? documentChunks.find((chunk) => chunk.id === focusChunkId) ?? null
+    : null;
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -324,9 +353,19 @@ export default function KnowledgePage() {
                 </button>
               </div>
               {detailTab === 'content' ? (
-                <div className="overflow-y-auto max-h-96 whitespace-pre-wrap text-sm">
-                  {selectedDoc.markdown || selectedDoc.text}
-                </div>
+                <>
+                  {focusChunkId || focusRawSourceId ? (
+                    <FocusedLocatorPanel
+                      chunkId={focusChunkId}
+                      chunk={focusedChunk}
+                      chunksLoading={chunksLoading}
+                      rawSourceId={focusRawSourceId}
+                    />
+                  ) : null}
+                  <div className="overflow-y-auto max-h-96 whitespace-pre-wrap text-sm">
+                    {selectedDoc.markdown || selectedDoc.text}
+                  </div>
+                </>
               ) : (
                 <VersionDrawer documentId={selectedDoc.id} onMerged={fetchDocuments} />
               )}
@@ -349,6 +388,40 @@ export default function KnowledgePage() {
         onComplete={fetchDocuments}
       />
     </div>
+  );
+}
+
+function FocusedLocatorPanel({
+  chunk,
+  chunkId,
+  chunksLoading,
+  rawSourceId,
+}: {
+  chunk: KnowledgeChunk | null;
+  chunkId: string;
+  chunksLoading: boolean;
+  rawSourceId: string;
+}) {
+  return (
+    <section className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm" aria-label="Focused KB locator">
+      <div className="mb-2 flex flex-wrap gap-2">
+        {chunkId ? <span className="badge badge-primary badge-outline">chunk {chunkId}</span> : null}
+        {rawSourceId ? <span className="badge badge-ghost">raw source {rawSourceId}</span> : null}
+      </div>
+      {chunkId ? (
+        chunksLoading ? (
+          <p className="text-base-content/60">Loading focused chunk...</p>
+        ) : chunk ? (
+          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-base-100 p-3 text-xs">
+            {chunk.text}
+          </pre>
+        ) : (
+          <p className="text-base-content/60">Focused chunk was not found in this document.</p>
+        )
+      ) : (
+        <p className="text-base-content/60">Use the raw source selector above to rollback or inspect related evidence.</p>
+      )}
+    </section>
   );
 }
 
