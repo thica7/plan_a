@@ -1,5 +1,9 @@
 # Hybrid Report Artifact v2 Implementation Plan
 
+> Superseded by
+> [Card-Native Report Artifact v2 Design](../specs/2026-06-21-card-native-report-artifact-v2-design.md).
+> Kept for history only. Do not implement this plan as the active plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the hybrid report pipeline where evidence becomes claim cards, claim cards become decision cards, cards become section briefs, natural writer prose is assembled deterministically, and Report Artifact v2 becomes the product/publication boundary.

@@ -1,7 +1,7 @@
 # Report Artifact v2 Dual-Layer Design
 
 > Superseded by
-> [Hybrid Report Artifact v2 Design](2026-06-21-hybrid-report-artifact-v2-design.md).
+> [Card-Native Report Artifact v2 Design](2026-06-21-card-native-report-artifact-v2-design.md).
 > Kept for history only. Do not implement this design as the active plan.
 
 ## Status

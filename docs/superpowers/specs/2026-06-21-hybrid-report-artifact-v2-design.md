@@ -1,8 +1,14 @@
 # Hybrid Report Artifact v2 Design
 
+> Superseded by
+> [Card-Native Report Artifact v2 Design](2026-06-21-card-native-report-artifact-v2-design.md).
+> Kept for history only. Do not implement this design as the active plan.
+
 ## Status
 
-Canonical design. This supersedes
+Historical design. Superseded by
+`docs/superpowers/specs/2026-06-21-card-native-report-artifact-v2-design.md`.
+This document previously superseded
 `docs/superpowers/specs/2026-06-21-report-artifact-v2-dual-layer-design.md`.
 
 The older dual-layer design correctly identified the product boundary problem,
