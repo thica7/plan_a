@@ -104,6 +104,7 @@ from packages.schema.models import (
     RawSource,
     RedoScope,
     ReflectionRecord,
+    RevisionRecord,
     RunMetrics,
     ToolCallMessage,
     TraceSpan,
@@ -229,6 +230,7 @@ class PendingGraphRedo:
     issue_ids: list[str]
     qa_issue_ids_before: list[str]
     issue_count_before: int
+    structured_targets: dict[str, Any] = field(default_factory=dict)
     auto_continue: bool = False
 
 
@@ -1117,16 +1119,26 @@ class RunService(
         detail.status = "running"
         detail.updated_at = datetime.utcnow()
         self._persist_run(run_id)
+        structured_targets = self._structured_redo_targets(issues)
+        event_metadata = {
+            "redo_scope": scope.model_dump(mode="json"),
+            "issues": [item.model_dump(mode="json") for item in issues],
+        }
+        redo_payload = {
+            "redo_scope": scope.model_dump(mode="json"),
+            "issues": [item.model_dump(mode="json") for item in issues],
+            "issue_ids": selected_issue_ids,
+        }
+        if structured_targets:
+            event_metadata["structured_targets"] = structured_targets
+            redo_payload["structured_targets"] = structured_targets
         await self.emit(
             run_id,
             "node_started",
             "orchestrator",
             scope.target_subagent,
             f"Scoped redo started: {scope.kind}.",
-            {
-                "redo_scope": scope.model_dump(mode="json"),
-                "issues": [item.model_dump(mode="json") for item in issues],
-            },
+            event_metadata,
         )
         self._append_agent_message(
             record,
@@ -1136,11 +1148,7 @@ class RunService(
             else "orchestrator",
             message_type="redo_request",
             payload_schema="RedoRequestPayload",
-            payload={
-                "redo_scope": scope.model_dump(mode="json"),
-                "issues": [item.model_dump(mode="json") for item in issues],
-                "issue_ids": selected_issue_ids,
-            },
+            payload=redo_payload,
         )
 
         try:
@@ -1155,6 +1163,7 @@ class RunService(
                     issue_ids=selected_issue_ids,
                     qa_issue_ids_before=before_issue_ids,
                     issue_count_before=before_issue_count,
+                    structured_targets=structured_targets,
                     auto_continue=auto_continue,
                 )
                 await self._record_pending_graph_redo(record)
@@ -1169,6 +1178,7 @@ class RunService(
                 issue_ids=selected_issue_ids,
                 qa_issue_ids_before=before_issue_ids,
                 issue_count_before=before_issue_count,
+                structured_targets=structured_targets,
                 auto_continue=auto_continue,
             )
             await self._run_real_scoped_redo(record, scope)
@@ -2054,6 +2064,7 @@ class RunService(
         before_issue_ids = [item.id for item in detail.qa_findings]
         selected_issue_ids = [item.id for item in issues]
         revision_iteration = len(detail.revisions) + 1
+        structured_targets = self._structured_redo_targets(issues)
         record.pending_graph_redo = PendingGraphRedo(
             iteration=revision_iteration,
             stage=scope.kind,
@@ -2063,7 +2074,16 @@ class RunService(
             issue_ids=selected_issue_ids,
             qa_issue_ids_before=before_issue_ids,
             issue_count_before=len(detail.qa_findings),
+            structured_targets=structured_targets,
         )
+        redo_payload = {
+            "redo_scope": scope.model_dump(mode="json"),
+            "issues": [item.model_dump(mode="json") for item in issues],
+            "issue_ids": selected_issue_ids,
+            "routing": "graph_conditional_edge",
+        }
+        if structured_targets:
+            redo_payload["structured_targets"] = structured_targets
         self._append_agent_message(
             record,
             from_agent="qa",
@@ -2072,25 +2092,23 @@ class RunService(
             else "orchestrator",
             message_type="redo_request",
             payload_schema="RedoRequestPayload",
-            payload={
-                "redo_scope": scope.model_dump(mode="json"),
-                "issues": [item.model_dump(mode="json") for item in issues],
-                "issue_ids": selected_issue_ids,
-                "routing": "graph_conditional_edge",
-            },
+            payload=redo_payload,
         )
         dimensions, target_competitors = self._prepare_redo_scope_inputs(detail, scope)
+        event_metadata = {
+            "redo_scope": scope.model_dump(mode="json"),
+            "dimensions": dimensions,
+            "target_competitors": target_competitors,
+        }
+        if structured_targets:
+            event_metadata["structured_targets"] = structured_targets
         await self.emit(
             detail.id,
             "node_started",
             "orchestrator",
             scope.target_subagent,
             f"QA routed graph redo through DAG edge: {scope.kind}.",
-            {
-                "redo_scope": scope.model_dump(mode="json"),
-                "dimensions": dimensions,
-                "target_competitors": target_competitors,
-            },
+            event_metadata,
         )
         return {
             "redo_kind": scope.kind,
@@ -2724,29 +2742,42 @@ class RunService(
         metadata = dict(projection.report_version.quality_metadata)
         initial_gaps = quality_gaps_from_release_gate(gate)
         initial_tasks = repair_tasks_from_gaps(initial_gaps)
-        report_repair = apply_release_gate_warning_report_repair(
-            projection.report_version.report_md,
-            gate=gate,
-            tasks=initial_tasks,
-        )
         gate_for_metadata = gate
-        if report_repair.changed:
-            projection.report_version = projection.report_version.model_copy(
-                update={"report_md": report_repair.report_md}
+        report_repair_metadata: dict[str, Any]
+        if projection.report_version.report_artifact is None:
+            report_repair = apply_release_gate_warning_report_repair(
+                projection.report_version.report_md,
+                gate=gate,
+                tasks=initial_tasks,
             )
-            after_gate = self._evaluate_report_release_gate(projection)
-            if after_gate is not None:
-                gate_for_metadata = after_gate
-                report_repair = apply_release_gate_warning_report_repair(
-                    projection.report_version.report_md,
-                    gate=gate,
-                    tasks=initial_tasks,
-                    after_gate=after_gate,
+            if report_repair.changed:
+                projection.report_version = projection.report_version.model_copy(
+                    update={"report_md": report_repair.report_md}
                 )
-                if report_repair.changed:
-                    projection.report_version = projection.report_version.model_copy(
-                        update={"report_md": report_repair.report_md}
+                after_gate = self._evaluate_report_release_gate(projection)
+                if after_gate is not None:
+                    gate_for_metadata = after_gate
+                    report_repair = apply_release_gate_warning_report_repair(
+                        projection.report_version.report_md,
+                        gate=gate,
+                        tasks=initial_tasks,
+                        after_gate=after_gate,
                     )
+                    if report_repair.changed:
+                        projection.report_version = projection.report_version.model_copy(
+                            update={"report_md": report_repair.report_md}
+                        )
+            report_repair_metadata = report_repair.metadata()
+        else:
+            self._attach_release_gate_artifact_quality(projection, gate)
+            report_repair_metadata = {
+                "changed": False,
+                "skipped": "report_artifact_v2",
+                "before_warn_count": gate.warn_count,
+                "before_blocker_count": gate.blocker_count,
+                "target_count": 0,
+                "targets": [],
+            }
         gaps = quality_gaps_from_release_gate(gate_for_metadata)
         tasks = repair_tasks_from_gaps(gaps)
         release_gate_metadata = {
@@ -2782,7 +2813,7 @@ class RunService(
                 for issue in gate_for_metadata.issues
             ],
             "repair_tasks": [task.model_dump(mode="json") for task in tasks],
-            "warning_repair": report_repair.metadata(),
+            "warning_repair": report_repair_metadata,
             "redo_scopes": [
                 scope.model_dump(mode="json")
                 for scope in repair_tasks_to_redo_scopes(tasks)
@@ -2804,6 +2835,51 @@ class RunService(
             update={"quality_metadata": metadata}
         )
         return True
+
+    def _attach_release_gate_artifact_quality(
+        self,
+        projection: EnterpriseRunProjection,
+        gate: ReportReleaseGate,
+    ) -> None:
+        artifact = projection.report_version.report_artifact
+        if artifact is None:
+            return
+
+        warnings = list(artifact.quality.warnings)
+        blockers = list(artifact.quality.blockers)
+        seen_warning_ids = {str(item.get("id")) for item in warnings if item.get("id")}
+        seen_blocker_ids = {str(item.get("id")) for item in blockers if item.get("id")}
+        for issue in gate.issues:
+            payload = (
+                issue.model_dump(mode="json")
+                if hasattr(issue, "model_dump")
+                else dict(issue)
+            )
+            issue_id = str(payload.get("id") or "")
+            if issue.severity == "blocker":
+                if issue_id and issue_id in seen_blocker_ids:
+                    continue
+                blockers.append(payload)
+                if issue_id:
+                    seen_blocker_ids.add(issue_id)
+            else:
+                if issue_id and issue_id in seen_warning_ids:
+                    continue
+                warnings.append(payload)
+                if issue_id:
+                    seen_warning_ids.add(issue_id)
+
+        projection.report_version = projection.report_version.model_copy(
+            update={
+                "report_artifact": artifact.model_copy(
+                    update={
+                        "quality": artifact.quality.model_copy(
+                            update={"warnings": warnings, "blockers": blockers}
+                        )
+                    }
+                )
+            }
+        )
 
     def _apply_release_gate_run_status(
         self,
@@ -2872,6 +2948,7 @@ class RunService(
                     problem=gap.reason,
                     redo_scope=scope,
                     self_found=True,
+                    metadata=dict(gap.metadata),
                 )
             )
 
@@ -2953,9 +3030,16 @@ class RunService(
                     f"Revision {latest.iteration} final quality counts recorded with "
                     f"convergence ratio {latest.convergence_ratio:.2f}."
                 ),
-                {"revision": latest_payload},
+                self._revision_recorded_payload(latest),
             )
             return
+
+    def _revision_recorded_payload(self, revision: RevisionRecord) -> dict[str, Any]:
+        payload: dict[str, Any] = {"revision": revision.model_dump(mode="json")}
+        structured_targets = revision.metadata.get("structured_targets")
+        if structured_targets:
+            payload["structured_targets"] = structured_targets
+        return payload
 
     def _release_gate_detected_by(self, scope: RedoScope) -> str:
         if scope.kind == "writer_only":
@@ -3152,8 +3236,18 @@ class RunService(
         issue_ids: list[str],
         qa_issue_ids_before: list[str],
         issue_count_before: int,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         detail = record.detail
+        revision_metadata = dict(metadata or {})
+        if "structured_targets" not in revision_metadata:
+            selected_issue_ids = set(issue_ids)
+            selected_issues = [
+                issue for issue in detail.qa_findings if issue.id in selected_issue_ids
+            ]
+            structured_targets = self._structured_redo_targets(selected_issues)
+            if structured_targets:
+                revision_metadata["structured_targets"] = structured_targets
         revision = build_revision_record(
             detail,
             iteration=iteration,
@@ -3164,6 +3258,7 @@ class RunService(
             issue_ids=issue_ids,
             qa_issue_ids_before=qa_issue_ids_before,
             issue_count_before=issue_count_before,
+            metadata=revision_metadata,
         )
         detail.revisions.append(revision)
         detail.updated_at = datetime.utcnow()
@@ -3177,7 +3272,7 @@ class RunService(
                 f"Revision {iteration} recorded with convergence ratio "
                 f"{revision.convergence_ratio:.2f}."
             ),
-            {"revision": revision.model_dump(mode="json")},
+            self._revision_recorded_payload(revision),
         )
 
     async def _record_pending_graph_redo(self, record: RunRecord) -> None:
@@ -3195,6 +3290,11 @@ class RunService(
             issue_ids=pending.issue_ids,
             qa_issue_ids_before=pending.qa_issue_ids_before,
             issue_count_before=pending.issue_count_before,
+            metadata=(
+                {"structured_targets": pending.structured_targets}
+                if pending.structured_targets
+                else None
+            ),
         )
 
     def _convergence_ratio(self, issue_count_before: int, issue_count_after: int) -> float:
@@ -3357,6 +3457,30 @@ class RunService(
                 + "; ".join(issue.problem for issue in issues[:3])
             ),
         )
+
+    def _structured_redo_targets(self, issues: list[QCIssue]) -> dict[str, Any]:
+        structured_targets: dict[str, Any] = {}
+        for issue in issues:
+            issue_targets = {
+                "source_id": issue.metadata.get("source_id"),
+                "claim_card_id": issue.metadata.get("claim_card_id"),
+                "decision_card_id": issue.metadata.get("decision_card_id"),
+                "section_key": issue.metadata.get("section_key"),
+                "artifact_layer": issue.metadata.get("artifact_layer"),
+            }
+            issue_targets = {
+                key: value for key, value in issue_targets.items() if value
+            }
+            for key, value in issue_targets.items():
+                existing = structured_targets.get(key)
+                if existing is None:
+                    structured_targets[key] = value
+                elif existing != value:
+                    values = existing if isinstance(existing, list) else [existing]
+                    if value not in values:
+                        values.append(value)
+                    structured_targets[key] = values
+        return structured_targets
 
     def _redo_scope_key(self, scope: RedoScope) -> str:
         competitors = (

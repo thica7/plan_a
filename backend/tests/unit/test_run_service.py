@@ -27,6 +27,7 @@ from packages.memory import PreferenceMemoryStore, RunJournal
 from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import PendingGraphRedo, RunRecord, RunService
+from packages.report_artifact.legacy_adapter import legacy_report_artifact
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
@@ -6063,6 +6064,77 @@ def test_convergence_ratio_tracks_remaining_issue_share() -> None:
 
     assert service._convergence_ratio(4, 1) == 0.25
     assert service._convergence_ratio(0, 1) == 1.0
+
+
+@pytest.mark.asyncio
+async def test_record_revision_preserves_structured_redo_targets() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="Structured target redo",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+        )
+    )
+    record = service._runs[detail.id]
+    issue = QCIssue(
+        id="structured-target-issue",
+        severity="blocker",
+        detected_by="schema",
+        target_agent="writer",
+        target_subagent="pricing",
+        field_path="report_artifact.core_report.sections[pricing]",
+        problem="Pricing section needs repair.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="pricing",
+            rationale="Repair pricing section.",
+        ),
+        metadata={
+            "source_id": "source-pricing",
+            "claim_card_id": "claim-card-pricing",
+            "section_key": "decision_summary",
+            "artifact_layer": "core",
+        },
+    )
+    record.detail.qa_findings = [issue]
+
+    await service._record_revision(
+        record,
+        iteration=1,
+        stage="writer_only",
+        redo_scope=issue.redo_scope,
+        redo_scopes=[issue.redo_scope],
+        before_md="Before.",
+        issue_ids=[issue.id],
+        qa_issue_ids_before=[issue.id],
+        issue_count_before=1,
+    )
+
+    structured_targets = {
+        "source_id": "source-pricing",
+        "claim_card_id": "claim-card-pricing",
+        "section_key": "decision_summary",
+        "artifact_layer": "core",
+    }
+    assert record.detail.revisions[-1].metadata["structured_targets"] == structured_targets
+    revision_event = next(event for event in record.events if event.type == "revision_recorded")
+    assert revision_event.payload["structured_targets"] == structured_targets
+    assert (
+        revision_event.payload["revision"]["metadata"]["structured_targets"]
+        == structured_targets
+    )
 
 
 def test_redo_issue_selection_batches_largest_competitor_gap_cluster() -> None:
@@ -15221,6 +15293,50 @@ def test_release_gate_quality_metadata_records_blocked_status_in_report() -> Non
     assert "claim_uses_low_confidence_evidence: 1 blocker(s)" not in (
         projection.report_version.report_md
     )
+
+
+def test_v2_release_gate_does_not_apply_markdown_warning_repair() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    before = (
+        "# Report\n\n"
+        "## Final QA Gate Status\n"
+        "**Status: passed.** No unresolved deterministic QA findings were recorded."
+    )
+    artifact = legacy_report_artifact(run_id="run-v2-release-gate", report_md=before)
+    projection = EnterpriseRunProjection(
+        workspace_id="workspace-1",
+        project_id="project-1",
+        run_id="run-v2-release-gate",
+        report_version=ReportVersionRecord(
+            id="report-version-v2-release-gate",
+            workspace_id="workspace-1",
+            project_id="project-1",
+            run_id="run-v2-release-gate",
+            version_number=1,
+            topic_normalized="release-gate-v2-artifact",
+            competitor_layer="L1",
+            competitor_set_hash="hash",
+            report_md=before,
+            report_artifact=artifact,
+        ),
+    )
+    before_full = artifact.render_cache.full_markdown
+
+    service._attach_release_gate_quality_metadata(projection, _blocked_release_gate())
+
+    assert projection.report_version.report_artifact is not None
+    assert projection.report_version.report_artifact.render_cache.full_markdown == before_full
+    assert projection.report_version.report_md == before
 
 
 def test_release_gate_quality_metadata_uses_current_projection_scope() -> None:

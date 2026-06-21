@@ -9,6 +9,7 @@ from packages.agents.writer.logic import (
 from packages.business_intel import compare_run_quality
 from packages.i18n.language import report_label
 from packages.rag.grounded_prompt import format_retrieval_records_for_prompt
+from packages.report_artifact.legacy_adapter import legacy_report_artifact
 from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import EnterpriseRunProjection, EvidenceRecord, ReportVersionRecord
 from packages.schema.models import (
@@ -103,6 +104,28 @@ def test_quality_scores_thin_executive_summary_below_release_minimum() -> None:
 
     assert metrics["executive_summary_section_score"].target_value < 1.0
     assert metrics["core_section_depth_score"].target_value < 1.0
+
+
+def test_report_quality_uses_artifact_core_when_present() -> None:
+    core_markdown = "## Executive Summary\n\nCore recommendation."
+    detail = _run_detail(
+        run_id="artifact-core-quality",
+        execution_mode="real",
+        source_count=1,
+        report_md="## Evidence Support\n\n" + ("Support-only material. " * 400),
+        metrics=RunMetrics(),
+    )
+    detail.report_artifact = legacy_report_artifact(
+        run_id=detail.id,
+        report_md=core_markdown + "\n\n## Evidence Support\n\nSupport.",
+    )
+    detail.report_artifact.core_report.markdown = core_markdown
+    detail.report_artifact.render_cache.core_markdown = core_markdown
+
+    comparison = compare_run_quality(detail, baseline=detail)
+    metrics = {metric.name: metric for metric in comparison.metrics}
+
+    assert metrics["report_length_score"].target_value == min(len(core_markdown) / 2500.0, 1.0)
 
 
 def test_compare_run_quality_scores_real_run_against_baseline() -> None:

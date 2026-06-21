@@ -152,6 +152,24 @@ def compare_run_quality(
     )
 
 
+def _core_report_markdown(detail: RunDetail) -> str:
+    if detail.report_artifact is not None:
+        return detail.report_artifact.render_cache.core_markdown
+    return _legacy_core_markdown(detail.report_md)
+
+
+def _support_report_markdown(detail: RunDetail) -> str:
+    if detail.report_artifact is not None:
+        return detail.report_artifact.render_cache.support_markdown
+    return _legacy_support_markdown(detail.report_md)
+
+
+def _full_report_markdown(detail: RunDetail) -> str:
+    if detail.report_artifact is not None:
+        return detail.report_artifact.render_cache.full_markdown
+    return detail.report_md
+
+
 def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
     if detail is None:
         return _QualitySnapshot(
@@ -162,6 +180,9 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
             real_llm_signal=False,
             report_quality_signal=False,
         )
+    core_markdown = _core_report_markdown(detail)
+    support_markdown = _support_report_markdown(detail)
+    full_markdown = _full_report_markdown(detail)
     values = {
         "evidence_count": float(len(detail.raw_sources)),
         "source_coverage_rate": _ratio_or_compute(
@@ -177,32 +198,32 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
             _claim_citation_rate(detail),
         ),
         "citation_validity_rate": _citation_validity_rate(detail),
-        "report_source_token_count": float(_report_source_token_count(detail.report_md)),
+        "report_source_token_count": float(_report_source_token_count(full_markdown)),
         "real_source_rate": _real_source_rate(detail.raw_sources),
         "gap_resolution_rate": _gap_resolution_rate(detail),
         "field_support_rate": _field_support_rate(detail),
         "validated_claim_rate": _validated_claim_rate(detail),
         "llm_call_signal": min(float(detail.metrics.llm_calls) / 3.0, 1.0),
-        "report_length_score": min(len(detail.report_md) / 2500.0, 1.0),
+        "report_length_score": min(len(core_markdown) / 2500.0, 1.0),
         "report_structure_score": _report_structure_score(detail),
-        "duplicate_section_count": float(_duplicate_section_count(detail.report_md)),
+        "duplicate_section_count": float(_duplicate_section_count(full_markdown)),
         "executive_summary_section_score": _executive_summary_section_score(
-            detail.report_md
+            core_markdown
         ),
-        "decision_summary_section_score": _decision_summary_section_score(detail.report_md),
+        "decision_summary_section_score": _decision_summary_section_score(core_markdown),
         "competitive_findings_section_score": _competitive_findings_section_score(
-            detail.report_md
+            core_markdown
         ),
         "competitor_deep_dive_section_score": _competitor_deep_dive_section_score(
-            detail.report_md
+            core_markdown
         ),
         "layer_analysis_section_score": _layer_analysis_section_score(detail),
-        "core_analysis_depth_score": _core_analysis_depth_score(detail.report_md),
+        "core_analysis_depth_score": _core_analysis_depth_score(core_markdown),
         "core_section_depth_score": _core_section_depth_score(detail),
-        "core_support_balance_score": _core_support_balance_score(detail.report_md),
-        "claim_risk_section_score": _claim_risk_section_score(detail.report_md),
+        "core_support_balance_score": _core_support_balance_score(full_markdown),
+        "claim_risk_section_score": _claim_risk_section_score(support_markdown),
         "scenario_checklist_section_score": _scenario_checklist_section_score(
-            detail.report_md
+            support_markdown
         ),
         "memory_context_section_score": _memory_context_section_score(detail),
         "user_research_section_score": _user_research_section_score(detail),
@@ -264,7 +285,7 @@ def _snapshot(detail: RunDetail | None) -> _QualitySnapshot:
         or any(span.kind == "llm" and (span.provider or span.model) for span in detail.trace_spans)
     )
     report_quality_signal = (
-        len(detail.report_md) >= 1200
+        len(core_markdown) >= 1200
         and values["claim_citation_rate"] >= 0.6
         and values["citation_validity_rate"] >= 0.6
         and values["source_coverage_rate"] >= 0.5
@@ -399,7 +420,7 @@ def _signal_checks(detail: RunDetail, snapshot: _QualitySnapshot) -> list[RunQua
         llm_blockers.append("llm_call_signal")
 
     report_blockers: list[str] = []
-    if len(detail.report_md) < 1200:
+    if len(_core_report_markdown(detail)) < 1200:
         report_blockers.append("report_length_score")
     for name, minimum in [
         ("claim_citation_rate", 0.6),
@@ -534,7 +555,7 @@ def _claim_citation_rate(detail: RunDetail) -> float:
 
 
 def _citation_validity_rate(detail: RunDetail) -> float:
-    tokens = source_tokens(detail.report_md, include_malformed=True)
+    tokens = source_tokens(_full_report_markdown(detail), include_malformed=True)
     if not tokens:
         return 0.0
     aliases = _source_alias_map(detail)
@@ -883,7 +904,7 @@ def _competitor_deep_dive_section_score(markdown: str) -> float:
 
 
 def _layer_analysis_section_score(detail: RunDetail) -> float:
-    return _core_section_score(detail.report_md, _layer_section_aliases(detail))
+    return _core_section_score(_core_report_markdown(detail), _layer_section_aliases(detail))
 
 
 def _core_analysis_depth_score(markdown: str) -> float:
@@ -938,10 +959,11 @@ def _core_section_depth_score(detail: RunDetail) -> float:
         specs.insert(2, (_review_theme_section_aliases(), 500, 4))
     scores: list[float] = []
     swot_aliases = _swot_section_aliases()
+    core_markdown = _core_report_markdown(detail)
     for aliases, min_chars, min_rows in specs:
-        score = _section_depth_score(detail.report_md, aliases, min_chars, min_rows)
+        score = _section_depth_score(core_markdown, aliases, min_chars, min_rows)
         if aliases == swot_aliases:
-            section = _find_section_before_support(detail.report_md, aliases)
+            section = _find_section_before_support(core_markdown, aliases)
             if section is not None and not _has_structured_swot_quadrants(section.body):
                 score = min(score, 0.5)
             elif section is None:
@@ -994,6 +1016,18 @@ def _markdown_before_support_sections(markdown: str) -> str:
     if first_support is None:
         return report_md
     return report_md[: first_support.start].strip()
+
+
+def _legacy_core_markdown(markdown: str) -> str:
+    return _markdown_before_support_sections(markdown)
+
+
+def _legacy_support_markdown(markdown: str) -> str:
+    report_md = repair_mojibake_text(markdown)
+    first_support = _first_support_section(_report_sections(report_md))
+    if first_support is None:
+        return ""
+    return report_md[first_support.start :].strip()
 
 
 def _core_section_score(markdown: str, aliases: tuple[str, ...]) -> float:
@@ -1236,26 +1270,28 @@ def _layer_section_aliases(detail: RunDetail) -> tuple[str, ...]:
 
 
 def _report_structure_score(detail: RunDetail) -> float:
-    report_md = repair_mojibake_text(detail.report_md)
+    core_markdown = repair_mojibake_text(_core_report_markdown(detail))
+    support_markdown = repair_mojibake_text(_support_report_markdown(detail))
+    full_markdown = repair_mojibake_text(_full_report_markdown(detail))
     checks = [
         _has_heading(
-            report_md,
+            core_markdown,
             ("executive summary", "executive overview", "执行摘要", "执行概览"),
         ),
-        _decision_summary_section_score(report_md) >= 1.0,
-        _competitive_findings_section_score(report_md) >= 1.0,
-        _competitor_deep_dive_section_score(report_md) >= 1.0,
+        _decision_summary_section_score(core_markdown) >= 1.0,
+        _competitive_findings_section_score(core_markdown) >= 1.0,
+        _competitor_deep_dive_section_score(core_markdown) >= 1.0,
         _layer_analysis_section_score(detail) >= 1.0,
-        _core_analysis_depth_score(report_md) >= 0.6,
-        _has_heading(report_md, ("source quality", "source coverage", "来源质量", "来源覆盖")),
+        _core_analysis_depth_score(core_markdown) >= 0.6,
+        _has_heading(support_markdown, ("source quality", "source coverage", "来源质量", "来源覆盖")),
         _has_heading(
-            report_md,
+            core_markdown,
             ("matrix", "dimension winners", "side-by-side", "决策矩阵", "对比矩阵", "维度结论"),
         ),
-        _scenario_checklist_section_score(report_md) >= 1.0,
-        _claim_risk_section_score(report_md) >= 1.0,
+        _scenario_checklist_section_score(support_markdown) >= 1.0,
+        _claim_risk_section_score(support_markdown) >= 1.0,
         _has_heading(
-            report_md,
+            support_markdown,
             (
                 "next collection",
                 "verification plan",
@@ -1265,18 +1301,18 @@ def _report_structure_score(detail: RunDetail) -> float:
                 "证据缺口",
             ),
         ),
-        _has_heading(report_md, ("evidence appendix", "source appendix", "证据附录", "来源附录")),
+        _has_heading(support_markdown, ("evidence appendix", "source appendix", "证据附录", "来源附录")),
         _memory_context_section_score(detail) >= 1.0,
         _user_research_section_score(detail) >= 1.0,
         _review_theme_section_score(detail) >= 1.0,
         _swot_section_score(detail) >= 1.0,
-        _has_layer_heading(detail, report_md=report_md),
+        _has_layer_heading(detail, report_md=full_markdown),
     ]
     return sum(1 for item in checks if item) / len(checks)
 
 
 def _has_layer_heading(detail: RunDetail, *, report_md: str | None = None) -> bool:
-    markdown = report_md if report_md is not None else repair_mojibake_text(detail.report_md)
+    markdown = report_md if report_md is not None else repair_mojibake_text(_core_report_markdown(detail))
     return any(
         _heading_matches(section.heading, _layer_section_aliases(detail))
         for section in _report_sections(markdown)
@@ -1311,21 +1347,21 @@ def _scenario_checklist_section_score(markdown: str) -> float:
 def _memory_context_section_score(detail: RunDetail) -> float:
     if not detail.plan.memory_prompt_context and not detail.plan.memory_candidate_ids:
         return 1.0
-    report_md = repair_mojibake_text(detail.report_md)
+    report_md = repair_mojibake_text(_full_report_markdown(detail))
     return 1.0 if _has_heading(report_md, ("memory context", "memoryagent", "记忆上下文")) else 0.0
 
 
 def _user_research_section_score(detail: RunDetail) -> float:
     if not _needs_user_research_section(detail):
         return 1.0
-    report_md = repair_mojibake_text(detail.report_md)
+    report_md = repair_mojibake_text(_full_report_markdown(detail))
     return 1.0 if _has_heading(report_md, ("user research", "buyer research", "用户研究")) else 0.0
 
 
 def _review_theme_section_score(detail: RunDetail) -> float:
     if not _needs_review_theme_section(detail):
         return 1.0
-    section = _find_section_before_support(detail.report_md, _review_theme_section_aliases())
+    section = _find_section_before_support(_core_report_markdown(detail), _review_theme_section_aliases())
     return 1.0 if section is not None and _section_has_substantive_body(section) else 0.0
 
 
@@ -1333,19 +1369,19 @@ def _community_evidence_section_score(detail: RunDetail) -> float:
     if not any(source.metadata.get("community_evidence") for source in detail.raw_sources):
         return 1.0
     section = _find_section_before_support(
-        detail.report_md,
+        _full_report_markdown(detail),
         _report_label_aliases("community_evidence_triangulation"),
     )
     if section is not None and _section_has_substantive_body(section):
         return 1.0
-    body = repair_mojibake_text(detail.report_md).casefold()
+    body = repair_mojibake_text(_full_report_markdown(detail)).casefold()
     if "community observation" in body and "official" in body:
         return 0.75
     return 0.0
 
 
 def _swot_section_score(detail: RunDetail) -> float:
-    section = _find_section_before_support(detail.report_md, _swot_section_aliases())
+    section = _find_section_before_support(_core_report_markdown(detail), _swot_section_aliases())
     if section is None:
         return 0.0
     if _has_structured_swot_quadrants(section.body):
@@ -1356,7 +1392,7 @@ def _swot_section_score(detail: RunDetail) -> float:
 def _rag_gap_fill_section_score(detail: RunDetail) -> float:
     if not _needs_rag_gap_fill_section(detail):
         return 1.0
-    report_md = repair_mojibake_text(detail.report_md)
+    report_md = repair_mojibake_text(_support_report_markdown(detail))
     rag_section_aliases = (
         "rag gap fill",
         "evidence gap fill",

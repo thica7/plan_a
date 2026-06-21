@@ -36,6 +36,7 @@ class QCIssue(BaseModel):
     problem: str
     redo_scope: RedoScope
     self_found: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class RedoScopeSeedCase(BaseModel):
@@ -315,6 +316,7 @@ class RevisionRecord(BaseModel):
     issue_count_before: int = 0
     issue_count_after: int = 0
     convergence_ratio: float = Field(default=1.0, ge=0.0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from packages.identity import stable_prefixed_id
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import RedoScope, RevisionRecord
@@ -16,6 +18,7 @@ def build_revision_record(
     issue_ids: list[str],
     qa_issue_ids_before: list[str],
     issue_count_before: int,
+    metadata: dict[str, Any] | None = None,
 ) -> RevisionRecord:
     return RevisionRecord(
         id=stable_prefixed_id("revision", detail.id, iteration, stage, length=16),
@@ -32,6 +35,7 @@ def build_revision_record(
         issue_count_before=issue_count_before,
         issue_count_after=len(detail.qa_findings),
         convergence_ratio=convergence_ratio(issue_count_before, len(detail.qa_findings)),
+        metadata=metadata or {},
     )
 
 
