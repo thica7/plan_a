@@ -33,7 +33,7 @@ from packages.enterprise import (
     build_report_scope,
     build_report_version_diff,
 )
-from packages.i18n.language import report_label
+from packages.i18n.language import normalize_output_language, report_label
 from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.service import RunService
 from packages.refs import audit_relationship_resource_id
@@ -1849,7 +1849,12 @@ async def test_run_service_applies_confirmed_memory_to_plan() -> None:
     assert f"## {report_label(created.output_language, 'scenario_checklist')}" in report_md
     assert f"## {report_label(created.output_language, 'claim_risk')}" in report_md
     assert created.plan.memory_candidate_ids[0] in report_md
-    assert "Confirmed MemoryAgent guidance" in report_md
+    if normalize_output_language(created.output_language) == "zh-CN":
+        assert "已确认的 MemoryAgent 指导" in report_md
+        assert "候选 ID：" in report_md
+    else:
+        assert "Confirmed MemoryAgent guidance" in report_md
+        assert "Candidate IDs:" in report_md
 
 
 @pytest.mark.asyncio

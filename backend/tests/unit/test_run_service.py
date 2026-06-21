@@ -9265,6 +9265,7 @@ def test_real_schema_contract_writer_uses_segmented_authoring_when_enabled(
         memory_context,
         layer_context,
         required_sections,
+        segments_override=None,
         allow_required_section_backfill=True,
     ):
         return _schema_contract_segmented_zh_markdown()
@@ -9333,6 +9334,7 @@ def test_real_schema_first_success_does_not_emit_markdown_fallback(monkeypatch) 
         memory_context,
         layer_context,
         required_sections,
+        segments_override=None,
         allow_required_section_backfill=True,
     ):
         return _schema_contract_segmented_zh_markdown()
@@ -9389,6 +9391,7 @@ def test_real_schema_contract_writer_preserves_section_marker_alignment(
         memory_context,
         layer_context,
         required_sections,
+        segments_override=None,
         allow_required_section_backfill=True,
     ):
         return _marked_schema_contract_report_in_assembler_order()
@@ -9460,6 +9463,7 @@ def test_real_schema_first_uses_segmented_writer_when_pack_requires_segments(
         memory_context,
         layer_context,
         required_sections,
+        segments_override=None,
         allow_required_section_backfill=True,
     ):
         segmented_calls.append(evidence_pack_result)
@@ -9522,6 +9526,7 @@ def test_real_schema_first_writer_fails_closed_when_structured_path_fails(
         memory_context,
         layer_context,
         required_sections,
+        segments_override=None,
         allow_required_section_backfill=True,
     ):
         raise ValueError("schema-contract segment failed")
@@ -9575,6 +9580,7 @@ def test_real_schema_contract_writer_fails_closed_on_publication_contract_error(
         memory_context,
         layer_context,
         required_sections,
+        segments_override=None,
         allow_required_section_backfill=True,
     ):
         return (
@@ -9640,6 +9646,7 @@ def test_schema_contract_publication_internal_leak_repairs_target_section(
         memory_context,
         layer_context,
         required_sections,
+        segments_override=None,
         allow_required_section_backfill=True,
     ):
         return (
@@ -9984,6 +9991,7 @@ def test_structured_repair_selection_not_emitted_when_markdown_fallback_used(
         memory_context,
         layer_context,
         required_sections,
+        segments_override=None,
         allow_required_section_backfill=True,
     ):
         raise ValueError("schema-contract segment failed")
