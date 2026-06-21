@@ -90,6 +90,7 @@ def test_local_artifact_storage_rejects_empty_payload() -> None:
 
 
 def test_local_artifact_storage_reads_text_preview_with_truncation(
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     storage = LocalArtifactStorage(tmp_path)
@@ -101,6 +102,11 @@ def test_local_artifact_storage_reads_text_preview_with_truncation(
             content_text="abcdef",
         )
     )
+
+    def fail_full_file_read(self: Path) -> bytes:
+        raise AssertionError("preview must not read the full artifact into memory")
+
+    monkeypatch.setattr(Path, "read_bytes", fail_full_file_read)
 
     assert storage.read_text(artifact, max_bytes=100) == ("abcdef", False)
     assert storage.read_text(artifact, max_bytes=3) == ("abc", True)

@@ -135,7 +135,8 @@ class LocalArtifactStorage:
         if not target_path.exists() or not target_path.is_file():
             return None
         limit = max(1, max_bytes)
-        payload = target_path.read_bytes()[: limit + 1]
+        with target_path.open("rb") as handle:
+            payload = handle.read(limit + 1)
         truncated = len(payload) > limit
         if truncated:
             payload = payload[:limit]
