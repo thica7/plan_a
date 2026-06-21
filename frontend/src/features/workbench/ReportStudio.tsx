@@ -118,6 +118,7 @@ export function ReportStudio({
           {selectedVersion ? (
             <ReportView
               markdown={selectedVersion.report_md}
+              reportArtifact={selectedVersion.report_artifact ?? null}
               sourceAliases={reportSources.aliases}
               sources={reportSources.sources}
             />

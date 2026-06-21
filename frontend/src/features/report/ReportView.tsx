@@ -2,7 +2,7 @@ import { isValidElement, useMemo, useState, type MouseEvent, type ReactNode } fr
 import { useTranslation } from '../../stores/i18n';
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { RawSource } from "../../api/types";
+import type { RawSource, ReportArtifactV2 } from "../../api/types";
 import { ReportSourceTrace } from "./ReportSourceTrace";
 import {
   buildCitationLabels,
@@ -20,12 +20,23 @@ export {
   sourceTypeLabel,
 } from "./sourceTokens";
 
+export type ReportViewLayer = "report" | "evidence" | "qa" | "audit";
+
+export interface ReportLayerLabels {
+  qa: string;
+  warnings: string;
+  blockers: string;
+}
+
 interface Props {
   activeSourceId?: string | null;
+  activeLayer?: ReportViewLayer;
   layout?: "stacked" | "reader";
   markdown: string;
+  onActiveLayerChange?: (layer: ReportViewLayer) => void;
   onActiveSourceChange?: (sourceId: string | null) => void;
   readerTitle?: string;
+  reportArtifact?: ReportArtifactV2 | null;
   showSourceTrace?: boolean;
   sources: RawSource[];
   sourceAliases?: Record<string, string>;
@@ -35,22 +46,32 @@ const EMPTY_SOURCE_ALIASES: Record<string, string> = {};
 
 export function ReportView({
   activeSourceId: controlledActiveSourceId,
+  activeLayer: controlledActiveLayer,
   layout = "stacked",
   markdown,
+  onActiveLayerChange,
   onActiveSourceChange,
   readerTitle = "Report",
+  reportArtifact = null,
   showSourceTrace = true,
   sources,
   sourceAliases = EMPTY_SOURCE_ALIASES,
 }: Props) {
   const { t } = useTranslation();
   const [internalActiveSourceId, setInternalActiveSourceId] = useState<string | null>(null);
+  const [internalActiveLayer, setInternalActiveLayer] = useState<ReportViewLayer>("report");
   const activeSourceId =
     controlledActiveSourceId === undefined ? internalActiveSourceId : controlledActiveSourceId;
+  const activeLayer = controlledActiveLayer ?? internalActiveLayer;
+  const layerMarkdown = selectReportLayerMarkdown(reportArtifact, markdown, activeLayer, {
+    qa: t("report.layers.qa"),
+    warnings: t("report.layers.qaWarnings"),
+    blockers: t("report.layers.qaBlockers"),
+  });
   const sourceMap = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources]);
   const sourceGroups = useMemo(
-    () => collectSourceTokenGroups(markdown, sourceMap, sourceAliases),
-    [markdown, sourceAliases, sourceMap],
+    () => collectSourceTokenGroups(layerMarkdown, sourceMap, sourceAliases),
+    [layerMarkdown, sourceAliases, sourceMap],
   );
   const citedSourceGroups = sourceGroups.filter((group) => group.source);
   const missingSourceGroups = sourceGroups.filter((group) => !group.source);
@@ -60,8 +81,8 @@ export function ReportView({
   );
   const citationLabels = useMemo(() => buildCitationLabels(sourceGroups), [sourceGroups]);
   const linkedMarkdown = useMemo(
-    () => linkSourceTokens(markdown, sourceMap, sourceAliases, citationLabels),
-    [citationLabels, markdown, sourceAliases, sourceMap],
+    () => linkSourceTokens(layerMarkdown, sourceMap, sourceAliases, citationLabels),
+    [citationLabels, layerMarkdown, sourceAliases, sourceMap],
   );
   const totalCitationCount = sourceGroups.reduce((total, group) => total + group.count, 0);
 
@@ -82,13 +103,40 @@ export function ReportView({
     target.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function handleLayerChange(layer: ReportViewLayer) {
+    if (controlledActiveLayer === undefined) {
+      setInternalActiveLayer(layer);
+    }
+    onActiveLayerChange?.(layer);
+  }
+
   const reportBody = (
     <section className={`panel report-panel${layout === "reader" ? " report-reader-panel" : ""}`}>
       <div className="panel-heading-row">
         <h2>{readerTitle}</h2>
         {totalCitationCount ? <span className="report-citation-count">{totalCitationCount} citations</span> : null}
       </div>
-      {markdown ? (
+      {reportArtifact ? (
+        <div role="group" aria-label={t("report.layers.label")} className="report-mode-toggle report-layer-tabs">
+          {([
+            ["report", t("report.layers.report")],
+            ["evidence", t("report.layers.evidence")],
+            ["qa", t("report.layers.qa")],
+            ["audit", t("report.layers.audit")],
+          ] as const).map(([key, label]) => (
+            <button
+              className={activeLayer === key ? "active" : undefined}
+              key={key}
+              aria-pressed={activeLayer === key}
+              onClick={() => handleLayerChange(key)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {layerMarkdown ? (
         <div className="report-reader-body">
           <ReactMarkdown
             components={{
@@ -181,6 +229,23 @@ export function ReportView({
       {sourceTrace}
     </>
   );
+}
+
+export function selectReportLayerMarkdown(
+  reportArtifact: ReportArtifactV2 | null | undefined,
+  markdown: string,
+  activeLayer: ReportViewLayer,
+  labels: ReportLayerLabels,
+) {
+  if (!reportArtifact) return markdown;
+  if (activeLayer === "report") return reportArtifact.render_cache.core_markdown;
+  if (activeLayer === "evidence") return reportArtifact.render_cache.support_markdown;
+  if (activeLayer === "audit") return reportArtifact.render_cache.audit_markdown;
+  return [
+    `## ${labels.qa}`,
+    `${labels.warnings}: ${reportArtifact.quality.warnings.length}`,
+    `${labels.blockers}: ${reportArtifact.quality.blockers.length}`,
+  ].join("\n\n");
 }
 
 export function slugReportHeading(text: string) {

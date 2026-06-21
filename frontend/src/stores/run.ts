@@ -22,7 +22,15 @@ export const useRunStore = create<RunState>((set) => ({
         event.payload.run
           ? (event.payload.run as RunDetail)
           : event.type === "report_updated" && state.detail
-          ? { ...state.detail, report_md: String(event.payload.report_md || "") }
+          ? {
+              ...state.detail,
+              report_md: Object.prototype.hasOwnProperty.call(event.payload, "report_md")
+                ? String(event.payload.report_md ?? "")
+                : state.detail.report_md ?? "",
+              report_artifact: Object.prototype.hasOwnProperty.call(event.payload, "report_artifact")
+                ? event.payload.report_artifact ?? null
+                : state.detail.report_artifact ?? null,
+            }
           : state.detail,
     })),
   reset: () => set({ detail: undefined, events: [] }),

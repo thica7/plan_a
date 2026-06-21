@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import {
   exportRunComplianceReport,
@@ -48,6 +48,7 @@ export function useRunDetailController() {
   const { runId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { detail, events, setDetail, addEvent, reset } = useRunStore();
+  const processedRefreshEventIdsRef = useRef<Set<number>>(new Set());
   const [activeView, setActiveViewState] = useState<RunDetailView>(
     () => parseRunDetailView(searchParams.get("view")) ?? "overview",
   );
@@ -121,6 +122,7 @@ export function useRunDetailController() {
     let retryTimer: number | undefined;
     let unsubscribe: (() => void) | undefined;
     reset();
+    processedRefreshEventIdsRef.current.clear();
     setQualityComparison(null);
     setQualityBaselineRunId("");
     setRunHistory([]);
@@ -204,12 +206,28 @@ export function useRunDetailController() {
 
   useEffect(() => {
     if (!runId) return;
-    if (events.some((event) => ["interrupt", "run_completed", "run_failed"].includes(event.type))) {
-      getRun(runId).then(setDetail).catch((err: Error) => {
-        if (!useRunStore.getState().detail) {
-          setError(err.message);
-        }
-      });
+    const refreshEvents = events.filter(
+      (event) =>
+        !processedRefreshEventIdsRef.current.has(event.id) &&
+        (["interrupt", "run_completed", "run_failed"].includes(event.type) ||
+          (event.type === "report_updated" &&
+            !Object.prototype.hasOwnProperty.call(event.payload, "report_artifact"))),
+    );
+    if (refreshEvents.length) {
+      for (const event of refreshEvents) {
+        processedRefreshEventIdsRef.current.add(event.id);
+      }
+      const refreshEvent = refreshEvents[refreshEvents.length - 1];
+      getRun(runId)
+        .then((loaded) => {
+          if (isStaleReportRefresh(refreshEvent.id)) return;
+          setDetail(loaded);
+        })
+        .catch((err: Error) => {
+          if (!useRunStore.getState().detail) {
+            setError(err.message);
+          }
+        });
       getRunQualityComparison(runId, qualityBaselineRunId || undefined)
         .then(setQualityComparison)
         .catch(() => setQualityComparison(null));
@@ -415,4 +433,15 @@ function parseRunDetailView(value: string | null): RunDetailView | null {
     return value;
   }
   return null;
+}
+
+function isStaleReportRefresh(refreshEventId: number) {
+  return useRunStore
+    .getState()
+    .events.some(
+      (event) =>
+        event.id > refreshEventId &&
+        event.type === "report_updated" &&
+        Object.prototype.hasOwnProperty.call(event.payload, "report_artifact"),
+    );
 }

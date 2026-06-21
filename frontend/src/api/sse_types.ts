@@ -1,4 +1,4 @@
-import type { RunDetail, QCIssue } from "./types";
+import type { RunDetail, QCIssue, ReportArtifactV2 } from "./types";
 
 export type RunEventType =
   | "run_created"
@@ -58,6 +58,7 @@ export interface RunEvent {
     run?: RunDetail;
     issue?: QCIssue;
     report_md?: string;
+    report_artifact?: ReportArtifactV2 | null;
     [key: string]: unknown;
   };
   created_at: string;

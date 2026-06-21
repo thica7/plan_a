@@ -70,6 +70,125 @@ export interface RawSource {
   extracted_at: string;
 }
 
+export type ArtifactLayerName = "core" | "support" | "audit";
+export type EvidenceStrength = "strong" | "moderate" | "weak" | "insufficient";
+export type SupportLevel = "official" | "triangulated_community" | "single_source" | "simulated" | "inferred" | "gap";
+
+export interface ClaimCard {
+  id: string;
+  run_id: string;
+  competitor: string;
+  dimension: string;
+  claim_type: string;
+  claim: string;
+  source_ids: string[];
+  confidence: number;
+  evidence_strength: EvidenceStrength;
+  support_level: SupportLevel;
+  scope: string;
+  caveats: string[];
+  conflicts: string[];
+  applicability: string;
+  produced_by: "analyst";
+  producer_stage: string;
+  derived_from: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface ClaimCardBundle {
+  run_id: string;
+  competitor: string;
+  dimension: string;
+  cards: ClaimCard[];
+  source_ids: string[];
+  coverage: Record<string, unknown>;
+  gap_count: number;
+  generated_at: string;
+  producer_context: Record<string, unknown>;
+}
+
+export interface DecisionCard {
+  id: string;
+  run_id: string;
+  decision_type: string;
+  subject: string;
+  recommendation: string;
+  posture: string;
+  rationale: string;
+  claim_card_ids: string[];
+  source_ids: string[];
+  winner?: string | null;
+  alternatives: string[];
+  why_not: Record<string, string>;
+  risk_factors: string[];
+  evidence_strength: EvidenceStrength;
+  confidence: number;
+  produced_by: "comparator";
+  producer_stage: "comparator";
+  metadata: Record<string, unknown>;
+}
+
+export interface DecisionCardBundle {
+  run_id: string;
+  cards: DecisionCard[];
+  matrix_snapshot: Record<string, unknown>;
+  coverage_by_dimension: Record<string, unknown>;
+  recommendation_card_id?: string | null;
+  generated_at: string;
+  producer_context: Record<string, unknown>;
+}
+
+export interface SectionBrief {
+  id: string;
+  section_key: string;
+  layer: ArtifactLayerName;
+  required_questions: string[];
+  allowed_claim_card_ids: string[];
+  allowed_decision_card_ids: string[];
+  allowed_source_ids: string[];
+  must_include: string[];
+  must_not_claim: string[];
+  tone: string;
+  minimum_depth: Record<string, unknown>;
+  citation_policy: Record<string, unknown>;
+  repair_targets: Record<string, unknown>;
+}
+
+export interface ReportLayer {
+  layer: ArtifactLayerName;
+  markdown: string;
+  sections: Array<Record<string, unknown>>;
+}
+
+export interface ReportArtifactV2 {
+  artifact_version: 2;
+  run_id: string;
+  core_report: ReportLayer;
+  support_appendix: ReportLayer;
+  audit_log: ReportLayer;
+  claim_card_bundles: ClaimCardBundle[];
+  decision_card_bundle?: DecisionCardBundle | null;
+  section_briefs: SectionBrief[];
+  quality: {
+    core_gate: Record<string, unknown>;
+    support_gate: Record<string, unknown>;
+    audit_gate: Record<string, unknown>;
+    warnings: Array<Record<string, unknown>>;
+    blockers: Array<Record<string, unknown>>;
+    revision_count: number;
+  };
+  render_cache: {
+    core_markdown: string;
+    support_markdown: string;
+    audit_markdown: string;
+    full_markdown: string;
+  };
+  legacy: {
+    source: "report_artifact_v2" | "report_md";
+    report_md_alias: boolean;
+  };
+}
+
 export interface ReflectionRecord {
   iteration: number;
   coverage_gaps: string[];
@@ -783,6 +902,10 @@ export interface RunDetail extends RunSummary {
   auto_redo_warn_enabled: boolean;
   hitl_enabled: boolean;
   report_md: string;
+  claim_card_bundles: ClaimCardBundle[];
+  decision_card_bundle?: DecisionCardBundle | null;
+  section_briefs: SectionBrief[];
+  report_artifact?: ReportArtifactV2 | null;
   raw_sources: RawSource[];
   competitor_kbs: Record<string, CompetitorKB>;
   competitor_knowledge: Record<string, CompetitorKnowledge>;
@@ -1770,6 +1893,11 @@ export interface ReportVersionRecord {
   competitor_set_hash: string;
   status: "draft" | "in_review" | "approved" | "rejected" | "published" | "archived";
   report_md: string;
+  core_report_md: string;
+  support_appendix_md: string;
+  audit_log_md: string;
+  full_report_md: string;
+  report_artifact?: ReportArtifactV2 | null;
   claim_ids: string[];
   evidence_ids: string[];
   quality_metadata?: Record<string, unknown>;
