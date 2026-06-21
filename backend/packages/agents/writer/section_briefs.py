@@ -53,6 +53,14 @@ _SECTION_DECISION_TYPES: dict[str, tuple[str, ...]] = {
     ),
 }
 
+_DECISION_CLAIM_SCOPED_SECTIONS = {
+    "decision_summary",
+    "side_by_side_matrix",
+    "workflow_enterprise_risk",
+    "market_landscape",
+    "business_implications",
+}
+
 _SUPPORT_NO_NEW_RECOMMENDATIONS_RULE = (
     "Do not add new business recommendations in support/audit material; only explain "
     "evidence coverage, confidence, gaps, and provenance for recommendations already "
@@ -111,32 +119,26 @@ def build_section_briefs(detail: RunDetail) -> list[SectionBrief]:
     for section_key in _core_section_keys(detail):
         section_decisions = _decisions_for_section(section_key, decision_cards)
         decision_ids = [card.id for card in section_decisions]
-        if section_decisions:
-            claim_ids = _unique(
-                claim_id
-                for decision in section_decisions
-                for claim_id in decision.claim_card_ids
-            )
-        else:
-            claim_ids = [
-                card.id
-                for card in _claims_for_section(
-                    section_key,
-                    claim_cards,
-                    raw_sources_by_id=raw_sources_by_id,
-                    plan_dimensions=detail.plan.dimensions,
-                )
-            ]
-        source_ids = _source_ids_for_scope(
+        claim_ids = _claim_ids_for_section(
+            section_key,
+            claim_cards,
+            section_decisions,
+            raw_sources_by_id=raw_sources_by_id,
+            plan_dimensions=detail.plan.dimensions,
+        )
+        source_ids = _source_ids_for_section(
+            section_key,
+            detail,
             claim_cards=claim_cards,
             decision_cards=section_decisions,
             claim_ids=claim_ids,
-            raw_source_ids=set(raw_sources_by_id),
+            raw_sources_by_id=raw_sources_by_id,
         )
         must_include = _must_include(section_key)
         if not claim_ids and not decision_ids:
             must_include.append(
-                "No section-relevant card scope is available; write an explicit evidence gap instead of using out-of-scope cards."
+                "No section-relevant card scope is available; write an explicit "
+                "evidence gap instead of using out-of-scope cards."
             )
         briefs.append(
             SectionBrief(
@@ -190,7 +192,8 @@ def build_section_briefs(detail: RunDetail) -> list[SectionBrief]:
                     "section_key": section_key,
                     "artifact_layer": layer,
                     "audit_intent": (
-                        "Task 4 renders audit-like provenance in support; Task 5 will split audit artifacts."
+                        "Task 4 renders audit-like provenance in support; Task 5 "
+                        "will split audit artifacts."
                     ),
                 },
             )
@@ -208,58 +211,177 @@ def segment_payloads_from_briefs(
     raw_sources_by_id = {source.id: source for source in detail.raw_sources}
     payloads: list[dict[str, object]] = []
     for brief in briefs:
-        allowed_source_ids = [
-            source_id
-            for source_id in brief.allowed_source_ids
-            if source_id in raw_sources_by_id
-        ]
-        segment_kind = (
-            "section_fragment" if brief.layer == "core" else "support_fragment"
-        )
-        section_brief = brief.model_copy(
-            update={"allowed_source_ids": allowed_source_ids}
-        )
-        payload: dict[str, object] = {
-            "schema_version": SCHEMA_VERSION,
-            "segment_name": brief.section_key,
-            "segment_kind": segment_kind,
-            "section_id": brief.section_key,
-            "section_key": brief.section_key,
-            "layer": brief.layer,
-            "output_language": detail.output_language,
-            "segment_essential": brief.layer == "core",
-            "allowed_source_ids": allowed_source_ids,
-            "allowed_claim_card_ids": list(brief.allowed_claim_card_ids),
-            "allowed_decision_card_ids": list(brief.allowed_decision_card_ids),
-            "section_brief": section_brief.model_dump(mode="json"),
-            "schema_contract_source": "section_brief",
-            "claim_cards": [
-                _claim_card_payload(
-                    claim_cards_by_id[claim_id],
-                    allowed_source_ids=set(allowed_source_ids),
+        if brief.section_key == "competitor_deep_dives":
+            payloads.extend(
+                _competitor_deep_dive_payloads(
+                    detail,
+                    brief,
+                    claim_cards_by_id=claim_cards_by_id,
+                    decision_cards_by_id=decision_cards_by_id,
+                    raw_sources_by_id=raw_sources_by_id,
                 )
-                for claim_id in brief.allowed_claim_card_ids
-                if claim_id in claim_cards_by_id
-            ],
-            "decision_cards": [
-                _decision_card_payload(
-                    decision_cards_by_id[decision_id],
-                    allowed_source_ids=set(allowed_source_ids),
-                )
-                for decision_id in brief.allowed_decision_card_ids
-                if decision_id in decision_cards_by_id
-            ],
-            "source_registry": [
-                _raw_source_payload(raw_sources_by_id[source_id])
-                for source_id in allowed_source_ids
-                if source_id in raw_sources_by_id
-            ],
-            "groups": [],
+            )
+            continue
+        payloads.append(
+            _section_payload_from_brief(
+                detail,
+                brief,
+                claim_cards_by_id=claim_cards_by_id,
+                decision_cards_by_id=decision_cards_by_id,
+                raw_sources_by_id=raw_sources_by_id,
+            )
+        )
+    return payloads
+
+
+def _section_payload_from_brief(
+    detail: RunDetail,
+    brief: SectionBrief,
+    *,
+    claim_cards_by_id: Mapping[str, ClaimCard],
+    decision_cards_by_id: Mapping[str, DecisionCard],
+    raw_sources_by_id: Mapping[str, RawSource],
+    segment_name: str | None = None,
+    segment_competitor: str | None = None,
+    allowed_claim_card_ids: Sequence[str] | None = None,
+    allowed_decision_card_ids: Sequence[str] | None = None,
+    allowed_source_ids: Sequence[str] | None = None,
+) -> dict[str, object]:
+    source_id_scope = brief.allowed_source_ids if allowed_source_ids is None else allowed_source_ids
+    claim_id_scope = (
+        brief.allowed_claim_card_ids if allowed_claim_card_ids is None else allowed_claim_card_ids
+    )
+    decision_id_scope = (
+        brief.allowed_decision_card_ids
+        if allowed_decision_card_ids is None
+        else allowed_decision_card_ids
+    )
+    scoped_source_ids = [
+        source_id for source_id in source_id_scope if source_id in raw_sources_by_id
+    ]
+    scoped_claim_ids = list(claim_id_scope)
+    scoped_decision_ids = list(decision_id_scope)
+    segment_kind = "section_fragment" if brief.layer == "core" else "support_fragment"
+    section_brief = brief.model_copy(
+        update={
+            "allowed_claim_card_ids": scoped_claim_ids,
+            "allowed_decision_card_ids": scoped_decision_ids,
+            "allowed_source_ids": scoped_source_ids,
         }
-        if brief.section_key == "decision_summary":
-            payload["require_executive_summary"] = True
-        _refresh_segment_input_chars(payload)
-        payloads.append(payload)
+    )
+    payload: dict[str, object] = {
+        "schema_version": SCHEMA_VERSION,
+        "segment_name": segment_name or brief.section_key,
+        "segment_kind": segment_kind,
+        "section_id": brief.section_key,
+        "section_key": brief.section_key,
+        "layer": brief.layer,
+        "output_language": detail.output_language,
+        "segment_essential": brief.layer == "core",
+        "allowed_source_ids": scoped_source_ids,
+        "allowed_claim_card_ids": scoped_claim_ids,
+        "allowed_decision_card_ids": scoped_decision_ids,
+        "section_brief": section_brief.model_dump(mode="json"),
+        "schema_contract_source": "section_brief",
+        "claim_cards": [
+            _claim_card_payload(
+                claim_cards_by_id[claim_id],
+                allowed_source_ids=set(scoped_source_ids),
+            )
+            for claim_id in scoped_claim_ids
+            if claim_id in claim_cards_by_id
+        ],
+        "decision_cards": [
+            _decision_card_payload(
+                decision_cards_by_id[decision_id],
+                allowed_source_ids=set(scoped_source_ids),
+            )
+            for decision_id in scoped_decision_ids
+            if decision_id in decision_cards_by_id
+        ],
+        "source_registry": [
+            _raw_source_payload(raw_sources_by_id[source_id])
+            for source_id in scoped_source_ids
+            if source_id in raw_sources_by_id
+        ],
+        "groups": [],
+    }
+    if segment_competitor:
+        payload["segment_competitor"] = segment_competitor
+    if brief.section_key == "decision_summary":
+        payload["require_executive_summary"] = True
+    _refresh_segment_input_chars(payload)
+    return payload
+
+
+def _competitor_deep_dive_payloads(
+    detail: RunDetail,
+    brief: SectionBrief,
+    *,
+    claim_cards_by_id: Mapping[str, ClaimCard],
+    decision_cards_by_id: Mapping[str, DecisionCard],
+    raw_sources_by_id: Mapping[str, RawSource],
+) -> list[dict[str, object]]:
+    competitors = _competitors(detail)
+    if not competitors:
+        return [
+            _section_payload_from_brief(
+                detail,
+                brief,
+                claim_cards_by_id=claim_cards_by_id,
+                decision_cards_by_id=decision_cards_by_id,
+                raw_sources_by_id=raw_sources_by_id,
+            )
+        ]
+    payloads: list[dict[str, object]] = []
+    allowed_source_id_set = set(brief.allowed_source_ids)
+    for competitor in competitors:
+        claim_ids = [
+            claim_id
+            for claim_id in brief.allowed_claim_card_ids
+            if claim_id in claim_cards_by_id
+            and _claim_matches_competitor(claim_cards_by_id[claim_id], competitor)
+        ]
+        source_ids = _unique(
+            [
+                *[
+                    source_id
+                    for claim_id in claim_ids
+                    for source_id in claim_cards_by_id[claim_id].source_ids
+                ],
+                *[
+                    source_id
+                    for source_id, source in raw_sources_by_id.items()
+                    if source_id in allowed_source_id_set
+                    and _source_matches_competitor(source, competitor)
+                    and _source_dimension_in_plan(source, detail.plan.dimensions)
+                ],
+            ]
+        )
+        decision_ids = [
+            decision_id
+            for decision_id in brief.allowed_decision_card_ids
+            if decision_id in decision_cards_by_id
+            and _decision_matches_competitor(
+                decision_cards_by_id[decision_id],
+                competitor,
+                claim_cards_by_id=claim_cards_by_id,
+            )
+        ]
+        payloads.append(
+            _section_payload_from_brief(
+                detail,
+                brief,
+                claim_cards_by_id=claim_cards_by_id,
+                decision_cards_by_id=decision_cards_by_id,
+                raw_sources_by_id=raw_sources_by_id,
+                segment_name=f"{brief.section_key} {competitor}",
+                segment_competitor=competitor,
+                allowed_claim_card_ids=claim_ids,
+                allowed_decision_card_ids=decision_ids,
+                allowed_source_ids=source_ids,
+            )
+        )
     return payloads
 
 
@@ -312,8 +434,29 @@ def _decisions_for_section(
     decision_types = set(_SECTION_DECISION_TYPES.get(section_key, ()))
     if not decision_types:
         return []
+    return [card for card in decision_cards if card.decision_type in decision_types]
+
+
+def _claim_ids_for_section(
+    section_key: str,
+    claim_cards: Sequence[ClaimCard],
+    section_decisions: Sequence[DecisionCard],
+    *,
+    raw_sources_by_id: Mapping[str, RawSource],
+    plan_dimensions: Sequence[str],
+) -> list[str]:
+    if section_key in _DECISION_CLAIM_SCOPED_SECTIONS and section_decisions:
+        return _unique(
+            claim_id for decision in section_decisions for claim_id in decision.claim_card_ids
+        )
     return [
-        card for card in decision_cards if card.decision_type in decision_types
+        card.id
+        for card in _claims_for_section(
+            section_key,
+            claim_cards,
+            raw_sources_by_id=raw_sources_by_id,
+            plan_dimensions=plan_dimensions,
+        )
     ]
 
 
@@ -329,16 +472,8 @@ def _all_source_ids(
         source_id
         for source_id in [
             *[source_id for card in claim_cards for source_id in card.source_ids],
-            *[
-                source_id
-                for bundle in detail.claim_card_bundles
-                for source_id in bundle.source_ids
-            ],
-            *[
-                source_id
-                for card in decision_cards
-                for source_id in card.source_ids
-            ],
+            *[source_id for bundle in detail.claim_card_bundles for source_id in bundle.source_ids],
+            *[source_id for card in decision_cards for source_id in card.source_ids],
             *[source.id for source in detail.raw_sources],
         ]
         if source_id in raw_source_ids
@@ -362,15 +497,41 @@ def _source_ids_for_scope(
                 if card.id in claim_id_set
                 for source_id in card.source_ids
             ],
-            *[
-                source_id
-                for card in decision_cards
-                for source_id in card.source_ids
-            ],
+            *[source_id for card in decision_cards for source_id in card.source_ids],
         ]
         if source_id in raw_source_ids
     )
     return source_ids
+
+
+def _source_ids_for_section(
+    section_key: str,
+    detail: RunDetail,
+    *,
+    claim_cards: Sequence[ClaimCard],
+    decision_cards: Sequence[DecisionCard],
+    claim_ids: Sequence[str],
+    raw_sources_by_id: Mapping[str, RawSource],
+) -> list[str]:
+    source_ids = _source_ids_for_scope(
+        claim_cards=claim_cards,
+        decision_cards=decision_cards,
+        claim_ids=claim_ids,
+        raw_source_ids=set(raw_sources_by_id),
+    )
+    if section_key != "competitor_deep_dives":
+        return source_ids
+    return _unique(
+        [
+            *source_ids,
+            *[
+                source.id
+                for source in raw_sources_by_id.values()
+                if _source_matches_plan_competitors(source, detail)
+                and _source_dimension_in_plan(source, detail.plan.dimensions)
+            ],
+        ]
+    )
 
 
 def _claims_for_section(
@@ -387,9 +548,7 @@ def _claims_for_section(
             if _is_user_research_claim(card, raw_sources_by_id=raw_sources_by_id)
         ]
     return [
-        card
-        for card in claim_cards
-        if _is_business_claim(card, plan_dimensions=plan_dimensions)
+        card for card in claim_cards if _is_business_claim(card, plan_dimensions=plan_dimensions)
     ]
 
 
@@ -415,10 +574,7 @@ def _is_user_research_claim(
         ).casefold()
         if any(token in source_text for token in _USER_RESEARCH_TOKENS):
             return True
-        if any(
-            token in source.source_type.casefold()
-            for token in _USER_RESEARCH_SOURCE_TYPES
-        ):
+        if any(token in source.source_type.casefold() for token in _USER_RESEARCH_SOURCE_TYPES):
             return True
     return False
 
@@ -453,6 +609,58 @@ def _claim_search_text(card: ClaimCard) -> str:
     ).casefold()
 
 
+def _competitors(detail: RunDetail) -> list[str]:
+    return _unique(detail.plan.competitors)
+
+
+def _claim_matches_competitor(card: ClaimCard, competitor: str) -> bool:
+    return _same_name(card.competitor, competitor)
+
+
+def _decision_matches_competitor(
+    card: DecisionCard,
+    competitor: str,
+    *,
+    claim_cards_by_id: Mapping[str, ClaimCard],
+) -> bool:
+    if card.winner and _same_name(card.winner, competitor):
+        return True
+    return any(
+        claim_id in claim_cards_by_id
+        and _claim_matches_competitor(claim_cards_by_id[claim_id], competitor)
+        for claim_id in card.claim_card_ids
+    )
+
+
+def _source_matches_plan_competitors(source: RawSource, detail: RunDetail) -> bool:
+    return any(
+        _source_matches_competitor(source, competitor) for competitor in _competitors(detail)
+    )
+
+
+def _source_matches_competitor(source: RawSource, competitor: str) -> bool:
+    if _same_name(source.competitor, competitor):
+        return True
+    return any(_same_name(name, competitor) for name in source.covered_competitors)
+
+
+def _source_dimension_in_plan(source: RawSource, dimensions: Sequence[str]) -> bool:
+    dimension_names = {
+        dimension.casefold().strip()
+        for dimension in dimensions
+        if isinstance(dimension, str) and dimension.strip()
+    }
+    if not dimension_names or not source.dimension:
+        return True
+    return source.dimension.casefold().strip() in dimension_names
+
+
+def _same_name(value: str | None, expected: str) -> bool:
+    if not value or not expected:
+        return False
+    return value.casefold().strip() == expected.casefold().strip()
+
+
 def _required_questions(section_key: str) -> list[str]:
     questions = {
         "decision_summary": [
@@ -460,11 +668,13 @@ def _required_questions(section_key: str) -> list[str]:
             "Which competitors, risks, and evidence boundaries most affect the decision?",
         ],
         "review_theme_summary": [
-            "What user, community, survey, interview, or persona themes materially affect adoption?",
+            "What user, community, survey, interview, or persona themes materially "
+            "affect adoption?",
             "Which themes are direct evidence versus simulated or inferred signals?",
         ],
         "competitor_deep_dives": [
-            "What does each competitor do well, where are the gaps, and what evidence supports those claims?",
+            "What does each competitor do well, where are the gaps, and what "
+            "evidence supports those claims?",
         ],
         "side_by_side_matrix": [
             "How do competitors compare across the requested decision dimensions?",
@@ -473,7 +683,8 @@ def _required_questions(section_key: str) -> list[str]:
             "What strengths, weaknesses, opportunities, and threats follow from the scoped cards?",
         ],
         "battlecard": [
-            "What attack points, rebuttals, best-fit scenarios, and proof gaps should sales or strategy use?",
+            "What attack points, rebuttals, best-fit scenarios, and proof gaps "
+            "should sales or strategy use?",
         ],
         "workflow_enterprise_risk": [
             "Which workflow overlaps and enterprise risks change adoption or procurement posture?",
@@ -485,13 +696,19 @@ def _required_questions(section_key: str) -> list[str]:
             "What operating decisions or validation tasks follow from the evidence?",
         ],
         "evidence_support": [
-            "What source coverage, confidence limits, gaps, and evidence risks should the reader audit?",
+            "What source coverage, confidence limits, gaps, and evidence risks "
+            "should the reader audit?",
         ],
         "generation_notes": [
             "What card and source scope constrained this report generation?",
         ],
     }
-    return list(questions.get(section_key, ["Answer the section contract using only scoped cards and sources."]))
+    return list(
+        questions.get(
+            section_key,
+            ["Answer the section contract using only scoped cards and sources."],
+        )
+    )
 
 
 def _must_include(section_key: str) -> list[str]:
