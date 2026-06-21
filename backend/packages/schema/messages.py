@@ -17,6 +17,7 @@ from packages.schema.models import (
     ReflectionRecord,
     ToolCallMessage,
 )
+from packages.schema.report_artifact import ClaimCardBundle
 from packages.schema.survey import SurveyEvidenceBundle
 
 
@@ -120,6 +121,10 @@ class CompetitorKnowledgeMessagePayload(_MessagePayload):
     mode: str | None = None
 
 
+class ClaimCardBundleReadyMessagePayload(_MessagePayload):
+    bundle: ClaimCardBundle
+
+
 class CompetitorKBDigestMessagePayload(_MessagePayload):
     dimensions: list[str]
     competitors: list[str]
@@ -195,6 +200,7 @@ AGENT_MESSAGE_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "CollectTaskPayload": CollectTaskMessagePayload,
     "CollectorDispatchPlan": DispatchPlanMessagePayload,
     "CommunitySearchSummary": CommunitySearchSummaryMessagePayload,
+    "ClaimCardBundle": ClaimCardBundleReadyMessagePayload,
     "CompetitorKBDigest": CompetitorKBDigestMessagePayload,
     "CompetitorKnowledge": CompetitorKnowledgeMessagePayload,
     "ComparisonMatrix": ComparisonMatrixMessagePayload,

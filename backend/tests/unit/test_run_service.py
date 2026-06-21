@@ -7,6 +7,7 @@ from datetime import datetime
 import pytest
 
 from packages.agents import SubagentContext
+from packages.agents.analysts.cards import build_claim_card_bundle
 from packages.agents.writer.assembler import ReportSectionFragment
 from packages.agents.writer.publication_contract import validate_publication_contract
 from packages.agents.writer.repair import build_writer_repair_plan
@@ -3355,6 +3356,99 @@ def test_analyst_slice_merge_discards_unknown_source_citations() -> None:
     )
     assert any("pricing-1" in claim.source_ids for claim in claims)
     assert all("pricing-404" not in claim.source_ids for claim in claims)
+
+
+@pytest.mark.asyncio
+async def test_analyst_join_consumes_claim_card_bundle_messages() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    source = RawSource(
+        id="pricing-1",
+        competitor="Cursor",
+        covered_competitors=["Cursor"],
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://example.com/pricing",
+        snippet="Cursor Pro costs $20 per month.",
+        content_hash="pricing-1-hash",
+        confidence=0.9,
+    )
+    detail = RunDetail(
+        id="run-claim-card-join",
+        topic="AI coding assistant",
+        status="running",
+        execution_mode="real",
+        output_language="en-US",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding assistant",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+        ),
+        raw_sources=[source],
+        competitor_kbs={
+            "Cursor": CompetitorKB(
+                competitor="Cursor",
+                slices={"pricing": ["Cursor Pro costs $20 per month."]},
+                sources=[source.id],
+                confidence=0.9,
+            )
+        },
+        competitor_knowledge={"Cursor": CompetitorKnowledge(competitor="Cursor")},
+    )
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    knowledge_message = service._append_agent_message(
+        record,
+        from_agent="analyst",
+        to_agent="analyst_join",
+        message_type="competitor_knowledge_ready",
+        payload_schema="CompetitorKnowledge",
+        payload={
+            "competitor": "Cursor",
+            "dimension": "pricing",
+            "knowledge": detail.competitor_knowledge["Cursor"].model_dump(mode="json"),
+        },
+    )
+    bundle = build_claim_card_bundle(
+        run_id=detail.id,
+        competitor="Cursor",
+        dimension="pricing",
+        claims=[
+            KnowledgeClaim(
+                claim="Cursor has a paid Pro plan.",
+                source_ids=[source.id],
+                confidence=0.84,
+            )
+        ],
+        sources=[source],
+        producer_stage="analyst:pricing:Cursor",
+    )
+    claim_card_message = service._append_agent_message(
+        record,
+        from_agent="analyst",
+        to_agent="analyst_join",
+        message_type="claim_card_bundle_ready",
+        payload_schema="ClaimCardBundle",
+        payload={"bundle": bundle.model_dump(mode="json")},
+    )
+
+    await service._real_analyst_join_step(record, ["pricing"], ["Cursor"])
+
+    assert knowledge_message.status == "consumed"
+    assert claim_card_message.status == "consumed"
+    assert claim_card_message.consumed_by == "analyst_join"
 
 
 def test_final_qa_deduplicates_repeated_unknown_source_findings() -> None:
