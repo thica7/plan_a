@@ -37,6 +37,7 @@ Phase 1 makes that flow observable and changes collector completion from "enough
 In scope:
 
 - Candidate ledger / trace diagnostics.
+- KB warm-start source diagnostics and coverage evaluation.
 - Coverage contract for collector completion.
 - Intent-bucket discovery and selection.
 - Adaptive backfill from overflow candidates.
@@ -50,6 +51,7 @@ Out of scope for Phase 1:
 - Multiple search providers.
 - New claims / conflicts schema.
 - Major report writer changes.
+- RAG KB retrieval redesign.
 - Full Collector v2 migration beyond the branch-level collection loop.
 
 ## Current Code Touchpoints
@@ -71,6 +73,7 @@ Suggested new modules:
 Relevant current behavior:
 
 - `run_research_pipeline()` returns `ResearchResult` with candidates, captured pages, extractions, evidence, gaps, and metrics.
+- collector now performs `_collect_competitor_from_kb()` before web search and can warm-start the branch with `RawSource` records whose `candidate_origin` is `rag_kb`.
 - `_discover_candidates()` currently returns `rank_and_dedupe_candidates(... )[: brief.max_candidates]`.
 - `select_capture_candidates()` currently selects preferred candidates first and may skip fallback candidates entirely when preferred count is high enough.
 - `source_saturation_reached` currently depends on `len(ok_pages) >= brief.target_source_count and len(gaps) == 0`.
@@ -140,7 +143,7 @@ Add a candidate ledger entry:
 class CandidateLedgerEntry(ResearchBaseModel):
     candidate_id: str
     url: str
-    origin: CandidateOrigin
+    origin: str
     intent: CandidateIntent = "unknown"
     status: CandidateLedgerStatus
     reason: str = ""
@@ -187,9 +190,12 @@ Also mirror key values in `ResearchResult.metrics`:
 - `candidate_selected_by_intent_count`
 - `source_fitness_counts`
 
+`CandidateLedgerEntry.origin` is intentionally `str`, not `CandidateOrigin`, because Phase 1 must also represent sources that do not flow through `SourceCandidate`, especially KB warm-start sources with `candidate_origin="rag_kb"`.
+
 ## Candidate Ledger
 
 The ledger records the final lifecycle state for every candidate that enters the pipeline.
+It must also record branch sources that bypass `SourceCandidate`, such as KB warm-start `RawSource` records. Those entries can use the raw source id as `candidate_id`, `origin="rag_kb"`, and `status="accepted"` or `status="raw_source_rejected"` depending on source quality and coverage evaluation.
 
 Required states:
 
@@ -260,6 +266,7 @@ Candidate discovery should preserve required evidence intents instead of globall
 Phase 1 keeps existing sources:
 
 - seed candidates;
+- KB warm-start raw sources;
 - trusted registry;
 - search results;
 - homepage-derived candidates;
@@ -409,6 +416,8 @@ Collector output payload should include:
 
 If repair fails, collector should output partial sources plus coverage gap metadata. It must not mark the branch as complete only because source count is high.
 
+KB warm-start sources must be evaluated by the same coverage gate. They may satisfy a coverage intent only if source fitness and evidence support allow it. They must not satisfy pricing completion merely because `_collect_competitor_from_kb()` returned enough high-confidence `RawSource` records.
+
 ## Error Handling
 
 New quality gates should degrade structurally, not crash the run.
@@ -471,6 +480,7 @@ Assertions:
 - selected candidates are marked selected;
 - fetch failures include requested URL and reason;
 - raw source rejection diagnostics are attached.
+- KB warm-start sources appear in the ledger with `origin="rag_kb"` and either accepted or rejected status.
 
 ### Intent-Bucket Selection
 
@@ -510,6 +520,7 @@ Assertions:
 - `coverage_contract_passed` is false;
 - missing intents include official pricing/current price support;
 - source saturation metric does not report success based only on count.
+- KB warm-start source count alone does not make pricing coverage pass.
 
 ### Collector Repair Trigger
 
@@ -553,6 +564,7 @@ Metrics to inspect during rollout:
 Implementation is complete when:
 
 - the candidate ledger shows lifecycle status for discovered candidates;
+- KB warm-start sources are visible in the ledger and covered by the same coverage contract;
 - pricing coverage does not pass solely because source count is high;
 - canonical pricing/plans/billing candidates are selected or explicitly logged as unavailable;
 - failed candidates can be replaced by overflow backfill within budget;
@@ -560,4 +572,3 @@ Implementation is complete when:
 - collector triggers repair when coverage fails despite enough sources;
 - Windsurf-style regression no longer marks pricing complete with docs/changelog/product docs only;
 - tests cover ledger, selection, backfill, fitness, coverage, repair trigger, and regression behavior.
-
