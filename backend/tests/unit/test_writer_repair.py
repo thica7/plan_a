@@ -213,6 +213,33 @@ def test_writer_repair_maps_rationale_only_decision_summary_to_section_repair() 
     assert plan.sections == ["decision_summary"]
 
 
+def test_writer_repair_maps_strong_conclusion_release_gate_to_decision_summary() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-strong-conclusion-weak-source",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        target_subagent="security",
+        field_path="release_gate.strong_conclusion_uses_weak_source",
+        problem=(
+            "strong_conclusion_uses_weak_source: A strong report conclusion cites "
+            "weak or search-only evidence."
+        ),
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="security",
+            rationale="Rewrite the conclusion as tentative or recollect official sources.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["decision_summary"]
+    assert plan.anti_regression_required is True
+
+
 def test_writer_repair_routes_release_gate_report_depth_to_full_rewrite() -> None:
     detail = _detail(report_md=_protectable_report())
     issue = QCIssue(

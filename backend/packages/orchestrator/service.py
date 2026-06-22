@@ -2869,12 +2869,33 @@ class RunService(
                 if issue_id:
                     seen_warning_ids.add(issue_id)
 
+        gate_payload = {
+            "status": gate.status,
+            "allowed": gate.allowed,
+            "readiness_score": gate.readiness.score if gate.readiness else None,
+            "readiness_risk_level": gate.readiness.risk_level if gate.readiness else None,
+            "blocker_count": gate.blocker_count,
+            "warn_count": gate.warn_count,
+            "issue_count": gate.issue_count,
+        }
         projection.report_version = projection.report_version.model_copy(
             update={
                 "report_artifact": artifact.model_copy(
                     update={
                         "quality": artifact.quality.model_copy(
-                            update={"warnings": warnings, "blockers": blockers}
+                            update={
+                                "core_gate": gate_payload,
+                                "support_gate": {
+                                    "status": "not_applicable",
+                                    "reason": "release_gate_applies_to_core_report",
+                                },
+                                "audit_gate": {
+                                    "status": "not_applicable",
+                                    "reason": "release_gate_applies_to_core_report",
+                                },
+                                "warnings": warnings,
+                                "blockers": blockers,
+                            }
                         )
                     }
                 )
@@ -3002,8 +3023,25 @@ class RunService(
         if latest.convergence_ratio != final_quality.revision_convergence_ratio:
             updates["convergence_ratio"] = final_quality.revision_convergence_ratio
         if not updates:
+            self._sync_report_artifact_revision_count(detail)
             return
         detail.revisions[-1] = latest.model_copy(update=updates)
+        self._sync_report_artifact_revision_count(detail)
+
+    def _sync_report_artifact_revision_count(self, detail: RunDetail) -> None:
+        artifact = detail.report_artifact
+        if artifact is None:
+            return
+        revision_count = len(detail.revisions)
+        if artifact.quality.revision_count == revision_count:
+            return
+        detail.report_artifact = artifact.model_copy(
+            update={
+                "quality": artifact.quality.model_copy(
+                    update={"revision_count": revision_count}
+                )
+            }
+        )
 
     def _sync_latest_revision_recorded_event(self, record: RunRecord) -> None:
         detail = record.detail

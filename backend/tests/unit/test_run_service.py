@@ -15297,6 +15297,13 @@ async def test_release_gate_sync_records_unified_quality_result_event_and_revisi
             convergence_ratio=0.0,
         )
     ]
+    record.detail.report_artifact = legacy_report_artifact(
+        run_id=detail.id,
+        report_md=record.detail.report_md,
+    )
+    record.detail.report_artifact.quality = record.detail.report_artifact.quality.model_copy(
+        update={"revision_count": 0}
+    )
 
     service._sync_release_gate_repair_issues(record, _blocked_release_gate())
 
@@ -15306,6 +15313,8 @@ async def test_release_gate_sync_records_unified_quality_result_event_and_revisi
     assert len(record.detail.qa_findings) == 1
     assert record.detail.revisions[-1].issue_count_after == 1
     assert record.detail.revisions[-1].convergence_ratio == 1.0
+    assert record.detail.report_artifact is not None
+    assert record.detail.report_artifact.quality.revision_count == 1
     assert len(unified_events) == 1
     assert unified_events[0].payload == {
         "blocker_count": 1,
@@ -15714,6 +15723,11 @@ def test_v2_release_gate_does_not_apply_markdown_warning_repair() -> None:
     assert projection.report_version.report_artifact is not None
     assert projection.report_version.report_artifact.render_cache.full_markdown == before_full
     assert projection.report_version.report_md == before
+    quality = projection.report_version.report_artifact.quality
+    assert quality.core_gate["status"] == "blocked"
+    assert quality.core_gate["blocker_count"] == 1
+    assert quality.core_gate["warn_count"] == 0
+    assert len(quality.blockers) == 1
 
 
 def test_release_gate_quality_metadata_uses_current_projection_scope() -> None:

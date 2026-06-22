@@ -198,6 +198,38 @@ def test_unknown_claim_sources_become_gap_card() -> None:
     assert "missing-source" in bundle.cards[0].metadata["dropped_source_ids"]
 
 
+def test_pricing_claim_drops_homepage_demo_source_without_pricing_evidence() -> None:
+    homepage = _source("raw-source-homepage", source_type="webpage_verified")
+    homepage.title = "Cursor: AI coding agent"
+    homepage.url = "https://cursor.com/en-US"
+    homepage.snippet = (
+        "Acme Research Dashboard Live Telemetry Pipeline Zero-Downtime Deploys "
+        "Binary Protocol Parser Edge Cache Invalidation Auth Token Rotation"
+    )
+    homepage.metadata["normalized_fields"] = []
+
+    bundle = build_claim_card_bundle(
+        run_id="run-1",
+        competitor="Cursor",
+        dimension="pricing",
+        claims=[
+            KnowledgeClaim(
+                claim="Cursor Team costs $40 per user per month.",
+                source_ids=[homepage.id],
+                confidence=0.96,
+            )
+        ],
+        sources=[homepage],
+        producer_stage="analyst:pricing:Cursor",
+    )
+
+    assert bundle.gap_count == 1
+    assert bundle.cards[0].support_level == "gap"
+    assert bundle.cards[0].source_ids == []
+    assert homepage.id in bundle.cards[0].metadata["dropped_source_ids"]
+    assert bundle.coverage["dimension_irrelevant_source_count"] == 1
+
+
 def test_mixed_supported_and_unsupported_claims_emit_supported_and_gap_cards() -> None:
     bundle = build_claim_card_bundle(
         run_id="run-1",

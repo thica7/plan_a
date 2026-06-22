@@ -566,10 +566,13 @@ def _clean_upstream_target_sections(issues: list[QCIssue]) -> list[str]:
 
 
 def _issue_target_sections(issue: QCIssue) -> list[str]:
+    field_path = issue.field_path or ""
+    if field_path == "release_gate.strong_conclusion_uses_weak_source":
+        return ["decision_summary"]
     haystack = " ".join(
         value
         for value in [
-            issue.field_path,
+            field_path,
             issue.problem,
             issue.target_subagent or "",
             issue.redo_scope.target_subagent or "",

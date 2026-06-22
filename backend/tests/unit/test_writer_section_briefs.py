@@ -309,6 +309,117 @@ def test_review_theme_brief_selects_user_research_claims_without_all_claim_fallb
     assert review.allowed_source_ids == ["raw-source-cursor-persona"]
 
 
+def test_review_theme_brief_does_not_treat_per_user_pricing_as_user_research() -> None:
+    pricing_claim = ClaimCard(
+        id="claim-cursor-pricing-per-user",
+        run_id="run-briefs",
+        competitor="Cursor",
+        dimension="pricing",
+        claim_type="pricing_fact",
+        claim="Cursor Team costs $40 per user per month.",
+        source_ids=["raw-source-cursor-pricing"],
+        confidence=0.9,
+        evidence_strength="moderate",
+        support_level="official",
+        scope="current pricing analysis",
+        caveats=[],
+        conflicts=[],
+        applicability="Cursor pricing analysis",
+        producer_stage="analyst:pricing:Cursor",
+        derived_from=["raw-source-cursor-pricing"],
+    )
+    persona_claim = ClaimCard(
+        id="claim-cursor-persona-interview",
+        run_id="run-briefs",
+        competitor="Cursor",
+        dimension="persona",
+        claim_type="user_research_signal",
+        claim="Cursor interviews show workflow fit is an adoption blocker.",
+        source_ids=["raw-source-cursor-persona"],
+        confidence=0.82,
+        evidence_strength="moderate",
+        support_level="simulated",
+        scope="current persona analysis",
+        caveats=[],
+        conflicts=[],
+        applicability="Cursor persona user research",
+        producer_stage="analyst:persona:Cursor",
+        derived_from=["raw-source-cursor-persona"],
+    )
+    detail = _detail_with_cards()
+    detail.decision_card_bundle = DecisionCardBundle(run_id="run-briefs")
+    detail.plan.dimensions = ["pricing", "persona"]
+    detail.claim_card_bundles = [
+        ClaimCardBundle(
+            run_id="run-briefs",
+            competitor="Cursor",
+            dimension="pricing",
+            cards=[pricing_claim],
+            source_ids=pricing_claim.source_ids,
+        ),
+        ClaimCardBundle(
+            run_id="run-briefs",
+            competitor="Cursor",
+            dimension="persona",
+            cards=[persona_claim],
+            source_ids=persona_claim.source_ids,
+        ),
+    ]
+    detail.raw_sources = [
+        _source("raw-source-cursor-pricing", dimension="pricing"),
+        _source("raw-source-cursor-persona", dimension="persona"),
+    ]
+
+    briefs = build_section_briefs(detail)
+
+    review = {brief.section_key: brief for brief in briefs}["review_theme_summary"]
+    assert review.allowed_claim_card_ids == [persona_claim.id]
+    assert review.allowed_source_ids == ["raw-source-cursor-persona"]
+
+
+def test_review_theme_brief_does_not_treat_customer_pricing_copy_as_user_research() -> None:
+    pricing_claim = ClaimCard(
+        id="claim-cursor-pricing-customer-copy",
+        run_id="run-briefs",
+        competitor="Cursor",
+        dimension="pricing",
+        claim_type="pricing_fact",
+        claim=(
+            "Cursor enterprise pricing requires contacting sales for customer teams "
+            "and includes account management."
+        ),
+        source_ids=["raw-source-cursor-pricing"],
+        confidence=0.9,
+        evidence_strength="moderate",
+        support_level="official",
+        scope="current pricing analysis",
+        caveats=[],
+        conflicts=[],
+        applicability="Cursor pricing analysis",
+        producer_stage="analyst:pricing:Cursor",
+        derived_from=["raw-source-cursor-pricing"],
+    )
+    detail = _detail_with_cards()
+    detail.decision_card_bundle = DecisionCardBundle(run_id="run-briefs")
+    detail.plan.dimensions = ["pricing", "persona"]
+    detail.claim_card_bundles = [
+        ClaimCardBundle(
+            run_id="run-briefs",
+            competitor="Cursor",
+            dimension="pricing",
+            cards=[pricing_claim],
+            source_ids=pricing_claim.source_ids,
+        )
+    ]
+    detail.raw_sources = [_source("raw-source-cursor-pricing", dimension="pricing")]
+
+    briefs = build_section_briefs(detail)
+
+    review = {brief.section_key: brief for brief in briefs}["review_theme_summary"]
+    assert review.allowed_claim_card_ids == []
+    assert review.allowed_source_ids == []
+
+
 def test_competitor_deep_dive_brief_uses_all_competitor_claims_not_only_winner_decision() -> None:
     cursor_pricing = _claim("Cursor", "pricing", "raw-source-cursor-pricing")
     cursor_persona = _claim("Cursor", "persona", "raw-source-cursor-persona")

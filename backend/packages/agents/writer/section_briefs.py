@@ -59,17 +59,6 @@ _SUPPORT_NO_NEW_RECOMMENDATIONS_RULE = (
     "made in core sections."
 )
 
-_USER_RESEARCH_TOKENS = (
-    "persona",
-    "user",
-    "review",
-    "community",
-    "survey",
-    "interview",
-    "customer",
-    "adoption",
-    "feedback",
-)
 _USER_RESEARCH_SOURCE_TYPES = (
     "survey",
     "interview",
@@ -79,6 +68,7 @@ _USER_RESEARCH_SOURCE_TYPES = (
     "forum",
     "review",
 )
+_USER_RESEARCH_DIMENSIONS = ("persona", "user", "users", "review", "reviews")
 _BUSINESS_CLAIM_TOKENS = (
     "pricing",
     "price",
@@ -549,26 +539,28 @@ def _is_user_research_claim(
     *,
     raw_sources_by_id: Mapping[str, RawSource],
 ) -> bool:
-    text = _claim_search_text(card)
-    if any(token in text for token in _USER_RESEARCH_TOKENS):
+    if _dimension_is_user_research(card.dimension):
+        return True
+    if any(
+        marker in card.claim_type.casefold()
+        for marker in ("persona", "user_research", "review", "survey", "interview")
+    ):
         return True
     for source_id in card.source_ids:
         source = raw_sources_by_id.get(source_id)
         if source is None:
             continue
-        source_text = " ".join(
-            (
-                source.source_type,
-                source.dimension,
-                source.title,
-                source.snippet,
-            )
-        ).casefold()
-        if any(token in source_text for token in _USER_RESEARCH_TOKENS):
+        if _dimension_is_user_research(source.dimension):
             return True
         if any(token in source.source_type.casefold() for token in _USER_RESEARCH_SOURCE_TYPES):
             return True
     return False
+
+
+def _dimension_is_user_research(dimension: str | None) -> bool:
+    if not dimension:
+        return False
+    return dimension.casefold().strip() in _USER_RESEARCH_DIMENSIONS
 
 
 def _is_business_claim(

@@ -22,14 +22,29 @@ def build_claim_card_bundle(
     source_by_id = {source.id: source for source in sources}
     cards: list[ClaimCard] = []
     dropped_claims: list[dict[str, Any]] = []
+    dimension_irrelevant_source_count = 0
 
     for claim_index, claim in enumerate(claims, start=1):
-        source_ids = merge_ordered_refs(
+        available_source_ids = [
             source_id for source_id in claim.source_ids if source_id in source_by_id
+        ]
+        dimension_irrelevant_source_ids = [
+            source_id
+            for source_id in available_source_ids
+            if not _source_relevant_to_dimension(source_by_id[source_id], dimension)
+        ]
+        dimension_irrelevant_source_count += len(dimension_irrelevant_source_ids)
+        source_ids = merge_ordered_refs(
+            source_id
+            for source_id in available_source_ids
+            if source_id not in set(dimension_irrelevant_source_ids)
         )
         dropped_source_ids = [
             source_id for source_id in claim.source_ids if source_id not in source_by_id
         ]
+        dropped_source_ids = merge_ordered_refs(
+            [*dropped_source_ids, *dimension_irrelevant_source_ids]
+        )
         if not source_ids:
             dropped_claims.append(
                 {
@@ -56,7 +71,9 @@ def build_claim_card_bundle(
         evidence_strength = _evidence_strength_for_claim(claim, claim_sources)
         caveats: list[str] = []
         if dropped_source_ids:
-            caveats.append("Some cited source IDs were not available to the analyst bundle.")
+            caveats.append(
+                "Some cited source IDs were unavailable or out of scope for this dimension."
+            )
 
         cards.append(
             ClaimCard(
@@ -88,6 +105,7 @@ def build_claim_card_bundle(
                         source.source_type for source in claim_sources if source.source_type
                     ],
                     "dropped_source_ids": dropped_source_ids,
+                    "dimension_irrelevant_source_ids": dimension_irrelevant_source_ids,
                 },
             )
         )
@@ -136,6 +154,7 @@ def build_claim_card_bundle(
             "card_count": len(cards),
             "dropped_claim_count": len(dropped_claims),
             "provided_source_count": len(sources),
+            "dimension_irrelevant_source_count": dimension_irrelevant_source_count,
         },
         gap_count=gap_count,
         producer_context={
@@ -404,6 +423,86 @@ def _is_community_source_type(source_type: str) -> bool:
     return any(
         marker in source_type
         for marker in ("community", "reddit", "forum", "github_issue", "discussion")
+    )
+
+
+def _source_relevant_to_dimension(source: RawSource, dimension: str) -> bool:
+    dimension_key = dimension.casefold().strip()
+    if "pricing" in dimension_key or "price" in dimension_key:
+        return _source_has_pricing_evidence(source)
+    return True
+
+
+def _source_has_pricing_evidence(source: RawSource) -> bool:
+    normalized_fields = source.metadata.get("normalized_fields")
+    if _normalized_fields_include_pricing(normalized_fields):
+        return True
+    high_signal_text = " ".join(
+        str(value or "")
+        for value in (
+            source.title,
+            source.url,
+            source.metadata.get("canonical_url"),
+            source.metadata.get("source_role"),
+        )
+    ).casefold()
+    if any(
+        token in high_signal_text
+        for token in (
+            "pricing",
+            "price",
+            "plans",
+            "plan",
+            "billing",
+            "usage",
+            "cost",
+            "costs",
+        )
+    ):
+        return True
+    snippet = (source.snippet or "").casefold()
+    has_money_or_unit = bool(
+        re.search(
+            r"([$€£]\s?\d|\b\d+\s?(?:usd|eur|gbp|credits?|tokens?)\b|/mo\b|per month|monthly|yearly|annually)",
+            snippet,
+        )
+    )
+    has_pricing_context = any(
+        token in snippet
+        for token in (
+            "pricing",
+            "price",
+            "plan",
+            "billing",
+            "cost",
+            "credit",
+            "usage",
+            "subscription",
+            "monthly",
+            "yearly",
+            "month",
+            "user",
+        )
+    )
+    return has_money_or_unit and has_pricing_context
+
+
+def _normalized_fields_include_pricing(value: object) -> bool:
+    if value is None:
+        return False
+    text = repr(value).casefold()
+    return any(
+        token in text
+        for token in (
+            "price",
+            "pricing",
+            "price_point",
+            "billing",
+            "cost",
+            "credit",
+            "plan",
+            "tier",
+        )
     )
 
 
