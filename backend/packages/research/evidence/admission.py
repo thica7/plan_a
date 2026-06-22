@@ -27,6 +27,7 @@ from packages.research.models import (
     ResearchResult,
     SourceCandidate,
 )
+from packages.research.source_fitness import classify_source_fitness
 from packages.schema.models import RawSource
 
 SourceExistsCallable = Callable[[str, list[RawSource]], bool]
@@ -281,6 +282,7 @@ def raw_sources_from_research_result(
             continue
         fallback = fallback_snippet(page)
         snippet = snippet_from_evidence_items(page_items, fallback=fallback)
+        fitness = classify_source_fitness(brief, candidate, page)
         source = raw_source_from_capture(
             brief,
             candidate,
@@ -289,6 +291,9 @@ def raw_sources_from_research_result(
             source_type="webpage_verified",
             snippet=snippet,
             metadata={
+                "source_fitness": fitness.fitness,
+                "source_fitness_reason": fitness.reason,
+                "coverage_intents": list(fitness.coverage_intents),
                 "normalized_fields": normalized_fields_as_dicts(
                     normalized_fields_from_evidence_items(page_items)
                 )
@@ -352,6 +357,15 @@ def source_quality_problem(source: RawSource) -> str | None:
     text = f"{source.title}\n{source.snippet}".strip()
     normalized = text.casefold()
     snippet_normalized = source.snippet.casefold()
+    source_fitness = str(source.metadata.get("source_fitness") or "").casefold()
+    if "pricing" in source.dimension.casefold() and source_fitness in {
+        "changelog",
+        "product_docs",
+    }:
+        return (
+            f"Source {source.id} has source fitness '{source_fitness}', which cannot "
+            "support current pricing evidence."
+        )
     if len(source.snippet.strip()) < 24 and not has_concrete_source_signal(
         source.dimension, normalized
     ):

@@ -51,6 +51,7 @@ from packages.research.pipeline import run_research_pipeline
 from packages.research.repair import repair_tasks_from_gaps
 from packages.research.repair.redos import repair_tasks_to_redo_scopes
 from packages.research.repair.strategies import repair_task_from_gap
+from packages.research.source_fitness import classify_source_fitness
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
@@ -60,6 +61,27 @@ from packages.schema.enterprise import (
 from packages.schema.models import RawSource
 from packages.search import SearchResult
 from packages.tools.evidence_fetch import EvidenceFetchResult
+
+
+class _FakeFetchResult:
+    def __init__(
+        self,
+        *,
+        url: str,
+        title: str,
+        text: str,
+        ok: bool = True,
+        quality_score: float = 1.0,
+    ) -> None:
+        self.url = url
+        self.title = title
+        self.text = text
+        self.markdown = text
+        self.snippet = text[:700]
+        self.ok = ok
+        self.quality_score = quality_score
+        self.status_code = 200 if ok else 500
+        self.fetch_method = "test_fetch"
 
 
 def test_research_discovery_separates_trusted_and_homepage_candidates() -> None:
@@ -112,6 +134,167 @@ def test_research_candidate_ranking_prefers_trusted_origin() -> None:
     )
 
     assert ranked[0].url == "https://docs.anthropic.com/en/docs/claude-code/overview"
+
+
+def test_pricing_source_fitness_classifies_changelog_as_non_pricing_source() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agent",
+        competitor="Windsurf",
+        dimension="pricing",
+        homepage_hint="https://windsurf.com",
+    )
+    candidate = SourceCandidate(
+        title="Windsurf plugin changelog",
+        url="https://docs.devin.ai/windsurf/plugins/changelog",
+        origin="trusted_registry",
+        competitor="Windsurf",
+        dimension="pricing",
+    )
+    page = CapturedPage(
+        candidate_id=candidate.id,
+        requested_url=candidate.url,
+        final_url=candidate.url,
+        status="ok",
+        title="Changelog - Devin Docs",
+        text="Changelog for Windsurf plugin updates. Pricing navigation appears in the docs shell.",
+        markdown="Changelog for Windsurf plugin updates. Pricing navigation appears in the docs shell.",
+        snippet="Changelog for Windsurf plugin updates. Pricing navigation appears in the docs shell.",
+        content_hash="hash",
+        fetch_method="test",
+        quality_score=1.0,
+        text_length=82,
+    )
+
+    fitness = classify_source_fitness(brief, candidate, page)
+
+    assert fitness.fitness == "changelog"
+    assert "current_plan_price_support" not in fitness.coverage_intents
+
+
+def test_pricing_changelog_fitness_rejects_raw_source_admission() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agent",
+        competitor="Windsurf",
+        dimension="pricing",
+        homepage_hint="https://windsurf.com",
+    )
+    candidate = SourceCandidate(
+        title="Windsurf plugin changelog",
+        url="https://docs.devin.ai/windsurf/plugins/changelog",
+        origin="trusted_registry",
+        competitor="Windsurf",
+        dimension="pricing",
+        confidence=0.9,
+    )
+    page = CapturedPage(
+        candidate_id=candidate.id,
+        requested_url=candidate.url,
+        final_url=candidate.url,
+        status="ok",
+        title="Changelog - Devin Docs",
+        text="Windsurf plugin changelog with pricing navigation and $20 text in the docs shell.",
+        markdown="Windsurf plugin changelog with pricing navigation and $20 text in the docs shell.",
+        snippet="Windsurf plugin changelog with pricing navigation and $20 text in the docs shell.",
+        content_hash="hash",
+        fetch_method="test",
+        quality_score=1.0,
+        text_length=78,
+    )
+    evidence = EvidenceItem(
+        competitor="Windsurf",
+        dimension="pricing",
+        field="price_points",
+        value=["$20"],
+        source_candidate_id=candidate.id,
+        captured_page_id=page.id,
+        source_url=page.final_url,
+        quote="Windsurf plugin changelog with pricing navigation and $20 text in the docs shell.",
+        confidence=0.9,
+        status="accepted",
+    )
+    result = ResearchResult(
+        brief=brief,
+        candidates=[candidate],
+        captured_pages=[page],
+        evidence_items=[evidence],
+    )
+    diagnostics: list[dict[str, object]] = []
+
+    sources = raw_sources_from_research_result(
+        brief,
+        result,
+        batch_sources=[],
+        target_source_count=1,
+        requires_accepted_evidence=True,
+        source_exists=lambda _url, _sources: False,
+        confidence_for_source=lambda _candidate, _page, _snippet, _items: 0.95,
+        fallback_snippet=lambda captured: captured.snippet,
+        rejection_diagnostics=diagnostics,
+    )
+
+    assert sources == []
+    assert diagnostics[0]["reason"] == "source_quality_problem"
+    assert "changelog" in str(diagnostics[0]["detail"]).casefold()
+
+
+@pytest.mark.asyncio
+async def test_research_pipeline_records_candidate_ledger_statuses() -> None:
+    brief = ResearchBrief(
+        run_id="run-ledger",
+        topic="AI coding agent",
+        competitor="ExampleAI",
+        dimension="pricing",
+        homepage_hint=None,
+        include_trusted_sources=False,
+        include_homepage_candidates=False,
+        target_source_count=1,
+        max_search_queries=0,
+        max_candidates=2,
+        max_fetches=2,
+        max_repair_rounds=0,
+    )
+    accepted = SourceCandidate(
+        title="ExampleAI pricing",
+        url="https://example.ai/pricing",
+        origin="manual",
+        competitor="ExampleAI",
+        dimension="pricing",
+        confidence=0.9,
+    )
+    failed = SourceCandidate(
+        title="ExampleAI old pricing",
+        url="https://example.ai/old-pricing",
+        origin="manual",
+        competitor="ExampleAI",
+        dimension="pricing",
+        confidence=0.8,
+    )
+
+    async def fake_fetch(url: str) -> _FakeFetchResult | None:
+        if url.endswith("/old-pricing"):
+            return None
+        return _FakeFetchResult(
+            url=url,
+            title="ExampleAI Pricing",
+            text="ExampleAI pricing plans include Pro at $20 per month and Enterprise contact sales.",
+        )
+
+    result = await run_research_pipeline(
+        brief,
+        fetch=fake_fetch,
+        seed_candidates=[accepted, failed],
+    )
+
+    ledger_by_url = {entry.url: entry for entry in result.candidate_ledger}
+
+    assert ledger_by_url["https://example.ai/pricing"].status == "accepted"
+    assert ledger_by_url["https://example.ai/pricing"].selected is True
+    assert ledger_by_url["https://example.ai/pricing"].fetched is True
+    assert ledger_by_url["https://example.ai/pricing"].source_fitness == "official_pricing"
+    assert ledger_by_url["https://example.ai/old-pricing"].status == "fetch_failed"
+    assert result.metrics["candidate_ledger_count"] == 2
 
 
 def test_search_candidate_confidence_requires_competitor_relevance() -> None:

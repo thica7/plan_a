@@ -21,6 +21,7 @@ from packages.research.evidence import (
 )
 from packages.research.extraction import extract_page
 from packages.research.models import (
+    CandidateLedgerEntry,
     CapturedPage,
     EvidenceItem,
     ExtractionResult,
@@ -31,6 +32,7 @@ from packages.research.models import (
     SourceCandidate,
 )
 from packages.research.repair import repair_tasks_from_gaps
+from packages.research.source_fitness import candidate_intent, classify_source_fitness
 from packages.search import SearchResult
 
 FetchCallable = Callable[[str], Awaitable[Any]]
@@ -109,6 +111,13 @@ async def run_research_pipeline(
             break
 
     normalized_fields = normalized_fields_from_evidence_items(evidence_items)
+    candidate_ledger = _candidate_ledger(
+        brief,
+        candidates=candidates,
+        pages=captured_pages,
+        evidence_items=evidence_items,
+        capture_metrics=capture_metrics,
+    )
     assembly = assemble_research_summary(
         brief,
         evidence_items=evidence_items,
@@ -121,6 +130,7 @@ async def run_research_pipeline(
         captured_pages=captured_pages,
         extractions=extractions,
         evidence_items=evidence_items,
+        candidate_ledger=candidate_ledger,
         normalized_fields=normalized_fields,
         gaps=gaps,
         repair_tasks=planned_repairs,
@@ -128,6 +138,7 @@ async def run_research_pipeline(
         metrics={
             **_metrics(candidates, captured_pages, extractions, evidence_items, gaps, brief),
             **capture_metrics,
+            **_ledger_metrics(candidate_ledger),
             "initial_gap_count": initial_gap_count,
             "remaining_gap_count": len(gaps),
             "repair_round_count": repair_round_count,
@@ -240,6 +251,100 @@ async def _capture_candidates(
         stats["capture_fetch_count"] += 1
         pages.append(page)
     return pages, stats
+
+
+def _candidate_ledger(
+    brief: ResearchBrief,
+    *,
+    candidates: list[SourceCandidate],
+    pages: list[CapturedPage],
+    evidence_items: list[EvidenceItem],
+    capture_metrics: dict[str, Any],
+) -> list[CandidateLedgerEntry]:
+    page_by_candidate = {page.candidate_id: page for page in pages}
+    skipped_reasons = capture_metrics.get("capture_skipped_reasons")
+    if not isinstance(skipped_reasons, dict):
+        skipped_reasons = {}
+    items_by_page: dict[str, list[EvidenceItem]] = {}
+    for item in evidence_items:
+        items_by_page.setdefault(item.captured_page_id, []).append(item)
+
+    ledger: list[CandidateLedgerEntry] = []
+    for candidate in candidates:
+        page = page_by_candidate.get(candidate.id)
+        intent = candidate_intent(brief, candidate)
+        if page is None:
+            reason = str(skipped_reasons.get(candidate.id) or "not_selected_for_capture")
+            ledger.append(
+                CandidateLedgerEntry(
+                    candidate_id=candidate.id,
+                    url=candidate.url,
+                    origin=candidate.origin,
+                    intent=intent,
+                    status="skipped",
+                    reason=reason,
+                )
+            )
+            continue
+
+        page_items = items_by_page.get(page.id, [])
+        accepted_items = [item for item in page_items if item.status == "accepted"]
+        rejected_items = [item for item in page_items if item.status == "rejected"]
+        fitness = classify_source_fitness(brief, candidate, page)
+        evidence_status = (
+            "accepted" if accepted_items else "rejected" if rejected_items else "unreviewed"
+        )
+        if page.status == "failed":
+            status = "fetch_failed"
+            reason = page.failure_reason or page.error or "fetch_failed"
+        elif page.status == "rejected":
+            status = "raw_source_rejected"
+            reason = page.failure_reason or "capture_rejected"
+        elif accepted_items:
+            status = "accepted"
+            reason = "accepted_evidence"
+        elif rejected_items:
+            status = "evidence_rejected"
+            reason = "; ".join(
+                sorted({item.rejection_reason or "evidence_rejected" for item in rejected_items})
+            )
+        else:
+            status = "fetched"
+            reason = "captured_without_field_evidence"
+
+        ledger.append(
+            CandidateLedgerEntry(
+                candidate_id=candidate.id,
+                url=candidate.url,
+                origin=candidate.origin,
+                intent=intent,
+                status=status,
+                reason=reason,
+                selected=True,
+                fetched=page.status == "ok",
+                source_fitness=fitness.fitness,
+                coverage_intent=fitness.coverage_intents[0] if fitness.coverage_intents else intent,
+                requested_url=page.requested_url,
+                final_url=page.final_url,
+                page_status=page.status,
+                evidence_status=evidence_status,
+                metadata={"source_fitness_reason": fitness.reason},
+            )
+        )
+    return ledger
+
+
+def _ledger_metrics(ledger: list[CandidateLedgerEntry]) -> dict[str, Any]:
+    status_counts: dict[str, int] = {}
+    fitness_counts: dict[str, int] = {}
+    for entry in ledger:
+        status_counts[entry.status] = status_counts.get(entry.status, 0) + 1
+        fitness_counts[entry.source_fitness] = fitness_counts.get(entry.source_fitness, 0) + 1
+    return {
+        "candidate_ledger_count": len(ledger),
+        "candidate_ledger_status_counts": status_counts,
+        "source_fitness_counts": fitness_counts,
+    }
 
 
 def _repair_brief(

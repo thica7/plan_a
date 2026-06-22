@@ -979,6 +979,24 @@ class CollectorAgentMixin:
                     "repair_task_ids": [task.id for task in result.repair_tasks],
                     "metrics": result.metrics,
                     "admission_rejections": admission_diagnostics[:12],
+                    "candidate_ledger": [
+                        {
+                            "candidate_id": entry.candidate_id,
+                            "url": entry.url,
+                            "origin": entry.origin,
+                            "intent": entry.intent,
+                            "status": entry.status,
+                            "reason": entry.reason,
+                            "selected": entry.selected,
+                            "fetched": entry.fetched,
+                            "source_fitness": entry.source_fitness,
+                            "coverage_intent": entry.coverage_intent,
+                            "final_url": entry.final_url,
+                            "page_status": entry.page_status,
+                            "evidence_status": entry.evidence_status,
+                        }
+                        for entry in result.candidate_ledger[:12]
+                    ],
                 },
                 ensure_ascii=False,
             ),
@@ -990,6 +1008,11 @@ class CollectorAgentMixin:
                 "gap_count": len(result.gaps),
                 "repair_round_count": result.metrics.get("repair_round_count", 0),
                 "admission_rejection_count": len(admission_diagnostics),
+                "candidate_ledger_count": len(result.candidate_ledger),
+                "source_fitness_counts": json.dumps(
+                    result.metrics.get("source_fitness_counts", {}),
+                    ensure_ascii=False,
+                ),
             },
         )
         return sources

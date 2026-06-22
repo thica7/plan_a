@@ -20,6 +20,40 @@ CandidateOrigin = Literal[
 CaptureStatus = Literal["ok", "failed", "rejected"]
 ExtractionStatus = Literal["extracted", "partial", "empty", "not_applicable"]
 EvidenceStatus = Literal["accepted", "rejected", "unreviewed"]
+CandidateIntent = Literal[
+    "official_pricing_page",
+    "official_billing_or_usage_docs",
+    "current_plan_price_support",
+    "community_or_conflict_signal",
+    "official_docs",
+    "product_page",
+    "third_party_context",
+    "unknown",
+]
+CandidateLedgerStatus = Literal[
+    "discovered",
+    "deduped",
+    "dropped_by_rank",
+    "selected",
+    "skipped",
+    "fetch_failed",
+    "fetched",
+    "extracted",
+    "evidence_rejected",
+    "raw_source_rejected",
+    "accepted",
+]
+SourceFitness = Literal[
+    "official_pricing",
+    "official_billing_docs",
+    "official_usage_limits",
+    "changelog",
+    "product_docs",
+    "community",
+    "third_party",
+    "irrelevant_or_stale",
+    "unknown",
+]
 GapSeverity = Literal["info", "warn", "blocker"]
 RepairStrategy = Literal[
     "targeted_discovery",
@@ -219,6 +253,25 @@ class EvidenceItem(ResearchBaseModel):
         return self
 
 
+class CandidateLedgerEntry(ResearchBaseModel):
+    candidate_id: str
+    url: str
+    origin: str
+    intent: CandidateIntent = "unknown"
+    status: CandidateLedgerStatus
+    reason: str = ""
+    selected: bool = False
+    fetched: bool = False
+    source_fitness: SourceFitness = "unknown"
+    coverage_intent: CandidateIntent = "unknown"
+    requested_url: str | None = None
+    final_url: str | None = None
+    page_status: CaptureStatus | None = None
+    evidence_status: EvidenceStatus | None = None
+    raw_source_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class QualityGap(ResearchBaseModel):
     id: str = ""
     severity: GapSeverity
@@ -333,6 +386,7 @@ class ResearchResult(ResearchBaseModel):
     captured_pages: list[CapturedPage] = Field(default_factory=list)
     extractions: list[ExtractionResult] = Field(default_factory=list)
     evidence_items: list[EvidenceItem] = Field(default_factory=list)
+    candidate_ledger: list[CandidateLedgerEntry] = Field(default_factory=list)
     normalized_fields: list[NormalizedEvidenceField] = Field(default_factory=list)
     raw_source_ids: list[str] = Field(default_factory=list)
     gaps: list[QualityGap] = Field(default_factory=list)
