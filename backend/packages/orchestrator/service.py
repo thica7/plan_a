@@ -56,7 +56,9 @@ from packages.identity import (
     compute_run_id_for_idempotency_key,
     compute_topic_normalized,
     new_run_id,
+    normalize_source_token,
     runtime_prefixed_id,
+    source_tokens,
     stable_prefixed_id,
 )
 from packages.llm import DoubaoClient
@@ -1977,10 +1979,12 @@ class RunService(
             if scope.kind == "collector":
                 if scoped_competitors:
                     target_competitors = scoped_competitors
+                    cited_source_ids = self._report_cited_raw_source_ids(detail.report_md)
                     removed_source_ids = self._remove_sources_for_collector_redo(
                         detail,
                         dimension=dimension,
                         scoped_competitors=scoped_competitors,
+                        preserve_source_ids=cited_source_ids,
                     )
                     dependent_competitors = self._competitors_with_removed_source_dependency(
                         detail,
@@ -1992,9 +1996,12 @@ class RunService(
                     ):
                         self._clear_competitor_dimension_output(detail, competitor, dimension)
                 else:
-                    detail.raw_sources = [
-                        source for source in detail.raw_sources if source.dimension != dimension
-                    ]
+                    self._remove_sources_for_collector_redo(
+                        detail,
+                        dimension=dimension,
+                        scoped_competitors=[],
+                        preserve_source_ids=self._report_cited_raw_source_ids(detail.report_md),
+                    )
                     self._clear_dimension_outputs(detail, dimension)
             elif scoped_competitors:
                 target_competitors = scoped_competitors
@@ -2024,20 +2031,42 @@ class RunService(
         *,
         dimension: str,
         scoped_competitors: list[str],
+        preserve_source_ids: set[str] | None = None,
     ) -> set[str]:
+        preserve_source_ids = preserve_source_ids or set()
         removed_source_ids: set[str] = set()
         retained_sources: list[RawSource] = []
         for source in detail.raw_sources:
-            should_remove = source.dimension == dimension and any(
-                self._source_matches_competitor(source, competitor)
-                for competitor in scoped_competitors
+            should_remove = source.dimension == dimension and (
+                not scoped_competitors
+                or any(
+                    self._source_matches_competitor(source, competitor)
+                    for competitor in scoped_competitors
+                )
             )
             if should_remove:
+                if source.id in preserve_source_ids:
+                    metadata = {
+                        **source.metadata,
+                        "redo_preserved_for_existing_citation": True,
+                        "redo_preserved_dimension": dimension,
+                        "redo_preserved_competitors": scoped_competitors,
+                    }
+                    retained_sources.append(source.model_copy(update={"metadata": metadata}))
+                    continue
                 removed_source_ids.add(source.id)
                 continue
             retained_sources.append(source)
         detail.raw_sources = retained_sources
         return removed_source_ids
+
+    @staticmethod
+    def _report_cited_raw_source_ids(report_md: str) -> set[str]:
+        return {
+            normalized
+            for token in source_tokens(report_md)
+            if (normalized := normalize_source_token(token))
+        }
 
     def _competitors_with_removed_source_dependency(
         self,

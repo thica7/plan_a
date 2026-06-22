@@ -1839,6 +1839,52 @@ def test_report_release_gate_warns_on_high_risk_single_source_claim() -> None:
     assert "listed claim-validation issue types" in consistency_issues[0].recommendation
 
 
+def test_release_gate_claim_consistency_redo_scope_distinguishes_evidence_gaps_from_claim_repair() -> None:
+    missing_evidence = BusinessQAFinding(
+        id="release-missing-evidence",
+        rule_id="claim_self_consistency_required",
+        rule_name="Claim self-consistency",
+        severity="blocker",
+        competitor_name="Windsurf",
+        dimension="pricing",
+        message="Claim validation is unsupported; issue_types=missing_evidence.",
+        claim_ids=["claim-missing"],
+        evidence_ids=[],
+        metadata={"claim_validation_issue_types": ["missing_evidence"]},
+    )
+    conflicting_claim = BusinessQAFinding(
+        id="release-conflicting-claim",
+        rule_id="claim_self_consistency_required",
+        rule_name="Claim self-consistency",
+        severity="blocker",
+        competitor_name="Windsurf",
+        dimension="pricing",
+        message="Claim validation is unsupported; issue_types=conflicting_evidence.",
+        claim_ids=["claim-conflict"],
+        evidence_ids=["evidence-1"],
+        metadata={"claim_validation_issue_types": ["conflicting_evidence"]},
+    )
+    weak_text = BusinessQAFinding(
+        id="release-weak-text",
+        rule_id="claim_self_consistency_required",
+        rule_name="Claim self-consistency",
+        severity="warn",
+        competitor_name="Windsurf",
+        dimension="persona",
+        message="Claim validation is weak; issue_types=weak_text_support.",
+        claim_ids=["claim-weak-text"],
+        evidence_ids=["evidence-2"],
+        metadata={"claim_validation_issue_types": ["weak_text_support"]},
+    )
+
+    scopes = business_findings_to_redo_scopes(
+        [missing_evidence, conflicting_claim, weak_text]
+    )
+
+    assert [scope.kind for scope in scopes] == ["collector", "analyst", "analyst"]
+    assert [scope.target_subagent for scope in scopes] == ["pricing", "pricing", "persona"]
+
+
 def test_report_release_gate_warns_on_unresolved_run_qa_metadata() -> None:
     competitor = _competitor()
     evidence = [

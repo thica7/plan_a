@@ -109,7 +109,7 @@ class Settings:
     hitl_timeout_seconds: float = 60.0
     collector_react_enabled: bool = True
     collector_react_max_turns: int = 3
-    collector_target_verified_sources_per_branch: int = 3
+    collector_target_verified_sources_per_branch: int = 5
     collector_search_max_results: int = 6
     collector_community_enabled: bool = True
     collector_community_queries_per_branch: int = 3
@@ -226,7 +226,7 @@ def get_settings() -> Settings:
         collector_react_max_turns=max(1, min(6, int(os.getenv("COLLECTOR_REACT_MAX_TURNS", "3")))),
         collector_target_verified_sources_per_branch=_env_int(
             "COLLECTOR_TARGET_VERIFIED_SOURCES_PER_BRANCH",
-            3,
+            5,
             minimum=1,
             maximum=5,
         ),

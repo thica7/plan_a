@@ -808,6 +808,30 @@ def test_source_quality_accepts_trusted_windsurf_docs_redirect_with_devin_rebran
     assert source_quality_problem(source) is None
 
 
+def test_source_quality_accepts_windsurf_pricing_redirect_when_quote_omits_identity() -> None:
+    source = RawSource(
+        id="pricing-windsurf-devin-official",
+        competitor="Windsurf",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Plans and Pricing | Devin",
+        url="https://devin.ai/pricing",
+        snippet=(
+            "Plans and Pricing include Free $0, Pro $20 per month, "
+            "Teams plans, increased quotas, and Enterprise contact sales."
+        ),
+        content_hash="windsurf-devin-pricing-hash",
+        confidence=0.96,
+        metadata={
+            "requested_url": "https://windsurf.com/pricing",
+            "final_url": "https://devin.ai/pricing",
+            "redirected": True,
+        },
+    )
+
+    assert source_quality_problem(source) is None
+
+
 def test_raw_source_admission_reports_rejection_reason_for_accepted_evidence() -> None:
     brief = ResearchBrief(
         run_id="run-1",

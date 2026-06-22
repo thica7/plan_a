@@ -110,7 +110,7 @@ class CollectorAgentMixin:
         detail = record.detail
         skill = self._skill_registry.get(dimension)
         observations: list[dict[str, object]] = []
-        fetched_by_url: dict[str, Any] = {}
+        fetched_by_url: dict[str, tuple[str, Any]] = {}
         added = 0
         max_turns = self._collector_task_max_turns(detail.plan, dimension)
         allowed_actions = [
@@ -188,7 +188,7 @@ class CollectorAgentMixin:
                     )
                     continue
                 fetched = await self._trace_fetch(record, "collector", dimension, url, context)
-                fetched_by_url[fetched.url] = fetched
+                fetched_by_url[fetched.url] = (url, fetched)
                 observations.append(
                     {
                         "turn": turn,
@@ -248,7 +248,7 @@ class CollectorAgentMixin:
         detail = record.detail
         skill = self._skill_registry.get(dimension)
         observations: list[dict[str, object]] = []
-        fetched_by_url: dict[str, Any] = {}
+        fetched_by_url: dict[str, tuple[str, Any]] = {}
         qa_feedback = self._qa_feedback_for_branch(detail, "collector", dimension, competitor)
         max_turns = self._collector_task_max_turns(detail.plan, dimension, competitor)
         allowed_actions = self._collector_react_allowed_actions(dimension)
@@ -347,7 +347,7 @@ class CollectorAgentMixin:
                 fetched = await self._trace_fetch(
                     record, "collector", context.subagent, url, context
                 )
-                fetched_by_url[fetched.url] = fetched
+                fetched_by_url[fetched.url] = (url, fetched)
                 observations.append(
                     {
                         "turn": turn,
@@ -413,7 +413,7 @@ class CollectorAgentMixin:
                 observations.append({"turn": turn, "action": action, "queries": plan.queries})
                 continue
             if action == "finish":
-                return self._source_candidates_from_react_finish(
+                candidates = self._source_candidates_from_react_finish(
                     detail,
                     dimension,
                     {
@@ -424,10 +424,23 @@ class CollectorAgentMixin:
                     },
                     default_competitor=competitor,
                 )
+                return [
+                    *candidates,
+                    *self._source_candidates_from_react_fetches(
+                        dimension,
+                        competitor,
+                        fetched_by_url,
+                        start_rank=len(candidates),
+                    ),
+                ]
             observations.append(
                 {"turn": turn, "action": action or "unknown", "error": "unsupported_action"}
             )
-        return []
+        return self._source_candidates_from_react_fetches(
+            dimension,
+            competitor,
+            fetched_by_url,
+        )
 
     def _collector_react_allowed_actions(self, dimension: str) -> list[str]:
         skill = self._skill_registry.get(dimension)
@@ -507,6 +520,44 @@ class CollectorAgentMixin:
                     metadata={
                         "collector_adapter": "react_candidate_proposer",
                         "react_finish_summary": summary,
+                    },
+                )
+            )
+        return candidates
+
+    def _source_candidates_from_react_fetches(
+        self,
+        dimension: str,
+        competitor: str,
+        fetched_by_url: dict[str, tuple[str, Any]],
+        *,
+        start_rank: int = 0,
+    ) -> list[SourceCandidate]:
+        candidates: list[SourceCandidate] = []
+        seen_requested_urls: set[str] = set()
+        for rank_offset, (requested_url, fetched) in enumerate(fetched_by_url.values()):
+            if requested_url in seen_requested_urls or not getattr(fetched, "ok", False):
+                continue
+            seen_requested_urls.add(requested_url)
+            title = str(getattr(fetched, "title", "") or f"{competitor} {dimension} evidence")
+            snippet = str(getattr(fetched, "snippet", "") or getattr(fetched, "text", "") or title)
+            final_url = str(getattr(fetched, "url", "") or requested_url)
+            candidates.append(
+                SourceCandidate(
+                    title=title,
+                    url=requested_url,
+                    snippet=snippet[:1000],
+                    origin="llm_fallback",
+                    competitor=competitor,
+                    dimension=dimension,
+                    rank=start_rank + rank_offset,
+                    confidence=0.82,
+                    reason="collector_react_fetch_materialized",
+                    metadata={
+                        "collector_adapter": "react_fetch_materializer",
+                        "react_fetch_materialized": True,
+                        "requested_url": requested_url,
+                        "final_url": final_url,
                     },
                 )
             )

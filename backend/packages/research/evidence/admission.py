@@ -586,6 +586,8 @@ def competitor_identity_problem(source: RawSource) -> str | None:
             )
     hints = identity_terms_for_competitor(source.competitor)
     if hints and not any(term in haystack for term in hints):
+        if key == "windsurf" and is_windsurf_devin_redirect_source(source, haystack):
+            return None
         return (
             f"Source {source.id} does not expose a recognizable {source.competitor} "
             "product identity signal."
@@ -614,7 +616,10 @@ def is_windsurf_devin_redirect_source(source: RawSource, haystack: str) -> bool:
     )
     pricing_rebrand = (
         "devin.ai/pricing" in url
-        and "windsurf is now devin desktop" in haystack
+        and (
+            "windsurf is now devin desktop" in haystack
+            or source_has_trusted_identity_lineage(source)
+        )
         and has_dimension_specific_fact("pricing", haystack)
         and "cognition devin" not in haystack
     )

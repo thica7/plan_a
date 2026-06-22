@@ -348,6 +348,156 @@ def _writer_repair_detail(report_md: str) -> RunDetail:
     )
 
 
+def test_collector_redo_preserves_sources_cited_by_current_report() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    cited_source = RawSource(
+        id="raw-source-cited",
+        competitor="Windsurf",
+        covered_competitors=["Windsurf"],
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Windsurf pricing",
+        url="https://windsurf.com/pricing",
+        snippet="Windsurf pricing evidence.",
+        content_hash="cited",
+        confidence=0.92,
+    )
+    uncited_source = cited_source.model_copy(
+        update={
+            "id": "raw-source-uncited",
+            "url": "https://windsurf.com/plans",
+            "content_hash": "uncited",
+            "snippet": "Uncited Windsurf pricing evidence.",
+        }
+    )
+    other_source = cited_source.model_copy(
+        update={
+            "id": "raw-source-feature",
+            "dimension": "feature",
+            "url": "https://windsurf.com/features",
+            "content_hash": "feature",
+            "snippet": "Feature evidence.",
+        }
+    )
+    detail = RunDetail(
+        id="run-source-preservation",
+        topic="Source preservation",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="Source preservation",
+            competitors=["Windsurf"],
+            dimensions=["pricing", "feature"],
+        ),
+        raw_sources=[cited_source, uncited_source, other_source],
+        report_md="## Pricing\nWindsurf pricing is documented. [source:raw-source-cited]",
+    )
+
+    dimensions, target_competitors = service._prepare_redo_scope_inputs(
+        detail,
+        RedoScope(
+            kind="collector",
+            target_subagent="pricing",
+            target_competitor="Windsurf",
+            target_competitors=["Windsurf"],
+            rationale="Refresh Windsurf pricing evidence.",
+        ),
+    )
+
+    assert dimensions == ["pricing"]
+    assert target_competitors == ["Windsurf"]
+    assert {source.id for source in detail.raw_sources} == {
+        "raw-source-cited",
+        "raw-source-feature",
+    }
+    preserved = next(source for source in detail.raw_sources if source.id == "raw-source-cited")
+    assert preserved.metadata["redo_preserved_for_existing_citation"] is True
+
+
+def test_dimension_collector_redo_preserves_sources_cited_by_current_report() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    pricing_source = RawSource(
+        id="raw-source-pricing-cited",
+        competitor="Cursor",
+        covered_competitors=["Cursor"],
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.com/pricing",
+        snippet="Cursor pricing evidence.",
+        content_hash="pricing-cited",
+        confidence=0.91,
+    )
+    uncited_pricing = pricing_source.model_copy(
+        update={
+            "id": "raw-source-pricing-uncited",
+            "url": "https://cursor.com/teams",
+            "content_hash": "pricing-uncited",
+        }
+    )
+    persona_source = pricing_source.model_copy(
+        update={
+            "id": "raw-source-persona",
+            "dimension": "persona",
+            "url": "https://cursor.com/customers",
+            "content_hash": "persona",
+        }
+    )
+    detail = RunDetail(
+        id="run-dimension-source-preservation",
+        topic="Dimension source preservation",
+        status="running",
+        execution_mode="real",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="Dimension source preservation",
+            competitors=["Cursor"],
+            dimensions=["pricing", "persona"],
+        ),
+        raw_sources=[pricing_source, uncited_pricing, persona_source],
+        report_md="## Pricing\nCursor pricing is documented. [source:raw-source-pricing-cited]",
+    )
+
+    dimensions, target_competitors = service._prepare_redo_scope_inputs(
+        detail,
+        RedoScope(
+            kind="collector",
+            target_subagent="pricing",
+            rationale="Refresh all pricing evidence.",
+        ),
+    )
+
+    assert dimensions == ["pricing"]
+    assert target_competitors == []
+    assert {source.id for source in detail.raw_sources} == {
+        "raw-source-pricing-cited",
+        "raw-source-persona",
+    }
+
+
 def _blocked_release_gate() -> ReportReleaseGate:
     return ReportReleaseGate(
         report_version_id="report-version-1",
@@ -16909,6 +17059,103 @@ async def test_collector_react_finish_fetches_uninspected_urls(
         "fetch_page",
         "clean_research_pipeline",
     ]
+
+
+@pytest.mark.asyncio
+async def test_collector_react_fetches_materialize_without_finish_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_fetch_page(url: str):  # noqa: ANN202
+        return FetchPageResult(
+            url="https://devin.ai/pricing" if url == "https://windsurf.com/pricing" else url,
+            ok=True,
+            title="Plans and Pricing | Devin",
+            text=(
+                "Windsurf is now Devin Desktop. Devin Plans and Pricing include "
+                "Free $0 and Pro $20 per month with increased quotas."
+            ),
+            content_hash="windsurf-devin-pricing",
+            status_code=200,
+        )
+
+    monkeypatch.setattr("packages.orchestrator.service.fetch_evidence_page", fake_fetch_page)
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx-key",
+            collector_react_max_turns=2,
+        ),
+    )
+    actions = [
+        {
+            "action": "fetch_page",
+            "url": "https://windsurf.com/pricing",
+            "rationale": "Fetch official pricing page.",
+            "sources": [],
+        },
+        {
+            "action": "fetch_page",
+            "url": "https://windsurf.com/pricing",
+            "rationale": "Retry official pricing page after redirect.",
+            "sources": [],
+        },
+    ]
+
+    async def fake_complete_json(*, system: str, user: str, schema_hint: str) -> dict:
+        if "bounded collector ReAct runner" in system:
+            return actions.pop(0)
+        raise AssertionError("Fallback collector LLM should not be called.")
+
+    service._llm.complete_json = fake_complete_json  # type: ignore[method-assign]
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="React fetched page materialization",
+            competitors=["Windsurf"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    context = SubagentContext(run_id=detail.id, agent="collector", subagent="pricing-windsurf")
+
+    candidates = await service._run_collector_competitor_react(
+        record,
+        "pricing",
+        "Windsurf",
+        context,
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].url == "https://windsurf.com/pricing"
+    assert candidates[0].metadata["requested_url"] == "https://windsurf.com/pricing"
+    assert candidates[0].metadata["final_url"] == "https://devin.ai/pricing"
+    assert candidates[0].metadata["react_fetch_materialized"] is True
+
+    sources = await service._collect_competitor_with_research_pipeline(
+        record,
+        record.detail,
+        "pricing",
+        "Windsurf",
+        context,
+        batch_sources=[],
+        target_source_count=1,
+        include_official=False,
+        seed_candidates=candidates,
+        enable_search=False,
+        enable_repair=False,
+    )
+
+    assert len(sources) == 1
+    assert str(sources[0].url) == "https://devin.ai/pricing"
+    assert sources[0].metadata["requested_url"] == "https://windsurf.com/pricing"
+    assert sources[0].metadata["final_url"] == "https://devin.ai/pricing"
+    assert sources[0].metadata["normalized_fields"]
 
 
 @pytest.mark.asyncio
