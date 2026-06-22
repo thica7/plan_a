@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import re
-from typing import Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 
 from packages.agents.writer.segment_contract import (
     CORE_HEADING_KEYS,
@@ -305,6 +305,73 @@ def _normalized_fragment_layer(layer: str) -> str:
     if normalized == "core":
         return "core"
     return ""
+
+
+def join_section_repair_parts(
+    parts: Sequence[str],
+    section_headings: str,
+) -> str:
+    requested_headings, requested_keys = _requested_repair_targets(section_headings)
+    has_requested_targets = bool(requested_headings or requested_keys)
+    seen_headings: set[str] = set()
+    cleaned_parts: list[str] = []
+    for part in parts:
+        include_current_block = not has_requested_targets
+        cleaned_lines: list[str] = []
+        for line in part.strip().splitlines():
+            heading = line.strip()
+            is_top_level_heading = heading.startswith("## ") and not heading.startswith(
+                "### "
+            )
+            if is_top_level_heading:
+                include_current_block = not has_requested_targets or _repair_heading_allowed(
+                    heading,
+                    requested_headings=requested_headings,
+                    requested_keys=requested_keys,
+                )
+                if not include_current_block:
+                    continue
+                if heading in seen_headings:
+                    continue
+                seen_headings.add(heading)
+            if include_current_block:
+                cleaned_lines.append(line)
+        cleaned_part = "\n".join(cleaned_lines).strip()
+        if cleaned_part:
+            cleaned_parts.append(cleaned_part)
+    return "\n\n".join(cleaned_parts)
+
+
+def _requested_repair_targets(section_headings: str) -> tuple[set[str], set[str]]:
+    requested_headings: set[str] = set()
+    requested_keys: set[str] = set()
+    for raw_line in section_headings.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if "->" in line:
+            section_key, heading = (part.strip() for part in line.split("->", 1))
+            requested_keys.update(SECTION_ALLOWED_KEYS.get(section_key, (section_key,)))
+        else:
+            heading = line
+        if heading.startswith("## ") and not heading.startswith("### "):
+            requested_headings.add(heading)
+            heading_key = heading_key_for(heading[3:].strip(), "zh-CN")
+            if heading_key is not None:
+                requested_keys.update(SECTION_ALLOWED_KEYS.get(heading_key, (heading_key,)))
+    return requested_headings, requested_keys
+
+
+def _repair_heading_allowed(
+    heading: str,
+    *,
+    requested_headings: set[str],
+    requested_keys: set[str],
+) -> bool:
+    if heading in requested_headings:
+        return True
+    heading_key = heading_key_for(heading[3:].strip(), "zh-CN")
+    return heading_key in requested_keys
 
 
 def _parse_fragment(

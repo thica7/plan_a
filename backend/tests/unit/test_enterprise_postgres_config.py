@@ -1,3 +1,5 @@
+import sys
+import types
 from datetime import datetime
 from importlib.util import find_spec
 from pathlib import Path
@@ -12,7 +14,7 @@ from packages.config.settings import (
     get_settings,
 )
 from packages.enterprise import EnterprisePostgresStore
-from packages.enterprise.postgres import _split_sql
+from packages.enterprise.postgres import _MIGRATED_DATABASE_URLS, _split_sql
 from packages.enterprise.postgres_sanitizer import sanitize_postgres_text, sanitize_postgres_value
 from packages.schema.enterprise import EvidenceRecord
 
@@ -58,11 +60,23 @@ def test_writer_structured_report_enabled_defaults_to_true_after_integration_gat
 ) -> None:
     monkeypatch.setenv(ENV_FILE_LOADING_FLAG, "0")
     monkeypatch.delenv("WRITER_STRUCTURED_REPORT_ENABLED", raising=False)
+
     get_settings.cache_clear()
 
     settings = get_settings()
 
     assert settings.writer_structured_report_enabled is True
+
+
+def test_create_run_rate_limit_settings_allow_explicit_override(monkeypatch) -> None:
+    monkeypatch.setenv("CREATE_RUN_RATE_LIMIT_PER_WINDOW", "12")
+    monkeypatch.setenv("CREATE_RUN_RATE_LIMIT_WINDOW_SECONDS", "30")
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.create_run_rate_limit_per_window == 12
+    assert settings.create_run_rate_limit_window_seconds == 30.0
 
 
 def test_env_file_candidates_include_source_root_when_cwd_is_backend(tmp_path: Path) -> None:
@@ -165,6 +179,38 @@ def test_postgres_store_can_be_constructed_without_migrating() -> None:
     store = EnterprisePostgresStore("postgresql://user:pass@localhost:5432/db", auto_migrate=False)
 
     assert store.database_url == "postgresql://user:pass@localhost:5432/db"
+
+
+def test_postgres_store_auto_migrates_database_url_once(monkeypatch) -> None:
+    psycopg = types.ModuleType("psycopg")
+    psycopg.connect = object()
+    rows = types.ModuleType("psycopg.rows")
+    rows.dict_row = object()
+    json_module = types.ModuleType("psycopg.types.json")
+    json_module.Jsonb = object()
+    monkeypatch.setitem(sys.modules, "psycopg", psycopg)
+    monkeypatch.setitem(sys.modules, "psycopg.rows", rows)
+    monkeypatch.setitem(sys.modules, "psycopg.types.json", json_module)
+    _MIGRATED_DATABASE_URLS.clear()
+    migrate_calls: list[str] = []
+
+    def fake_migrate(self: EnterprisePostgresStore) -> None:
+        migrate_calls.append(self.database_url)
+
+    monkeypatch.setattr(EnterprisePostgresStore, "migrate", fake_migrate)
+
+    first = EnterprisePostgresStore("postgresql://user:pass@localhost:5432/db")
+    second = EnterprisePostgresStore("postgresql://user:pass@localhost:5432/db")
+
+    assert first.database_url == second.database_url
+    assert migrate_calls == ["postgresql://user:pass@localhost:5432/db"]
+
+
+def test_postgres_migration_uses_database_advisory_lock() -> None:
+    source = Path("backend/packages/enterprise/postgres.py").read_text(encoding="utf-8")
+
+    assert "pg_advisory_lock" in source
+    assert "pg_advisory_unlock" in source
 
 
 def test_postgres_store_sets_service_role_rls_context_on_connections() -> None:

@@ -297,6 +297,16 @@ def test_projection_carries_run_quality_metadata() -> None:
                     target_competitor="Cursor",
                     rationale="Recollect official security evidence.",
                 ),
+                metadata={
+                    "issue_kind": "source_freshness",
+                    "source_ids": ["security-1"],
+                    "evidence_audit_trail": [
+                        {
+                            "raw_source_id": "security-1",
+                            "kb_document_id": "kb-doc-security-v1",
+                        }
+                    ],
+                },
             ),
             QCIssue(
                 id="qa-release-gate-1",
@@ -325,6 +335,13 @@ def test_projection_carries_run_quality_metadata() -> None:
     assert [item["id"] for item in metadata["run_qa_findings"]] == ["qa-1"]
     assert metadata["run_qa_findings"][0]["field_path"] == "raw_sources[security-1]"
     assert metadata["run_qa_findings"][0]["redo_scope"]["target_subagent"] == "security"
+    assert metadata["run_qa_findings"][0]["metadata"]["issue_kind"] == "source_freshness"
+    assert (
+        metadata["run_qa_findings"][0]["metadata"]["evidence_audit_trail"][0][
+            "kb_document_id"
+        ]
+        == "kb-doc-security-v1"
+    )
     assert metadata["schema_pass_rate"] == 0.5
     assert metadata["search_only_source_ids"] == ["security-1"]
     assert metadata["low_confidence_source_ids"] == ["security-1"]

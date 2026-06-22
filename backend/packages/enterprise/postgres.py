@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -71,6 +72,9 @@ from packages.sources import (
     preserve_existing_report_layers_for_legacy_upsert,
 )
 
+_MIGRATION_LOCK = threading.Lock()
+_MIGRATED_DATABASE_URLS: set[str] = set()
+
 
 class EnterprisePostgresStore:
     """Postgres-backed enterprise repository for Workspace/Project/Evidence projections."""
@@ -92,7 +96,7 @@ class EnterprisePostgresStore:
         self._dict_row = dict_row
         self._jsonb = Jsonb
         if auto_migrate:
-            self.migrate()
+            self._migrate_once()
 
     @contextmanager
     def _connect(
@@ -149,10 +153,21 @@ class EnterprisePostgresStore:
         script = _schema_path().read_text(encoding="utf-8")
         with self._service_connection() as conn:
             with conn.cursor() as cur:
-                for statement in _split_sql(script):
-                    cur.execute(statement)
-                self._copy_legacy_claim_records(cur)
+                cur.execute("SELECT pg_advisory_lock(%s, %s)", (816873309, 20260619))
+                try:
+                    for statement in _split_sql(script):
+                        cur.execute(statement)
+                    self._copy_legacy_claim_records(cur)
+                finally:
+                    cur.execute("SELECT pg_advisory_unlock(%s, %s)", (816873309, 20260619))
             conn.commit()
+
+    def _migrate_once(self) -> None:
+        with _MIGRATION_LOCK:
+            if self.database_url in _MIGRATED_DATABASE_URLS:
+                return
+            self.migrate()
+            _MIGRATED_DATABASE_URLS.add(self.database_url)
 
     def ping(self) -> str:
         with self._service_connection() as conn:
@@ -673,6 +688,7 @@ class EnterprisePostgresStore:
         self,
         workspace_id: str | None = None,
         *,
+        project_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[NotificationRecord]:
@@ -681,6 +697,9 @@ class EnterprisePostgresStore:
         if workspace_id:
             clauses.append("workspace_id = %s")
             params.append(workspace_id)
+        if project_id:
+            clauses.append("project_id = %s")
+            params.append(project_id)
         if status:
             clauses.append("status = %s")
             params.append(status)
@@ -1255,6 +1274,7 @@ class EnterprisePostgresStore:
         project_id: str | None = None,
         evidence_id: str | None = None,
         report_version_id: str | None = None,
+        raw_source_id: str | None = None,
     ) -> list[ArtifactRecord]:
         sql = "SELECT * FROM artifacts"
         params: list[str] = []
@@ -1271,6 +1291,25 @@ class EnterprisePostgresStore:
         if report_version_id:
             clauses.append("report_version_id = %s")
             params.append(report_version_id)
+        if raw_source_id:
+            clauses.append(
+                "("
+                "metadata->>'raw_source_id' = %s OR "
+                "metadata->>'kb_raw_source_id' = %s OR "
+                "metadata->'artifact_lifecycle'->'links'->>'raw_source_id' = %s OR "
+                "metadata->'artifact_lifecycle'->'links'->>'kb_raw_source_id' = %s OR "
+                "metadata->'source_tokens' ? %s"
+                ")"
+            )
+            params.extend(
+                [
+                    raw_source_id,
+                    raw_source_id,
+                    raw_source_id,
+                    raw_source_id,
+                    raw_source_id,
+                ]
+            )
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY created_at DESC"

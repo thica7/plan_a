@@ -696,8 +696,49 @@ class ReportApprovalActivities:
         gate = self._release_gate(version)
         if gate.allowed:
             return gate
+        self._record_release_gate_blocked_notification(version, gate)
         reasons = "; ".join(item.message for item in gate.issues[:3])
         raise RuntimeError(f"Report release gate blocked approval: {reasons}")
+
+    def _record_release_gate_blocked_notification(
+        self,
+        version: ReportVersionRecord,
+        gate: ReportReleaseGate,
+    ) -> None:
+        top_issue_messages = [issue.message for issue in gate.issues[:3]]
+        notification = NotificationRecord(
+            id=compute_notification_id(
+                "report-approval",
+                version.workspace_id,
+                version.project_id,
+                version.id,
+                [issue.id for issue in gate.issues[:5]],
+            ),
+            workspace_id=version.workspace_id,
+            project_id=version.project_id,
+            notification_type="release_gate_blocked",
+            channel="in_app",
+            severity="critical",
+            status="queued",
+            title="Report approval blocked by release gate",
+            body="; ".join(top_issue_messages)
+            or "Report approval is blocked by release gate findings.",
+            resource_type="report_version",
+            resource_id=version.id,
+            created_by="report-approval-workflow",
+            metadata={
+                "run_id": version.run_id,
+                "report_version_id": version.id,
+                "readiness_score": gate.readiness.score,
+                "readiness_risk_level": gate.readiness.risk_level,
+                "qa_finding_count": gate.qa_evaluation.finding_count,
+                "blocker_count": gate.blocker_count,
+                "warn_count": gate.warn_count,
+                "issue_count": gate.issue_count,
+                "issues": [issue.model_dump(mode="json") for issue in gate.issues[:5]],
+            },
+        )
+        self._store.upsert_notification(notification)
 
     def _release_gate(self, version: ReportVersionRecord) -> ReportReleaseGate:
         project = self._store.get_project(version.project_id)

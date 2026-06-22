@@ -46,7 +46,7 @@ export interface RedoScope {
 export interface QCIssue {
   id: string;
   severity: "info" | "warn" | "blocker";
-  detected_by: "citation" | "consistency" | "coverage" | "schema" | "reflector";
+  detected_by: "citation" | "consistency" | "coverage" | "schema" | "reflector" | "text_quality";
   target_agent: string;
   target_subagent?: string | null;
   target_competitor?: string | null;
@@ -54,6 +54,7 @@ export interface QCIssue {
   problem: string;
   redo_scope: RedoScope;
   self_found: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface RawSource {
@@ -67,6 +68,13 @@ export interface RawSource {
   snippet: string;
   content_hash: string;
   confidence: number;
+  candidate_origin: string;
+  candidate_rank?: number | null;
+  candidate_confidence?: number | null;
+  fetch_method: string;
+  quality_score: number;
+  failure_reason?: string | null;
+  metadata: Record<string, unknown>;
   extracted_at: string;
 }
 
@@ -195,6 +203,9 @@ export interface ReflectionRecord {
   confidence_outliers: string[];
   cross_competitor_gaps: string[];
   suggested_redos: RedoScope[];
+  gate_status: "pass" | "warn" | "block";
+  blocking_gaps: string[];
+  writer_constraints: string[];
 }
 
 export interface CompetitorKB {
@@ -1240,6 +1251,7 @@ export interface BusinessQAFinding {
   evidence_ids: string[];
   claim_ids: string[];
   recommendation: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface BusinessQAEvaluation {
@@ -1686,6 +1698,9 @@ export type ArtifactType =
   | "screenshot"
   | "raw_text"
   | "report_export"
+  | "survey_response"
+  | "interview_record"
+  | "manual_transcript"
   | "other";
 
 export interface ArtifactRecord {
@@ -1694,6 +1709,7 @@ export interface ArtifactRecord {
   project_id: string;
   evidence_id?: string | null;
   run_id?: string | null;
+  report_version_id?: string | null;
   artifact_type: ArtifactType;
   filename: string;
   media_type: string;
@@ -1704,6 +1720,8 @@ export interface ArtifactRecord {
   source_url?: string | null;
   created_by?: string | null;
   created_at: string;
+  retention_policy?: string;
+  compliance_metadata?: Record<string, unknown>;
   metadata: Record<string, unknown>;
 }
 
@@ -1719,11 +1737,25 @@ export interface ArtifactCreateRequest {
   content_base64?: string | null;
   external_uri?: string | null;
   source_url?: string | null;
+  retention_policy?: string;
+  compliance_metadata?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 
 export interface ArtifactCreateResult {
   artifact: ArtifactRecord;
+}
+
+export interface ArtifactPreview {
+  artifact: ArtifactRecord;
+  preview_type: "text" | "image" | "pdf" | "external" | "unavailable";
+  preview_available: boolean;
+  content_text: string;
+  content_base64: string;
+  data_url: string;
+  media_type: string;
+  truncated: boolean;
+  external_uri?: string | null;
 }
 
 export interface SourceRegistryRecord {
@@ -1763,6 +1795,8 @@ export interface SourceSnapshotCreateRequest {
   display_name?: string;
   trust_level?: "official" | "verified" | "community" | "synthetic" | "unknown";
   robots_status?: "unknown" | "allowed" | "blocked" | "error";
+  retention_policy?: string;
+  compliance_metadata?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 

@@ -34,6 +34,18 @@ class KnowledgeDocument(BaseModel):
     parent_document_id: str | None = None
 
 
+class KnowledgeRollbackResult(BaseModel):
+    """Result for rolling back polluted knowledge documents."""
+
+    matched_count: int = 0
+    rolled_back_count: int = 0
+    restored_count: int = 0
+    archived_document_ids: list[str] = Field(default_factory=list)
+    restored_document_ids: list[str] = Field(default_factory=list)
+    skipped_document_ids: list[str] = Field(default_factory=list)
+    vector_cleanup_error: str | None = None
+
+
 class DocumentCreate(BaseModel):
     """Payload to ingest a new document."""
 
@@ -85,7 +97,10 @@ class RetrievalHit(BaseModel):
     dimension: str | None = None
     source_type: str = ""
     content_hash: str = ""
-
+    fetched_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    status: str = "active"
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 class RetrievalRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2_000)
@@ -100,7 +115,7 @@ class RetrievalRequest(BaseModel):
     mmr_lambda: float = Field(default=0.0, ge=0.0, le=1.0)
     enable_query_rewrite: bool = True
     num_rewrites: int = Field(default=3, ge=0, le=5)
-    mode: Literal["dense", "hybrid"] = "hybrid"
+    mode: Literal["dense", "hybrid", "sparse"] = "hybrid"
 
 
 class RetrievalResponse(BaseModel):

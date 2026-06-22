@@ -15,6 +15,7 @@ import type { ReportSourceBundle } from "../report/sourceBundle";
 import { TraceList } from "../trace/TraceList";
 import { TracePlayback } from "../trace/TracePlayback";
 import type { RunEvent } from "../../api/sse_types";
+import { AgentHandoffSummary } from "./AgentHandoffSummary";
 import { CompliancePanel } from "./CompliancePanel";
 import { RunQaPanel } from "./RunQaPanel";
 import { RunQualityPanel } from "./RunQualityPanel";
@@ -81,6 +82,7 @@ export function RunDetailContent({
   if (activeView === "agents") {
     return (
       <div className="detail-grid agents-detail-grid">
+        <AgentHandoffSummary detail={detail} messages={renderedAgentMessages} />
         <TracePlayback spans={renderedTraceSpans} />
         <AgentMessagesView messages={renderedAgentMessages} toolCalls={renderedToolCallMessages} />
         <TraceList

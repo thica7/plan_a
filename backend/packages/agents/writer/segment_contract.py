@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import re
-from typing import Literal, Mapping
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Literal
 
 from packages.agents.writer.heading_hygiene import (
     ENGLISH_STRUCTURAL_HEADINGS,

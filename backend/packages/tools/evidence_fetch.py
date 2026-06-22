@@ -36,6 +36,12 @@ async def fetch_evidence_page(
     """Fetch evidence through the fast HTTP path, then webfetch_v2 when quality is weak."""
 
     basic = await fetch_page(url, timeout_seconds=timeout_seconds)
+    if _basic_fetch_is_policy_blocked(basic):
+        return _from_basic_fetch(
+            basic,
+            fetch_method="basic_httpx_policy_blocked",
+            failure_reason="policy_blocked",
+        )
     if _basic_fetch_is_sufficient(basic, min_text_chars=min_text_chars):
         return _from_basic_fetch(basic)
 
@@ -61,6 +67,20 @@ async def fetch_evidence_page(
 
 def _basic_fetch_is_sufficient(result: FetchPageResult, *, min_text_chars: int) -> bool:
     return result.ok and len(result.text.strip()) >= min_text_chars
+
+
+def _basic_fetch_is_policy_blocked(result: FetchPageResult) -> bool:
+    if result.ok or not result.error:
+        return False
+    return result.error.startswith(
+        (
+            "Unsupported URL scheme",
+            "URL hostname is required",
+            "Hostname did not resolve",
+            "Blocked ",
+            "DNS rebinding detected",
+        )
+    )
 
 
 def _advanced_fetch_is_better(

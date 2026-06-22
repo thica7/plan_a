@@ -2,8 +2,10 @@ import sqlite3
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, HTTPException, Request
 
+from app.middleware import auth
+from app.rate_limit import SlidingWindowRateLimiter
 from packages.artifacts import ArtifactStorage, build_artifact_storage
 from packages.auth import EnterpriseUserContext, normalize_role
 from packages.config import Settings, get_settings
@@ -56,6 +58,11 @@ def get_graph_checkpointer() -> GraphCheckpointer:
     return GraphCheckpointer.from_default_path()
 
 
+@lru_cache
+def get_create_run_rate_limiter() -> SlidingWindowRateLimiter:
+    return SlidingWindowRateLimiter()
+
+
 _RUN_SERVICE_CACHE: dict[tuple[int, ...], RunService] = {}
 
 
@@ -83,14 +90,28 @@ def get_artifact_storage() -> ArtifactStorage:
 
 
 def get_enterprise_user_context(
+    request: Request,
     settings: Annotated[Settings, Depends(get_app_settings)],
     x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
     x_user_role: Annotated[str | None, Header(alias="X-User-Role")] = None,
     x_workspace_id: Annotated[str | None, Header(alias="X-Workspace-Id")] = None,
 ) -> EnterpriseUserContext:
+    if auth.AUTH_ENABLED:
+        subject = getattr(request.state, "enterprise_user", None)
+        if not isinstance(subject, dict):
+            raise HTTPException(status_code=401, detail="Authenticated subject is missing")
+        return EnterpriseUserContext(
+            user_id=str(subject.get("user_id") or DEFAULT_USER_ID),
+            role=normalize_role(str(subject.get("role") or "")),
+            workspace_id=subject.get("workspace_id") or None,
+            policy_engine=settings.auth_policy_engine,
+            policy_url=settings.auth_policy_url,
+            policy_timeout_seconds=settings.auth_policy_timeout_seconds,
+        )
+
     return EnterpriseUserContext(
         user_id=x_user_id or DEFAULT_USER_ID,
-        role=normalize_role(x_user_role),
+        role=normalize_role(x_user_role, default="owner"),
         workspace_id=x_workspace_id or None,
         policy_engine=settings.auth_policy_engine,
         policy_url=settings.auth_policy_url,

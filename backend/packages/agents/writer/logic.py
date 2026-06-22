@@ -5590,23 +5590,15 @@ class WriterAgentMixin:
             sources=detail.raw_sources,
             qa_findings=detail.qa_findings,
         )
-        # Enrich with KB retrieval context
-        try:
-            from packages.tools.rag_retrieve import rag_retrieve_tool
-            query = getattr(detail.plan, "topic", "") or ""
-            if query:
-                kb_results = await rag_retrieve_tool.ainvoke({
-                    "query": query,
-                    "competitors": list(detail.plan.competitors),
-                    "dimensions": list(detail.plan.dimensions),
-                    "top_k": 5,
-                })
-                if kb_results:
-                    grounding += "\n\n## Additional KB Evidence\n"
-                    for r in kb_results[:5]:
-                        grounding += f"- {r}\n"
-        except Exception:
-            pass  # Non-fatal: RAG enrichment is optional
+        kb_source_ids = [
+            source.id for source in detail.raw_sources if source.candidate_origin == "rag_kb"
+        ]
+        if kb_source_ids:
+            grounding += "\n\n## KB-Reused Evidence\n"
+            grounding += (
+                "Use KB-reused evidence only through these existing source tokens: "
+                f"{', '.join(f'[source:{source_id}]' for source_id in kb_source_ids[:8])}.\n"
+            )
         return grounding
 
     def _writer_context_package(self, detail: RunDetail) -> dict[str, object]:

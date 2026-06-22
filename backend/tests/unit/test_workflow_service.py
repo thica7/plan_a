@@ -2,18 +2,25 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from fastapi.testclient import TestClient
 
+import packages.runtime.service as runtime_service_module
 from app.deps import (
     get_app_settings,
+    get_create_run_rate_limiter,
     get_enterprise_store,
     get_run_service,
     get_temporal_workflow_service,
 )
 from app.main import create_app
+from app.rate_limit import SlidingWindowRateLimiter
+from packages.auth import EnterpriseUserContext
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
+from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.service import RunService
+from packages.runtime import CreateRunCommand, RuntimeCommandService
 from packages.schema.api_dto import (
     MonitorStartRequest,
     MonitorStartResponse,
@@ -490,6 +497,157 @@ def test_runs_router_can_cut_over_to_temporal_backend() -> None:
     assert visible.json()["status"] == "queued"
 
 
+def test_runs_router_rate_limits_create_run_by_workspace() -> None:
+    class FakeWorkflowService:
+        async def start_competitive_intel(
+            self,
+            request: RunCreateRequest,
+        ) -> WorkflowStartResponse:
+            assert request.idempotency_key is not None
+            return WorkflowStartResponse(
+                workflow_id=f"competitive-intel-{request.idempotency_key}",
+                run_id=run_id_for_idempotency_key(request.idempotency_key),
+                idempotency_key=request.idempotency_key,
+                task_queue="test-queue",
+                status="started",
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_app_settings] = lambda: _settings(
+        run_orchestration_backend="temporal",
+        create_run_rate_limit_per_window=1,
+        create_run_rate_limit_window_seconds=60.0,
+    )
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    rate_limiter = SlidingWindowRateLimiter()
+    app.dependency_overrides[get_create_run_rate_limiter] = lambda: rate_limiter
+    run_service = _memory_run_service(_settings(run_orchestration_backend="temporal"))
+    app.dependency_overrides[get_run_service] = lambda: run_service
+    client = TestClient(app)
+
+    payload = {
+        "topic": "AI coding assistant rate limit",
+        "competitors": ["Cursor"],
+        "dimensions": ["pricing"],
+        "execution_mode": "demo",
+    }
+
+    first = client.post("/api/runs", json={**payload, "idempotency_key": "rate-limit-001"})
+    second = client.post("/api/runs", json={**payload, "idempotency_key": "rate-limit-002"})
+
+    assert first.status_code == 202
+    assert first.headers["X-Create-Run-RateLimit-Remaining"] == "0"
+    assert second.status_code == 429
+    assert second.headers["Retry-After"] == "60"
+    assert second.json()["detail"]["reason"] == "Create run rate limit exceeded."
+
+
+def test_runs_router_allows_duplicate_idempotency_key_without_rate_limit_penalty() -> None:
+    class FakeWorkflowService:
+        async def start_competitive_intel(
+            self,
+            request: RunCreateRequest,
+        ) -> WorkflowStartResponse:
+            assert request.idempotency_key is not None
+            return WorkflowStartResponse(
+                workflow_id=f"competitive-intel-{request.idempotency_key}",
+                run_id=run_id_for_idempotency_key(request.idempotency_key),
+                idempotency_key=request.idempotency_key,
+                task_queue="test-queue",
+                status="started",
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_app_settings] = lambda: _settings(
+        run_orchestration_backend="temporal",
+        create_run_rate_limit_per_window=1,
+        create_run_rate_limit_window_seconds=60.0,
+    )
+    app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
+    rate_limiter = SlidingWindowRateLimiter()
+    app.dependency_overrides[get_create_run_rate_limiter] = lambda: rate_limiter
+    run_service = _memory_run_service(_settings(run_orchestration_backend="temporal"))
+    app.dependency_overrides[get_run_service] = lambda: run_service
+    client = TestClient(app)
+    payload = {
+        "topic": "AI coding assistant duplicate submit",
+        "competitors": ["Cursor"],
+        "dimensions": ["pricing"],
+        "execution_mode": "demo",
+        "idempotency_key": "duplicate-rate-limit-001",
+    }
+
+    first = client.post("/api/runs", json=payload)
+    second = client.post("/api/runs", json=payload)
+
+    assert first.status_code == 202
+    assert second.status_code == 201
+    assert second.json()["id"] == first.json()["run_id"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_command_defers_temporal_visibility_sync_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeWorkflowService:
+        async def start_competitive_intel(
+            self,
+            request: RunCreateRequest,
+        ) -> WorkflowStartResponse:
+            assert request.idempotency_key is not None
+            return WorkflowStartResponse(
+                workflow_id="competitive-intel-deferred-visibility",
+                run_id=run_id_for_idempotency_key(request.idempotency_key),
+                idempotency_key=request.idempotency_key,
+                task_queue="test-queue",
+                status="started",
+            )
+
+    class DummyTask:
+        pass
+
+    settings = _settings(run_orchestration_backend="temporal")
+    run_service = _memory_run_service(settings)
+
+    async def fail_visibility_sync(
+        request: RunCreateRequest,
+        *,
+        skip_active_duplicate_check: bool = False,
+    ) -> None:
+        assert skip_active_duplicate_check is True
+        raise RuntimeError("database visibility lag")
+
+    scheduled: list[object] = []
+
+    def capture_background_task(coro: object) -> DummyTask:
+        scheduled.append(coro)
+        close = getattr(coro, "close", None)
+        if close is not None:
+            close()
+        return DummyTask()
+
+    monkeypatch.setattr(run_service, "ensure_run_visible", fail_visibility_sync)
+    monkeypatch.setattr(runtime_service_module.asyncio, "create_task", capture_background_task)
+    runtime = RuntimeCommandService(
+        settings=settings,
+        run_service=run_service,
+        workflow_service=FakeWorkflowService(),  # type: ignore[arg-type]
+        enterprise_store=run_service.enterprise_store or EnterpriseMemoryStore(),
+        preference_memory=PreferenceMemoryStore.in_memory(),
+    )
+
+    result = await runtime.create_run(
+        CreateRunCommand(request=_request(idempotency_key="route-visibility-deferred")),
+        actor=EnterpriseUserContext(user_id="user-1", role="owner"),
+    )
+
+    assert result.route == "temporal"
+    assert result.status == "accepted"
+    assert result.run_id == run_id_for_idempotency_key("route-visibility-deferred")
+    assert result.metadata["temporal_visibility_sync"] == "deferred"
+    assert len(scheduled) == 1
+
+
 def test_runs_router_reuses_active_duplicate_for_temporal_cutover() -> None:
     class FakeWorkflowService:
         def __init__(self) -> None:
@@ -732,7 +890,7 @@ def test_hitl_router_delegates_manual_redo_guard_to_runtime_command() -> None:
     app.dependency_overrides[get_run_service] = lambda: run_service
     client = TestClient(app)
 
-    response = client.post(f"/api/runs/{detail.id}/redo")
+    response = client.post(f"/api/runs/{detail.id}/redo", json={})
 
     assert response.status_code == 409
     assert response.json()["detail"] == "No eligible QA findings or redo limit reached."

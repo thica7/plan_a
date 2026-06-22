@@ -1,9 +1,11 @@
 import asyncio
 import json
 
+import httpx
 import pytest
 
 from packages.config import Settings
+from packages.crawler.policy import SSRFGuard
 from packages.governance import build_tool_registry_report
 from packages.tools import (
     AdvancedFetchQuality,
@@ -11,6 +13,7 @@ from packages.tools import (
     FetchPageResult,
     advanced_fetch_page,
     fetch_evidence_page,
+    fetch_page,
 )
 from packages.tools.webfetch_runtime import DEFAULT_WEBFETCH_V2_ROOT, resolve_webfetch_v2_root
 
@@ -23,6 +26,13 @@ class _FakeProcess:
 
     async def communicate(self) -> tuple[bytes, bytes]:
         return self._stdout, self._stderr
+
+
+def _resolver_for(*addresses: str):
+    def resolver(host: str, port: int, *args, **kwargs):
+        return [(2, 1, 6, "", (address, port)) for address in addresses]
+
+    return resolver
 
 
 @pytest.mark.asyncio
@@ -126,6 +136,43 @@ def test_tool_registry_lists_advanced_fetch_as_guarded_when_unconfigured(
 
 
 @pytest.mark.asyncio
+async def test_fetch_page_blocks_private_destinations_before_transport() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        raise AssertionError("blocked destinations must not be requested")
+
+    result = await fetch_page(
+        "http://internal.example",
+        guard=SSRFGuard(resolver=_resolver_for("127.0.0.1")),
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert result.ok is False
+    assert result.status_code is None
+    assert "Blocked non-public address" in (result.error or "")
+
+
+@pytest.mark.asyncio
+async def test_fetch_page_blocks_redirect_to_private_destination() -> None:
+    def resolver(host: str, port: int, *args, **kwargs):
+        address = "93.184.216.34" if host == "example.com" else "127.0.0.1"
+        return [(2, 1, 6, "", (address, port))]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "example.com":
+            return httpx.Response(302, headers={"location": "http://internal.example/secret"})
+        raise AssertionError("private redirect target must not be requested")
+
+    result = await fetch_page(
+        "https://example.com/start",
+        guard=SSRFGuard(resolver=resolver),
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert result.ok is False
+    assert "Blocked non-public address" in (result.error or "")
+
+
+@pytest.mark.asyncio
 async def test_fetch_evidence_page_falls_back_to_webfetch_v2_for_weak_basic_fetch(
     monkeypatch,
 ) -> None:
@@ -173,6 +220,31 @@ async def test_fetch_evidence_page_falls_back_to_webfetch_v2_for_weak_basic_fetc
     assert result.quality_score == 0.92
     assert result.text.startswith("Example pricing")
     assert calls == ["basic:12.0", "advanced:auto:15.0:0.55"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_evidence_page_does_not_fallback_after_policy_block(monkeypatch) -> None:
+    async def fake_basic_fetch(url: str, timeout_seconds: float = 12.0) -> FetchPageResult:
+        return FetchPageResult(
+            url=url,
+            ok=False,
+            title="",
+            text="",
+            content_hash="blocked",
+            error="Blocked non-public address: 127.0.0.1",
+        )
+
+    async def fail_advanced_fetch(*args: object, **kwargs: object) -> AdvancedFetchResult:
+        raise AssertionError("policy blocked URLs must not reach advanced fetch")
+
+    monkeypatch.setattr("packages.tools.evidence_fetch.fetch_page", fake_basic_fetch)
+    monkeypatch.setattr("packages.tools.evidence_fetch.advanced_fetch_page", fail_advanced_fetch)
+
+    result = await fetch_evidence_page("http://internal.example")
+
+    assert result.ok is False
+    assert result.fetch_method == "basic_httpx_policy_blocked"
+    assert result.failure_reason == "policy_blocked"
 
 
 @pytest.mark.asyncio

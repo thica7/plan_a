@@ -90,6 +90,7 @@ def quality_findings_from_business_qa(
                 acceptance_rule=finding.recommendation or _acceptance_rule_for_action(action),
                 redo_scope=_first_redo_scope(business_findings_to_redo_scopes([finding])),
                 metadata={
+                    **finding.metadata,
                     "rule_id": finding.rule_id,
                     "rule_name": finding.rule_name,
                 },

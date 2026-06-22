@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from packages.agents.writer.segment_contract import (
     CORE_HEADING_KEYS,

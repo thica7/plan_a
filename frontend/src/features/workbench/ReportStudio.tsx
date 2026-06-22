@@ -17,11 +17,16 @@ import { ReportReviewDesk } from "./ReportReviewDesk";
 import { ReportVersionPanel } from "./ReportVersionPanel";
 import type { ReportAction, ReportExportFormat } from "./reportOperations";
 import { useTranslation } from "../../stores/i18n";
+import type { KnowledgeRollbackRequest, KnowledgeRollbackResult } from "../../stores/knowledgeStore";
 
 interface ReportStudioProps {
   claims: ClaimRecord[];
   evidenceById: Map<string, EvidenceRecord>;
   isPending: boolean;
+  gateRedoIssueId: string | null;
+  gateRedoResult: { issueId: string; runId: string; status: string } | null;
+  kbRollbackIssueId: string | null;
+  kbRollbackResult: { issueId: string; result: KnowledgeRollbackResult } | null;
   lastExport: ArtifactRecord | null;
   onExport: (format: ReportExportFormat) => void;
   onEvidenceQuality: (evidenceId: string, qualityLabel: EvidenceQualityLabel) => void;
@@ -29,6 +34,8 @@ interface ReportStudioProps {
   onSelectEvidence: (evidence: EvidenceRecord) => void;
   onSelectReport: (report: ReportVersionRecord) => void;
   onReportAction: (action: ReportAction) => void;
+  onRedoGateIssue: (issueId: string) => void;
+  onRollbackKbIssue: (issueId: string, request: KnowledgeRollbackRequest) => void;
   releaseGate: ReportReleaseGate | null;
   reportSources: ReportSourceBundle;
   selectedVersion: ReportVersionRecord | null;
@@ -41,6 +48,10 @@ export function ReportStudio({
   claims,
   evidenceById,
   isPending,
+  gateRedoIssueId,
+  gateRedoResult,
+  kbRollbackIssueId,
+  kbRollbackResult,
   lastExport,
   onExport,
   onEvidenceQuality,
@@ -48,6 +59,8 @@ export function ReportStudio({
   onSelectEvidence,
   onSelectReport,
   onReportAction,
+  onRedoGateIssue,
+  onRollbackKbIssue,
   releaseGate,
   reportSources,
   selectedVersion,
@@ -131,7 +144,13 @@ export function ReportStudio({
           diff={diff}
           evidenceById={evidenceById}
           isDiffLoading={isDiffLoading}
+          gateRedoIssueId={gateRedoIssueId}
+          gateRedoResult={gateRedoResult}
+          kbRollbackIssueId={kbRollbackIssueId}
+          kbRollbackResult={kbRollbackResult}
           onEvidenceQuality={onEvidenceQuality}
+          onRedoGateIssue={selectedVersion?.run_id ? onRedoGateIssue : undefined}
+          onRollbackKbIssue={onRollbackKbIssue}
           onSelectClaim={onSelectClaim}
           onSelectEvidence={onSelectEvidence}
           previousVersion={previousVersion}

@@ -22,6 +22,10 @@ frontend/design/
 课题概要.txt
 课题详情.txt
 
+# 部署 / 临时归档
+tmp/
+plan_a_deploy.tar.gz
+
 __pycache__/
 *.py[cod]
 .pytest_cache/

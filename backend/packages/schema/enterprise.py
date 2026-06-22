@@ -28,6 +28,7 @@ ArtifactType = Literal[
     "other",
 ]
 ArtifactStorageBackend = Literal["local", "external", "s3", "oss"]
+ArtifactPreviewKind = Literal["text", "image", "pdf", "external", "unavailable"]
 NotificationChannel = Literal["in_app", "email", "webhook", "feishu"]
 NotificationSeverity = Literal["info", "success", "warning", "critical"]
 NotificationStatus = Literal["queued", "sent", "failed", "read"]
@@ -455,6 +456,20 @@ class ArtifactCreateResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     artifact: ArtifactRecord
+
+
+class ArtifactPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact: ArtifactRecord
+    preview_type: ArtifactPreviewKind = "unavailable"
+    preview_available: bool = False
+    content_text: str = ""
+    content_base64: str = ""
+    data_url: str = ""
+    media_type: str = ""
+    truncated: bool = False
+    external_uri: str | None = None
 
 
 class SourceSnapshotCreateRequest(BaseModel):
@@ -931,6 +946,7 @@ class BusinessQAFinding(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     claim_ids: list[str] = Field(default_factory=list)
     recommendation: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class BusinessQAEvaluation(BaseModel):

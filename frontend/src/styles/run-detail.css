@@ -351,6 +351,10 @@
   grid-column: 1 / -1;
 }
 
+.agents-detail-grid .agent-handoff-summary {
+  grid-column: 1 / -1;
+}
+
 .agents-detail-grid .agent-messages-panel,
 .agents-detail-grid .trace-playback-panel {
   min-height: 0;
@@ -392,6 +396,126 @@
 
 .run-flow-panel {
   min-width: 0;
+}
+
+.agent-handoff-summary {
+  min-width: 0;
+}
+
+.handoff-signal-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.handoff-signal-block,
+.agent-workload-grid article,
+.handoff-route-list article {
+  background: var(--surface-muted);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.handoff-signal-block {
+  display: grid;
+  gap: 7px;
+}
+
+.handoff-signal-block span,
+.handoff-signal-block em,
+.agent-workload-grid span,
+.handoff-route-list span {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.agent-workload-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.agent-workload-grid article {
+  align-items: start;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+
+.agent-workload-grid svg {
+  color: var(--accent);
+  margin-top: 1px;
+}
+
+.agent-workload-grid strong {
+  color: var(--text);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.agent-workload-grid span {
+  grid-column: 2;
+}
+
+.handoff-constraint-list,
+.handoff-gap-list,
+.handoff-rationale-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.handoff-constraint-list span,
+.handoff-gap-list span,
+.handoff-rationale-list span {
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-size: 12px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 5px 8px;
+}
+
+.handoff-constraint-list span {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.handoff-gap-list span {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.handoff-rationale-list span {
+  background: #ffffff;
+  color: var(--muted);
+}
+
+.handoff-route-list {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.handoff-route-list article {
+  display: grid;
+  gap: 7px;
+}
+
+.handoff-route-list strong {
+  color: var(--text);
+  font-size: 13px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.agent-handoff-summary.compact .handoff-route-list {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
 .run-review-score {
@@ -1256,6 +1380,40 @@
   overflow-wrap: anywhere;
 }
 
+.source-audit-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  margin: 2px 0;
+}
+
+.source-audit-grid div {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px;
+}
+
+.source-audit-grid dt,
+.source-audit-grid dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.source-audit-grid dt {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.source-audit-grid dd {
+  color: var(--text);
+  font-size: 12px;
+}
 .source-card.cited,
 .source-strip span.cited {
   border-color: rgba(15, 118, 110, 0.28);

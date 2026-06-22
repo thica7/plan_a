@@ -19,7 +19,7 @@ export const starterPresets: StarterPreset[] = [
     name: "L1 battlecard",
     topic: "AI coding assistant competitive battlecard",
     competitorLayer: "L1",
-    scenarioId: "l1_pricing_pack",
+    scenarioId: "l1_direct_battlecard",
     competitors: ["Cursor", "GitHub Copilot", "Windsurf"],
     dimensions: ["pricing", "feature", "persona", "security"],
   },

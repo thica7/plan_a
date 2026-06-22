@@ -27,6 +27,26 @@ describe("buildReportSourceBundle", () => {
     expect(bundle.sources.map((source) => source.id)).toEqual(["raw-pricing-001"]);
     expect(bundle.aliases["raw-feature-002"]).toBeUndefined();
   });
+
+  it("preserves KB collector provenance from enterprise evidence metadata", () => {
+    const bundle = buildReportSourceBundle([
+      evidenceRecord({
+        raw_source_id: "evidence-kb-pricing-001",
+        metadata: {
+          kb_sync: true,
+          kb_raw_source_id: "collector-raw-pricing-001",
+          kb_collector_candidate_origin: "web_fetch",
+          kb_collector_fetch_method: "browser_fetch",
+          kb_collector_confidence: 0.91,
+        },
+      }),
+    ]);
+
+    expect(bundle.aliases["collector-raw-pricing-001"]).toBe("evidence-kb-pricing-001");
+    expect(bundle.sources[0].candidate_origin).toBe("web_fetch");
+    expect(bundle.sources[0].fetch_method).toBe("browser_fetch");
+    expect(bundle.sources[0].candidate_confidence).toBe(0.91);
+  });
 });
 
 function evidenceRecord(overrides: Partial<EvidenceRecord> = {}): EvidenceRecord {

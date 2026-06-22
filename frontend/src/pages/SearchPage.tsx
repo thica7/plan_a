@@ -70,6 +70,12 @@ function metricValue(metrics: Record<string, number>, names: string[]) {
   return 0;
 }
 
+function retrievalMode(params: RetrievalParams) {
+  if (params.sparse_weight <= 0) return 'dense';
+  if (params.dense_weight <= 0) return 'sparse';
+  return 'hybrid';
+}
+
 function Sparkline({ values }: { values: number[] }) {
   const points = values.length > 0 ? values : [0];
   const path = points
@@ -152,7 +158,7 @@ export default function SearchPage() {
           sparse_weight: nextParams.sparse_weight,
           mmr_lambda: nextParams.enable_mmr ? nextParams.mmr_lambda : 0,
           enable_query_rewrite: nextParams.enable_query_rewrite,
-          mode: nextParams.sparse_weight > 0 ? 'hybrid' : 'dense',
+          mode: retrievalMode(nextParams),
         }),
         signal: controller.signal,
       });
@@ -384,13 +390,14 @@ export default function SearchPage() {
         {hits.map((hit) => (
           <div key={hit.chunk_id} className="card bg-base-200 p-4 space-y-2">
             <SourceCard
-              title={hit.title}
+              title={hit.title ?? hit.document_id}
               url={hit.url}
               competitor={hit.competitor}
               dimension={hit.dimension}
               source_type={hit.source_type}
               score={hit.score}
               rerank_score={hit.rerank_score}
+              fetched_at={hit.last_seen_at ?? hit.fetched_at ?? undefined}
             />
             <p className="text-xs text-base-content/70 line-clamp-3">
               {highlightText(hit.text.slice(0, 300), query)}

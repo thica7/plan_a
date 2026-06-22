@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
 from packages.business_intel.report_sections import build_report_section_index
 from packages.identity import stable_prefixed_id
 from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
+from packages.rag.structured_claims import find_structured_source_conflicts
 from packages.research.evidence import publishable_text_noise_problem
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
@@ -87,6 +88,31 @@ PERSONA_SIGNAL_TERMS = (
     "workflow fit",
     "use case",
     "pain point",
+)
+FRESHNESS_STALE_STATUSES = {"archived", "deleted", "stale"}
+FRESHNESS_DIMENSION_WINDOWS_DAYS = (
+    (("pricing", "price", "plan", "billing"), 45),
+    (("security", "trust", "compliance", "privacy", "procurement"), 90),
+    (("feature", "api", "docs", "model", "integration"), 120),
+    (("persona", "user", "customer", "review", "community"), 180),
+)
+CONTRADICTION_FACT_TERMS = (
+    "sso",
+    "saml",
+    "scim",
+    "soc 2",
+    "iso",
+    "audit log",
+    "api",
+    "free plan",
+    "enterprise plan",
+    "self-hosted",
+)
+PRICING_PLAN_TERMS = ("free", "pro", "team", "teams", "business", "enterprise")
+PRICE_AMOUNT_RE = re.compile(
+    r"(?:\$|usd\s*)(?P<prefix>\d+(?:\.\d+)?)|"
+    r"(?P<suffix>\d+(?:\.\d+)?)\s*(?:usd|dollars?)",
+    flags=re.IGNORECASE,
 )
 
 if TYPE_CHECKING:
@@ -576,6 +602,8 @@ class QualityAgentMixin:
                 issues.append(issue)
 
         issues.extend(self._build_source_quality_issues(detail))
+        issues.extend(self._build_source_freshness_issues(detail))
+        issues.extend(self._build_source_contradiction_issues(detail))
         issues.extend(self._build_source_coverage_issues(detail, missing_dimensions))
         issues.extend(self._build_persona_evidence_strength_issues(detail, missing_dimensions))
         issues.extend(self._build_community_attempt_issues(detail))
@@ -704,6 +732,494 @@ class QualityAgentMixin:
                 issue.redo_scope = assign_redo_scope(issue)
                 issues.append(issue)
         return issues
+
+    def _build_source_freshness_issues(self, detail: RunDetail) -> list[QCIssue]:
+        issues: list[QCIssue] = []
+        seen: set[str] = set()
+        strict_source_qa = self._memory_enforces_strict_source_qa(
+            detail.plan
+        ) or detail.execution_mode == "real"
+        for source in detail.raw_sources:
+            if source.dimension not in detail.plan.dimensions:
+                continue
+            problem = self._source_freshness_problem(source)
+            if problem is None:
+                continue
+            targets = [
+                competitor
+                for competitor in (
+                    source.covered_competitors
+                    or self._normalize_covered_competitors(detail, source.competitor)
+                )
+                if competitor in detail.plan.competitors
+            ] or [None]
+            for competitor in targets:
+                issue_id = stable_prefixed_id(
+                    "qc-issue",
+                    "source-freshness",
+                    source.dimension,
+                    competitor or source.competitor,
+                    source.id,
+                    problem,
+                    length=16,
+                )
+                if issue_id in seen:
+                    continue
+                seen.add(issue_id)
+                issue = QCIssue(
+                    id=issue_id,
+                    severity=(
+                        "blocker"
+                        if strict_source_qa and "missing original observation date" not in problem
+                        else "warn"
+                    ),
+                    detected_by="coverage",
+                    target_agent="collector",
+                    target_subagent=source.dimension,
+                    target_competitor=competitor,
+                    field_path=f"raw_sources[{source.id}].freshness",
+                    problem=problem,
+                    redo_scope=self._initial_redo_scope(
+                        detected_by="coverage",
+                        target_agent="collector",
+                        target_subagent=source.dimension,
+                        target_competitor=competitor,
+                        field_path=f"raw_sources[{source.id}].freshness",
+                        problem=problem,
+                    ),
+                    self_found=False,
+                    metadata=self._source_freshness_issue_metadata(source),
+                )
+                issue.redo_scope = assign_redo_scope(issue)
+                issues.append(issue)
+        return issues
+
+    def _source_freshness_problem(self, source: RawSource) -> str | None:
+        metadata = source.metadata
+        status = self._source_document_status(source)
+        limit_days = self._freshness_limit_days(source.dimension)
+        if status in FRESHNESS_STALE_STATUSES:
+            return (
+                f"Source {source.id} is marked {status}; recollect current "
+                f"{source.dimension} evidence before using it."
+            )
+        observed_at = self._source_observed_at(source)
+        if observed_at is None:
+            if metadata.get("kb_retrieved") or source.candidate_origin == "rag_kb":
+                return (
+                    f"Source {source.id} is reused from KB but is missing original "
+                    "observation date metadata; recollect or verify it before relying on it."
+                )
+            return None
+        now = datetime.now(UTC).replace(tzinfo=None)
+        age_days = max(0, (now - observed_at).days)
+        if age_days <= limit_days:
+            return None
+        return (
+            f"Source {source.id} is {age_days} days old, exceeding the "
+            f"{limit_days}-day freshness policy for {source.dimension} evidence."
+        )
+
+    def _source_freshness_issue_metadata(self, source: RawSource) -> dict[str, object]:
+        observed_at = self._source_observed_at(source)
+        status = self._source_document_status(source)
+        limit_days = self._freshness_limit_days(source.dimension)
+        metadata: dict[str, object] = {
+            "issue_kind": "source_freshness",
+            "source_ids": [source.id],
+            "raw_source_ids": [source.id],
+            "freshness_policy_days": limit_days,
+            "evidence_audit_trail": [self._source_audit_trail_item(source)],
+        }
+        if status:
+            metadata["kb_document_status"] = status
+            if status in FRESHNESS_STALE_STATUSES:
+                metadata["freshness_basis"] = "kb_document_status"
+        if observed_at is None:
+            metadata["freshness_basis"] = metadata.get(
+                "freshness_basis", "missing_observation_date"
+            )
+            return metadata
+        now = datetime.now(UTC).replace(tzinfo=None)
+        metadata["observed_at"] = observed_at.isoformat()
+        metadata["source_age_days"] = max(0, (now - observed_at).days)
+        metadata["freshness_basis"] = metadata.get("freshness_basis", "source_age")
+        return metadata
+
+    def _source_document_status(self, source: RawSource) -> str:
+        metadata = source.metadata
+        return str(
+            metadata.get("kb_document_status")
+            or metadata.get("document_status")
+            or metadata.get("status")
+            or ""
+        ).casefold()
+
+    def _source_observed_at(self, source: RawSource) -> datetime | None:
+        metadata = source.metadata
+        is_kb_reuse = bool(metadata.get("kb_retrieved") or source.candidate_origin == "rag_kb")
+        keys = (
+            ("kb_last_seen_at", "kb_fetched_at")
+            if is_kb_reuse
+            else ("last_verified_at", "fetched_at", "crawl_fetched_at", "captured_at")
+        )
+        for key in keys:
+            parsed = self._parse_source_datetime(metadata.get(key))
+            if parsed is not None:
+                return parsed
+        if is_kb_reuse:
+            return None
+        return self._parse_source_datetime(source.extracted_at)
+
+    def _parse_source_datetime(self, value: object) -> datetime | None:
+        if isinstance(value, datetime):
+            parsed = value
+        elif isinstance(value, str):
+            cleaned = value.strip()
+            if not cleaned:
+                return None
+            try:
+                parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        else:
+            return None
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+        return parsed
+
+    def _freshness_limit_days(self, dimension: str) -> int:
+        normalized = dimension.casefold()
+        for hints, days in FRESHNESS_DIMENSION_WINDOWS_DAYS:
+            if any(hint in normalized for hint in hints):
+                return days
+        return 120
+
+    def _build_source_contradiction_issues(self, detail: RunDetail) -> list[QCIssue]:
+        issues: list[QCIssue] = []
+        for dimension in detail.plan.dimensions:
+            for competitor in detail.plan.competitors:
+                sources = [
+                    source
+                    for source in detail.raw_sources
+                    if source.dimension == dimension
+                    and self._source_matches_competitor(source, competitor)
+                ]
+                for conflict in self._source_contradictions(sources, dimension)[:4]:
+                    source_ids = sorted(
+                        {
+                            source_id
+                            for ids in conflict["source_ids_by_position"].values()
+                            for source_id in ids
+                        }
+                    )
+                    field_path = f"raw_sources[{dimension}][{competitor}].contradictions"
+                    positions = ", ".join(sorted(conflict["source_ids_by_position"]))
+                    problem = (
+                        f"{competitor} {dimension} evidence has conflicting "
+                        f"{conflict['claim_area']} positions ({positions}) across "
+                        f"sources {', '.join(source_ids)}."
+                    )
+                    issue = QCIssue(
+                        id=stable_prefixed_id(
+                            "qc-issue",
+                            "source-contradiction",
+                            dimension,
+                            competitor,
+                            conflict["claim_area"],
+                            source_ids,
+                            length=16,
+                        ),
+                        severity="blocker" if detail.execution_mode == "real" else "warn",
+                        detected_by="consistency",
+                        target_agent="collector",
+                        target_subagent=dimension,
+                        target_competitor=competitor,
+                        field_path=field_path,
+                        problem=problem,
+                        redo_scope=self._initial_redo_scope(
+                            detected_by="consistency",
+                            target_agent="collector",
+                            target_subagent=dimension,
+                            target_competitor=competitor,
+                            field_path=field_path,
+                            problem=problem,
+                        ),
+                        self_found=False,
+                        metadata=self._source_contradiction_issue_metadata(
+                            sources,
+                            conflict,
+                            competitor=competitor,
+                            dimension=dimension,
+                        ),
+                    )
+                    issue.redo_scope = assign_redo_scope(issue)
+                    issues.append(issue)
+        return issues
+
+    def _source_contradictions(
+        self,
+        sources: list[RawSource],
+        dimension: str,
+    ) -> list[dict[str, object]]:
+        return [
+            conflict.to_qa_payload()
+            for conflict in find_structured_source_conflicts(sources, dimension=dimension)
+        ]
+
+    def _source_contradiction_issue_metadata(
+        self,
+        sources: list[RawSource],
+        conflict: dict[str, object],
+        *,
+        competitor: str,
+        dimension: str,
+    ) -> dict[str, object]:
+        source_ids_by_position = self._source_ids_by_position(conflict)
+        source_ids = sorted(
+            {
+                source_id
+                for source_ids in source_ids_by_position.values()
+                for source_id in source_ids
+            }
+        )
+        sources_by_id = {source.id: source for source in sources}
+        audit_trail = [
+            self._source_audit_trail_item(sources_by_id[source_id], position=position)
+            for position, position_source_ids in source_ids_by_position.items()
+            for source_id in position_source_ids
+            if source_id in sources_by_id
+        ][:8]
+        return {
+            "issue_kind": "source_contradiction",
+            "claim_area": str(conflict.get("claim_area") or ""),
+            "competitor": competitor,
+            "dimension": dimension,
+            "source_ids": source_ids,
+            "raw_source_ids": source_ids,
+            "source_ids_by_position": source_ids_by_position,
+            "source_evidence_pairs": self._source_conflict_pairs(
+                source_ids_by_position,
+                sources_by_id,
+                claim_area=str(conflict.get("claim_area") or ""),
+            ),
+            "evidence_audit_trail": audit_trail,
+        }
+
+    def _source_ids_by_position(
+        self,
+        conflict: dict[str, object],
+    ) -> dict[str, list[str]]:
+        value = conflict.get("source_ids_by_position")
+        if not isinstance(value, dict):
+            return {}
+        result: dict[str, list[str]] = {}
+        for position, source_ids in value.items():
+            if not isinstance(source_ids, list):
+                continue
+            normalized = [
+                str(source_id).strip()
+                for source_id in source_ids
+                if str(source_id).strip()
+            ]
+            if normalized:
+                result[str(position)] = sorted(set(normalized))
+        return result
+
+    def _source_conflict_pairs(
+        self,
+        source_ids_by_position: dict[str, list[str]],
+        sources_by_id: dict[str, RawSource],
+        *,
+        claim_area: str,
+    ) -> list[dict[str, object]]:
+        pairs: list[dict[str, object]] = []
+        positions = sorted(source_ids_by_position)
+        for left_index, left_position in enumerate(positions):
+            for right_position in positions[left_index + 1 :]:
+                for left_id in source_ids_by_position[left_position]:
+                    for right_id in source_ids_by_position[right_position]:
+                        left = sources_by_id.get(left_id)
+                        right = sources_by_id.get(right_id)
+                        if left is None or right is None:
+                            continue
+                        left_is_kb = self._source_is_kb_reuse(left)
+                        right_is_kb = self._source_is_kb_reuse(right)
+                        if left_is_kb == right_is_kb:
+                            continue
+                        kb_source = left if left_is_kb else right
+                        live_source = right if left_is_kb else left
+                        kb_position = left_position if left_is_kb else right_position
+                        live_position = right_position if left_is_kb else left_position
+                        pairs.append(
+                            self._compact_metadata(
+                                {
+                                    "claim_area": claim_area,
+                                    "kb_source_id": kb_source.id,
+                                    "kb_position": kb_position,
+                                    "kb_document_id": self._source_metadata_text(
+                                        kb_source,
+                                        "kb_document_id",
+                                        "document_id",
+                                    ),
+                                    "kb_chunk_id": self._source_metadata_text(
+                                        kb_source,
+                                        "kb_chunk_id",
+                                        "chunk_id",
+                                    ),
+                                    "kb_title": kb_source.title,
+                                    "kb_url": str(kb_source.url or ""),
+                                    "live_source_id": live_source.id,
+                                    "live_position": live_position,
+                                    "live_title": live_source.title,
+                                    "live_url": str(live_source.url or ""),
+                                }
+                            )
+                        )
+                        if len(pairs) >= 8:
+                            return pairs
+        return pairs
+
+    def _source_audit_trail_item(
+        self,
+        source: RawSource,
+        *,
+        position: str | None = None,
+    ) -> dict[str, object]:
+        return self._compact_metadata(
+            {
+                "source_id": source.id,
+                "raw_source_id": source.id,
+                "competitor": source.competitor,
+                "dimension": source.dimension,
+                "source_type": source.source_type,
+                "title": source.title,
+                "url": str(source.url or ""),
+                "position": position,
+                "candidate_origin": source.candidate_origin,
+                "fetch_method": source.fetch_method,
+                "confidence": source.confidence,
+                "quality_score": source.quality_score,
+                "kb_document_id": self._source_metadata_text(
+                    source,
+                    "kb_document_id",
+                    "document_id",
+                ),
+                "kb_document_version": source.metadata.get("kb_document_version"),
+                "kb_document_status": self._source_document_status(source),
+                "kb_chunk_id": self._source_metadata_text(source, "kb_chunk_id", "chunk_id"),
+                "kb_chunk_ids": source.metadata.get("kb_chunk_ids"),
+                "kb_retrieval_query": self._source_metadata_text(source, "kb_retrieval_query"),
+                "kb_hit_score": source.metadata.get("kb_hit_score"),
+                "kb_rerank_score": source.metadata.get("kb_rerank_score"),
+                "kb_raw_source_id": self._source_metadata_text(source, "kb_raw_source_id"),
+                "kb_collector_run_id": self._source_metadata_text(
+                    source,
+                    "kb_collector_run_id",
+                ),
+                "kb_freshness_score": source.metadata.get("kb_freshness_score"),
+                "kb_fetched_at": self._source_metadata_text(source, "kb_fetched_at"),
+                "kb_last_seen_at": self._source_metadata_text(source, "kb_last_seen_at"),
+                "kb_indexed_at": self._source_metadata_text(source, "kb_indexed_at"),
+                "is_kb_reuse": self._source_is_kb_reuse(source),
+            }
+        )
+
+    def _source_metadata_text(self, source: RawSource, *keys: str) -> str:
+        for key in keys:
+            value = source.metadata.get(key)
+            if value is None or value == "":
+                continue
+            return str(value)
+        return ""
+
+    def _source_is_kb_reuse(self, source: RawSource) -> bool:
+        return bool(source.candidate_origin == "rag_kb" or source.metadata.get("kb_retrieved"))
+
+    def _compact_metadata(self, metadata: dict[str, object]) -> dict[str, object]:
+        return {
+            key: value
+            for key, value in metadata.items()
+            if value is not None and value != "" and value != []
+        }
+
+    def _source_contradiction_positions(
+        self,
+        source: RawSource,
+        dimension: str,
+    ) -> list[tuple[str, str]]:
+        text = f"{source.title}\n{source.snippet}".casefold()
+        positions = self._binary_contradiction_positions(text)
+        if "pricing" in dimension.casefold():
+            positions.extend(self._pricing_contradiction_positions(text))
+        return positions
+
+    def _binary_contradiction_positions(self, text: str) -> list[tuple[str, str]]:
+        positions: list[tuple[str, str]] = []
+        for term in CONTRADICTION_FACT_TERMS:
+            start = text.find(term)
+            if start < 0:
+                continue
+            window = text[max(0, start - 90) : start + len(term) + 90]
+            claim_area = f"support:{term}"
+            if self._negative_position_window(window, term):
+                positions.append((claim_area, "unsupported"))
+            elif self._positive_position_window(window):
+                positions.append((claim_area, "supported"))
+        return positions
+
+    def _positive_position_window(self, window: str) -> bool:
+        return any(
+            marker in window
+            for marker in (
+                "supports",
+                "support ",
+                "includes",
+                "include ",
+                "available",
+                "offers",
+                "provides",
+                "has ",
+            )
+        )
+
+    def _negative_position_window(self, window: str, term: str) -> bool:
+        return any(
+            marker in window
+            for marker in (
+                f"does not support {term}",
+                f"doesn't support {term}",
+                f"not support {term}",
+                f"no {term}",
+                f"without {term}",
+                f"{term} is not available",
+                f"{term} unavailable",
+                f"{term} removed",
+                f"{term} deprecated",
+                f"{term} discontinued",
+                f"no longer supports {term}",
+            )
+        )
+
+    def _pricing_contradiction_positions(self, text: str) -> list[tuple[str, str]]:
+        positions: list[tuple[str, str]] = []
+        for match in PRICE_AMOUNT_RE.finditer(text):
+            value = match.group("prefix") or match.group("suffix")
+            if not value:
+                continue
+            window = text[max(0, match.start() - 80) : match.end() + 80]
+            plan = next((term for term in PRICING_PLAN_TERMS if term in window), "")
+            if not plan:
+                continue
+            cadence = "year" if any(term in window for term in ("year", "annual")) else "month"
+            normalized_amount = value.rstrip("0").rstrip(".") if "." in value else value
+            positions.append((f"price:{plan}:{cadence}", f"${normalized_amount}/{cadence}"))
+        if "free plan" in text or "free tier" in text:
+            if self._negative_position_window(text, "free plan"):
+                positions.append(("support:free plan", "unsupported"))
+            elif self._positive_position_window(text):
+                positions.append(("support:free plan", "supported"))
+        return positions
 
     def _build_source_coverage_issues(
         self,

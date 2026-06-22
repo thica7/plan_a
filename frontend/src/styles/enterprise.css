@@ -902,6 +902,140 @@
   overflow: auto;
 }
 
+.release-issue-audit-grid {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
+  margin: 8px 0 0;
+}
+
+.release-issue-audit-grid div {
+  display: contents;
+}
+
+.release-issue-audit-grid dt,
+.release-issue-audit-grid dd {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.release-issue-audit-grid dt {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.release-issue-audit-grid dd {
+  color: #0f172a;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.release-issue-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.release-issue-actions span,
+.release-issue-feedback {
+  color: #475569;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.release-issue-actions .table-action-button {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.release-issue-feedback {
+  background: var(--success-soft);
+  border-radius: 6px;
+  color: var(--success);
+  margin: 8px 0 0;
+  padding: 6px 8px;
+}
+
+.release-review-queue-panel {
+  align-content: start;
+}
+
+.release-review-task-list {
+  display: grid;
+  gap: 10px;
+  max-height: 430px;
+  overflow: auto;
+}
+
+.release-review-task {
+  background: #ffffff;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px;
+}
+
+.release-review-task.blocker {
+  background: var(--danger-soft);
+  border-color: rgba(194, 65, 58, 0.2);
+}
+
+.release-review-task.warn {
+  background: var(--amber-soft);
+  border-color: rgba(183, 121, 31, 0.22);
+}
+
+.release-review-task header {
+  align-items: start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.release-review-task header > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.release-review-task strong,
+.release-review-task p,
+.release-review-task span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.release-review-task header span,
+.release-review-task p,
+.release-review-task-metrics {
+  color: #475569;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.release-review-task p {
+  margin: 0;
+}
+
+.release-review-task-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.release-review-task-metrics span {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  padding: 3px 7px;
+}
+
 .report-review-desk .source-scope-list,
 .report-review-desk .review-claim-list {
   max-height: 240px;

@@ -431,6 +431,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/documents/{document_id}/chunks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Knowledge Document Chunks */
+        get: operations["get_knowledge_document_chunks_api_knowledge_documents__document_id__chunks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/knowledge/documents/{document_id}/versions": {
         parameters: {
             query?: never;
@@ -476,6 +493,23 @@ export interface paths {
         put?: never;
         /** Merge Knowledge Document Version */
         post: operations["merge_knowledge_document_version_api_knowledge_documents__document_id__merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/documents/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rollback Knowledge Documents */
+        post: operations["rollback_knowledge_documents_api_knowledge_documents_rollback_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1733,6 +1767,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/artifacts/{artifact_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Artifact Preview */
+        get: operations["get_artifact_preview_api_enterprise_artifacts__artifact_id__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/artifacts/{artifact_id}": {
         parameters: {
             query?: never;
@@ -2537,6 +2588,48 @@ export interface components {
             /** Items */
             items?: components["schemas"]["ArtifactLifecycleItem"][];
         };
+        /** ArtifactPreview */
+        ArtifactPreview: {
+            artifact: components["schemas"]["ArtifactRecord"];
+            /**
+             * Preview Type
+             * @default unavailable
+             * @enum {string}
+             */
+            preview_type: "text" | "image" | "pdf" | "external" | "unavailable";
+            /**
+             * Preview Available
+             * @default false
+             */
+            preview_available: boolean;
+            /**
+             * Content Text
+             * @default
+             */
+            content_text: string;
+            /**
+             * Content Base64
+             * @default
+             */
+            content_base64: string;
+            /**
+             * Data Url
+             * @default
+             */
+            data_url: string;
+            /**
+             * Media Type
+             * @default
+             */
+            media_type: string;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+            /** External Uri */
+            external_uri?: string | null;
+        };
         /** ArtifactRecord */
         ArtifactRecord: {
             /** Id */
@@ -2783,6 +2876,10 @@ export interface components {
              * @default
              */
             recommendation: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
         };
         /** BusinessQARule */
         BusinessQARule: {
@@ -2841,6 +2938,88 @@ export interface components {
             target_type: "project" | "competitor" | "dimension" | "evidence" | "claim";
             /** Target Id */
             target_id?: string | null;
+        };
+        /** ClaimCard */
+        ClaimCard: {
+            /** Id */
+            id: string;
+            /** Run Id */
+            run_id: string;
+            /** Competitor */
+            competitor: string;
+            /** Dimension */
+            dimension: string;
+            /** Claim Type */
+            claim_type: string;
+            /** Claim */
+            claim: string;
+            /** Source Ids */
+            source_ids?: string[];
+            /** Confidence */
+            confidence: number;
+            /**
+             * Evidence Strength
+             * @enum {string}
+             */
+            evidence_strength: "insufficient" | "weak" | "moderate" | "strong";
+            /**
+             * Support Level
+             * @enum {string}
+             */
+            support_level: "official" | "triangulated_community" | "single_source" | "simulated" | "inferred" | "gap";
+            /** Scope */
+            scope: string;
+            /** Caveats */
+            caveats?: string[];
+            /** Conflicts */
+            conflicts?: string[];
+            /** Applicability */
+            applicability: string;
+            /**
+             * Produced By
+             * @default analyst
+             * @constant
+             */
+            produced_by: "analyst";
+            /** Producer Stage */
+            producer_stage: string;
+            /** Derived From */
+            derived_from?: string[];
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** ClaimCardBundle */
+        ClaimCardBundle: {
+            /** Run Id */
+            run_id: string;
+            /** Competitor */
+            competitor: string;
+            /** Dimension */
+            dimension: string;
+            /** Cards */
+            cards?: components["schemas"]["ClaimCard"][];
+            /** Source Ids */
+            source_ids?: string[];
+            /** Coverage */
+            coverage?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Gap Count
+             * @default 0
+             */
+            gap_count: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+            /** Producer Context */
+            producer_context?: {
+                [key: string]: unknown;
+            };
         };
         /** ClaimRecord */
         ClaimRecord: {
@@ -3549,6 +3728,92 @@ export interface components {
              */
             generated_at?: string;
         };
+        /** DecisionCard */
+        DecisionCard: {
+            /** Id */
+            id: string;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Decision Type
+             * @enum {string}
+             */
+            decision_type: "dimension_winner" | "overall_recommendation" | "risk_adjusted_recommendation" | "why_not" | "battlecard_position" | "swot_interpretation";
+            /** Subject */
+            subject: string;
+            /** Recommendation */
+            recommendation: string;
+            /**
+             * Posture
+             * @enum {string}
+             */
+            posture: "strong" | "tentative" | "watch" | "avoid" | "insufficient_evidence";
+            /** Rationale */
+            rationale: string;
+            /** Claim Card Ids */
+            claim_card_ids?: string[];
+            /** Source Ids */
+            source_ids?: string[];
+            /** Winner */
+            winner?: string | null;
+            /** Alternatives */
+            alternatives?: string[];
+            /** Why Not */
+            why_not?: {
+                [key: string]: string;
+            };
+            /** Risk Factors */
+            risk_factors?: string[];
+            /**
+             * Evidence Strength
+             * @enum {string}
+             */
+            evidence_strength: "insufficient" | "weak" | "moderate" | "strong";
+            /** Confidence */
+            confidence: number;
+            /**
+             * Produced By
+             * @default comparator
+             * @constant
+             */
+            produced_by: "comparator";
+            /**
+             * Producer Stage
+             * @default comparator
+             * @constant
+             */
+            producer_stage: "comparator";
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** DecisionCardBundle */
+        DecisionCardBundle: {
+            /** Run Id */
+            run_id: string;
+            /** Cards */
+            cards?: components["schemas"]["DecisionCard"][];
+            /** Matrix Snapshot */
+            matrix_snapshot?: {
+                [key: string]: unknown;
+            };
+            /** Coverage By Dimension */
+            coverage_by_dimension?: {
+                [key: string]: unknown;
+            };
+            /** Recommendation Card Id */
+            recommendation_card_id?: string | null;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+            /** Producer Context */
+            producer_context?: {
+                [key: string]: unknown;
+            };
+        };
         /** DecisionReplayEvent */
         DecisionReplayEvent: {
             /** Id */
@@ -3632,6 +3897,22 @@ export interface components {
         DocumentMergeRequest: {
             /** Target Document Id */
             target_document_id: string;
+        };
+        /** DocumentRollbackRequest */
+        DocumentRollbackRequest: {
+            /** Document Ids */
+            document_ids?: string[];
+            /** Run Id */
+            run_id?: string | null;
+            /** Raw Source Id */
+            raw_source_id?: string | null;
+            /** Crawl Run Id */
+            crawl_run_id?: string | null;
+            /**
+             * Restore Previous
+             * @default true
+             */
+            restore_previous: boolean;
         };
         /** EnterpriseRunProjection */
         EnterpriseRunProjection: {
@@ -4687,6 +4968,35 @@ export interface components {
             /** Content Hash */
             content_hash: string;
         };
+        /**
+         * KnowledgeChunk
+         * @description A text chunk vectorised and stored in Qdrant.
+         */
+        KnowledgeChunk: {
+            /** Id */
+            id: string;
+            /** Document Id */
+            document_id: string;
+            /** Chunk Index */
+            chunk_index: number;
+            /** Text */
+            text: string;
+            /** Token Count */
+            token_count: number;
+            /** Embedding Model */
+            embedding_model: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Crawl Run Id */
+            crawl_run_id?: string | null;
+            /**
+             * Metadata
+             * @default {}
+             */
+            metadata: {
+                [key: string]: unknown;
+            };
+        };
         /** KnowledgeClaim */
         KnowledgeClaim: {
             /** Claim */
@@ -4998,6 +5308,35 @@ export interface components {
              * Format: date-time
              */
             generated_at?: string;
+        };
+        /**
+         * KnowledgeRollbackResult
+         * @description Result for rolling back polluted knowledge documents.
+         */
+        KnowledgeRollbackResult: {
+            /**
+             * Matched Count
+             * @default 0
+             */
+            matched_count: number;
+            /**
+             * Rolled Back Count
+             * @default 0
+             */
+            rolled_back_count: number;
+            /**
+             * Restored Count
+             * @default 0
+             */
+            restored_count: number;
+            /** Archived Document Ids */
+            archived_document_ids?: string[];
+            /** Restored Document Ids */
+            restored_document_ids?: string[];
+            /** Skipped Document Ids */
+            skipped_document_ids?: string[];
+            /** Vector Cleanup Error */
+            vector_cleanup_error?: string | null;
         };
         /** KnowledgeStatsResponse */
         KnowledgeStatsResponse: {
@@ -5837,6 +6176,10 @@ export interface components {
              * @default false
              */
             self_found: boolean;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
         };
         /** QualityAgentMatrix */
         QualityAgentMatrix: {
@@ -6218,6 +6561,16 @@ export interface components {
             cross_competitor_gaps?: string[];
             /** Suggested Redos */
             suggested_redos?: components["schemas"]["RedoScope"][];
+            /**
+             * Gate Status
+             * @default pass
+             * @enum {string}
+             */
+            gate_status: "pass" | "warn" | "block";
+            /** Blocking Gaps */
+            blocking_gaps?: string[];
+            /** Writer Constraints */
+            writer_constraints?: string[];
         };
         /** RejectedItem */
         RejectedItem: {
@@ -6296,6 +6649,68 @@ export interface components {
              */
             status: "started" | "already_started";
         };
+        /** ReportArtifactLegacyInfo */
+        ReportArtifactLegacyInfo: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "report_md" | "report_artifact_v2";
+            /**
+             * Report Md Alias
+             * @default false
+             */
+            report_md_alias: boolean;
+        };
+        /** ReportArtifactRenderCache */
+        ReportArtifactRenderCache: {
+            /**
+             * Core Markdown
+             * @default
+             */
+            core_markdown: string;
+            /**
+             * Support Markdown
+             * @default
+             */
+            support_markdown: string;
+            /**
+             * Audit Markdown
+             * @default
+             */
+            audit_markdown: string;
+            /**
+             * Full Markdown
+             * @default
+             */
+            full_markdown: string;
+        };
+        /** ReportArtifactV2 */
+        ReportArtifactV2: {
+            /**
+             * Artifact Version
+             * @default 2
+             * @constant
+             */
+            artifact_version: 2;
+            /** Run Id */
+            run_id: string;
+            core_report: components["schemas"]["ReportLayer"];
+            support_appendix?: components["schemas"]["ReportLayer"];
+            audit_log?: components["schemas"]["ReportLayer"];
+            /** Claim Card Bundles */
+            claim_card_bundles?: components["schemas"]["ClaimCardBundle"][];
+            decision_card_bundle?: components["schemas"]["DecisionCardBundle"] | null;
+            /** Section Briefs */
+            section_briefs?: components["schemas"]["SectionBrief"][];
+            quality?: components["schemas"]["ReportQualityAccount"];
+            render_cache: components["schemas"]["ReportArtifactRenderCache"];
+            legacy: components["schemas"]["ReportArtifactLegacyInfo"];
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
         /** ReportDiffLine */
         ReportDiffLine: {
             /**
@@ -6305,6 +6720,70 @@ export interface components {
             kind: "unchanged" | "added" | "removed";
             /** Text */
             text: string;
+        };
+        /** ReportLayer */
+        ReportLayer: {
+            /**
+             * Layer
+             * @enum {string}
+             */
+            layer: "core" | "support" | "audit";
+            /**
+             * Markdown
+             * @default
+             */
+            markdown: string;
+            /** Sections */
+            sections?: components["schemas"]["ReportLayerSection"][];
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** ReportLayerSection */
+        ReportLayerSection: {
+            /** Section Key */
+            section_key: string;
+            /** Heading */
+            heading: string;
+            /** Start Line */
+            start_line: number;
+            /** End Line */
+            end_line: number;
+            /** Source Ids */
+            source_ids?: string[];
+            /** Claim Card Ids */
+            claim_card_ids?: string[];
+            /** Decision Card Ids */
+            decision_card_ids?: string[];
+        };
+        /** ReportQualityAccount */
+        ReportQualityAccount: {
+            /** Core Gate */
+            core_gate?: {
+                [key: string]: unknown;
+            };
+            /** Support Gate */
+            support_gate?: {
+                [key: string]: unknown;
+            };
+            /** Audit Gate */
+            audit_gate?: {
+                [key: string]: unknown;
+            };
+            /** Warnings */
+            warnings?: {
+                [key: string]: unknown;
+            }[];
+            /** Blockers */
+            blockers?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Revision Count
+             * @default 0
+             */
+            revision_count: number;
         };
         /** ReportReleaseGate */
         ReportReleaseGate: {
@@ -6394,6 +6873,27 @@ export interface components {
              * @default
              */
             report_md: string;
+            /**
+             * Core Report Md
+             * @default
+             */
+            core_report_md: string;
+            /**
+             * Support Appendix Md
+             * @default
+             */
+            support_appendix_md: string;
+            /**
+             * Audit Log Md
+             * @default
+             */
+            audit_log_md: string;
+            /**
+             * Full Report Md
+             * @default
+             */
+            full_report_md: string;
+            report_artifact?: components["schemas"]["ReportArtifactV2"] | null;
             /** Claim Ids */
             claim_ids?: string[];
             /** Evidence Ids */
@@ -6465,6 +6965,19 @@ export interface components {
              * @default
              */
             content_hash: string;
+            /** Fetched At */
+            fetched_at?: string | null;
+            /** Last Seen At */
+            last_seen_at?: string | null;
+            /**
+             * Status
+             * @default active
+             */
+            status: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
         };
         /** RetrievalPreset */
         RetrievalPreset: {
@@ -6593,7 +7106,7 @@ export interface components {
              * @default hybrid
              * @enum {string}
              */
-            mode: "dense" | "hybrid";
+            mode: "dense" | "hybrid" | "sparse";
         };
         /** RetrievalResponse */
         RetrievalResponse: {
@@ -6707,6 +7220,10 @@ export interface components {
              * @default 1
              */
             convergence_ratio: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
             /**
              * Created At
              * Format: date-time
@@ -6851,6 +7368,12 @@ export interface components {
              * @default
              */
             report_md: string;
+            /** Claim Card Bundles */
+            claim_card_bundles?: components["schemas"]["ClaimCardBundle"][];
+            decision_card_bundle?: components["schemas"]["DecisionCardBundle"] | null;
+            /** Section Briefs */
+            section_briefs?: components["schemas"]["SectionBrief"][];
+            report_artifact?: components["schemas"]["ReportArtifactV2"] | null;
             /** Raw Sources */
             raw_sources?: components["schemas"]["RawSource"][];
             /** Competitor Kbs */
@@ -7116,6 +7639,11 @@ export interface components {
             reason: string;
             /** Blocking Metric Names */
             blocking_metric_names?: string[];
+        };
+        /** RunRedoRequest */
+        RunRedoRequest: {
+            /** Issue Ids */
+            issue_ids?: string[];
         };
         /** RunSummary */
         RunSummary: {
@@ -7584,6 +8112,47 @@ export interface components {
              * @default 3
              */
             max_results: number;
+        };
+        /** SectionBrief */
+        SectionBrief: {
+            /** Id */
+            id: string;
+            /** Section Key */
+            section_key: string;
+            /**
+             * Layer
+             * @enum {string}
+             */
+            layer: "core" | "support" | "audit";
+            /** Required Questions */
+            required_questions?: string[];
+            /** Allowed Claim Card Ids */
+            allowed_claim_card_ids?: string[];
+            /** Allowed Decision Card Ids */
+            allowed_decision_card_ids?: string[];
+            /** Allowed Source Ids */
+            allowed_source_ids?: string[];
+            /** Must Include */
+            must_include?: string[];
+            /** Must Not Claim */
+            must_not_claim?: string[];
+            /**
+             * Tone
+             * @default
+             */
+            tone: string;
+            /** Minimum Depth */
+            minimum_depth?: {
+                [key: string]: unknown;
+            };
+            /** Citation Policy */
+            citation_policy?: {
+                [key: string]: unknown;
+            };
+            /** Repair Targets */
+            repair_targets?: {
+                [key: string]: unknown;
+            };
         };
         /** SkillOutputSpec */
         SkillOutputSpec: {
@@ -8916,7 +9485,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunRedoRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -9507,6 +10080,41 @@ export interface operations {
             };
         };
     };
+    get_knowledge_document_chunks_api_knowledge_documents__document_id__chunks_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeChunk"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_knowledge_document_versions_api_knowledge_documents__document_id__versions_get: {
         parameters: {
             query?: never;
@@ -9605,6 +10213,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeDocument"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rollback_knowledge_documents_api_knowledge_documents_rollback_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentRollbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeRollbackResult"];
                 };
             };
             /** @description Validation Error */
@@ -10733,6 +11378,7 @@ export interface operations {
         parameters: {
             query?: {
                 workspace_id?: string | null;
+                project_id?: string | null;
                 status?: string | null;
                 limit?: number;
             };
@@ -12392,6 +13038,7 @@ export interface operations {
                 project_id?: string | null;
                 evidence_id?: string | null;
                 report_version_id?: string | null;
+                raw_source_id?: string | null;
             };
             header?: {
                 "X-User-Id"?: string | null;
@@ -12467,6 +13114,7 @@ export interface operations {
                 project_id?: string | null;
                 evidence_id?: string | null;
                 report_version_id?: string | null;
+                raw_source_id?: string | null;
             };
             header?: {
                 "X-User-Id"?: string | null;
@@ -12522,6 +13170,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceSnapshotResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artifact_preview_api_enterprise_artifacts__artifact_id__preview_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactPreview"];
                 };
             };
             /** @description Validation Error */
@@ -12901,6 +13584,7 @@ export interface operations {
         parameters: {
             query?: {
                 format?: string;
+                scope?: string | null;
             };
             header?: {
                 "X-User-Id"?: string | null;

@@ -109,8 +109,8 @@ export function RetrievalParamsDrawer({ open, params, onChange, onClose }: Retri
           </div>
 
           <div className="grid flex-1 content-start gap-5 overflow-y-auto p-5">
-            <SliderRow label={t('retrieval.denseWeight')} value={params.dense_weight} min={0} max={2} step={0.1} onChange={(value) => update({ dense_weight: value })} />
-            <SliderRow label={t('retrieval.sparseWeight')} value={params.sparse_weight} min={0} max={2} step={0.1} onChange={(value) => update({ sparse_weight: value })} />
+            <SliderRow label={t('retrieval.denseWeight')} value={params.dense_weight} min={0} max={1} step={0.1} onChange={(value) => update({ dense_weight: value })} />
+            <SliderRow label={t('retrieval.sparseWeight')} value={params.sparse_weight} min={0} max={1} step={0.1} onChange={(value) => update({ sparse_weight: value })} />
             <SliderRow label={t('retrieval.rerankTopK')} value={params.rerank_top_k} min={1} max={50} step={1} onChange={(value) => update({ rerank_top_k: value })} />
             <SliderRow label="Final top K" value={params.final_top_k} min={1} max={30} step={1} onChange={(value) => update({ final_top_k: value })} />
             <SliderRow label="MMR lambda" value={params.mmr_lambda} min={0} max={1} step={0.05} onChange={(value) => update({ mmr_lambda: value })} />

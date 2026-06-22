@@ -28,6 +28,26 @@ LAYER_KEYWORDS: dict[str, set[str]] = {
         "benchmark",
     },
 }
+L2_STRONG_SIGNALS = {
+    "workflow",
+    "integration",
+    "integrations",
+    "ecosystem",
+    "enterprise",
+    "security",
+    "compliance",
+    "governance",
+    "switching",
+}
+L3_STRONG_SIGNALS = {
+    "landscape",
+    "market",
+    "category",
+    "trend",
+    "industry",
+    "benchmark",
+    "segmentation",
+}
 
 
 def assess_competitor_layer(
@@ -65,18 +85,22 @@ def assess_competitor_layer(
         scores["L1"] += 1
         signals.append("focused_competitor_set")
 
-    if any("pricing" in item.casefold() for item in dimensions):
+    if any(_dimension_has(item, {"pricing", "packaging"}) for item in dimensions):
         scores["L1"] += 1
         signals.append("pricing_dimension")
-    if any("market" in item.casefold() or "trend" in item.casefold() for item in dimensions):
+    if any(_dimension_has(item, L3_STRONG_SIGNALS) for item in dimensions):
         scores["L3"] += 1
         signals.append("market_dimension")
-    if any(
-        "integration" in item.casefold() or "ecosystem" in item.casefold()
-        for item in dimensions
-    ):
+    if any(_dimension_has(item, L2_STRONG_SIGNALS) for item in dimensions):
         scores["L2"] += 1
         signals.append("ecosystem_dimension")
+
+    if _has_strong_signal(text, L3_STRONG_SIGNALS):
+        scores["L3"] += 2
+        signals.append("explicit_landscape_scope")
+    if _has_strong_signal(text, L2_STRONG_SIGNALS):
+        scores["L2"] += 2
+        signals.append("explicit_workflow_or_enterprise_scope")
 
     layer = max(scores, key=lambda item: (scores[item], _layer_priority(item)))
     total = max(sum(scores.values()), 1)
@@ -98,6 +122,15 @@ def assess_competitor_layer(
 
 def _layer_priority(layer: str) -> int:
     return {"L1": 3, "L2": 2, "L3": 1}.get(layer, 0)
+
+
+def _dimension_has(dimension: str, keywords: set[str]) -> bool:
+    normalized = dimension.casefold()
+    return any(keyword in normalized for keyword in keywords)
+
+
+def _has_strong_signal(text: str, keywords: set[str]) -> bool:
+    return any(keyword in text for keyword in keywords)
 
 
 def _rationale(layer: str, competitor_count: int) -> str:

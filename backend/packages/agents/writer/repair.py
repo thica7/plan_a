@@ -40,12 +40,15 @@ SECTION_REPAIR_HINTS: dict[str, tuple[str, ...]] = {
         "dimension findings",
         "highest-impact finding",
         "findings section",
+        "pricing",
+        "feature",
     ),
     "review_theme_summary": (
         "user review",
         "review themes",
         "customer review",
         "buyer feedback",
+        "persona",
         "review_theme",
         "user_research",
         "adoption blocker",
@@ -538,7 +541,12 @@ def _has_deterministic_report_structure_damage(detail: RunDetail) -> bool:
     duplicate_count = int(metric_by_name.get("duplicate_section_count") or 0)
     core_depth = float(metric_by_name.get("core_section_depth_score") or 0.0)
     core_analysis_depth = float(metric_by_name.get("core_analysis_depth_score") or 0.0)
-    return duplicate_count > 0 or (core_depth == 0.0 and core_analysis_depth >= 0.6)
+    return (
+        duplicate_count > 0
+        or (core_depth == 0.0 and core_analysis_depth >= 0.6)
+        or float(metric_by_name.get("citation_hygiene_score", 1.0)) < 1.0
+        or float(metric_by_name.get("localized_heading_score", 1.0)) < 1.0
+    )
 
 
 def _target_sections(issues: list[QCIssue]) -> list[str]:

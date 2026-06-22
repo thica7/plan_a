@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime
 from typing import Any
 
@@ -68,6 +69,8 @@ from packages.schema.enterprise import (
 )
 from packages.schema.evals import EvalOpsReleaseContract
 from packages.workflows.service import TemporalWorkflowService, decide_temporal_cutover
+
+LOGGER = logging.getLogger(__name__)
 
 
 class RuntimeCommandService:
@@ -154,12 +157,14 @@ class RuntimeCommandService:
                 ) from exc
             except ValueError as exc:
                 raise RuntimeCommandError(400, str(exc), command_type="create_run") from exc
-            except Exception as exc:  # noqa: BLE001 - preserve existing API behavior.
-                raise RuntimeCommandError(
-                    500,
-                    "Temporal workflow started but run visibility sync failed.",
-                    command_type="create_run",
-                ) from exc
+            except Exception:  # noqa: BLE001 - sync is best-effort after workflow start.
+                LOGGER.exception(
+                    "Temporal workflow started but run visibility sync failed; "
+                    "deferring local visibility repair.",
+                    extra={"run_id": result.run_id, "workflow_id": result.workflow_id},
+                )
+                asyncio.create_task(self._retry_temporal_run_visibility(result, request))
+                metadata["temporal_visibility_sync"] = "deferred"
             return _result(
                 command_id=command_id,
                 command_type="create_run",
@@ -527,6 +532,15 @@ class RuntimeCommandService:
                 "Resolve the active HITL interrupt before manual redo.",
                 command_type="request_redo",
             )
+        if command.issue_ids and not self._run_service.can_start_redo(
+            command.run_id,
+            preferred_issue_ids=command.issue_ids,
+        ):
+            raise RuntimeCommandError(
+                409,
+                "Requested redo issue is no longer active.",
+                command_type="request_redo",
+            )
         if not self._run_service.can_start_redo(command.run_id):
             raise RuntimeCommandError(
                 409,
@@ -542,9 +556,15 @@ class RuntimeCommandService:
             metadata={
                 "qa_finding_count": len(detail.qa_findings),
                 "current_status": detail.status,
+                "issue_ids": list(command.issue_ids),
             },
         )
-        asyncio.create_task(self._run_service.run_scoped_redo(command.run_id))
+        asyncio.create_task(
+            self._run_service.run_scoped_redo(
+                command.run_id,
+                preferred_issue_ids=command.issue_ids,
+            )
+        )
         return _result(
             command_id=command_id,
             command_type="request_redo",
@@ -556,7 +576,10 @@ class RuntimeCommandService:
             run_id=detail.id,
             route="langgraph",
             payload=detail,
-            metadata={"qa_finding_count": len(detail.qa_findings)},
+            metadata={
+                "qa_finding_count": len(detail.qa_findings),
+                "issue_ids": list(command.issue_ids),
+            },
         )
 
     async def request_approval(
@@ -781,12 +804,59 @@ class RuntimeCommandService:
         request: RunCreateRequest,
     ) -> None:
         visible_request = request.model_copy(update={"idempotency_key": result.idempotency_key})
-        detail = await self._run_service.ensure_run_visible(visible_request)
+        detail = await self._run_service.ensure_run_visible(
+            visible_request,
+            skip_active_duplicate_check=True,
+        )
         if detail.id != result.run_id:
             raise RuntimeError(
                 f"Temporal returned run_id={result.run_id}, but local visibility "
                 f"created run_id={detail.id}."
             )
+
+    async def _retry_temporal_run_visibility(
+        self,
+        result: WorkflowStartResponse,
+        request: RunCreateRequest,
+    ) -> None:
+        delays = (0.25, 1.0, 2.0)
+        for attempt, delay in enumerate(delays, start=1):
+            await asyncio.sleep(delay)
+            try:
+                await self._ensure_temporal_run_visible(result, request)
+            except (WorkspaceQuotaExceededError, ValueError):
+                LOGGER.exception(
+                    "Deferred Temporal run visibility repair stopped on validation error.",
+                    extra={
+                        "run_id": result.run_id,
+                        "workflow_id": result.workflow_id,
+                        "attempt": attempt,
+                    },
+                )
+                return
+            except Exception:  # noqa: BLE001 - retry loop records transient repair failures.
+                LOGGER.exception(
+                    "Deferred Temporal run visibility repair failed.",
+                    extra={
+                        "run_id": result.run_id,
+                        "workflow_id": result.workflow_id,
+                        "attempt": attempt,
+                    },
+                )
+                continue
+            LOGGER.info(
+                "Deferred Temporal run visibility repair succeeded.",
+                extra={
+                    "run_id": result.run_id,
+                    "workflow_id": result.workflow_id,
+                    "attempt": attempt,
+                },
+            )
+            return
+        LOGGER.error(
+            "Deferred Temporal run visibility repair exhausted retries.",
+            extra={"run_id": result.run_id, "workflow_id": result.workflow_id},
+        )
 
     def _create_manual_report_revision(
         self,

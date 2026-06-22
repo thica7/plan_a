@@ -836,6 +836,7 @@ def test_enterprise_store_round_trips_notifications_with_audit() -> None:
         NotificationRecord(
             id="notification-1",
             workspace_id="workspace-a",
+            project_id="project-a",
             notification_type="scheduled_scan_summary",
             severity="success",
             status="sent",
@@ -845,9 +846,24 @@ def test_enterprise_store_round_trips_notifications_with_audit() -> None:
             resource_id="weekly",
         )
     )
+    other_project_notification = store.upsert_notification(
+        NotificationRecord(
+            id="notification-2",
+            workspace_id="workspace-a",
+            project_id="project-b",
+            notification_type="release_gate_blocked",
+            severity="critical",
+            status="queued",
+            title="Other project blocked",
+        )
+    )
 
     assert notification.status == "sent"
-    assert store.list_notifications("workspace-a") == [notification]
+    assert store.list_notifications("workspace-a") == [other_project_notification, notification]
+    assert store.list_notifications("workspace-a", project_id="project-a") == [notification]
+    assert store.list_notifications("workspace-a", project_id="project-b") == [
+        other_project_notification
+    ]
     assert store.list_notifications("workspace-a", status="sent") == [notification]
     assert store.list_notifications("workspace-b") == []
     assert any(log.action == "notification.upserted" for log in store.list_audit_logs())
@@ -1929,6 +1945,11 @@ def test_enterprise_router_exposes_projection() -> None:
     memory = PreferenceMemoryStore.in_memory()
     detail = _detail()
     context = store.start_run(detail)
+    other_context = store.start_run(
+        detail.model_copy(deep=True, update={"id": "run-other-workspace"}),
+        workspace_id="workspace-other",
+        project_id="project-other-workspace",
+    )
     projection = build_enterprise_projection(
         detail,
         workspace_id=context.workspace_id,
@@ -1955,6 +1976,7 @@ def test_enterprise_router_exposes_projection() -> None:
         json=NotificationRecord(
             id="notification-route-1",
             workspace_id=context.workspace_id,
+            project_id=context.project_id,
             notification_type="scheduled_scan_summary",
             severity="success",
             status="sent",
@@ -1962,6 +1984,14 @@ def test_enterprise_router_exposes_projection() -> None:
         ).model_dump(mode="json"),
     )
     notifications = client.get(f"/api/enterprise/notifications?workspace_id={context.workspace_id}")
+    project_notifications = client.get(
+        f"/api/enterprise/notifications?workspace_id={context.workspace_id}"
+        f"&project_id={context.project_id}"
+    )
+    cross_workspace_project_notifications = client.get(
+        f"/api/enterprise/notifications?workspace_id={context.workspace_id}"
+        f"&project_id={other_context.project_id}"
+    )
     policy_actions = client.get("/api/enterprise/policy/actions")
     policy_decision = client.post(
         "/api/enterprise/policy/evaluate",
@@ -2150,6 +2180,9 @@ def test_enterprise_router_exposes_projection() -> None:
     assert notification_upsert.json()["id"] == "notification-route-1"
     assert notifications.status_code == 200
     assert notifications.json()[0]["notification_type"] == "scheduled_scan_summary"
+    assert project_notifications.status_code == 200
+    assert project_notifications.json()[0]["project_id"] == context.project_id
+    assert cross_workspace_project_notifications.status_code == 403
     assert policy_actions.status_code == 200
     assert policy_actions.json()["project:write"] == "analyst"
     assert policy_decision.status_code == 200

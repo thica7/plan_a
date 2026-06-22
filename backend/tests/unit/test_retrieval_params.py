@@ -49,8 +49,8 @@ class SparseRepo:
                 id="sparse-doc",
                 url=None,
                 title="Sparse",
-                competitor=None,
-                dimension=None,
+                competitor="Acme",
+                dimension="pricing",
                 source_type="manual",
                 content_hash="hash",
             )
@@ -123,6 +123,66 @@ class LeakyVectorStore:
                 dimension="pricing",
             ),
         ]
+
+
+
+class StatusAwareVectorStore:
+    async def search(self, query_vector, **kwargs):
+        return [
+            RetrievalHit(
+                chunk_id="active-chunk",
+                document_id="active-doc",
+                text="active dense text",
+                score=1.0,
+            ),
+            RetrievalHit(
+                chunk_id="archived-chunk",
+                document_id="archived-doc",
+                text="archived dense text",
+                score=0.9,
+            ),
+            RetrievalHit(
+                chunk_id="missing-chunk",
+                document_id="missing-doc",
+                text="missing dense text",
+                score=0.8,
+            ),
+        ]
+
+
+class StatusAwareRepo:
+    def __init__(self) -> None:
+        self.documents = {
+            "active-doc": SimpleNamespace(
+                id="active-doc",
+                url="https://example.com/active",
+                title="Active",
+                competitor="Acme",
+                dimension="pricing",
+                source_type="webpage_verified",
+                content_hash="active-hash",
+                fetched_at=None,
+                last_seen_at=None,
+                status="active",
+                is_active=True,
+            ),
+            "archived-doc": SimpleNamespace(
+                id="archived-doc",
+                url="https://example.com/archived",
+                title="Archived",
+                competitor="Acme",
+                dimension="pricing",
+                source_type="webpage_verified",
+                content_hash="archived-hash",
+                fetched_at=None,
+                last_seen_at=None,
+                status="archived",
+                is_active=False,
+            ),
+        }
+
+    async def get_document(self, doc_id: str):
+        return self.documents.get(doc_id)
 
 
 def embed(texts: list[str]) -> list[list[float]]:
@@ -263,6 +323,56 @@ async def test_retrieval_filters_flow_into_dense_and_sparse_search() -> None:
     assert vector_store.calls[0]["dimensions"] == ["security"]
     assert repo.filters == [{"competitors": ["Netlify"], "dimensions": ["security"]}]
 
+
+@pytest.mark.asyncio
+async def test_sparse_mode_uses_sqlite_without_dense_vector_search() -> None:
+    repo = SparseRepo()
+    vector_store = FixedVectorStore()
+    service = RetrievalService(
+        repo=repo,
+        vector_store=vector_store,
+        embed_fn=embed,
+    )
+
+    response = await service.retrieve(
+        RetrievalRequest(
+            query="pricing",
+            mode="sparse",
+            competitors=["Acme"],
+            dimensions=["pricing"],
+            enable_query_rewrite=False,
+            final_top_k=3,
+        )
+    )
+
+    assert vector_store.calls == []
+    assert repo.filters == [{"competitors": ["Acme"], "dimensions": ["pricing"]}]
+    assert [hit.chunk_id for hit in response.hits] == ["sparse"]
+
+
+
+
+@pytest.mark.asyncio
+async def test_dense_mode_filters_hits_by_sqlite_document_status() -> None:
+    service = RetrievalService(
+        repo=StatusAwareRepo(),
+        vector_store=StatusAwareVectorStore(),
+        embed_fn=embed,
+    )
+
+    response = await service.retrieve(
+        RetrievalRequest(
+            query="pricing",
+            mode="dense",
+            enable_query_rewrite=False,
+            final_top_k=5,
+        )
+    )
+
+    assert [hit.chunk_id for hit in response.hits] == ["active-chunk"]
+    assert response.hits[0].status == "active"
+    assert response.hits[0].title == "Active"
+    assert response.total == 1
 
 @pytest.mark.asyncio
 async def test_retrieval_prefers_document_diversity_in_final_hits() -> None:

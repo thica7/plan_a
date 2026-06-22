@@ -4,6 +4,7 @@ from packages.agents.writer.assembler import (
     ReportSectionFragment,
     assemble_report_fragments,
     assemble_report_sections,
+    join_section_repair_parts,
 )
 from packages.business_intel.report_sections import build_report_section_index
 from packages.i18n.language import report_label
@@ -367,3 +368,28 @@ def test_keyed_assembler_keeps_known_support_after_core_even_when_input_is_first
     )
     assert assembled.telemetry["input_fragment_count"] == 2
     assert assembled.telemetry["first_support_key"] == "evidence_support"
+
+
+def test_join_section_repair_parts_keeps_requested_sections_only() -> None:
+    result = join_section_repair_parts(
+        [
+            (
+                "## Decision Summary\n"
+                "Keep the repaired decision section [source:decision-1].\n\n"
+                "## SWOT Analysis\n"
+                "Drop this unrelated repaired section [source:swot-1]."
+            ),
+            (
+                "## Competitor Deep Dives\n"
+                "Keep the repaired competitor section [source:deep-1]."
+            ),
+        ],
+        "## Decision Summary\n## Competitor Deep Dives",
+    )
+
+    assert "## Decision Summary" in result
+    assert "Keep the repaired decision section [source:decision-1]." in result
+    assert "## Competitor Deep Dives" in result
+    assert "Keep the repaired competitor section [source:deep-1]." in result
+    assert "## SWOT Analysis" not in result
+    assert "Drop this unrelated repaired section" not in result

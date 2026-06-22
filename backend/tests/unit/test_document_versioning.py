@@ -5,11 +5,12 @@ import pytest
 from app.routes.knowledge import (
     DocumentMergeRequest,
     diff_knowledge_document,
+    get_knowledge_document_chunks,
     get_knowledge_document_versions,
     merge_knowledge_document_version,
 )
 from packages.auth import EnterpriseUserContext
-from packages.knowledge.models import DocumentCreate
+from packages.knowledge.models import DocumentCreate, KnowledgeChunk
 from packages.knowledge.repository import KnowledgeRepository
 
 
@@ -98,6 +99,51 @@ async def test_merge_document_version_marks_target_active(tmp_path) -> None:
         assert first_after.status == "active"
         assert second_after.is_active is False
         assert second_after.status == "archived"
+    finally:
+        await repo.close()
+
+
+@pytest.mark.asyncio
+async def test_get_knowledge_document_chunks_returns_ordered_chunks(tmp_path) -> None:
+    repo = KnowledgeRepository(str(tmp_path / "knowledge.db"))
+    await repo.initialise()
+    try:
+        document = await repo.upsert_document(
+            DocumentCreate(
+                url="https://example.com/security",
+                title="Security",
+                source_type="manual",
+                text="Security text",
+            ),
+            "hash-security",
+        )
+        await repo.insert_chunks(
+            [
+                KnowledgeChunk(
+                    id="chunk-2",
+                    document_id=document.id,
+                    chunk_index=2,
+                    text="Second chunk.",
+                    token_count=2,
+                    embedding_model="hash",
+                    content_hash="hash-chunk-2",
+                ),
+                KnowledgeChunk(
+                    id="chunk-1",
+                    document_id=document.id,
+                    chunk_index=1,
+                    text="First chunk.",
+                    token_count=2,
+                    embedding_model="hash",
+                    content_hash="hash-chunk-1",
+                ),
+            ]
+        )
+
+        chunks = await get_knowledge_document_chunks(document.id, repo, user=_user())
+
+        assert [chunk.id for chunk in chunks] == ["chunk-1", "chunk-2"]
+        assert chunks[0].text == "First chunk."
     finally:
         await repo.close()
 
