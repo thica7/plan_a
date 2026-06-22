@@ -548,8 +548,6 @@ class CollectorAgentMixin:
         detail = record.detail
         target_source_count = self._collector_target_source_count(detail, dimension)
         sources = list(seed_sources or [])
-        if len(sources) >= target_source_count:
-            return sources
         pipeline_sources = await self._collect_competitor_with_research_pipeline(
             record,
             detail,
@@ -562,6 +560,37 @@ class CollectorAgentMixin:
         )
         self._extend_source_batch(sources, pipeline_sources, target_source_count)
         return sources
+
+    def _record_collector_coverage(
+        self,
+        run_id: str,
+        subagent: str,
+        competitor: str,
+        dimension: str,
+        coverage: dict[str, object],
+    ) -> None:
+        if not hasattr(self, "_collector_coverage_by_branch"):
+            self._collector_coverage_by_branch = {}
+        self._collector_coverage_by_branch[
+            (run_id, subagent, competitor.casefold(), dimension.casefold())
+        ] = dict(coverage)
+
+    def _collector_coverage_for(
+        self,
+        run_id: str,
+        subagent: str,
+        competitor: str,
+        dimension: str,
+    ) -> dict[str, object] | None:
+        store = getattr(self, "_collector_coverage_by_branch", {})
+        value = store.get((run_id, subagent, competitor.casefold(), dimension.casefold()))
+        return dict(value) if isinstance(value, dict) else None
+
+    @staticmethod
+    def _collector_coverage_failed(coverage: dict[str, object] | None) -> bool:
+        if not coverage:
+            return False
+        return coverage.get("passed") is False
 
     async def _collect_competitor_from_kb(
         self,
@@ -949,6 +978,14 @@ class CollectorAgentMixin:
             search=search if enable_search and self._search.is_enabled else None,
             seed_candidates=seed_candidates,
         )
+        if result.coverage is not None:
+            self._record_collector_coverage(
+                detail.id,
+                context.subagent,
+                competitor,
+                dimension,
+                result.coverage.model_dump(mode="json"),
+            )
         admission_diagnostics: list[dict[str, object]] = []
         sources = self._raw_sources_from_research_result(
             detail,
@@ -2358,8 +2395,17 @@ class CollectorAgentMixin:
         except Exception as exc:  # noqa: BLE001 - deterministic fallbacks continue.
             collect_payload["research_pipeline_error"] = str(exc)
             collect_payload["memory_official_first"] = memory_official_first
+        coverage = self._collector_coverage_for(
+            detail.id,
+            context.subagent,
+            competitor,
+            dimension,
+        )
+        if coverage is not None:
+            collect_payload["coverage_contract"] = coverage
+        coverage_repair_needed = self._collector_coverage_failed(coverage)
         if (
-            len(sources) < target_source_count
+            (len(sources) < target_source_count or coverage_repair_needed)
             and self._settings.collector_react_enabled
             and self._search.is_enabled
         ):
@@ -2380,9 +2426,15 @@ class CollectorAgentMixin:
                     enable_search=False,
                     enable_repair=False,
                 )
-                self._extend_source_batch(sources, react_sources, target_source_count)
+                if coverage_repair_needed:
+                    for source in react_sources:
+                        if not self._source_already_in_batch(source, sources):
+                            sources.append(source)
+                else:
+                    self._extend_source_batch(sources, react_sources, target_source_count)
                 collect_payload["react_candidate_count"] = len(react_candidates)
                 collect_payload["react_pipeline_added"] = len(react_sources)
+                collect_payload["react_triggered_by_coverage"] = coverage_repair_needed
             except Exception as exc:  # noqa: BLE001 - deterministic fallback continues.
                 collect_payload["react_error"] = str(exc)
         if not sources:

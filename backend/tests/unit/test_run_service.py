@@ -67,6 +67,7 @@ from packages.schema.models import (
 )
 from packages.schema.report_artifact import DecisionCardBundle
 from packages.search import SearchResult
+from packages.research.models import SourceCandidate
 from packages.skills.registry import SkillRegistry
 from packages.tools.evidence_fetch import EvidenceFetchResult
 from packages.tools.fetch_page import FetchPageResult
@@ -14029,6 +14030,128 @@ async def test_collector_preserves_official_sources_when_community_search_fails(
         if event.type == "node_completed" and event.agent == "collector"
     )
     assert collector_done.payload["collect"]["community_error"] == "community search down"
+
+
+@pytest.mark.asyncio
+async def test_collector_branch_reacts_when_coverage_fails_despite_source_count() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="key",
+            ark_model="model",
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+            pplx_api_key="pplx",
+            web_search_provider="perplexity",
+            collector_react_enabled=True,
+            collector_target_verified_sources_per_branch=1,
+            collector_community_enabled=False,
+        ),
+    )
+    detail = await service.create_run(
+        RunCreateRequest(
+            topic="AI coding assistants",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="real",
+        )
+    )
+    record = service._runs[detail.id]
+    bad_source = RawSource(
+        id="cursor-changelog-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor changelog",
+        url="https://cursor.com/changelog",
+        snippet="Cursor changelog mentions pricing navigation.",
+        content_hash="cursor-changelog-pricing-hash",
+        confidence=0.95,
+    )
+    repaired_source = RawSource(
+        id="cursor-official-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.com/pricing",
+        snippet="Cursor Pro is $20 per month.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+    )
+    repair_called = False
+
+    async def fake_collect_with_web_search(  # noqa: ANN001
+        record,
+        dimension,
+        competitor,
+        context,
+        *,
+        seed_sources=None,
+        include_official=True,
+    ) -> list[RawSource]:
+        service._record_collector_coverage(
+            detail.id,
+            context.subagent,
+            competitor,
+            dimension,
+            {
+                "passed": False,
+                "missing_intents": ["official_pricing_page", "current_plan_price_support"],
+                "blocking_reasons": ["changelog cannot support current pricing"],
+                "repair_hints": ["Find official pricing page."],
+            },
+        )
+        return [bad_source]
+
+    async def fake_react(  # noqa: ANN001
+        record,
+        dimension,
+        competitor,
+        context,
+    ) -> list[SourceCandidate]:
+        nonlocal repair_called
+        repair_called = True
+        return [
+            SourceCandidate(
+                title="Cursor pricing",
+                url="https://cursor.com/pricing",
+                origin="manual",
+                competitor=competitor,
+                dimension=dimension,
+            )
+        ]
+
+    async def fake_repair_pipeline(  # noqa: ANN001
+        record,
+        detail,
+        dimension,
+        competitor,
+        context,
+        *,
+        batch_sources,
+        target_source_count,
+        include_official,
+        seed_candidates=None,
+        enable_search=True,
+        enable_repair=True,
+    ) -> list[RawSource]:
+        assert seed_candidates
+        return [repaired_source]
+
+    service._collect_competitor_with_web_search = fake_collect_with_web_search  # type: ignore[method-assign]
+    service._run_collector_competitor_react = fake_react  # type: ignore[method-assign]
+    service._collect_competitor_with_research_pipeline = fake_repair_pipeline  # type: ignore[method-assign]
+
+    await service._real_collector_branch_step(record, "pricing", "Cursor")
+
+    assert repair_called is True
+    assert [source.id for source in record.detail.raw_sources] == [
+        "cursor-changelog-pricing",
+        "cursor-official-pricing",
+    ]
 
 
 @pytest.mark.asyncio

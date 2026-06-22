@@ -272,6 +272,18 @@ class CandidateLedgerEntry(ResearchBaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class CoverageContractResult(ResearchBaseModel):
+    dimension: str
+    competitor: str
+    required_intents: list[CandidateIntent] = Field(default_factory=list)
+    satisfied_intents: list[CandidateIntent] = Field(default_factory=list)
+    missing_intents: list[CandidateIntent] = Field(default_factory=list)
+    blocking_reasons: list[str] = Field(default_factory=list)
+    repair_hints: list[str] = Field(default_factory=list)
+    passed: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class QualityGap(ResearchBaseModel):
     id: str = ""
     severity: GapSeverity
@@ -387,6 +399,7 @@ class ResearchResult(ResearchBaseModel):
     extractions: list[ExtractionResult] = Field(default_factory=list)
     evidence_items: list[EvidenceItem] = Field(default_factory=list)
     candidate_ledger: list[CandidateLedgerEntry] = Field(default_factory=list)
+    coverage: CoverageContractResult | None = None
     normalized_fields: list[NormalizedEvidenceField] = Field(default_factory=list)
     raw_source_ids: list[str] = Field(default_factory=list)
     gaps: list[QualityGap] = Field(default_factory=list)

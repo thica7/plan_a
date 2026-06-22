@@ -13,6 +13,7 @@ from packages.research.discovery import (
     search_result_candidates,
     trusted_registry_candidates,
 )
+from packages.research.coverage_contract import evaluate_coverage_contract
 from packages.research.evaluation import evaluate_research_quality
 from packages.research.evidence import (
     admit_evidence_items,
@@ -23,6 +24,7 @@ from packages.research.extraction import extract_page
 from packages.research.models import (
     CandidateLedgerEntry,
     CapturedPage,
+    CoverageContractResult,
     EvidenceItem,
     ExtractionResult,
     QualityGap,
@@ -46,6 +48,7 @@ class ResearchPass:
     extractions: list[ExtractionResult]
     evidence_items: list[EvidenceItem]
     gaps: list[QualityGap]
+    coverage: CoverageContractResult
     capture_metrics: dict[str, Any]
 
 
@@ -73,6 +76,7 @@ async def run_research_pipeline(
     extractions = first_pass.extractions
     evidence_items = first_pass.evidence_items
     gaps = first_pass.gaps
+    coverage = first_pass.coverage
     capture_metrics = dict(first_pass.capture_metrics)
     planned_repairs = repair_tasks_from_gaps(gaps)
 
@@ -102,12 +106,26 @@ async def run_research_pipeline(
             candidates=candidates,
         )
         gaps = evaluate_research_quality(brief, extractions, evidence_items)
+        candidate_ledger = _candidate_ledger(
+            brief,
+            candidates=candidates,
+            pages=captured_pages,
+            evidence_items=evidence_items,
+            capture_metrics=capture_metrics,
+        )
+        coverage = evaluate_coverage_contract(
+            brief,
+            candidates=candidates,
+            pages=captured_pages,
+            evidence_items=evidence_items,
+            ledger=candidate_ledger,
+        )
         planned_repairs = repair_tasks_from_gaps(gaps)
         repair_round_count += 1
         repair_candidate_count += len(repair_pass.candidates)
         repair_capture_count += len(repair_pass.captured_pages)
         capture_metrics = _merge_numeric_metrics(capture_metrics, repair_pass.capture_metrics)
-        if not gaps:
+        if not gaps and coverage.passed:
             break
 
     normalized_fields = normalized_fields_from_evidence_items(evidence_items)
@@ -117,6 +135,13 @@ async def run_research_pipeline(
         pages=captured_pages,
         evidence_items=evidence_items,
         capture_metrics=capture_metrics,
+    )
+    coverage = evaluate_coverage_contract(
+        brief,
+        candidates=candidates,
+        pages=captured_pages,
+        evidence_items=evidence_items,
+        ledger=candidate_ledger,
     )
     assembly = assemble_research_summary(
         brief,
@@ -131,6 +156,7 @@ async def run_research_pipeline(
         extractions=extractions,
         evidence_items=evidence_items,
         candidate_ledger=candidate_ledger,
+        coverage=coverage,
         normalized_fields=normalized_fields,
         gaps=gaps,
         repair_tasks=planned_repairs,
@@ -139,6 +165,7 @@ async def run_research_pipeline(
             **_metrics(candidates, captured_pages, extractions, evidence_items, gaps, brief),
             **capture_metrics,
             **_ledger_metrics(candidate_ledger),
+            **_coverage_metrics(coverage),
             "initial_gap_count": initial_gap_count,
             "remaining_gap_count": len(gaps),
             "repair_round_count": repair_round_count,
@@ -165,29 +192,43 @@ async def _run_research_pass(
         seed_candidates=seed_candidates,
         repair_tasks=repair_tasks,
     )
-    captured_pages, capture_metrics = await _capture_candidates(
+    captured_pages, capture_metrics, overflow_queue = await _capture_candidates(
         brief,
         candidates,
         fetch,
         capture_cache=capture_cache,
     )
-    extractions = [
-        extract_page(brief, page)
-        for page in captured_pages
-        if page.status == "ok" and (page.text or page.markdown or page.snippet)
-    ]
-    evidence_items = admit_evidence_items(
-        extractions,
-        captured_pages=captured_pages,
+    extractions, evidence_items, gaps, ledger, coverage = _evaluate_capture_set(
+        brief,
         candidates=candidates,
+        pages=captured_pages,
+        capture_metrics=capture_metrics,
     )
-    gaps = evaluate_research_quality(brief, extractions, evidence_items)
+    while (
+        not coverage.passed
+        and overflow_queue
+        and capture_metrics["capture_fetch_count"] < brief.max_fetches
+    ):
+        candidate = overflow_queue.pop(0)
+        page = await _capture_one(candidate, fetch, capture_cache)
+        captured_pages.append(page)
+        capture_metrics["capture_fetch_count"] += 1
+        capture_metrics["adaptive_backfill_fetch_count"] = (
+            capture_metrics.get("adaptive_backfill_fetch_count", 0) + 1
+        )
+        extractions, evidence_items, gaps, ledger, coverage = _evaluate_capture_set(
+            brief,
+            candidates=candidates,
+            pages=captured_pages,
+            capture_metrics=capture_metrics,
+        )
     return ResearchPass(
         candidates=candidates,
         captured_pages=captured_pages,
         extractions=extractions,
         evidence_items=evidence_items,
         gaps=gaps,
+        coverage=coverage,
         capture_metrics=capture_metrics,
     )
 
@@ -229,28 +270,87 @@ async def _capture_candidates(
     fetch: FetchCallable,
     *,
     capture_cache: CaptureCache | None = None,
-) -> tuple[list[CapturedPage], dict[str, Any]]:
+) -> tuple[list[CapturedPage], dict[str, Any], list[SourceCandidate]]:
     pages: list[CapturedPage] = []
     cache = CaptureCache()
     selection = select_capture_candidates(brief, candidates)
     stats = {
         "capture_cache_hits": 0,
         "capture_fetch_count": 0,
+        "adaptive_backfill_fetch_count": 0,
         "capture_selected_candidate_count": len(selection.selected),
+        "capture_overflow_candidate_count": len(selection.overflow_queue),
         "capture_skipped_candidate_count": len(selection.skipped_reasons),
         "capture_skipped_reasons": selection.skipped_reasons,
+        "capture_selected_intents": selection.selected_intents,
     }
     for candidate in selection.selected:
-        cached = (capture_cache or cache).get(candidate)
+        active_cache = capture_cache or cache
+        cached = active_cache.get(candidate)
         if cached is not None:
             stats["capture_cache_hits"] += 1
             pages.append(cached)
             continue
         page = await capture_candidate(candidate, fetch)
-        (capture_cache or cache).put(candidate, page)
+        active_cache.put(candidate, page)
         stats["capture_fetch_count"] += 1
         pages.append(page)
-    return pages, stats
+    return pages, stats, list(selection.overflow_queue)
+
+
+async def _capture_one(
+    candidate: SourceCandidate,
+    fetch: FetchCallable,
+    capture_cache: CaptureCache | None,
+) -> CapturedPage:
+    cache = capture_cache or CaptureCache()
+    cached = cache.get(candidate)
+    if cached is not None:
+        return cached
+    page = await capture_candidate(candidate, fetch)
+    cache.put(candidate, page)
+    return page
+
+
+def _evaluate_capture_set(
+    brief: ResearchBrief,
+    *,
+    candidates: list[SourceCandidate],
+    pages: list[CapturedPage],
+    capture_metrics: dict[str, Any],
+) -> tuple[
+    list[ExtractionResult],
+    list[EvidenceItem],
+    list[QualityGap],
+    list[CandidateLedgerEntry],
+    CoverageContractResult,
+]:
+    extractions = [
+        extract_page(brief, page)
+        for page in pages
+        if page.status == "ok" and (page.text or page.markdown or page.snippet)
+    ]
+    evidence_items = admit_evidence_items(
+        extractions,
+        captured_pages=pages,
+        candidates=candidates,
+    )
+    gaps = evaluate_research_quality(brief, extractions, evidence_items)
+    ledger = _candidate_ledger(
+        brief,
+        candidates=candidates,
+        pages=pages,
+        evidence_items=evidence_items,
+        capture_metrics=capture_metrics,
+    )
+    coverage = evaluate_coverage_contract(
+        brief,
+        candidates=candidates,
+        pages=pages,
+        evidence_items=evidence_items,
+        ledger=ledger,
+    )
+    return extractions, evidence_items, gaps, ledger, coverage
 
 
 def _candidate_ledger(
@@ -344,6 +444,16 @@ def _ledger_metrics(ledger: list[CandidateLedgerEntry]) -> dict[str, Any]:
         "candidate_ledger_count": len(ledger),
         "candidate_ledger_status_counts": status_counts,
         "source_fitness_counts": fitness_counts,
+    }
+
+
+def _coverage_metrics(coverage: CoverageContractResult) -> dict[str, Any]:
+    return {
+        "coverage_contract_passed": coverage.passed,
+        "coverage_missing_intents": list(coverage.missing_intents),
+        "coverage_blocking_reason_count": len(coverage.blocking_reasons),
+        "coverage_repair_hints": list(coverage.repair_hints),
+        "source_saturation_reached": coverage.passed,
     }
 
 
