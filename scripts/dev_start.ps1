@@ -2,6 +2,7 @@
 param(
     [int]$BackendPort = 8000,
     [int]$FrontendPort = 5173,
+    [int]$QdrantPort = 6333,
     [int]$ActiveRunLookbackHours = 6,
     [switch]$NoDocker,
     [switch]$NoClean,
@@ -242,7 +243,7 @@ if (-not $NoDocker) {
     Write-Step "starting Docker dependencies"
     Push-Location $Root
     try {
-        & docker compose up -d postgres temporal temporal-ui
+        & docker compose up -d postgres temporal temporal-ui qdrant
     } finally {
         Pop-Location
     }
@@ -279,6 +280,9 @@ if (-not $NoHealthCheck) {
     $runtime = (Wait-HttpOk -Url "http://127.0.0.1:$BackendPort/api/runtime").Content | ConvertFrom-Json
     Wait-HttpOk -Url "http://127.0.0.1:$FrontendPort" | Out-Null
     Wait-HttpOk -Url "http://127.0.0.1:8233" | Out-Null
+    if (-not $NoDocker) {
+        Wait-HttpOk -Url "http://127.0.0.1:$QdrantPort/collections" | Out-Null
+    }
 
     Write-Step "backend runtime: mode=$($runtime.default_execution_mode), orchestration=$($runtime.run_orchestration_backend), temporal_percent=$($runtime.temporal_traffic_percent), demo=$($runtime.demo_mode)"
 }
@@ -287,3 +291,4 @@ Write-Step "ready"
 Write-Host "Frontend:    http://127.0.0.1:$FrontendPort"
 Write-Host "Backend:     http://127.0.0.1:$BackendPort"
 Write-Host "Temporal UI: http://127.0.0.1:8233"
+Write-Host "Qdrant:      http://127.0.0.1:$QdrantPort"

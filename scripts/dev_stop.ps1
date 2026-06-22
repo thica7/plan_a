@@ -112,7 +112,7 @@ if ($StopDocker) {
     Write-Step "stopping Docker dependencies"
     Push-Location $Root
     try {
-        & docker compose stop temporal-ui temporal postgres
+        & docker compose stop temporal-ui temporal postgres qdrant
     } finally {
         Pop-Location
     }
