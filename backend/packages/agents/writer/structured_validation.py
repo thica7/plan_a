@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any
 
 from packages.agents.writer.structured_hygiene import (
+    contains_internal_writer_term,
     has_source_token,
     is_valid_source_id,
 )
@@ -15,18 +15,6 @@ from packages.agents.writer.structured_report import (
 )
 
 
-_INTERNAL_TERM_RES = [
-    re.compile(pattern, re.IGNORECASE)
-    for pattern in (
-        r"source_registry",
-        r"allowed_source_ids",
-        r"represented_by",
-        r"Segment Evidence Pack JSON",
-        r"Writer Evidence Pack",
-        r"\bfact:",
-        r"\bsignal:",
-    )
-]
 _WEAK_RECOMMENDATION_ROLES = {"simulated_research", "evidence_gap"}
 _BATTLECARD_TEMPLATE_TERMS = (
     "直接战报定位",
@@ -333,9 +321,7 @@ def _validate_text_field(
             )
         )
 
-    if check_internal_terms and any(
-        pattern.search(text) for pattern in _INTERNAL_TERM_RES
-    ):
+    if check_internal_terms and contains_internal_writer_term(text):
         issues.append(
             StructuredValidationIssue(
                 code="internal_term_leak",

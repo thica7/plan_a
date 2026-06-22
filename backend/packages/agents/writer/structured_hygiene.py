@@ -4,17 +4,40 @@ import re
 
 
 SOURCE_ID_RE = re.compile(r"^[A-Za-z0-9_.:#-]+$")
-SOURCE_TOKEN_RE = re.compile(r"\[source:[^\]]+\]", re.IGNORECASE)
+SOURCE_TOKEN_RE = re.compile(
+    r"\[(?:source|\u6765\u6e90):[^\]]+\]",
+    re.IGNORECASE,
+)
 SOURCE_TOKEN_ATTEMPT_RE = re.compile(
     r"(?:\[[^\]\n]*\]|【[^】\n]*】)",
     re.IGNORECASE,
 )
-SOURCE_TOKEN_ATTEMPT_BODY_RE = re.compile(r"^\s*source\s*[:\uFF1A]", re.IGNORECASE)
+SOURCE_TOKEN_ATTEMPT_BODY_RE = re.compile(
+    r"^\s*(?:source|\u6765\u6e90)\s*[:\uFF1A]",
+    re.IGNORECASE,
+)
 SOURCE_TOKEN_MARKER = "[source:"
+INTERNAL_TERM_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"source_registry",
+        r"allowed_source_ids",
+        r"represented_by",
+        r"Segment Evidence Pack JSON",
+        r"Writer Evidence Pack",
+        r"\bfact:",
+        r"\bsignal:",
+        r"\bkb:[A-Za-z0-9_.:#-]+",
+    )
+)
 
 
 def has_source_token(text: str) -> bool:
     return bool(SOURCE_TOKEN_RE.search(text))
+
+
+def contains_internal_writer_term(text: str) -> bool:
+    return any(pattern.search(text or "") for pattern in INTERNAL_TERM_PATTERNS)
 
 
 def find_malformed_source_token_attempts(text: str) -> list[str]:

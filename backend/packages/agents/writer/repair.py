@@ -5,7 +5,10 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from packages.agents.writer.quality_preflight import run_writer_quality_preflight
-from packages.business_intel.report_quality import compare_run_quality
+from packages.business_intel.report_quality import (
+    compare_run_quality,
+    core_section_depth_diagnostics,
+)
 from packages.i18n.language import report_label
 from packages.identity.source_resolver import normalize_source_token, source_tokens
 from packages.research.evidence import publishable_text_noise_problem
@@ -202,16 +205,16 @@ def build_writer_repair_plan(
             previous_report_protectable=True,
             anti_regression_required=False,
         )
-    if not protectable:
-        return WriterRepairPlan(
-            mode="full",
-            reason="report is not protectable; full rewrite required",
-            previous_report_protectable=False,
-        )
 
     if _has_release_gate_report_depth_issue(issues):
         sections = _target_sections(issues)
-        if len(sections) == 1:
+        if not sections:
+            sections = _infer_release_gate_depth_sections(detail)
+        scoped_report_protectable = protectable or (
+            len(sections) == 1
+            and _previous_report_is_protectable_except_sections(detail, sections)
+        )
+        if len(sections) == 1 and scoped_report_protectable:
             return WriterRepairPlan(
                 mode="section",
                 reason=(
@@ -222,11 +225,24 @@ def build_writer_repair_plan(
                 sections=sections,
                 anti_regression_required=True,
             )
+        if not protectable:
+            return WriterRepairPlan(
+                mode="full",
+                reason="report is not protectable; full rewrite required",
+                previous_report_protectable=False,
+            )
         return WriterRepairPlan(
             mode="full",
             reason="release_gate.report_depth_required requires full core rewrite",
             previous_report_protectable=True,
             anti_regression_required=True,
+        )
+
+    if not protectable:
+        return WriterRepairPlan(
+            mode="full",
+            reason="report is not protectable; full rewrite required",
+            previous_report_protectable=False,
         )
 
     line_numbers = _report_line_numbers(issues)
@@ -451,6 +467,43 @@ def _previous_report_is_protectable(detail: RunDetail) -> bool:
     )
 
 
+def _previous_report_is_protectable_except_sections(
+    detail: RunDetail,
+    sections: list[str],
+) -> bool:
+    if not detail.report_md.strip():
+        return False
+
+    comparison = compare_run_quality(detail)
+    if comparison.report_quality_signal:
+        return True
+
+    ignored_metrics = _protectable_metrics_for_sections(sections)
+    metric_by_name = {metric.name: metric.target_value for metric in comparison.metrics}
+    return all(
+        metric_by_name.get(name, 0.0) >= minimum
+        for name, minimum in PROTECTABLE_MINIMUMS.items()
+        if name not in ignored_metrics
+    )
+
+
+def _protectable_metrics_for_sections(sections: list[str]) -> set[str]:
+    metric_by_section = {
+        "decision_summary": "decision_summary_section_score",
+        "competitive_findings": "competitive_findings_section_score",
+        "competitor_deep_dives": "competitor_deep_dive_section_score",
+        "battlecard": "layer_analysis_section_score",
+        "workflow_enterprise_risk": "layer_analysis_section_score",
+        "market_landscape": "layer_analysis_section_score",
+        "business_implications": "layer_analysis_section_score",
+    }
+    return {
+        metric_name
+        for section in sections
+        if (metric_name := metric_by_section.get(section)) is not None
+    }
+
+
 def _report_line_numbers(issues: list[QCIssue]) -> list[int]:
     numbers: list[int] = []
     for issue in issues:
@@ -462,6 +515,14 @@ def _report_line_numbers(issues: list[QCIssue]) -> list[int]:
 
 def _has_release_gate_report_depth_issue(issues: list[QCIssue]) -> bool:
     return any(issue.field_path == "release_gate.report_depth_required" for issue in issues)
+
+
+def _infer_release_gate_depth_sections(detail: RunDetail) -> list[str]:
+    return [
+        diagnostic.section_key
+        for diagnostic in core_section_depth_diagnostics(detail)
+        if diagnostic.score < 1.0
+    ]
 
 
 def _has_deterministic_report_structure_damage(detail: RunDetail) -> bool:

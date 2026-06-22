@@ -19,10 +19,14 @@ if TYPE_CHECKING:
 RAW_SOURCE_ALIASES_KEY = "raw_source_aliases"
 RUN_RAW_SOURCE_ID_KEY = "run_raw_source_id"
 SOURCE_TOKEN_RE = re.compile(
-    r"(?:\[source:([A-Za-z0-9_.:#-]+)\]|\u3010source:([A-Za-z0-9_.:#-]+)\u3011)"
+    r"(?:\[(?:source|\u6765\u6e90):([A-Za-z0-9_.:#-]+)\]"
+    r"|\u3010(?:source|\u6765\u6e90):([A-Za-z0-9_.:#-]+)\u3011)",
+    re.IGNORECASE,
 )
 ANY_SOURCE_TOKEN_RE = re.compile(
-    r"(?:\[source:([^\]]+)\]|\u3010source:([^\u3011]+)\u3011)"
+    r"(?:\[(?:source|\u6765\u6e90):([^\]]+)\]"
+    r"|\u3010(?:source|\u6765\u6e90):([^\u3011]+)\u3011)",
+    re.IGNORECASE,
 )
 VALID_SOURCE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.:#-]+$")
 

@@ -92,6 +92,24 @@ def build_claim_card_bundle(
             )
         )
 
+    represented_source_ids = {
+        source_id for card in cards for source_id in card.source_ids
+    }
+    supplemental_cards = _supplemental_user_research_cards(
+        run_id=run_id,
+        competitor=competitor,
+        dimension=dimension,
+        producer_stage=producer_stage,
+        sources=[
+            source
+            for source in sources
+            if source.id not in represented_source_ids
+            and _is_user_research_source(source)
+        ],
+        starting_ordinal=len(cards) + 1,
+    )
+    cards.extend(supplemental_cards)
+
     if not cards:
         cards.append(
             _gap_card(
@@ -124,6 +142,101 @@ def build_claim_card_bundle(
             "producer_stage": producer_stage,
             "produced_by": "analyst",
         },
+    )
+
+
+def _supplemental_user_research_cards(
+    *,
+    run_id: str,
+    competitor: str,
+    dimension: str,
+    producer_stage: str,
+    sources: Sequence[RawSource],
+    starting_ordinal: int,
+) -> list[ClaimCard]:
+    cards: list[ClaimCard] = []
+    for offset, source in enumerate(sources):
+        claim = _user_research_claim_from_source(competitor, source)
+        source_ids = [source.id]
+        claim_model = KnowledgeClaim(
+            claim=claim,
+            source_ids=source_ids,
+            confidence=source.confidence,
+        )
+        cards.append(
+            ClaimCard(
+                id=_claim_card_id(
+                    run_id=run_id,
+                    competitor=competitor,
+                    dimension=dimension,
+                    ordinal=starting_ordinal + offset,
+                    claim=claim,
+                ),
+                run_id=run_id,
+                competitor=competitor,
+                dimension=dimension,
+                claim_type="user_research_signal",
+                claim=claim,
+                source_ids=source_ids,
+                confidence=source.confidence,
+                evidence_strength=_evidence_strength_for_claim(claim_model, [source]),
+                support_level=_support_level_for_sources([source]),
+                scope=_scope_for_dimension(dimension),
+                caveats=_user_research_caveats(source),
+                conflicts=[],
+                applicability=f"{competitor} {dimension} user research",
+                produced_by="analyst",
+                producer_stage=producer_stage,
+                derived_from=source_ids,
+                metadata={
+                    "supplemental_from_raw_source": True,
+                    "source_type": source.source_type,
+                    "source_role": source.metadata.get("source_role"),
+                },
+            )
+        )
+    return cards
+
+
+def _user_research_claim_from_source(competitor: str, source: RawSource) -> str:
+    evidence_text = _trim_text(source.snippet or source.title, limit=260)
+    source_role = source.metadata.get("source_role")
+    role_text = (
+        str(source_role).replace("_", " ").strip()
+        if isinstance(source_role, str) and source_role.strip()
+        else source.source_type.replace("_", " ")
+    )
+    return f"{competitor} user research signal ({role_text}): {evidence_text}"
+
+
+def _user_research_caveats(source: RawSource) -> list[str]:
+    if _is_synthetic_source(source):
+        return [
+            "Synthetic user research; treat as directional interview/survey signal, not observed respondent evidence."
+        ]
+    return []
+
+
+def _is_user_research_source(source: RawSource) -> bool:
+    source_type = _normalized_source_type(source)
+    source_role = source.metadata.get("source_role")
+    source_role_text = source_role.casefold() if isinstance(source_role, str) else ""
+    return (
+        source.dimension.strip().casefold() in {"persona", "user", "users", "review"}
+        and any(
+            marker in source_type or marker in source_role_text
+            for marker in (
+                "survey",
+                "interview",
+                "manual_user",
+                "manual_note",
+                "manual_transcript",
+                "review",
+                "community",
+                "forum",
+                "reddit",
+            )
+        )
     )
 
 
@@ -218,7 +331,10 @@ def _gap_card(
 
 def _support_level_for_sources(sources: Sequence[RawSource]) -> str:
     source_types = [_normalized_source_type(source) for source in sources]
-    if any("simulated" in source_type for source_type in source_types):
+    if any(
+        "simulated" in source_type or _is_synthetic_source(source)
+        for source, source_type in zip(sources, source_types)
+    ):
         return "simulated"
     if any(_is_official_source(source) for source in sources):
         return "official"
@@ -250,6 +366,21 @@ def _normalized_source_type(source: RawSource) -> str:
     if isinstance(metadata_source_type, str) and metadata_source_type.strip():
         return metadata_source_type.strip().casefold()
     return source.source_type.strip().casefold()
+
+
+def _is_synthetic_source(source: RawSource) -> bool:
+    return any(
+        _metadata_truthy(source.metadata.get(key))
+        for key in ("survey_interview_synthetic", "fallback_synthetic", "synthetic")
+    )
+
+
+def _metadata_truthy(value: object) -> bool:
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().casefold() == "true"
+    return False
 
 
 def _is_official_source(source: RawSource) -> bool:
@@ -306,6 +437,13 @@ def _claim_card_id(
 def _slug(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.strip().casefold()).strip("-")
     return slug or "unknown"
+
+
+def _trim_text(value: str, *, limit: int) -> str:
+    text = " ".join((value or "").split())
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 1].rstrip()}..."
 
 
 __all__ = ["build_claim_card_bundle"]

@@ -98,6 +98,17 @@ class _ReportSection:
     section_key: str | None = None
 
 
+@dataclass(frozen=True)
+class CoreSectionDepthDiagnostic:
+    section_key: str
+    score: float
+    body_chars: int
+    substantive_rows: int
+    min_chars: int
+    min_rows: int
+    missing: bool = False
+
+
 def compare_run_quality(
     target: RunDetail,
     *,
@@ -923,8 +934,14 @@ def _core_analysis_depth_score(markdown: str) -> float:
 
 
 def _core_section_depth_score(detail: RunDetail) -> float:
+    diagnostics = core_section_depth_diagnostics(detail)
+    return min((diagnostic.score for diagnostic in diagnostics), default=0.0)
+
+
+def core_section_depth_diagnostics(detail: RunDetail) -> list[CoreSectionDepthDiagnostic]:
     specs = [
         (
+            "executive_summary",
             _report_label_aliases(
                 "executive_takeaway",
                 "executive_summary",
@@ -933,9 +950,15 @@ def _core_section_depth_score(detail: RunDetail) -> float:
             320,
             3,
         ),
-        (_report_label_aliases("decision_summary"), 450, 3),
-        (_report_label_aliases("competitive_findings"), 600, 4),
+        ("decision_summary", _report_label_aliases("decision_summary"), 450, 3),
         (
+            "competitive_findings",
+            _report_label_aliases("competitive_findings"),
+            600,
+            4,
+        ),
+        (
+            "competitor_deep_dives",
             (
                 *_report_label_aliases("competitor_deep_dives"),
                 "Competitor Deep Dive",
@@ -943,9 +966,10 @@ def _core_section_depth_score(detail: RunDetail) -> float:
             500,
             max(3, len(detail.plan.competitors)),
         ),
-        (_swot_section_aliases(), 280, 4),
-        (_layer_section_aliases(detail), 600, 4),
+        ("swot_analysis", _swot_section_aliases(), 280, 4),
+        (_layer_section_key(detail), _layer_section_aliases(detail), 600, 4),
         (
+            "side_by_side_matrix",
             (
                 *_report_label_aliases("side_by_side_matrix", "comparison_matrix"),
                 "Side-by-Side Decision Matrix",
@@ -956,20 +980,41 @@ def _core_section_depth_score(detail: RunDetail) -> float:
         ),
     ]
     if _needs_review_theme_section(detail):
-        specs.insert(2, (_review_theme_section_aliases(), 500, 4))
-    scores: list[float] = []
+        specs.insert(2, ("review_theme_summary", _review_theme_section_aliases(), 500, 4))
+    diagnostics: list[CoreSectionDepthDiagnostic] = []
     swot_aliases = _swot_section_aliases()
     core_markdown = _core_report_markdown(detail)
-    for aliases, min_chars, min_rows in specs:
+    for section_key, aliases, min_chars, min_rows in specs:
+        section = _find_section_before_support(core_markdown, aliases)
+        if section is None:
+            diagnostics.append(
+                CoreSectionDepthDiagnostic(
+                    section_key=section_key,
+                    score=0.0,
+                    body_chars=0,
+                    substantive_rows=0,
+                    min_chars=min_chars,
+                    min_rows=min_rows,
+                    missing=True,
+                )
+            )
+            continue
+        char_count, row_count = _body_content_summary(section.body)
         score = _section_depth_score(core_markdown, aliases, min_chars, min_rows)
         if aliases == swot_aliases:
-            section = _find_section_before_support(core_markdown, aliases)
-            if section is not None and not _has_structured_swot_quadrants(section.body):
+            if not _has_structured_swot_quadrants(section.body):
                 score = min(score, 0.5)
-            elif section is None:
-                score = 0.0
-        scores.append(score)
-    return min(scores) if scores else 0.0
+        diagnostics.append(
+            CoreSectionDepthDiagnostic(
+                section_key=section_key,
+                score=score,
+                body_chars=char_count,
+                substantive_rows=row_count,
+                min_chars=min_chars,
+                min_rows=min_rows,
+            )
+        )
+    return diagnostics
 
 
 def _section_depth_score(
@@ -1269,6 +1314,17 @@ def _layer_section_aliases(detail: RunDetail) -> tuple[str, ...]:
     )
 
 
+def _layer_section_key(detail: RunDetail) -> str:
+    layer = detail.plan.competitor_layer
+    if layer == "L1":
+        return "battlecard"
+    if layer == "L2":
+        return "workflow_enterprise_risk"
+    if layer == "L3":
+        return "market_landscape"
+    return "business_implications"
+
+
 def _report_structure_score(detail: RunDetail) -> float:
     core_markdown = repair_mojibake_text(_core_report_markdown(detail))
     support_markdown = repair_mojibake_text(_support_report_markdown(detail))
@@ -1283,7 +1339,10 @@ def _report_structure_score(detail: RunDetail) -> float:
         _competitor_deep_dive_section_score(core_markdown) >= 1.0,
         _layer_analysis_section_score(detail) >= 1.0,
         _core_analysis_depth_score(core_markdown) >= 0.6,
-        _has_heading(support_markdown, ("source quality", "source coverage", "来源质量", "来源覆盖")),
+        _has_heading(
+            support_markdown,
+            ("source quality", "source coverage", "来源质量", "来源覆盖"),
+        ),
         _has_heading(
             core_markdown,
             ("matrix", "dimension winners", "side-by-side", "决策矩阵", "对比矩阵", "维度结论"),
@@ -1301,7 +1360,10 @@ def _report_structure_score(detail: RunDetail) -> float:
                 "证据缺口",
             ),
         ),
-        _has_heading(support_markdown, ("evidence appendix", "source appendix", "证据附录", "来源附录")),
+        _has_heading(
+            support_markdown,
+            ("evidence appendix", "source appendix", "证据附录", "来源附录"),
+        ),
         _memory_context_section_score(detail) >= 1.0,
         _user_research_section_score(detail) >= 1.0,
         _review_theme_section_score(detail) >= 1.0,
@@ -1312,7 +1374,11 @@ def _report_structure_score(detail: RunDetail) -> float:
 
 
 def _has_layer_heading(detail: RunDetail, *, report_md: str | None = None) -> bool:
-    markdown = report_md if report_md is not None else repair_mojibake_text(_core_report_markdown(detail))
+    markdown = (
+        report_md
+        if report_md is not None
+        else repair_mojibake_text(_core_report_markdown(detail))
+    )
     return any(
         _heading_matches(section.heading, _layer_section_aliases(detail))
         for section in _report_sections(markdown)
@@ -1361,7 +1427,10 @@ def _user_research_section_score(detail: RunDetail) -> float:
 def _review_theme_section_score(detail: RunDetail) -> float:
     if not _needs_review_theme_section(detail):
         return 1.0
-    section = _find_section_before_support(_core_report_markdown(detail), _review_theme_section_aliases())
+    section = _find_section_before_support(
+        _core_report_markdown(detail),
+        _review_theme_section_aliases(),
+    )
     return 1.0 if section is not None and _section_has_substantive_body(section) else 0.0
 
 

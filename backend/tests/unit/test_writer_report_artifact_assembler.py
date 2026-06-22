@@ -5,6 +5,7 @@ import pytest
 from packages.agents.writer.artifact_assembler import assemble_report_artifact_v2
 from packages.agents.writer.logic import WriterAgentMixin
 from packages.business_intel.report_sections import report_section_marker
+from packages.i18n.language import report_label
 from packages.observability.tracing import build_run_event
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import AnalysisPlan, RawSource, RevisionRecord
@@ -123,6 +124,82 @@ def _detail_with_cards_and_briefs() -> RunDetail:
         ),
     ]
     return detail
+
+
+def _schema_contract_report_markdown(detail: RunDetail) -> str:
+    section_keys = [
+        "executive_summary",
+        "decision_summary",
+        "competitive_findings",
+        "review_theme_summary",
+        "community_evidence_triangulation",
+        "side_by_side_matrix",
+        "competitor_deep_dives",
+        "swot_analysis",
+        "battlecard",
+        "evidence_support",
+    ]
+    blocks: list[str] = []
+    for section_key in section_keys:
+        layer = "support" if section_key == "evidence_support" else "core"
+        heading = report_label(detail.output_language, section_key)
+        blocks.append(
+            "\n".join(
+                [
+                    report_section_marker(section_key, layer),
+                    f"## {heading}",
+                    (
+                        f"{heading} keeps the schema marker paired with its heading and "
+                        "cites the registered pricing source. "
+                        "[source:raw-source-cursor-pricing]"
+                    ),
+                ]
+            )
+        )
+    return "\n\n".join(blocks)
+
+
+def _marker_heading_pairs(markdown: str) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    marker: str | None = None
+    for line in markdown.splitlines():
+        if line.startswith("<!-- report-section:"):
+            marker = line
+        elif line.startswith("## ") and marker:
+            pairs.append((marker, line))
+            marker = None
+    return pairs
+
+
+def _expected_marker_heading_pairs(detail: RunDetail) -> list[tuple[str, str]]:
+    return [
+        (
+            report_section_marker(
+                section_key,
+                "support" if section_key == "evidence_support" else "core",
+            ),
+            f"## {report_label(detail.output_language, section_key)}",
+        )
+        for section_key in [
+            "executive_summary",
+            "decision_summary",
+            "competitive_findings",
+            "review_theme_summary",
+            "community_evidence_triangulation",
+            "side_by_side_matrix",
+            "competitor_deep_dives",
+            "swot_analysis",
+            "battlecard",
+            "evidence_support",
+        ]
+    ]
+
+
+def _assert_marker_heading_contract(markdown: str, detail: RunDetail) -> None:
+    actual = _marker_heading_pairs(markdown)
+    expected = _expected_marker_heading_pairs(detail)
+    assert dict(actual) == dict(expected)
+    assert len(actual) == len(expected)
 
 
 class _WriterHarness(WriterAgentMixin):
@@ -362,6 +439,35 @@ def test_assemble_report_artifact_v2_metadata_section_keys_are_input_order_indep
 
     assert first.metadata["section_keys"] == second.metadata["section_keys"]
     assert first.render_cache.full_markdown == second.render_cache.full_markdown
+
+
+def test_legacy_report_hardener_preserves_schema_contract_marker_heading_pairs() -> None:
+    detail = _detail_with_cards_and_briefs()
+    markdown = _schema_contract_report_markdown(detail)
+    harness = _WriterHarness()
+
+    hardened = harness._harden_report_markdown(detail, markdown)
+
+    _assert_marker_heading_contract(hardened, detail)
+
+
+def test_preserving_schema_contract_report_rebuilds_artifact_without_marker_drift() -> None:
+    detail = _detail_with_cards_and_briefs()
+    previous_report = _schema_contract_report_markdown(detail)
+    detail.report_md = previous_report
+    detail.report_artifact = assemble_report_artifact_v2(
+        detail,
+        {"final_report": previous_report},
+    )
+    harness = _WriterHarness()
+
+    preserved = harness._preserve_hardened_previous_report(detail, previous_report)
+
+    _assert_marker_heading_contract(preserved, detail)
+    assert detail.report_md == preserved
+    assert detail.report_artifact is not None
+    assert detail.report_artifact.render_cache.full_markdown == preserved
+    assert detail.report_artifact.legacy.source == "report_artifact_v2"
 
 
 @pytest.mark.asyncio

@@ -9722,6 +9722,109 @@ def test_schema_contract_publication_internal_leak_repairs_target_section(
     assert validation_events[-1].payload["passed"] is True
 
 
+def test_schema_contract_publication_repair_splits_multi_section_output(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    service._settings = replace(
+        service._settings,
+        writer_structured_report_enabled=True,
+        writer_timeout_seconds=10,
+    )
+    record = _segmented_writer_record(service, competitors=["Cursor"])
+    record.detail.execution_mode = "real"
+    record.detail.output_language = "zh-CN"
+    record.detail.raw_sources = _structured_writer_raw_sources()
+    allowed_source_ids = {source.id for source in record.detail.raw_sources}
+    report_md = (
+        f"{report_section_marker('executive_summary', 'core')}\n"
+        f"## {report_label('zh-CN', 'executive_summary')}\n"
+        "Writer Evidence Pack should be removed. [source:raw-source-a]\n\n"
+        f"{report_section_marker('competitive_findings', 'core')}\n"
+        f"## {report_label('zh-CN', 'competitive_findings')}\n"
+        "Segment Evidence Pack JSON should be removed. [source:raw-source-a]\n\n"
+        f"{report_section_marker('evidence_support', 'support')}\n"
+        f"## {report_label('zh-CN', 'evidence_support')}\n"
+        "source_registry should be removed. [source:raw-source-a]\n"
+    )
+    validation = validate_publication_contract(
+        report_md,
+        structured_report=None,
+        allowed_source_ids=allowed_source_ids,
+        output_language=record.detail.output_language,
+    )
+    assert not validation.passed
+    assert {
+        issue.code for issue in validation.issues
+    } == {"internal_term_leak"}
+
+    async def fake_section_repair(
+        self,
+        record,
+        *,
+        sections,
+        previous_report,
+        publication_issues=None,
+    ):
+        assert sections == [
+            "executive_summary",
+            "competitive_findings",
+            "evidence_support",
+        ]
+        assert publication_issues
+        return (
+            f"## {report_label('zh-CN', 'executive_summary')}\n"
+            "Repaired executive analysis. [source:raw-source-a]\n\n"
+            f"## {report_label('zh-CN', 'competitive_findings')}\n"
+            "Repaired competitive findings. [source:raw-source-a]\n\n"
+            "### Cursor\n"
+            "Repaired competitive H3 detail. [source:raw-source-a]\n\n"
+            f"## {report_label('zh-CN', 'evidence_support')}\n"
+            "Repaired evidence support. [source:raw-source-a]\n\n"
+            "### raw-source-a\n"
+            "Repaired support H3 detail. [source:raw-source-a]\n"
+        )
+
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.WriterAgentMixin._writer_section_repair_markdown",
+        fake_section_repair,
+    )
+
+    repaired = asyncio.run(
+        service._repair_schema_contract_publication_issues(
+            record,
+            report_md=report_md,
+            validation=validation,
+            timeout_seconds=10,
+        )
+    )
+
+    assert repaired is not None
+    assert "Writer Evidence Pack" not in repaired
+    assert "Segment Evidence Pack JSON" not in repaired
+    assert "source_registry" not in repaired
+    assert repaired.count("Repaired executive analysis") == 1
+    assert repaired.count("Repaired competitive findings") == 1
+    assert repaired.count("Repaired competitive H3 detail") == 1
+    assert repaired.count("Repaired evidence support") == 1
+    assert repaired.count("Repaired support H3 detail") == 1
+    assert (
+        f"{report_section_marker('evidence_support', 'support')}\n"
+        f"## {report_label('zh-CN', 'evidence_support')}"
+    ) in repaired
+    assert (
+        f"{report_section_marker('evidence_support', 'support')}\n"
+        f"## {report_label('zh-CN', 'executive_summary')}"
+    ) not in repaired
+    after = validate_publication_contract(
+        repaired,
+        structured_report=None,
+        allowed_source_ids=allowed_source_ids,
+        output_language=record.detail.output_language,
+    )
+    assert after.passed
+
+
 def test_schema_contract_segment_scoped_redo_uses_segment_authoring(
     monkeypatch,
 ) -> None:
@@ -10178,6 +10281,148 @@ async def test_writer_segment_preflight_emits_contract_metadata(monkeypatch) -> 
     assert "decision_summary" in preflight_payload["allowed_heading_keys"]
     assert "evidence_support" in preflight_payload["forbidden_heading_keys"]
     assert preflight_payload["segment_essential"] is True
+
+
+@pytest.mark.asyncio
+async def test_writer_runs_all_segment_tasks_without_concurrency_cap(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-parallel-writer",
+        competitors=["Cursor"],
+    )
+    pack = _SegmentedWriterFakePack(
+        segments=[
+            _segmented_writer_segment(
+                segment_name="decision_summary",
+                section_id="decision_summary",
+                allowed_source_id=f"raw-source-{index}",
+                segment_kind="evidence_shard",
+                segment_batch=f"batch-{index}",
+            )
+            for index in range(1, 10)
+        ]
+    )
+    all_shards_started = asyncio.Event()
+    started_shards: set[str] = set()
+    concurrent_counts: list[int] = []
+    active_count = 0
+
+    async def fake_segment_writer(*args, **kwargs):
+        nonlocal active_count
+        segment = kwargs["segment"]
+        active_count += 1
+        concurrent_counts.append(active_count)
+        try:
+            if segment["segment_kind"] == "evidence_shard":
+                batch = str(segment["segment_batch"])
+                started_shards.add(batch)
+                if len(started_shards) == 9:
+                    all_shards_started.set()
+                await asyncio.wait_for(all_shards_started.wait(), timeout=0.5)
+                return (
+                    f"- {batch} evidence note. "
+                    f"[source:{segment['allowed_source_ids'][0]}]"
+                )
+            return (
+                "## Decision Summary\n"
+                "Cursor should be evaluated first. [source:raw-source-1]\n\n"
+                "## Competitive Findings\n"
+                "Cursor has strong workflow fit. [source:raw-source-2]"
+            )
+        finally:
+            active_count -= 1
+
+    class PassingPreflight:
+        passed = True
+        failure_reasons: list[str] = []
+
+        def telemetry_payload(self):
+            return {"passed": True}
+
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+    monkeypatch.setattr(
+        "packages.agents.writer.logic.run_writer_quality_preflight",
+        lambda detail, markdown: PassingPreflight(),  # noqa: ARG005
+    )
+
+    report = await service._writer_segmented_report_markdown(
+        record,
+        evidence_pack_result=pack,
+        timeout_seconds=60,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    assert max(concurrent_counts) == 9
+    assert len(started_shards) == 9
+    assert report.index("## Decision Summary") < report.index(
+        "## Competitive Findings"
+    )
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_retries_publication_hygiene_violations(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-publication-hygiene",
+        competitors=["Cursor"],
+    )
+    segment = _segmented_writer_segment(
+        segment_name="decision_summary",
+        section_id="decision_summary",
+        allowed_source_id="raw-source-a",
+    )
+    calls: list[dict[str, object]] = []
+
+    async def fake_segment_writer(*args, **kwargs):
+        calls.append(
+            {
+                "retry_count": kwargs["retry_count"],
+                "contract_errors": list(kwargs.get("contract_errors") or []),
+            }
+        )
+        if len(calls) == 1:
+            return (
+                "## Decision Summary\n"
+                "Segment Evidence Pack JSON should not leak. "
+                "[source：raw-source-a]\n\n"
+                "## Competitive Findings\n"
+                "Cursor evidence is relevant. [source：raw-source-a]"
+            )
+        return (
+            "## Decision Summary\n"
+            "Cursor evidence is relevant. [source:raw-source-a]\n\n"
+            "## Competitive Findings\n"
+            "Cursor pricing should be verified. [source:raw-source-a]"
+        )
+
+    monkeypatch.setattr(service, "_writer_segment_markdown", fake_segment_writer)
+
+    segment_md, contract = await service._writer_validated_segment_markdown(
+        record,
+        evidence_pack_result=_SegmentedWriterFakePack(),
+        segment=segment,
+        timeout_seconds=10,
+        language_guidance="",
+        memory_context="",
+        layer_context="",
+        required_sections="",
+    )
+
+    assert contract.section_id == "decision_summary"
+    assert [call["retry_count"] for call in calls] == [0, 1]
+    assert any("internal writer" in error for error in calls[1]["contract_errors"])
+    assert "Segment Evidence Pack JSON" not in segment_md
+    assert "[source：raw-source-a]" not in segment_md
+    assert "[source:raw-source-a]" in segment_md
 
 
 @pytest.mark.asyncio
@@ -16588,6 +16833,84 @@ def test_writer_hardens_chinese_user_research_with_persona_sources() -> None:
 
     assert "[source:github-persona-survey]" in hardened
     assert "[source:github-pricing]" not in hardened
+
+
+def test_schema_contract_hardening_does_not_globally_backfill_uncited_segment_lines() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            ark_api_key=None,
+            ark_model=None,
+            ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
+            llm_timeout_seconds=10,
+            llm_temperature=0.2,
+        ),
+    )
+    detail = RunDetail(
+        id="run-schema-contract-no-global-citation-backfill",
+        topic="AI coding agent",
+        status="running",
+        execution_mode="demo",
+        output_language="zh-CN",
+        created_at=_now(),
+        updated_at=_now(),
+        plan=AnalysisPlan(
+            topic="AI coding agent",
+            competitors=["Cursor", "GitHub Copilot"],
+            dimensions=["pricing", "feature", "persona"],
+            competitor_layer="L1",
+        ),
+        raw_sources=[
+            RawSource(
+                id="raw-source-github-pricing",
+                competitor="GitHub Copilot",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="GitHub Copilot pricing",
+                snippet="GitHub Copilot pricing plans.",
+                content_hash="github-pricing-hash",
+                confidence=0.98,
+            ),
+            RawSource(
+                id="raw-source-cursor-pricing",
+                competitor="Cursor",
+                dimension="pricing",
+                source_type="webpage_verified",
+                title="Cursor pricing",
+                snippet="Cursor Individual costs $20 per month.",
+                content_hash="cursor-pricing-hash",
+                confidence=0.96,
+            ),
+        ],
+    )
+    markdown = "\n\n".join(
+        [
+            "<!-- report-section:key=executive_summary layer=core -->\n"
+            "## 执行摘要\n- 这是 segment 已生成的摘要。",
+            "<!-- report-section:key=decision_summary layer=core -->\n"
+            "## 决策摘要\n- 这是 segment 已生成的决策。",
+            "<!-- report-section:key=competitive_findings layer=core -->\n"
+            "## 竞争发现\n- 这是 segment 已生成的发现。",
+            "<!-- report-section:key=review_theme_summary layer=core -->\n"
+            "## 用户评价整理\n- 这是 segment 已生成的用户评价。",
+            "<!-- report-section:key=competitor_deep_dives layer=core -->\n"
+            "## 竞品深挖\n### Cursor\n#### 定价与包装\n"
+            "- **Individual**：$20/月，面向个人开发者。",
+            "<!-- report-section:key=side_by_side_matrix layer=core -->\n"
+            "## 横向决策矩阵\n- 这是 segment 已生成的矩阵解读。",
+            "<!-- report-section:key=swot_analysis layer=core -->\n"
+            "## SWOT 分析\n- 这是 segment 已生成的 SWOT。",
+        ]
+    )
+
+    hardened = service._harden_schema_contract_report_markdown(detail, markdown)
+
+    individual_line = next(
+        line for line in hardened.splitlines() if "Individual" in line
+    )
+    assert "[source:raw-source-github-pricing]" not in individual_line
+    assert "[source:raw-source-cursor-pricing]" not in individual_line
 
 
 def test_writer_source_ids_for_chinese_pricing_user_overlap_keeps_pricing_first() -> None:

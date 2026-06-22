@@ -11,6 +11,7 @@ from packages.agents.writer.heading_hygiene import (
 from packages.agents.writer.segment_contract import heading_key_for
 from packages.agents.writer.structured_hygiene import (
     SOURCE_TOKEN_RE,
+    contains_internal_writer_term,
     find_malformed_source_token_attempts,
     has_source_token,
     is_valid_source_id,
@@ -84,21 +85,6 @@ _EN_SUPPORT_SECTION_HEADINGS = frozenset(
 _ZH_SUPPORT_SECTION_HEADINGS = frozenset(
     _normalize_heading(STRUCTURED_REPORT_ZH_LABELS[key]) for key in _SUPPORT_SECTION_KEYS
 )
-_INTERNAL_TERM_PATTERNS = tuple(
-    re.compile(pattern, re.IGNORECASE)
-    for pattern in (
-        r"source_registry",
-        r"allowed_source_ids",
-        r"represented_by",
-        r"Segment Evidence Pack JSON",
-        r"Writer Evidence Pack",
-        r"\bfact:",
-        r"\bsignal:",
-        r"\bkb:[A-Za-z0-9_.:#-]+",
-    )
-)
-
-
 @dataclass(frozen=True)
 class PublicationContractIssue:
     code: str
@@ -344,7 +330,7 @@ def _validate_internal_terms(
     issues: list[PublicationContractIssue],
 ) -> None:
     for line_number, line in enumerate(lines, start=1):
-        if any(pattern.search(line) for pattern in _INTERNAL_TERM_PATTERNS):
+        if contains_internal_writer_term(line):
             issues.append(
                 PublicationContractIssue(
                     code="internal_term_leak",

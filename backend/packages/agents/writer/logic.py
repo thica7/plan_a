@@ -64,6 +64,10 @@ from packages.agents.writer.structured_report import (
     SwotSection,
     UserReviewThemesSection,
 )
+from packages.agents.writer.structured_hygiene import (
+    contains_internal_writer_term,
+    find_malformed_source_token_attempts,
+)
 from packages.agents.writer.structured_sections import (
     StructuredReportGenerationError,
     StructuredSectionGenerationError,
@@ -73,7 +77,10 @@ from packages.agents.writer.structured_repair import (
     recommendation_delta_problem,
 )
 from packages.business_intel.release_gate import REPORT_RICHNESS_MINIMUMS
-from packages.business_intel.report_sections import build_report_section_index
+from packages.business_intel.report_sections import (
+    build_report_section_index,
+    parse_report_section_marker,
+)
 from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.i18n.language import (
@@ -1894,14 +1901,7 @@ class WriterAgentMixin:
 
     async def _publish_schema_contract_report_artifact(self, record: RunRecord) -> None:
         detail = record.detail
-        artifact = assemble_report_artifact_v2(
-            detail,
-            {"final_report": detail.report_md},
-        )
-        validation = validate_report_artifact_publication(
-            artifact,
-            allowed_source_ids={source.id for source in detail.raw_sources},
-        )
+        artifact, validation = self._build_schema_contract_report_artifact(detail)
         validation_payload = validation.telemetry_payload()
         await self.emit(
             detail.id,
@@ -1927,6 +1927,27 @@ class WriterAgentMixin:
                 "issue_count": len(validation.issues),
             },
         )
+        if not validation.passed:
+            raise ValueError(
+                "report artifact v2 publication contract failed: "
+                + ", ".join(validation.issue_codes())
+            )
+        detail.report_artifact = artifact
+        detail.report_md = artifact.render_cache.full_markdown
+
+    def _build_schema_contract_report_artifact(self, detail: RunDetail):
+        artifact = assemble_report_artifact_v2(
+            detail,
+            {"final_report": detail.report_md},
+        )
+        validation = validate_report_artifact_publication(
+            artifact,
+            allowed_source_ids={source.id for source in detail.raw_sources},
+        )
+        return artifact, validation
+
+    def _set_schema_contract_report_artifact(self, detail: RunDetail) -> None:
+        artifact, validation = self._build_schema_contract_report_artifact(detail)
         if not validation.passed:
             raise ValueError(
                 "report artifact v2 publication contract failed: "
@@ -2232,13 +2253,39 @@ class WriterAgentMixin:
             previous_report=report_md,
             publication_issues=repairable_issues,
         )
+        section_replacements = self._publication_section_repair_replacements(
+            repaired_section_md,
+            target_sections=target_sections,
+            output_language=detail.output_language,
+        )
+        missing_sections = [
+            section
+            for section in target_sections
+            if not section_replacements.get(section, "").strip()
+        ]
+        if missing_sections:
+            await self.emit(
+                detail.id,
+                "writer_publication_contract_repair_incomplete",
+                "writer",
+                None,
+                "Writer publication contract repair did not return every target section.",
+                {
+                    "sections": target_sections,
+                    "missing_sections": missing_sections,
+                    "issue_codes": sorted(
+                        {issue.code for issue in repairable_issues}
+                    ),
+                },
+            )
+            return None
         repaired_report_md = report_md
         for section in target_sections:
             repaired_report_md = replace_markdown_section(
                 repaired_report_md,
                 section,
                 detail.output_language,
-                repaired_section_md,
+                section_replacements[section],
             )
         await self.emit(
             detail.id,
@@ -2254,6 +2301,64 @@ class WriterAgentMixin:
             },
         )
         return repaired_report_md
+
+    def _publication_section_repair_replacements(
+        self,
+        repaired_markdown: str,
+        *,
+        target_sections: Sequence[str],
+        output_language: str,
+    ) -> dict[str, str]:
+        target_set = set(target_sections)
+        h2_matches = list(re.finditer(r"(?m)^##\s+(.+?)\s*$", repaired_markdown))
+        if not h2_matches:
+            if len(target_sections) == 1:
+                return {target_sections[0]: repaired_markdown.strip()}
+            return {}
+
+        replacements: dict[str, str] = {}
+        for index, match in enumerate(h2_matches):
+            block_start = self._report_section_start_with_marker(
+                repaired_markdown,
+                match.start(),
+            )
+            block_end = (
+                self._report_section_start_with_marker(
+                    repaired_markdown,
+                    h2_matches[index + 1].start(),
+                )
+                if index + 1 < len(h2_matches)
+                else len(repaired_markdown)
+            )
+            section_key = self._report_section_marker_key_before_heading(
+                repaired_markdown,
+                match.start(),
+            ) or heading_key_for(match.group(1).strip(), output_language)
+            if section_key not in target_set or section_key in replacements:
+                continue
+            replacements[section_key] = repaired_markdown[
+                block_start:block_end
+            ].strip()
+
+        if replacements:
+            return replacements
+        if len(target_sections) == 1 and len(h2_matches) == 1:
+            return {target_sections[0]: repaired_markdown.strip()}
+        return {}
+
+    def _report_section_marker_key_before_heading(
+        self,
+        markdown: str,
+        heading_start: int,
+    ) -> str | None:
+        previous_line_end = heading_start
+        while previous_line_end > 0 and markdown[previous_line_end - 1] in " \t\r\n":
+            previous_line_end -= 1
+        previous_line_start = markdown.rfind("\n", 0, previous_line_end) + 1
+        marker = parse_report_section_marker(
+            markdown[previous_line_start:previous_line_end].strip()
+        )
+        return marker.section_key if marker is not None else None
 
     def _publication_issue_section_keys(
         self,
@@ -2598,17 +2703,17 @@ class WriterAgentMixin:
         sections: list[ReportSectionFragment] = []
         shards_by_section: dict[tuple[str, str | None], list[str]] = {}
         section_allowed_source_ids: dict[tuple[str, str | None], set[str]] = {}
-        for segment in segments:
-            segment_md, contract = await self._writer_validated_segment_markdown(
-                record,
-                evidence_pack_result=evidence_pack_result,
-                segment=segment,
-                timeout_seconds=timeout_seconds,
-                language_guidance=language_guidance,
-                memory_context=memory_context,
-                layer_context=layer_context,
-                required_sections=required_sections,
-            )
+        segment_results = await self._writer_parallel_validated_segments(
+            record,
+            evidence_pack_result=evidence_pack_result,
+            segments=segments,
+            timeout_seconds=timeout_seconds,
+            language_guidance=language_guidance,
+            memory_context=memory_context,
+            layer_context=layer_context,
+            required_sections=required_sections,
+        )
+        for segment, segment_md, contract in segment_results:
             if contract.segment_kind == "evidence_shard":
                 section_id = contract.section_id
                 segment_competitor = (
@@ -2639,26 +2744,30 @@ class WriterAgentMixin:
                 )
             )
 
+        section_segments: list[dict[str, object]] = []
         for (section_id, segment_competitor), shard_notes in shards_by_section.items():
-            section_segment = self._writer_section_segment_from_shards(
-                detail,
-                section_id=section_id,
-                segment_competitor=segment_competitor,
-                shard_notes=shard_notes,
-                allowed_source_ids=section_allowed_source_ids[
-                    (section_id, segment_competitor)
-                ],
+            section_segments.append(
+                self._writer_section_segment_from_shards(
+                    detail,
+                    section_id=section_id,
+                    segment_competitor=segment_competitor,
+                    shard_notes=shard_notes,
+                    allowed_source_ids=section_allowed_source_ids[
+                        (section_id, segment_competitor)
+                    ],
+                )
             )
-            section_md, section_contract = await self._writer_validated_segment_markdown(
-                record,
-                evidence_pack_result=evidence_pack_result,
-                segment=section_segment,
-                timeout_seconds=timeout_seconds,
-                language_guidance=language_guidance,
-                memory_context=memory_context,
-                layer_context=layer_context,
-                required_sections=required_sections,
-            )
+        section_results = await self._writer_parallel_validated_segments(
+            record,
+            evidence_pack_result=evidence_pack_result,
+            segments=section_segments,
+            timeout_seconds=timeout_seconds,
+            language_guidance=language_guidance,
+            memory_context=memory_context,
+            layer_context=layer_context,
+            required_sections=required_sections,
+        )
+        for section_segment, section_md, section_contract in section_results:
             sections.append(
                 self._writer_report_section_fragment(
                     markdown=section_md,
@@ -2667,6 +2776,46 @@ class WriterAgentMixin:
                 )
             )
         return sections
+
+    async def _writer_parallel_validated_segments(
+        self,
+        record: RunRecord,
+        *,
+        evidence_pack_result,
+        segments: Sequence[dict[str, object]],
+        timeout_seconds: float,
+        language_guidance: str,
+        memory_context: str,
+        layer_context: str,
+        required_sections: str,
+    ) -> list[tuple[dict[str, object], str, SegmentContract]]:
+        if not segments:
+            return []
+
+        async def run_segment(
+            segment: dict[str, object],
+        ) -> tuple[dict[str, object], str, SegmentContract]:
+            segment_md, contract = await self._writer_validated_segment_markdown(
+                record,
+                evidence_pack_result=evidence_pack_result,
+                segment=segment,
+                timeout_seconds=timeout_seconds,
+                language_guidance=language_guidance,
+                memory_context=memory_context,
+                layer_context=layer_context,
+                required_sections=required_sections,
+            )
+            return segment, segment_md, contract
+
+        tasks = [asyncio.create_task(run_segment(dict(segment))) for segment in segments]
+        try:
+            return await asyncio.gather(*tasks)
+        except Exception:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
     def _writer_report_section_fragment(
         self,
@@ -2937,6 +3086,46 @@ class WriterAgentMixin:
                 "Writer segment cited invalid source IDs after retry: "
                 f"{', '.join(invalid_sources)}"
             )
+        publication_hygiene_errors = self._writer_segment_publication_hygiene_errors(
+            segment_md
+        )
+        if publication_hygiene_errors:
+            retry_count = max(1, segment_retry_count + 1)
+            segment_md = await self._writer_segment_markdown(
+                record,
+                segment=segment_with_contract,
+                timeout_seconds=timeout_seconds,
+                language_guidance=language_guidance,
+                memory_context=memory_context,
+                layer_context=layer_context,
+                required_sections=required_sections,
+                retry_count=retry_count,
+                contract_errors=publication_hygiene_errors,
+            )
+            segment_retry_count = retry_count
+            segment_md = self._sanitize_writer_segment_citations(
+                evidence_pack_result,
+                segment_md,
+                allowed_source_ids=allowed_source_ids,
+            )
+            invalid_sources = evidence_pack_result.validate_segment_citations(
+                segment_md,
+                allowed_source_ids=allowed_source_ids,
+            )
+            if invalid_sources:
+                raise RuntimeError(
+                    "Writer segment cited invalid source IDs after publication "
+                    f"hygiene retry: {', '.join(invalid_sources)}"
+                )
+            publication_hygiene_errors = (
+                self._writer_segment_publication_hygiene_errors(segment_md)
+            )
+            if publication_hygiene_errors:
+                raise RuntimeError(
+                    "Writer segment violated publication hygiene after retry: "
+                    f"{segment['segment_name']}: "
+                    f"{'; '.join(publication_hygiene_errors)}"
+                )
         truncation_error = self._writer_segment_truncation_error(segment_md)
         if truncation_error:
             retry_count = max(1, segment_retry_count + 1)
@@ -3108,6 +3297,15 @@ class WriterAgentMixin:
                     "Writer segment violated heading contract after retry: "
                     f"{segment['segment_name']}: {'; '.join(validation.errors)}"
                 )
+            publication_hygiene_errors = (
+                self._writer_segment_publication_hygiene_errors(segment_md)
+            )
+            if publication_hygiene_errors:
+                raise RuntimeError(
+                    "Writer segment violated publication hygiene after contract retry: "
+                    f"{segment['segment_name']}: "
+                    f"{'; '.join(publication_hygiene_errors)}"
+                )
             await self.emit(
                 detail.id,
                 "writer_segment_validated",
@@ -3131,6 +3329,27 @@ class WriterAgentMixin:
                 },
             )
         return segment_md.strip(), contract
+
+    def _writer_segment_publication_hygiene_errors(self, markdown: str) -> list[str]:
+        malformed_count = 0
+        internal_term_found = False
+        for line in (markdown or "").splitlines():
+            malformed_count += len(find_malformed_source_token_attempts(line))
+            internal_term_found = internal_term_found or contains_internal_writer_term(
+                line
+            )
+        errors: list[str] = []
+        if malformed_count:
+            errors.append(
+                "segment contains malformed Markdown source citation syntax; "
+                "use exact [source:ID] citations"
+            )
+        if internal_term_found:
+            errors.append(
+                "segment contains internal writer or evidence-pack terminology; "
+                "remove internal writer process labels"
+            )
+        return errors
 
     def _writer_segment_truncation_error(self, markdown: str) -> str | None:
         stripped = markdown.strip()
@@ -3569,7 +3788,7 @@ class WriterAgentMixin:
             forbidden = ", ".join(contract_forbidden_headings or [])
             missing = ", ".join(contract_missing_required_heading_keys or [])
             contract_warning = (
-                "Previous segment violated its heading contract: "
+                "Previous segment violated its heading contract or publication contract: "
                 f"{'; '.join(contract_errors)}. "
                 f"Missing required H2 heading keys: {missing or 'none'}. "
                 f"Forbidden H2 headings found: {forbidden or 'none'}. "
@@ -3996,11 +4215,24 @@ class WriterAgentMixin:
         detail: RunDetail,
         previous_report: str,
     ) -> str:
-        preserved_report = self._harden_report_markdown(detail, previous_report)
+        if self._has_report_section_markers(previous_report):
+            preserved_report = self._harden_schema_contract_report_markdown(
+                detail,
+                previous_report,
+            )
+        else:
+            preserved_report = self._harden_report_markdown(detail, previous_report)
         if detail.report_md != preserved_report:
             detail.report_md = preserved_report
-        self._clear_stale_report_artifact(detail)
+        if self._has_report_section_markers(preserved_report):
+            self._set_schema_contract_report_artifact(detail)
+            return detail.report_md
+        else:
+            self._clear_stale_report_artifact(detail)
         return preserved_report
+
+    def _has_report_section_markers(self, markdown: str) -> bool:
+        return bool(re.search(r"^<!--\s*report-section:", markdown, flags=re.MULTILINE))
 
     def _backfill_layer_sections(
         self,
@@ -4717,7 +4949,6 @@ class WriterAgentMixin:
     ) -> str:
         repaired = repair_mojibake_text(markdown)
         repaired = self._repair_report_source_tokens(detail, repaired)
-        repaired = self._ensure_report_claim_citations(detail, repaired)
         preflight = run_writer_quality_preflight(detail, repaired)
         if not preflight.passed:
             raise RuntimeError(
@@ -5045,9 +5276,20 @@ class WriterAgentMixin:
         pre_support_unknown_sections: list[str] = []
         tail_unknown_sections: list[str] = []
         for index, match in enumerate(matches):
-            section_end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
+            section_start = self._report_section_start_with_marker(
+                markdown,
+                match.start(),
+            )
+            section_end = (
+                self._report_section_start_with_marker(
+                    markdown,
+                    matches[index + 1].start(),
+                )
+                if index + 1 < len(matches)
+                else len(markdown)
+            )
             heading = match.group(1).strip()
-            section = markdown[match.start() : section_end].strip()
+            section = markdown[section_start:section_end].strip()
             order_index = next(
                 (
                     index
@@ -5067,7 +5309,11 @@ class WriterAgentMixin:
         if not known_sections:
             return markdown
 
-        preamble = markdown[: matches[0].start()].strip()
+        first_section_start = self._report_section_start_with_marker(
+            markdown,
+            matches[0].start(),
+        )
+        preamble = markdown[:first_section_start].strip()
         support_start_index = len(heading_groups) - len(
             self._support_report_heading_alias_groups()
         )
@@ -5092,6 +5338,20 @@ class WriterAgentMixin:
             ]
             if part
         )
+
+    def _report_section_start_with_marker(
+        self,
+        markdown: str,
+        heading_start: int,
+    ) -> int:
+        previous_line_end = heading_start
+        while previous_line_end > 0 and markdown[previous_line_end - 1] in " \t\r\n":
+            previous_line_end -= 1
+        previous_line_start = markdown.rfind("\n", 0, previous_line_end) + 1
+        previous_line = markdown[previous_line_start:previous_line_end].strip()
+        if re.fullmatch(r"<!--\s*report-section:[^>]*-->", previous_line):
+            return previous_line_start
+        return heading_start
 
     def _ordered_report_heading_groups(self, detail: RunDetail) -> list[list[str]]:
         return [

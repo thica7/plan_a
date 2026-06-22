@@ -59,6 +59,44 @@ def test_build_claim_card_bundle_emits_gap_card_for_empty_claims() -> None:
     assert bundle.cards[0].source_ids == []
 
 
+def test_user_research_sources_are_represented_even_when_structured_claims_omit_them() -> None:
+    survey = _source("raw-source-survey", source_type="survey_simulated")
+    survey.dimension = "persona"
+    survey.title = "Cursor persona survey synthesis"
+    survey.snippet = (
+        "Simulated survey research identifies adoption blockers, switching triggers, "
+        "and buying criteria for Cursor."
+    )
+    survey.confidence = 0.76
+    survey.metadata["survey_interview_synthetic"] = True
+    interview = _source("raw-source-interview", source_type="interview_record")
+    interview.dimension = "persona"
+    interview.title = "Cursor persona interview synthesis"
+    interview.snippet = (
+        "Synthetic interview respondents discussed budget approval, governance "
+        "review, onboarding effort, and workflow fit."
+    )
+    interview.confidence = 0.82
+    interview.metadata["survey_interview_synthetic"] = True
+
+    bundle = build_claim_card_bundle(
+        run_id="run-1",
+        competitor="Cursor",
+        dimension="persona",
+        claims=[],
+        sources=[survey, interview],
+        producer_stage="analyst:persona:Cursor",
+    )
+
+    represented_source_ids = {
+        source_id for card in bundle.cards for source_id in card.source_ids
+    }
+    assert represented_source_ids == {survey.id, interview.id}
+    assert bundle.gap_count == 0
+    assert {card.support_level for card in bundle.cards} == {"simulated"}
+    assert all(card.produced_by == "analyst" for card in bundle.cards)
+
+
 def test_simulated_sources_become_simulated_cards() -> None:
     source = _source("raw-source-sim", source_type="simulated_interview")
     bundle = build_claim_card_bundle(

@@ -2301,6 +2301,59 @@ def test_segment_citation_sanitizer_normalizes_spacing_and_combined_sources() ->
     assert "raw-source-missing" in invalid_sources[0]
 
 
+def test_segment_citation_sanitizer_normalizes_full_width_colon() -> None:
+    source = RawSource(
+        id="raw-source-cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor pricing is documented.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+    )
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+
+    sanitized = result.sanitize_segment_citations(
+        "Cursor pricing is supported. [source：raw-source-cursor-pricing]",
+        allowed_source_ids={"raw-source-cursor-pricing"},
+    )
+
+    assert "[source：raw-source-cursor-pricing]" not in sanitized
+    assert "[source:raw-source-cursor-pricing]" in sanitized
+    assert result.validate_segment_citations(
+        sanitized,
+        allowed_source_ids={"raw-source-cursor-pricing"},
+    ) == []
+
+
+def test_segment_citation_sanitizer_normalizes_chinese_source_label() -> None:
+    source = RawSource(
+        id="raw-source-cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor pricing is documented.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+    )
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+    chinese_source_label = "\u6765\u6e90"
+
+    sanitized = result.sanitize_segment_citations(
+        f"Cursor pricing is supported. [{chinese_source_label}:raw-source-cursor-pricing]",
+        allowed_source_ids={"raw-source-cursor-pricing"},
+    )
+
+    assert f"[{chinese_source_label}:raw-source-cursor-pricing]" not in sanitized
+    assert "[source:raw-source-cursor-pricing]" in sanitized
+    assert result.validate_segment_citations(
+        sanitized,
+        allowed_source_ids={"raw-source-cursor-pricing"},
+    ) == []
+
+
 def test_segment_citation_sanitizer_prefixes_allowed_bare_raw_source_hash() -> None:
     source = RawSource(
         id="raw-source-923de7e2eb0370b8d440",

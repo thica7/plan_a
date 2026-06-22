@@ -34,7 +34,9 @@ LEGACY_STRATEGIC_SEGMENT_ALIASES: dict[str, tuple[str, ...]] = {
     "swot_matrix": ("side_by_side_matrix", "swot_analysis"),
 }
 SOURCE_CITATION_RE = re.compile(
-    r"(?:\[source:([^\]]+)\]|\u3010source:([^\u3011]+)\u3011)"
+    r"(?:\[(?:source|\u6765\u6e90)[:\uFF1A]([^\]]+)\]"
+    r"|\u3010(?:source|\u6765\u6e90)[:\uFF1A]([^\u3011]+)\u3011)",
+    re.IGNORECASE,
 )
 T = TypeVar("T")
 NORMALIZED_FIELD_DROP_KEYS = {

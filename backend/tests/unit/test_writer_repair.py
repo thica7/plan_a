@@ -263,6 +263,125 @@ def test_writer_repair_routes_release_gate_depth_to_named_section_when_scoped() 
     assert plan.anti_regression_required is True
 
 
+def test_writer_repair_infers_single_thin_section_for_generic_release_gate_depth() -> None:
+    detail = _detail(report_md=_release_depth_report_with_thin_decision_summary())
+    issue = QCIssue(
+        id="issue-generic-report-depth-required",
+        severity="blocker",
+        detected_by="coverage",
+        target_agent="writer",
+        field_path="release_gate.report_depth_required",
+        problem=(
+            "Report core richness metrics are below release minimums: "
+            "core_section_depth_score=0.74 (<1.00)."
+        ),
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="Redo writer report with expanded evidence-backed core analysis.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["decision_summary"]
+    assert plan.anti_regression_required is True
+
+
+def _release_depth_report_with_thin_decision_summary() -> str:
+    return """
+# Cursor vs Copilot Direct Battlecard
+
+## Executive Summary
+- Cursor is the pricing-transparency baseline for a direct L1 battlecard, while Copilot remains
+  the bundled-distribution counterweight that procurement teams will ask about. [source:pricing-1]
+- The practical recommendation should separate evidence-backed pricing clarity from still-open
+  enterprise rollout, governance, and switching-friction validation tasks. [source:feature-1]
+- Immediate action is to keep Cursor as the test baseline, gather security and buyer objection
+  evidence, and avoid presenting either vendor as an absolute winner. [source:pricing-1]
+
+## Decision Summary
+Cursor is the tentative baseline, but the decision needs more tradeoff detail. [source:pricing-1]
+
+## Competitive Findings
+- Pricing clarity gives Cursor the cleaner initial sales argument for teams that need a direct
+  standalone coding-agent comparison rather than a bundled platform conversation. [source:pricing-1]
+- Copilot's Microsoft adjacency remains the strongest procurement defense because many buyers
+  will value existing distribution, governance familiarity, and IDE continuity. [source:feature-1]
+- Persona fit is split: developer evaluators can trial Cursor directly, while platform owners may
+  prefer Copilot if rollout risk and procurement simplicity dominate. [source:pricing-1]
+- The decision implication is to sell Cursor on transparent value while treating Copilot as the
+  incumbent-friction benchmark that must be answered with evidence. [source:feature-1]
+
+## User Review Themes
+- Customer signal: direct evaluators need fast value proof and clear pricing before they invest
+  time in a replacement workflow. [source:pricing-1]
+- Adoption blocker: security review, procurement routing, and team rollout evidence remain open
+  enough that the report should keep its recommendation qualified. [source:feature-1]
+- Switching trigger: a team would move faster when standalone pricing and workflow fit are easy
+  to explain to both developers and budget owners. [source:pricing-1]
+- Evidence gap: the next collection pass should add buyer objections or user interview notes
+  before turning this into a final procurement recommendation. [source:feature-1]
+
+## Competitor Deep Dives
+- Cursor wins on standalone pricing clarity and focused developer workflow positioning, which
+  makes it a strong baseline for direct evaluation. [source:pricing-1]
+- Cursor watchout: enterprise rollout claims still need verified trust, security, and procurement
+  material before they become hard sales claims. [source:feature-1]
+- Copilot wins on bundled distribution and familiar IDE adjacency, giving it a strong default
+  defense in Microsoft-heavy accounts. [source:feature-1]
+- Copilot watchout: bundled familiarity can obscure whether the coding-agent value itself is
+  stronger for the target workflow. [source:pricing-1]
+
+## SWOT Analysis
+- Strengths: Cursor has pricing transparency and a focused evaluation story. [source:pricing-1]
+- Weaknesses: Cursor still needs firmer enterprise rollout proof. [source:feature-1]
+- Opportunities: Cursor can convert direct evaluator demand into a cleaner buyer narrative.
+  [source:pricing-1]
+- Threats: Copilot can defend through incumbent distribution and bundled procurement familiarity.
+  [source:feature-1]
+
+## Battlecard
+- Attack point: ask whether the buyer needs a focused coding workflow proof or simply a bundled
+  incumbent extension. [source:pricing-1]
+- Defense point: acknowledge Copilot's distribution advantage before returning to direct value,
+  pricing clarity, and adoption evidence. [source:feature-1]
+- Scenario: use Cursor when the buyer prioritizes fast developer evaluation and transparent
+  pricing over platform bundling. [source:pricing-1]
+- Evidence risk: do not overclaim security, governance, or enterprise rollout readiness until
+  those sources are collected. [source:feature-1]
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Copilot |
+| --- | --- | --- |
+| Price | clearer standalone pricing [source:pricing-1] | bundled context [source:feature-1] |
+| Feature | focused workflow story [source:pricing-1] | IDE adjacency [source:feature-1] |
+| Persona | direct evaluator fit [source:pricing-1] | platform owner continuity [source:feature-1] |
+| Security | verify first [source:feature-1] | validate governance [source:feature-1] |
+| Procurement | sell clarity [source:pricing-1] | answer bundled default [source:feature-1] |
+| Next step | collect objections [source:pricing-1] | collect rollout proof [source:feature-1] |
+
+## Source Quality & Coverage
+Verified source coverage exists for the pricing and feature dimensions. [source:pricing-1]
+
+## User Research Evidence
+User research evidence is directional and should be validated before final procurement claims.
+[source:pricing-1]
+
+## Scenario QA Checklist
+- Scenario: direct battlecard comparison with pricing, feature, and persona validation tasks.
+[source:feature-1]
+
+## Claim Validation & Evidence Risk
+The main evidence risk is overclaiming enterprise readiness before security and rollout sources
+are collected. [source:feature-1]
+
+## Evidence Appendix
+- pricing-1: Cursor pricing source. [source:pricing-1]
+- feature-1: Copilot feature source. [source:feature-1]
+""".strip()
+
+
 def test_writer_repair_claim_risk_review_wording_does_not_target_user_reviews() -> None:
     detail = _detail(report_md=_protectable_report())
     issue = QCIssue(
@@ -858,7 +977,8 @@ def test_section_regression_allows_review_theme_fallback_evidence_gap() -> None:
     assert problem is None
 
 
-def test_report_regression_ignores_absolute_quality_gate_failure_without_relative_regression() -> None:
+def test_report_regression_ignores_absolute_quality_gate_failure_without_relative_regression(
+) -> None:
     previous = RunDetail(
         id="run-prev",
         topic="AI coding",

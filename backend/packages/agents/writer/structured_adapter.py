@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from packages.agents.writer.structured_hygiene import has_source_token
+from packages.agents.writer.structured_hygiene import (
+    contains_internal_writer_term,
+    has_source_token,
+)
 
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
@@ -39,16 +42,6 @@ _BATTLECARD_TEMPLATE_TERMS = (
     "行动偏向",
     "落地检查",
 )
-_INTERNAL_TERM_PATTERNS = tuple(
-    re.compile(pattern, re.IGNORECASE)
-    for pattern in (
-        r"Segment Evidence Pack JSON",
-        r"source_registry",
-        r"Writer Evidence Pack",
-    )
-)
-
-
 @dataclass(frozen=True)
 class MarkdownFailureShape:
     code: str
@@ -212,7 +205,7 @@ def _detect_internal_term_leak(
     issues: list[MarkdownFailureShape],
 ) -> None:
     for line in lines:
-        if any(pattern.search(line.text) for pattern in _INTERNAL_TERM_PATTERNS):
+        if contains_internal_writer_term(line.text):
             issues.append(
                 MarkdownFailureShape(
                     code="internal_term_leak",
