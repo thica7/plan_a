@@ -22,6 +22,8 @@ INTERNAL_TERM_PATTERNS = tuple(
     for pattern in (
         r"source_registry",
         r"allowed_source_ids",
+        r"claim_cards",
+        r"decision_cards",
         r"represented_by",
         r"Segment Evidence Pack JSON",
         r"Writer Evidence Pack",

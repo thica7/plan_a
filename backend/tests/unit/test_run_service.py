@@ -8523,9 +8523,9 @@ async def test_writer_uses_evidence_pack_for_llm_prompt() -> None:
 
     await service._real_writer_step(record)
 
-    assert "Writer Evidence Pack JSON:" in captured_user
+    assert "Report Evidence Context JSON:" in captured_user
     assert "Writer Context JSON:" not in captured_user
-    assert "source_registry" in captured_user
+    assert "source_index" in captured_user
     assert "around 5,500 characters" not in captured_user
     assert "8,500-10,000 characters" not in captured_user
     assert "16,000-20,000 characters" in captured_user
@@ -8603,9 +8603,9 @@ async def test_writer_uses_evidence_pack_context_and_emits_preflight(monkeypatch
 
     await service._real_writer_step(record)
 
-    assert "Writer Evidence Pack JSON:" in captured["user"]
+    assert "Report Evidence Context JSON:" in captured["user"]
     assert "Writer Context JSON:" not in captured["user"]
-    assert "source_registry" in captured["user"]
+    assert "source_index" in captured["user"]
 
 
 @pytest.mark.asyncio
@@ -11852,7 +11852,7 @@ async def test_writer_segment_prompt_hides_internal_card_ids(monkeypatch) -> Non
     )
 
     prompt = captured["user"]
-    marker = "Segment Evidence Pack JSON: "
+    marker = "Segment Context JSON: "
     payload = prompt.split(marker, 1)[1].split("\n\nRequired sections", 1)[0]
     assert "raw-source-cursor-pricing" in payload
     assert "claim-cursor-pricing" not in payload
@@ -11988,6 +11988,83 @@ async def test_writer_segment_support_prompt_uses_canonical_support_labels(
     assert "## Next Collection / Verification Plan" in prompt
     assert "## Claim Risk and Evidence Limits" not in prompt
     assert "## Next Collection Plan" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_writer_segment_support_prompt_uses_reader_safe_evidence_labels(
+    monkeypatch,
+) -> None:
+    service = _segmented_writer_service()
+    record = _segmented_writer_record(
+        service,
+        run_id="run-segment-template-support-reader-safe",
+    )
+    captured: dict[str, str] = {}
+    segment = _segmented_writer_segment(
+        segment_name="evidence_support",
+        section_id="evidence_support",
+        segment_kind="support_fragment",
+        allowed_source_id="raw-source-cursor-pricing",
+    )
+    segment.update(
+        {
+            "allowed_claim_card_ids": ["claim-cursor-pricing"],
+            "allowed_decision_card_ids": ["decision-cursor"],
+            "section_brief": {
+                "allowed_source_ids": ["raw-source-cursor-pricing"],
+                "allowed_claim_card_ids": ["claim-cursor-pricing"],
+                "allowed_decision_card_ids": ["decision-cursor"],
+            },
+            "claim_cards": [
+                {
+                    "id": "claim-cursor-pricing",
+                    "claim": "Cursor pricing is visible.",
+                    "source_ids": ["raw-source-cursor-pricing"],
+                }
+            ],
+            "decision_cards": [
+                {
+                    "id": "decision-cursor",
+                    "recommendation": "Treat Cursor pricing as visible.",
+                    "claim_card_ids": ["claim-cursor-pricing"],
+                    "source_ids": ["raw-source-cursor-pricing"],
+                }
+            ],
+        }
+    )
+
+    async def fake_trace_llm_text(*args, **kwargs):
+        captured["system"] = kwargs["system"]
+        captured["user"] = kwargs["user"]
+        return "## Evidence & QA Support\nSupport. [source:raw-source-cursor-pricing]"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
+
+    await service._writer_segment_markdown(
+        record,
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="Use English.",
+        memory_context="none",
+        layer_context="none",
+        required_sections="",
+        retry_count=0,
+    )
+
+    prompt = f"{captured['system']}\n{captured['user']}"
+    assert "Segment Evidence Pack JSON" not in prompt
+    assert "Writer Evidence Pack" not in prompt
+    assert "source_registry" not in prompt
+    assert "allowed_source_ids" not in prompt
+    assert "claim_cards" not in prompt
+    assert "decision_cards" not in prompt
+    assert "source_index" in prompt
+    assert "citation_source_ids" in prompt
+    assert "evidence_claims" in prompt
+    assert "decision_guidance" in prompt
+    assert "raw-source-cursor-pricing" in prompt
+    assert "claim-cursor-pricing" not in prompt
+    assert "decision-cursor" not in prompt
 
 
 @pytest.mark.asyncio
@@ -12340,7 +12417,7 @@ async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
     decision_calls = 0
 
     def segment_payload_from_prompt(user: str) -> dict[str, object]:
-        marker = "Segment Evidence Pack JSON: "
+        marker = "Segment Context JSON: "
         if marker not in user:
             return {}
         payload = user.split(marker, 1)[1].split("\n\nRequired sections", 1)[0]
@@ -12351,7 +12428,7 @@ async def test_writer_segment_retry_uses_valid_rewrite(monkeypatch) -> None:
         user = kwargs["user"]
         segment_payload = segment_payload_from_prompt(user)
         if segment_payload.get("segment_kind") == "evidence_shard":
-            allowed_source_ids = segment_payload.get("allowed_source_ids") or []
+            allowed_source_ids = segment_payload.get("citation_source_ids") or []
             source_id = (
                 allowed_source_ids[0]
                 if allowed_source_ids
@@ -12467,7 +12544,7 @@ async def test_writer_segment_sanitizes_spacing_and_combined_citations(monkeypat
     decision_calls = 0
 
     def segment_payload_from_prompt(user: str) -> dict[str, object]:
-        marker = "Segment Evidence Pack JSON: "
+        marker = "Segment Context JSON: "
         if marker not in user:
             return {}
         payload = user.split(marker, 1)[1].split("\n\nRequired sections", 1)[0]
@@ -12478,7 +12555,7 @@ async def test_writer_segment_sanitizes_spacing_and_combined_citations(monkeypat
         user = kwargs["user"]
         segment_payload = segment_payload_from_prompt(user)
         if segment_payload.get("segment_kind") == "evidence_shard":
-            allowed_source_ids = segment_payload.get("allowed_source_ids") or []
+            allowed_source_ids = segment_payload.get("citation_source_ids") or []
             source_id = (
                 allowed_source_ids[0]
                 if allowed_source_ids
@@ -12649,9 +12726,9 @@ async def test_writer_section_repair_uses_evidence_pack_context(monkeypatch) -> 
         previous_report="## User Review Themes\nThin.",
     )
 
-    assert "Writer Evidence Pack JSON:" in captured["user"]
+    assert "Report Evidence Context JSON:" in captured["user"]
     assert "Writer Context JSON:" not in captured["user"]
-    assert "source_registry" in captured["user"]
+    assert "source_index" in captured["user"]
     assert "cursor-persona" in captured["user"]
 
 
@@ -12736,7 +12813,7 @@ async def test_writer_section_repair_uses_segment_payload_for_segmented_pack(
     )
 
     assert not full_serialized
-    assert "Writer Evidence Pack JSON:" in captured["user"]
+    assert "Report Evidence Context JSON:" in captured["user"]
     assert "repair_sections" in captured["user"]
     assert "cursor-persona" in captured["user"]
 
@@ -12860,7 +12937,7 @@ async def test_writer_section_repair_iterates_budgeted_segment_payloads(
     )
     assert not full_serialized
     assert len(calls) == 2
-    assert all("Writer Evidence Pack JSON:" in user for user in calls)
+    assert all("Report Evidence Context JSON:" in user for user in calls)
     assert '"repair_part": 1' in calls[0]
     assert '"repair_part": 2' in calls[1]
     assert "Part 1 cites" in result

@@ -122,14 +122,20 @@ USER_RESEARCH_SOURCE_TYPE_ORDER = (
 )
 USER_RESEARCH_SOURCE_TYPES = set(USER_RESEARCH_SOURCE_TYPE_ORDER)
 CJK_TEXT_RE = re.compile(r"[\u3400-\u9fff]")
-PROMPT_INTERNAL_FIELD_NAMES = (
-    "source_registry",
-    "allowed_source_ids",
-    "publication_repair_issues",
-    "represented_by",
-    "Segment Evidence Pack JSON",
-    "Writer Evidence Pack",
-)
+PROMPT_SAFE_FIELD_ALIASES = {
+    "source_registry": "source_index",
+    "allowed_source_ids": "citation_source_ids",
+    "claim_cards": "evidence_claims",
+    "decision_cards": "decision_guidance",
+    "publication_repair_issues": "report_repair_notes",
+    "represented_by": "summarized_by",
+}
+PROMPT_DROPPED_INTERNAL_REFERENCE_KEYS = {
+    "allowed_claim_card_ids",
+    "allowed_decision_card_ids",
+    "claim_card_ids",
+    "decision_card_ids",
+}
 PRICING_LINE_TOKENS = (
     "price",
     "pricing",
@@ -778,7 +784,32 @@ def _prompt_safe_writer_segment(segment: Mapping[str, object]) -> dict[str, obje
             for card in decision_cards
             if isinstance(card, Mapping)
         ]
-    return payload
+    return _reader_safe_prompt_field_names(payload)
+
+
+def _reader_safe_prompt_field_names(value: object) -> object:
+    if isinstance(value, Mapping):
+        payload: dict[str, object] = {}
+        for key, child in value.items():
+            if key in PROMPT_DROPPED_INTERNAL_REFERENCE_KEYS:
+                continue
+            safe_key = PROMPT_SAFE_FIELD_ALIASES.get(str(key), str(key))
+            payload[safe_key] = _reader_safe_prompt_field_names(child)
+        return payload
+    if isinstance(value, list):
+        return [_reader_safe_prompt_field_names(item) for item in value]
+    return value
+
+
+def _reader_safe_prompt_json_text(json_text: str) -> str:
+    try:
+        payload = json.loads(json_text)
+    except json.JSONDecodeError:
+        return json_text
+    return json.dumps(
+        _reader_safe_prompt_field_names(payload),
+        ensure_ascii=False,
+    )
 
 
 def _prompt_safe_claim_card(card: Mapping[str, object]) -> dict[str, object]:
@@ -2115,7 +2146,9 @@ class WriterAgentMixin:
                 required_sections=required_sections,
             )
 
-        writer_context_json = evidence_pack_result.to_prompt_json()
+        writer_context_json = _reader_safe_prompt_json_text(
+            evidence_pack_result.to_prompt_json()
+        )
         return await asyncio.wait_for(
             self._trace_llm_text(
                 record,
@@ -2162,7 +2195,7 @@ class WriterAgentMixin:
                     f"Layer Report Context: {layer_context}\n"
                     f"{grounding_prompt}\n"
                     f"{self._writer_community_policy_text()}\n"
-                    f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
+                    f"Report Evidence Context JSON: {writer_context_json}\n\n"
                     f"Required sections:\n{required_sections}\n"
                     "Target 16,000-20,000 characters for the first draft. Use about "
                     "70-80% of the report on the Core analysis layer: decision summary, "
@@ -3419,7 +3452,7 @@ class WriterAgentMixin:
         competitor = str(segment.get("segment_competitor") or "").strip()
         source_warning = (
             "Do not copy placeholder source IDs from examples. Use only IDs from "
-            "allowed_source_ids in Segment Evidence Pack JSON."
+            "the citation source list in the segment context."
         )
 
         def h2(key: str) -> str:
@@ -3702,7 +3735,7 @@ class WriterAgentMixin:
                     ),
                     (
                         "Do not write an exact total source count unless it is copied "
-                        "from deterministic telemetry in Segment Evidence Pack JSON."
+                        "from deterministic source telemetry in the segment context."
                     ),
                     source_warning,
                 ]
@@ -3778,7 +3811,8 @@ class WriterAgentMixin:
                 )
             )
             citation_warning = (
-                f"{citation_error_summary} Rewrite using only allowed_source_ids. "
+                f"{citation_error_summary} Rewrite using only this segment's "
+                "citation source IDs. "
                 "Use exact [source:ID] syntax with no space after source:. Do not put "
                 "multiple source IDs inside one [source:...] token; cite multiple "
                 "sources as consecutive citations such as [source:A][source:B].\n"
@@ -3847,10 +3881,10 @@ class WriterAgentMixin:
                     "You are a senior enterprise competitive-intelligence analyst writing "
                     "one section group of a larger markdown report. Return only markdown "
                     "for this segment. Cite factual claims only with source IDs in "
-                    "allowed_source_ids. Do not invent source IDs. Use exact [source:ID] "
-                    "syntax with no space after source:. Do not combine multiple source "
-                    "IDs inside one [source:...] token; write consecutive citations "
-                    "like [source:A][source:B]. "
+                    "the segment's citation source list. Do not invent source IDs. "
+                    "Use exact [source:ID] syntax with no space after source:. Do not "
+                    "combine multiple source IDs inside one [source:...] token; write "
+                    "consecutive citations like [source:A][source:B]. "
                     "Do not use web_search_result or confidence < 0.75 as the sole support "
                     "for a winner, legal/security certification, pricing, or procurement "
                     "recommendation. If evidence is incomplete, say the conclusion is "
@@ -3889,7 +3923,7 @@ class WriterAgentMixin:
                     f"Confirmed Memory Preferences:\n{memory_context}\n"
                     f"Layer Report Context: {layer_context}\n"
                     f"{self._writer_community_policy_text()}\n"
-                    f"Segment Evidence Pack JSON: {segment_json}\n\n"
+                    f"Segment Context JSON: {segment_json}\n\n"
                     f"Required sections for full report:\n{required_sections}\n"
                     "Write with consulting depth for this segment. Keep support material "
                     "concise and preserve [source:ID] citation syntax."
@@ -3935,13 +3969,19 @@ class WriterAgentMixin:
                 for segment in repair_segments
             )
             writer_context_jsons = [
-                json.dumps(payload, ensure_ascii=False) for payload in repair_payloads
+                json.dumps(
+                    _reader_safe_prompt_field_names(payload),
+                    ensure_ascii=False,
+                )
+                for payload in repair_payloads
             ]
         else:
             repair_payloads = []
             repair_segments = []
             repair_has_evidence_shards = False
-            writer_context_jsons = [evidence_pack_result.to_prompt_json()]
+            writer_context_jsons = [
+                _reader_safe_prompt_json_text(evidence_pack_result.to_prompt_json())
+            ]
         telemetry_payload = (
             evidence_pack_result.telemetry_payload()
             if hasattr(evidence_pack_result, "telemetry_payload")
@@ -4031,7 +4071,7 @@ class WriterAgentMixin:
                         "You must preserve existing [source:ID] syntax.\n"
                         f"{self._writer_community_policy_text()}\n"
                         f"{self._writer_publication_repair_instruction(publication_issues)}"
-                        f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
+                        f"Report Evidence Context JSON: {writer_context_json}\n\n"
                         f"Previous report:\n{previous_report}"
                     ),
                 )
@@ -4072,10 +4112,9 @@ class WriterAgentMixin:
         self,
         issues: Sequence[PublicationContractIssue] | None,
     ) -> str:
-        internal_names = ", ".join(PROMPT_INTERNAL_FIELD_NAMES)
         base = (
             "Do not mention internal JSON or implementation field names in the report "
-            f"body, including: {internal_names}. Refer to them as sources, evidence, "
+            "body. Refer to implementation objects as sources, evidence, "
             "or the source list in reader-facing language.\n"
         )
         if not issues:
