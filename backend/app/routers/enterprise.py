@@ -70,6 +70,7 @@ from packages.enterprise import (
 from packages.enterprise import (
     report_release_gate_scope as _report_release_gate_scope,
 )
+from packages.enterprise.store import DEFAULT_WORKSPACE_ID
 from packages.evals import build_enterprise_evalops_report, build_evalops_release_contract
 from packages.governance import (
     ModelPolicyReport,
@@ -521,7 +522,11 @@ def get_runtime_policy_decision(
     estimated_input_tokens: Annotated[int, Query(ge=0)] = 0,
     estimated_output_tokens: Annotated[int, Query(ge=0)] = 0,
 ) -> RuntimePolicyDecision:
-    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "audit:read")
+    scoped_workspace_id = _required_scoped_workspace_id(
+        user,
+        workspace_id,
+        "audit:read",
+    )
     return build_runtime_policy_decision(
         settings,
         store=store,
@@ -3221,6 +3226,18 @@ def _scoped_workspace_id(
         _require_workspace_access(user, user.workspace_id, action)
         return user.workspace_id
     return None
+
+
+def _required_scoped_workspace_id(
+    user: EnterpriseUserContext,
+    workspace_id: str | None,
+    action: str,
+) -> str:
+    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, action)
+    if scoped_workspace_id is not None:
+        return scoped_workspace_id
+    _require_workspace_access(user, DEFAULT_WORKSPACE_ID, action)
+    return DEFAULT_WORKSPACE_ID
 
 
 def _require_workspace_access(
