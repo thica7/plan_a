@@ -165,6 +165,7 @@ class RedoRequestMessagePayload(_MessagePayload):
     redo_scope: RedoScope
     issues: list[QCIssue] = Field(default_factory=list)
     issue_ids: list[str] = Field(default_factory=list)
+    requested_issue_ids: list[str] = Field(default_factory=list)
     routing: str | None = None
 
 
