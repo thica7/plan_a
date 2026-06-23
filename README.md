@@ -1,5 +1,56 @@
 # Competiscope v2
 
+Competiscope v2 is a competitive intelligence workbench for running
+source-grounded competitor research, evaluating evidence quality, and producing
+auditable competitive reports.
+
+It combines a FastAPI backend, a React/Vite console, graph-driven agent
+orchestration, RAG/KB ingestion, enterprise governance surfaces, and
+Docker-first deployment scaffolding.
+
+## Core Capabilities
+
+- Run competitive intelligence workflows from a topic, competitor set, and
+  analysis dimensions such as pricing, features, security, persona, market,
+  integrations, and reviews.
+- Orchestrate planner, collector, analyst, comparator, writer, QA, reflector,
+  and scoped redo stages through a graph-based pipeline.
+- Collect evidence from trusted registries, web search, fetched web pages,
+  crawler sources, community signals, manual inputs, and the knowledge base.
+- Build source-grounded reports with evidence packs, structured source tokens,
+  quality gates, release checks, and report versioning.
+- Manage enterprise workspaces, projects, competitors, evidence, claims,
+  reports, audit logs, governance policies, compliance exports, and RBAC.
+- Ingest and retrieve knowledge through crawl sources, document parsers,
+  SimHash deduplication, retrieval presets, Qdrant vector search, and retrieval
+  trace logging.
+- Inspect runs through frontend views for history, crawl, search, knowledge,
+  evidence, reports, traces, revisions, governance, and release review.
+
+## Architecture Overview
+
+```text
+frontend/        React, Vite, TypeScript console
+backend/         FastAPI app, agents, orchestration, RAG, enterprise services
+docs/            Architecture, deployment, contracts, ADRs, and user guides
+docker/          Nginx reverse proxy config
+data/            Seed data and golden sets
+eval/            Evaluation datasets
+third_party/     Vendored runtime helpers, including webfetch_v2
+```
+
+High-level runtime flow:
+
+```text
+New run
+  -> planner
+  -> collector branches
+  -> analyst branches
+  -> comparator
+  -> writer
+  -> QA / release gate
+  -> scoped redo or final report
+```
 
 ## Quick Start
 
@@ -10,35 +61,44 @@ Copy-Item .env.example .env
 powershell -ExecutionPolicy Bypass -File scripts\docker_deploy.ps1 -Build
 ```
 
-Then open `http://localhost:8080`. See `docs/docker_deployment.md` for the
-deployment contract and production notes.
+Then open:
 
-Windows one-command development startup:
+```text
+http://localhost:8080
+```
+
+See `docs/docker_deployment.md` for deployment details.
+
+## Local Development
+
+Windows one-command startup:
 
 ```powershell
 .\scripts\dev_start.ps1
 ```
 
 This starts local Postgres, Temporal, Temporal UI, the FastAPI backend, the
-Temporal worker, and the Vite frontend. To stop or inspect the local stack:
+Temporal worker, and the Vite frontend.
+
+Useful commands:
 
 ```powershell
-.\scripts\dev_stop.ps1
 .\scripts\dev_status.ps1
+.\scripts\dev_stop.ps1
 ```
 
-The backend runs on `http://localhost:8000`. The frontend runs on
-`http://localhost:5173` and proxies `/api` to the backend. Temporal exposes gRPC
-on `127.0.0.1:7233` and UI on `http://localhost:8233` when the full stack is
-running.
+Default local services:
 
-For the lighter RAG/KB demo path, Qdrant remains in `docker-compose.yml` and the
-backend uses `QDRANT_URL=http://qdrant:6333` plus
-`KB_DB_PATH=/app/runs/knowledge_docker.db`.
+```text
+Backend:      http://localhost:8000
+Frontend:     http://localhost:5173
+Temporal UI:  http://localhost:8233
+Temporal gRPC 127.0.0.1:7233
+```
 
 ## Real API Mode
 
-Create a root `.env` from `.env.example`, then set the provider keys you need:
+Create `.env` from `.env.example`, then configure the provider keys you need:
 
 ```text
 DEMO_MODE=false
@@ -49,28 +109,42 @@ BACKUP_LLM_API_KEY=your_backup_key
 BACKUP_LLM_MODEL=your_backup_model
 ```
 
-Leave Competitors on `Auto-discover` to provide only a topic; the planner will
-search and select direct competitors before evidence collection. When
-`PPLX_API_KEY` is present, collector subagents prefer official source registry
-candidates, then Perplexity `web_search` results, fetch and hash returned pages,
-and fall back to LLM-generated evidence candidates when search is unavailable.
+When real API mode is enabled, the system can use live search, page fetching,
+LLM-backed planning and writing, and evidence-grounded report generation.
 
-## Current Slice
+## RAG / Knowledge Base
 
-- FastAPI backend with run, stream, HITL, health, metrics, skills, runtime,
-  trace, crawl, knowledge, KB, revision, enterprise, eval, and workflow routers.
-- RAG/KB ingestion with crawl sources, document parsing, SimHash deduplication,
-  retrieval presets, Qdrant vector support, and retrieval trace recording.
-- Enterprise boundary for workspace, project, competitor, evidence, claim,
-  report version, audit log, auth/RBAC, compliance, and Postgres storage.
-- Temporal thin shell for retry-safe workflow wrapping and report approval
-  signals.
-- Observability coverage for local traces, decision replay, OpenTelemetry export,
-  Langfuse mirroring, and compliance redaction.
-- React + Vite + TypeScript console with run, history, crawl, search, knowledge,
-  enterprise, evidence, competitor, report, trace, and revision views.
-- Docker Compose stack with Nginx, frontend, backend, Qdrant, Postgres, Temporal,
-  Temporal UI, and a Temporal worker.
+The project includes a knowledge ingestion and retrieval layer for grounding
+reports in reusable evidence.
+
+Supported capabilities include:
+
+- crawl source ingestion
+- document parsing
+- chunking and SimHash deduplication
+- Qdrant-backed vector retrieval
+- retrieval presets
+- retrieval trace recording
+- KB-backed evidence reuse during runs
+
+For the Docker KB path, Qdrant is included in `docker-compose.yml`, and the
+backend uses:
+
+```text
+QDRANT_URL=http://qdrant:6333
+KB_DB_PATH=/app/runs/knowledge_docker.db
+```
+
+## Evidence And Quality
+
+Competiscope emphasizes auditable report generation:
+
+- collected sources carry provenance and fetch metadata
+- evidence is checked before it supports claims
+- reports use structured source references
+- QA and release gates surface blockers and warnings
+- redo can be scoped to the failing stage instead of rerunning everything
+- traces and audit logs are available for debugging run behavior
 
 ## Useful Commands
 
@@ -91,14 +165,3 @@ make smoke-temporal-thin-shell
 make smoke-temporal-server
 ```
 
-## Project Layout
-
-```text
-backend/      FastAPI app, schema, agents, orchestration, RAG, enterprise code
-frontend/     React/Vite console and generated OpenAPI client types
-docs/         Architecture, deployment, ADR, contract, and eval notes
-docker/       Nginx reverse proxy config
-data/         Seed data and golden sets
-eval/         RAG evaluation data
-third_party/  Vendored runtime helpers, including webfetch_v2
-```
