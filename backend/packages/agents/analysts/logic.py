@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from packages.agents import SubagentContext
+from packages.agents.analysts.cards import build_claim_card_bundle
 from packages.agents.analysts.citation_tools import inspect_sources, validate_source_ids
 from packages.memory import KBCacheEntry
 from packages.refs import merge_ordered_refs
@@ -559,6 +560,12 @@ class AnalystAgentMixin:
             cache_entry = self._kb_cache.get(competitor, dimension, cache_content_hash)
             if cache_entry is not None:
                 self._apply_kb_cache_entry(detail, cache_entry)
+                self._emit_claim_card_bundle(
+                    record,
+                    competitor,
+                    dimension,
+                    source_message_ids=[task_message.id],
+                )
                 self._append_agent_message(
                     record,
                     from_agent="kb_cache",
@@ -617,6 +624,12 @@ class AnalystAgentMixin:
                     self._merge_structured_knowledge_payload(detail, competitor, dimension, payload)
                     self._store_kb_cache_entry(detail, competitor, dimension, cache_content_hash)
                     knowledge = detail.competitor_knowledge.get(competitor)
+                    self._emit_claim_card_bundle(
+                        record,
+                        competitor,
+                        dimension,
+                        source_message_ids=[task_message.id],
+                    )
                     self._append_agent_message(
                         record,
                         from_agent="analyst",
@@ -707,6 +720,12 @@ class AnalystAgentMixin:
         self._merge_structured_knowledge_payload(detail, competitor, dimension, payload)
         self._store_kb_cache_entry(detail, competitor, dimension, cache_content_hash)
         knowledge = detail.competitor_knowledge.get(competitor)
+        self._emit_claim_card_bundle(
+            record,
+            competitor,
+            dimension,
+            source_message_ids=[task_message.id],
+        )
         self._append_agent_message(
             record,
             from_agent="analyst",
@@ -1017,7 +1036,11 @@ class AnalystAgentMixin:
             record,
             to_agent="analyst_join",
             consumer_agent="analyst_join",
-            message_types={"competitor_knowledge_ready", "kb_cache_hit"},
+            message_types={
+                "claim_card_bundle_ready",
+                "competitor_knowledge_ready",
+                "kb_cache_hit",
+            },
         )
         kb_summary = {
             competitor: {
@@ -1075,6 +1098,49 @@ class AnalystAgentMixin:
             for source in detail.raw_sources
             if source.dimension == dimension and self._source_matches_competitor(source, competitor)
         ]
+
+    def _sources_for_dimension_for_claim_cards(
+        self,
+        detail: RunDetail,
+        competitor: str,
+        dimension: str,
+    ) -> list[RawSource]:
+        return self._sources_for_competitor_dimension(detail, competitor, dimension)
+
+    def _emit_claim_card_bundle(
+        self,
+        record: RunRecord,
+        competitor: str,
+        dimension: str,
+        *,
+        source_message_ids: list[str] | None = None,
+    ) -> None:
+        detail = record.detail
+        knowledge = detail.competitor_knowledge.get(competitor)
+        claims = self._structured_claims_for_dimension(knowledge, dimension)
+        bundle = build_claim_card_bundle(
+            run_id=detail.id,
+            competitor=competitor,
+            dimension=dimension,
+            claims=claims,
+            sources=self._sources_for_dimension_for_claim_cards(detail, competitor, dimension),
+            producer_stage=f"analyst:{dimension}:{competitor}",
+        )
+        detail.claim_card_bundles = [
+            existing
+            for existing in detail.claim_card_bundles
+            if not (existing.competitor == competitor and existing.dimension == dimension)
+        ]
+        detail.claim_card_bundles.append(bundle)
+        self._append_agent_message(
+            record,
+            from_agent="analyst",
+            to_agent="analyst_join",
+            message_type="claim_card_bundle_ready",
+            payload_schema="ClaimCardBundle",
+            payload={"bundle": bundle.model_dump(mode="json")},
+            source_message_ids=source_message_ids or [],
+        )
 
     def _source_matches_competitor(self, source: RawSource, competitor: str) -> bool:
         if source.covered_competitors:

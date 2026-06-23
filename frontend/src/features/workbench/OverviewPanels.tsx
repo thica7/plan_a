@@ -101,6 +101,7 @@ export function TraceTimelinePanel({
 }) {
   const { t } = useTranslation();
   const rows = buildTimelineRows({ auditLogs, decisionReplay, evalOps, selectedVersion, traceSpans });
+  const kbWarmStart = buildKbWarmStartSummary(traceSpans);
   const stages = [
     "Planning",
     "Discovery",
@@ -141,6 +142,35 @@ export function TraceTimelinePanel({
           Gate <strong>{evalOps?.regression_gate_status ?? "n/a"}</strong>
         </span>
       </div>
+      {kbWarmStart.spanCount > 0 ? (
+        <div className="kb-warm-start-strip" aria-label="KB warm-start diagnostics">
+          <div className="kb-warm-start-metrics">
+            <span>
+              KB hits <strong>{kbWarmStart.hitCount}</strong>
+            </span>
+            <span>
+              Accepted <strong>{kbWarmStart.acceptedCount}</strong>
+            </span>
+            <span>
+              Rejected <strong>{kbWarmStart.rejectedCount}</strong>
+            </span>
+            <span>
+              Spans <strong>{kbWarmStart.spanCount}</strong>
+            </span>
+          </div>
+          {kbWarmStart.topRejections.length > 0 ? (
+            <div className="kb-warm-start-rejections">
+              {kbWarmStart.topRejections.map((item) => (
+                <span key={item.reason} title={item.examples.join(", ")}>
+                  <strong>{item.reason}</strong>
+                  <em>{item.count}</em>
+                  {item.examples[0] ? <code>{item.examples[0]}</code> : null}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="trace-event-list">
         {rows.slice(0, 4).map((row) => (
           <article key={row.id}>
@@ -154,6 +184,60 @@ export function TraceTimelinePanel({
       </div>
     </Panel>
   );
+}
+
+export interface KbWarmStartSummary {
+  acceptedCount: number;
+  hitCount: number;
+  rejectedCount: number;
+  spanCount: number;
+  topRejections: Array<{ count: number; examples: string[]; reason: string }>;
+}
+
+export function buildKbWarmStartSummary(traceSpans: TraceSpan[]): KbWarmStartSummary {
+  const summary: KbWarmStartSummary = {
+    acceptedCount: 0,
+    hitCount: 0,
+    rejectedCount: 0,
+    spanCount: 0,
+    topRejections: [],
+  };
+  const rejectionStats = new Map<string, { count: number; examples: string[] }>();
+
+  for (const span of traceSpans) {
+    if (span.name !== "rag_kb_warm_start") continue;
+    summary.spanCount += 1;
+    summary.hitCount += metadataNumber(span, "hit_count") ?? 0;
+    summary.acceptedCount += metadataNumber(span, "source_count") ?? 0;
+    const rejected = metadataNumber(span, "rejection_count") ?? 0;
+    summary.rejectedCount += rejected;
+
+    const output = parseTraceOutput(span);
+    const rejections = Array.isArray(output?.rejections) ? output.rejections : [];
+    for (const rejection of rejections) {
+      if (!isRecord(rejection)) continue;
+      addRejectionStat(
+        rejectionStats,
+        metadataText(rejection, "reason") ?? "rejected",
+        rejectionLocator(rejection),
+        1,
+      );
+    }
+    if (rejections.length === 0 && rejected > 0) {
+      addRejectionStat(
+        rejectionStats,
+        metadataText(span.metadata, "top_rejection_reason") ?? "rejected",
+        "",
+        rejected,
+      );
+    }
+  }
+
+  summary.topRejections = [...rejectionStats.entries()]
+    .map(([reason, stats]) => ({ reason, ...stats }))
+    .sort((left, right) => right.count - left.count || left.reason.localeCompare(right.reason))
+    .slice(0, 3);
+  return summary;
 }
 
 function buildTimelineRows({
@@ -211,6 +295,58 @@ function buildTimelineRows({
       time: log.created_at,
     })),
   ].filter((row): row is { id: string; title: string; meta: string; time: string } => Boolean(row));
+}
+
+function addRejectionStat(
+  stats: Map<string, { count: number; examples: string[] }>,
+  reason: string,
+  example: string,
+  count: number,
+) {
+  const key = reason.trim() || "rejected";
+  const current = stats.get(key) ?? { count: 0, examples: [] };
+  current.count += count;
+  if (example && !current.examples.includes(example) && current.examples.length < 3) {
+    current.examples.push(example);
+  }
+  stats.set(key, current);
+}
+
+function parseTraceOutput(span: TraceSpan): Record<string, unknown> | null {
+  const text = span.full_output || span.output_preview;
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function rejectionLocator(item: Record<string, unknown>) {
+  return (
+    metadataText(item, "document_id") ??
+    metadataText(item, "chunk_id") ??
+    metadataText(item, "source_id") ??
+    metadataText(item, "url") ??
+    ""
+  );
+}
+
+function metadataNumber(span: TraceSpan, key: string): number | null {
+  const value = span.metadata[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function metadataText(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key];
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 export function CompetitorsOverviewTable({

@@ -106,6 +106,19 @@ from packages.schema.models import (
 )
 from packages.schema.quality import QualityFinding, QualityFindingBundle
 from packages.schema.rag import GapRetrievalContext, RetrievalChunk, RetrievalRecord
+from packages.schema.report_artifact import (
+    ClaimCard,
+    ClaimCardBundle,
+    DecisionCard,
+    DecisionCardBundle,
+    ReportArtifactLegacyInfo,
+    ReportArtifactRenderCache,
+    ReportArtifactV2,
+    ReportLayer,
+    ReportLayerSection,
+    ReportQualityAccount,
+    SectionBrief,
+)
 from packages.schema.survey import (
     ImportedResearchSourceType,
     ImportedUserResearchMaterial,
@@ -129,6 +142,8 @@ __all__ = [
     "BusinessQARule",
     "BusinessRecommendation",
     "ClaimRecord",
+    "ClaimCard",
+    "ClaimCardBundle",
     "ComparisonMatrix",
     "CompetitorCandidate",
     "CompetitorDiscovery",
@@ -139,6 +154,8 @@ __all__ = [
     "CompetitorRecord",
     "CompetitorScore",
     "CompetitorScoreReport",
+    "DecisionCard",
+    "DecisionCardBundle",
     "EnterpriseRunProjection",
     "EvidenceEmbeddingRecord",
     "EvidenceGapItem",
@@ -195,6 +212,12 @@ __all__ = [
     "ReportApprovalSignalResponse",
     "ReportApprovalStartRequest",
     "ReportApprovalStartResponse",
+    "ReportArtifactLegacyInfo",
+    "ReportArtifactRenderCache",
+    "ReportArtifactV2",
+    "ReportLayer",
+    "ReportLayerSection",
+    "ReportQualityAccount",
     "ReportVersionRecord",
     "RevisionRecord",
     "RedTeamFinding",
@@ -209,6 +232,7 @@ __all__ = [
     "RunSummary",
     "RuntimeConfig",
     "ScenarioPack",
+    "SectionBrief",
     "SkillSpec",
     "SourceSnapshotCreateRequest",
     "SourceSnapshotResult",

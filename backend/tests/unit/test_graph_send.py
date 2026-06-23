@@ -119,6 +119,104 @@ async def test_real_graph_uses_send_fanout_for_collector_and_analyst() -> None:
 
 
 @pytest.mark.asyncio
+async def test_real_graph_stops_after_writer_marks_run_failed() -> None:
+    calls: list[str] = []
+
+    detail = SimpleNamespace(
+        id="run-writer-failed",
+        plan=SimpleNamespace(dimensions=["pricing"], competitors=["A"]),
+        status="running",
+    )
+    record = SimpleNamespace(detail=detail)
+
+    class Service:
+        _runs = {"run-writer-failed": record}
+
+        def _analyst_branch_id(self, dimension: str, competitor: str) -> str:
+            return f"{dimension}::{competitor}"
+
+        async def _real_planner_step(self, _record) -> None:
+            calls.append("planner")
+
+        async def _real_planner_hitl_step(self, _record) -> None:
+            calls.append("planner_hitl")
+
+        async def _real_collector_dispatch_step(self, _record, _dimensions, _competitors) -> None:
+            calls.append("collector_dispatch")
+
+        async def _real_collector_branch_step(self, _record, _dimension, _competitor) -> None:
+            calls.append("collector")
+
+        async def _real_collect_join_step(self, _record, _dimensions) -> None:
+            calls.append("collect_join")
+
+        async def _run_survey_interview_enrichment(
+            self,
+            _record,
+            _dimensions,
+            _competitors,
+        ) -> None:
+            calls.append("survey_interview")
+
+        async def _real_phase_qa_step(self, _record, phase: str) -> None:
+            calls.append(f"{phase}_qa")
+
+        def _route_phase_qa(self, _state, _phase: str) -> str:
+            return "pass"
+
+        def _blocking_phase_issues(self, _detail, _phase: str) -> list:
+            return []
+
+        def _issue_dimensions(self, _detail, _issues) -> set[str]:
+            return set()
+
+        def _issue_target_competitors(self, _detail, _issues) -> set[str]:
+            return set()
+
+        async def _real_analyst_dispatch_step(self, _record, _dimensions, _competitors) -> None:
+            calls.append("analyst_dispatch")
+
+        async def _real_analyst_branch_step(self, _record, _dimension, _competitor) -> None:
+            calls.append("analyst")
+
+        async def _real_analyst_join_step(self, _record, _dimensions, _competitors) -> None:
+            calls.append("analyst_join")
+
+        async def _real_comparator_step(self, _record) -> None:
+            calls.append("comparator")
+
+        async def _real_reflector_step(self, _record) -> None:
+            calls.append("reflector")
+
+        async def _real_writer_step(self, record) -> None:
+            calls.append("writer")
+            record.detail.status = "failed"
+
+        async def _real_qa_step(self, _record) -> None:
+            calls.append("qa")
+
+        async def _real_qa_hitl_step(self, _record) -> dict[str, object]:
+            calls.append("qa_hitl")
+            return {"redo_kind": "end"}
+
+    graph = build_real_analysis_graph(Service())
+
+    await graph.ainvoke(
+        {
+            "run_id": "run-writer-failed",
+            "dimensions": ["pricing"],
+            "target_competitors": ["A"],
+            "collect_qa_attempts": 0,
+            "analyst_qa_attempts": 0,
+        }
+    )
+
+    assert calls[-1] == "writer"
+    assert "qa" not in calls
+    assert "qa_hitl" not in calls
+
+
+@pytest.mark.asyncio
 async def test_final_qa_redo_limit_ends_graph_after_allowed_retry() -> None:
     calls: list[str] = []
     events: list[tuple[str, dict]] = []

@@ -2,6 +2,7 @@
 param(
     [int]$BackendPort = 8000,
     [int]$FrontendPort = 5173,
+    [int]$QdrantPort = 6333,
     [int]$ActiveRunLookbackHours = 6
 )
 
@@ -28,6 +29,7 @@ Write-Host "[plan_a] HTTP"
 Test-Http -Url "http://127.0.0.1:$BackendPort/api/health" | Format-List
 Test-Http -Url "http://127.0.0.1:$FrontendPort" | Format-List
 Test-Http -Url "http://127.0.0.1:8233" | Format-List
+Test-Http -Url "http://127.0.0.1:$QdrantPort/collections" | Format-List
 
 try {
     $runtime = (Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$BackendPort/api/runtime" -TimeoutSec 5).Content | ConvertFrom-Json
@@ -75,7 +77,7 @@ try {
 }
 
 Write-Host "[plan_a] Ports"
-foreach ($port in @($BackendPort, $FrontendPort, 7233, 8233, 55432)) {
+foreach ($port in @($BackendPort, $FrontendPort, $QdrantPort, 7233, 8233, 55432)) {
     Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue |
         Where-Object { $_.State -eq "Listen" } |
         Select-Object @{n = "Port"; e = { $port } }, OwningProcess

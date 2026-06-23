@@ -9,6 +9,7 @@ import type {
   ReportReleaseGate,
   ReportVersionRecord,
 } from "../../api/types";
+import type { KnowledgeRollbackRequest, KnowledgeRollbackResult } from "../../stores/knowledgeStore";
 import type { ReportSourceBundle } from "../report/sourceBundle";
 import { ActivityCenter } from "./ActivityCenter";
 import { CompetitorLibrary } from "./CompetitorLibrary";
@@ -27,11 +28,17 @@ interface ActiveViewProps {
   filteredEvidence: EvidenceRecord[];
   gapFillResult: EvidenceGapFillResult | null;
   isFillingGaps: boolean;
+  gateRedoIssueId: string | null;
+  gateRedoResult: { issueId: string; runId: string; status: string } | null;
+  kbRollbackIssueId: string | null;
+  kbRollbackResult: { issueId: string; result: KnowledgeRollbackResult } | null;
   isReportActionPending: boolean;
   lastExport: ArtifactRecord | null;
   onEvidenceQuality: (evidenceId: string, qualityLabel: EvidenceQualityLabel) => void;
   onExport: (format: ReportExportFormat) => void;
   onFillGaps: () => void;
+  onRedoGateIssue: (issueId: string) => void;
+  onRollbackKbIssue: (issueId: string, request: KnowledgeRollbackRequest) => void;
   onReportAction: (action: ReportAction) => void;
   onSelectClaim: (claim: ClaimRecord) => void;
   onSelectEvidence: (evidence: EvidenceRecord) => void;
@@ -55,11 +62,17 @@ export function ActiveView({
   filteredEvidence,
   gapFillResult,
   isFillingGaps,
+  gateRedoIssueId,
+  gateRedoResult,
+  kbRollbackIssueId,
+  kbRollbackResult,
   isReportActionPending,
   lastExport,
   onEvidenceQuality,
   onExport,
   onFillGaps,
+  onRedoGateIssue,
+  onRollbackKbIssue,
   onReportAction,
   onSelectClaim,
   onSelectEvidence,
@@ -98,6 +111,10 @@ export function ActiveView({
         claims={data.claims}
         evidenceById={evidenceById}
         isPending={isReportActionPending}
+        gateRedoIssueId={gateRedoIssueId}
+        gateRedoResult={gateRedoResult}
+        kbRollbackIssueId={kbRollbackIssueId}
+        kbRollbackResult={kbRollbackResult}
         lastExport={lastExport}
         onEvidenceQuality={onEvidenceQuality}
         onExport={onExport}
@@ -105,6 +122,8 @@ export function ActiveView({
         onSelectEvidence={onSelectEvidence}
         onSelectReport={onSelectReport}
         onReportAction={onReportAction}
+        onRedoGateIssue={onRedoGateIssue}
+        onRollbackKbIssue={onRollbackKbIssue}
         releaseGate={releaseGate}
         reportSources={reportSources}
         selectedVersion={selectedVersion}
@@ -145,8 +164,16 @@ export function ActiveView({
       <ActivityCenter
         auditLogs={data.auditLogs}
         evalOps={data.evalOps}
+        gateRedoIssueId={gateRedoIssueId}
+        gateRedoResult={gateRedoResult}
+        kbRollbackIssueId={kbRollbackIssueId}
+        kbRollbackResult={kbRollbackResult}
         notifications={data.notifications}
+        onRedoGateIssue={onRedoGateIssue}
+        onRollbackKbIssue={onRollbackKbIssue}
         project={selectedProject}
+        releaseGate={releaseGate}
+        selectedVersion={selectedVersion}
       />
     );
   }

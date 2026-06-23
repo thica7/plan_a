@@ -119,6 +119,12 @@ async def sync_knowledge_to_evidence(
                 "metadata": {
                     "run_id": item.run_id,
                     "crawl_run_ids": item.metadata.get("kb_crawl_run_ids", []),
+                    "evidence_raw_source_id": item.raw_source_id,
+                    "kb_document_version": item.metadata.get("kb_document_version"),
+                    "kb_document_status": item.metadata.get("kb_document_status"),
+                    "kb_fetched_at": item.metadata.get("kb_fetched_at"),
+                    "kb_last_seen_at": item.metadata.get("kb_last_seen_at"),
+                    "kb_raw_source_id": item.metadata.get("kb_raw_source_id"),
                 },
             }
             for item in stored
@@ -268,11 +274,21 @@ def _sync_metadata(
     metadata_keys: list[str],
 ) -> dict[str, object]:
     # 只保存精选 chunk 和白名单 metadata，避免长网页和爬虫内部字段放大存储与索引成本。
+    freshness_basis = document.last_seen_at or document.fetched_at
     metadata: dict[str, object] = {
         "kb_sync": True,
         "kb_document_id": document.id,
         "kb_document_version": document.version,
         "kb_parent_document_id": document.parent_document_id,
+        "kb_document_status": document.status,
+        "kb_document_source_type": document.source_type,
+        "kb_document_url": document.url or "",
+        "kb_canonical_url": document.canonical_url or "",
+        "kb_fetched_at": _iso_or_none(document.fetched_at),
+        "kb_indexed_at": _iso_or_none(document.indexed_at),
+        "kb_last_seen_at": _iso_or_none(document.last_seen_at),
+        "kb_freshness_basis_at": _iso_or_none(freshness_basis),
+        "kb_freshness_score": _freshness_score(freshness_basis),
         "kb_competitor_name": competitor,
         "kb_chunk_count": len(chunks),
         "kb_selected_chunk_count": selected_chunk_count,
@@ -288,6 +304,19 @@ def _sync_metadata(
         "robots_status": document.metadata.get("robots_status", "unknown"),
         "kb_source_metadata": _safe_source_metadata(document.metadata, metadata_keys),
     }
+    _copy_text_metadata(
+        metadata,
+        document.metadata,
+        {
+            "raw_source_id": "kb_raw_source_id",
+            "run_id": "kb_collector_run_id",
+            "collector_candidate_origin": "kb_collector_candidate_origin",
+            "collector_fetch_method": "kb_collector_fetch_method",
+        },
+    )
+    collector_confidence = _safe_metadata_value(document.metadata.get("collector_confidence"))
+    if collector_confidence is not None:
+        metadata["kb_collector_confidence"] = collector_confidence
     if full_text:
         metadata["full_text"] = full_text
     return metadata
@@ -467,6 +496,21 @@ def _metadata_text(metadata: dict[str, object], key: str) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def _copy_text_metadata(
+    target: dict[str, object],
+    source: dict[str, object],
+    keys: dict[str, str],
+) -> None:
+    for source_key, target_key in keys.items():
+        value = _metadata_text(source, source_key)
+        if value:
+            target[target_key] = value
+
+
+def _iso_or_none(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
 
 
 def _normalized_text(value: str) -> str:

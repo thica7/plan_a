@@ -106,6 +106,42 @@ async def test_complete_text_falls_back_to_backup_provider(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_complete_text_does_not_send_default_max_tokens(monkeypatch) -> None:
+    payloads: list[dict[str, object]] = []
+
+    class FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            self.timeout = timeout
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def post(
+            self,
+            url: str,  # noqa: ARG002
+            *,
+            json: dict[str, object],
+            headers: dict[str, str],  # noqa: ARG002
+        ) -> httpx.Response:
+            payloads.append(json)
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "ok"}}]},
+            )
+
+    monkeypatch.setattr("packages.llm.doubao_client.httpx.AsyncClient", FakeAsyncClient)
+    client = DoubaoClient(_settings())
+
+    content = await client.complete_text(system="system", user="user")
+
+    assert content == "ok"
+    assert "max_tokens" not in payloads[0]
+
+
+@pytest.mark.asyncio
 async def test_complete_text_retries_retryable_status_before_failing_over(monkeypatch) -> None:
     calls = 0
 

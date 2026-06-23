@@ -7,6 +7,8 @@ import { Panel, StatusPill } from "../../components/ui";
 import {
   buildCitationLabels,
   collectSourceTokenGroups,
+  selectReportLayerMarkdown,
+  type ReportViewLayer,
 } from "../report/ReportView";
 import { ReportSourceTrace } from "../report/ReportSourceTrace";
 import type { ReportSourceBundle } from "../report/sourceBundle";
@@ -25,7 +27,13 @@ type ReviewActionState = "idle" | "pending" | "success" | "error";
 export function RunReportReviewStudio({ detail, reportSources }: RunReportReviewStudioProps) {
   const { t } = useTranslation();
   const markdown = detail.report_md ?? "";
-  const wordCount = markdown.trim() ? markdown.trim().split(/\s+/).length : 0;
+  const [activeLayer, setActiveLayer] = useState<ReportViewLayer>("report");
+  const selectedMarkdown = selectReportLayerMarkdown(detail.report_artifact, markdown, activeLayer, {
+    qa: t("report.layers.qa"),
+    warnings: t("report.layers.qaWarnings"),
+    blockers: t("report.layers.qaBlockers"),
+  });
+  const wordCount = selectedMarkdown.trim() ? selectedMarkdown.trim().split(/\s+/).length : 0;
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [actionState, setActionState] = useState<ReviewActionState>("idle");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -36,8 +44,8 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
     [reportSources.sources],
   );
   const sourceGroups = useMemo(
-    () => collectSourceTokenGroups(markdown, sourceMap, reportSources.aliases),
-    [markdown, reportSources.aliases, sourceMap],
+    () => collectSourceTokenGroups(selectedMarkdown, sourceMap, reportSources.aliases),
+    [selectedMarkdown, reportSources.aliases, sourceMap],
   );
   const citedSourceGroups = sourceGroups.filter((group) => group.source);
   const missingSourceGroups = sourceGroups.filter((group) => !group.source);
@@ -102,12 +110,15 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
       <ReportStatusStrip detail={detail} reportSources={reportSources} wordCount={wordCount} />
 
       <div className="report-review-workspace">
-        <ReportOutline markdown={markdown} />
+        <ReportOutline markdown={selectedMarkdown} />
 
         <ReportReaderWorkspace
           activeSourceId={activeSourceId}
+          activeLayer={activeLayer}
           markdown={markdown}
+          onActiveLayerChange={setActiveLayer}
           onActiveSourceChange={setActiveSourceId}
+          reportArtifact={detail.report_artifact ?? null}
           reportSources={reportSources}
         />
 

@@ -1,4 +1,4 @@
-import type { RunDetail, QCIssue } from "./types";
+import type { RunDetail, QCIssue, ReportArtifactV2 } from "./types";
 
 export type RunEventType =
   | "run_created"
@@ -30,7 +30,21 @@ export type RunEventType =
   | "writer_assembly_completed"
   | "writer_assemble_repair_completed"
   | "writer_quality_preflight"
-  | "writer_quality_preflight_repair";
+  | "writer_quality_preflight_repair"
+  | "writer_structured_repair_selected"
+  | "writer_structured_section_started"
+  | "writer_structured_section_completed"
+  | "writer_structured_section_failed"
+  | "writer_structured_report_validated"
+  | "writer_publication_contract_validated"
+  | "writer_report_artifact_v2_publication_validated"
+  | "writer_publication_contract_repair_selected"
+  | "writer_publication_contract_repaired"
+  | "writer_recommendation_delta_checked"
+  | "writer_structured_repair_failed_preserved_previous"
+  | "writer_schema_first_failed_closed"
+  | "writer_markdown_fallback_used"
+  | "writer_unified_quality_result_recorded";
 
 export interface RunEvent {
   id: number;
@@ -44,6 +58,7 @@ export interface RunEvent {
     run?: RunDetail;
     issue?: QCIssue;
     report_md?: string;
+    report_artifact?: ReportArtifactV2 | null;
     [key: string]: unknown;
   };
   created_at: string;

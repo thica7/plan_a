@@ -143,6 +143,16 @@
               "type": "string",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "include_trace_payloads",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Trace Payloads"
+            }
           }
         ],
         "responses": {
@@ -485,6 +495,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRedoRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1489,6 +1509,100 @@
         }
       }
     },
+    "/api/knowledge/documents/{document_id}/chunks": {
+      "get": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Get Knowledge Document Chunks",
+        "operationId": "get_knowledge_document_chunks_api_knowledge_documents__document_id__chunks_get",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/KnowledgeChunk"
+                  },
+                  "title": "Response Get Knowledge Document Chunks Api Knowledge Documents  Document Id  Chunks Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/knowledge/documents/{document_id}/versions": {
       "get": {
         "tags": [
@@ -1765,6 +1879,97 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/KnowledgeDocument"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/documents/rollback": {
+      "post": {
+        "tags": [
+          "knowledge"
+        ],
+        "summary": "Rollback Knowledge Documents",
+        "operationId": "rollback_knowledge_documents_api_knowledge_documents_rollback_post",
+        "parameters": [
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentRollbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeRollbackResult"
                 }
               }
             }
@@ -4611,6 +4816,22 @@
                 }
               ],
               "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
             }
           },
           {
@@ -9042,6 +9263,22 @@
             }
           },
           {
+            "name": "raw_source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Raw Source Id"
+            }
+          },
+          {
             "name": "X-User-Id",
             "in": "header",
             "required": false,
@@ -9280,6 +9517,22 @@
             }
           },
           {
+            "name": "raw_source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Raw Source Id"
+            }
+          },
+          {
             "name": "X-User-Id",
             "in": "header",
             "required": false,
@@ -9426,6 +9679,96 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SourceSnapshotResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enterprise/artifacts/{artifact_id}/preview": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Get Artifact Preview",
+        "operationId": "get_artifact_preview_api_enterprise_artifacts__artifact_id__preview_get",
+        "parameters": [
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Artifact Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactPreview"
                 }
               }
             }
@@ -10407,6 +10750,22 @@
               "type": "string",
               "default": "markdown",
               "title": "Format"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
             }
           },
           {
@@ -12619,6 +12978,72 @@
         "type": "object",
         "title": "ArtifactLifecycleReport"
       },
+      "ArtifactPreview": {
+        "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/ArtifactRecord"
+          },
+          "preview_type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "image",
+              "pdf",
+              "external",
+              "unavailable"
+            ],
+            "title": "Preview Type",
+            "default": "unavailable"
+          },
+          "preview_available": {
+            "type": "boolean",
+            "title": "Preview Available",
+            "default": false
+          },
+          "content_text": {
+            "type": "string",
+            "title": "Content Text",
+            "default": ""
+          },
+          "content_base64": {
+            "type": "string",
+            "title": "Content Base64",
+            "default": ""
+          },
+          "data_url": {
+            "type": "string",
+            "title": "Data Url",
+            "default": ""
+          },
+          "media_type": {
+            "type": "string",
+            "title": "Media Type",
+            "default": ""
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          },
+          "external_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Uri"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "artifact"
+        ],
+        "title": "ArtifactPreview"
+      },
       "ArtifactRecord": {
         "properties": {
           "id": {
@@ -13244,6 +13669,11 @@
             "type": "string",
             "title": "Recommendation",
             "default": ""
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
           }
         },
         "additionalProperties": false,
@@ -13390,6 +13820,189 @@
           "action_type"
         ],
         "title": "BusinessRecommendation"
+      },
+      "ClaimCard": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "claim_type": {
+            "type": "string",
+            "title": "Claim Type"
+          },
+          "claim": {
+            "type": "string",
+            "title": "Claim"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "evidence_strength": {
+            "type": "string",
+            "enum": [
+              "insufficient",
+              "weak",
+              "moderate",
+              "strong"
+            ],
+            "title": "Evidence Strength"
+          },
+          "support_level": {
+            "type": "string",
+            "enum": [
+              "official",
+              "triangulated_community",
+              "single_source",
+              "simulated",
+              "inferred",
+              "gap"
+            ],
+            "title": "Support Level"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Caveats"
+          },
+          "conflicts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Conflicts"
+          },
+          "applicability": {
+            "type": "string",
+            "title": "Applicability"
+          },
+          "produced_by": {
+            "type": "string",
+            "const": "analyst",
+            "title": "Produced By",
+            "default": "analyst"
+          },
+          "producer_stage": {
+            "type": "string",
+            "title": "Producer Stage"
+          },
+          "derived_from": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Derived From"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "run_id",
+          "competitor",
+          "dimension",
+          "claim_type",
+          "claim",
+          "confidence",
+          "evidence_strength",
+          "support_level",
+          "scope",
+          "applicability",
+          "producer_stage"
+        ],
+        "title": "ClaimCard"
+      },
+      "ClaimCardBundle": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimCard"
+            },
+            "type": "array",
+            "title": "Cards"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "coverage": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Coverage"
+          },
+          "gap_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Gap Count",
+            "default": 0
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "producer_context": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Producer Context"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id",
+          "competitor",
+          "dimension"
+        ],
+        "title": "ClaimCardBundle"
       },
       "ClaimRecord": {
         "properties": {
@@ -14054,6 +14667,59 @@
         ],
         "title": "CompetitorDiscovery"
       },
+      "CompetitorEdit": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove",
+              "rename",
+              "keep",
+              "mark_unrelated"
+            ],
+            "title": "Action"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "new_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Name"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Reason",
+            "default": ""
+          },
+          "source_note": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Source Note",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "name"
+        ],
+        "title": "CompetitorEdit"
+      },
       "CompetitorKB": {
         "properties": {
           "competitor": {
@@ -14106,6 +14772,12 @@
           },
           "user_personas": {
             "$ref": "#/components/schemas/UserPersonaModel"
+          },
+          "review_summary": {
+            "$ref": "#/components/schemas/ReviewThemeSummary"
+          },
+          "swot_analysis": {
+            "$ref": "#/components/schemas/SWOTAnalysis"
           },
           "source_ids": {
             "items": {
@@ -14909,6 +15581,198 @@
         ],
         "title": "DataRetentionReport"
       },
+      "DecisionCard": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "decision_type": {
+            "type": "string",
+            "enum": [
+              "dimension_winner",
+              "overall_recommendation",
+              "risk_adjusted_recommendation",
+              "why_not",
+              "battlecard_position",
+              "swot_interpretation"
+            ],
+            "title": "Decision Type"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "recommendation": {
+            "type": "string",
+            "title": "Recommendation"
+          },
+          "posture": {
+            "type": "string",
+            "enum": [
+              "strong",
+              "tentative",
+              "watch",
+              "avoid",
+              "insufficient_evidence"
+            ],
+            "title": "Posture"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale"
+          },
+          "claim_card_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Claim Card Ids"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "winner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Winner"
+          },
+          "alternatives": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Alternatives"
+          },
+          "why_not": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Why Not"
+          },
+          "risk_factors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Factors"
+          },
+          "evidence_strength": {
+            "type": "string",
+            "enum": [
+              "insufficient",
+              "weak",
+              "moderate",
+              "strong"
+            ],
+            "title": "Evidence Strength"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "produced_by": {
+            "type": "string",
+            "const": "comparator",
+            "title": "Produced By",
+            "default": "comparator"
+          },
+          "producer_stage": {
+            "type": "string",
+            "const": "comparator",
+            "title": "Producer Stage",
+            "default": "comparator"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "run_id",
+          "decision_type",
+          "subject",
+          "recommendation",
+          "posture",
+          "rationale",
+          "evidence_strength",
+          "confidence"
+        ],
+        "title": "DecisionCard"
+      },
+      "DecisionCardBundle": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionCard"
+            },
+            "type": "array",
+            "title": "Cards"
+          },
+          "matrix_snapshot": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Matrix Snapshot"
+          },
+          "coverage_by_dimension": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Coverage By Dimension"
+          },
+          "recommendation_card_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Card Id"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "producer_context": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Producer Context"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id"
+        ],
+        "title": "DecisionCardBundle"
+      },
       "DecisionReplayEvent": {
         "properties": {
           "id": {
@@ -15119,6 +15983,61 @@
           "target_document_id"
         ],
         "title": "DocumentMergeRequest"
+      },
+      "DocumentRollbackRequest": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Document Ids"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "raw_source_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Source Id"
+          },
+          "crawl_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawl Run Id"
+          },
+          "restore_previous": {
+            "type": "boolean",
+            "title": "Restore Previous",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "DocumentRollbackRequest"
       },
       "EnterpriseRunProjection": {
         "properties": {
@@ -17292,6 +18211,29 @@
               }
             ],
             "title": "Dimensions"
+          },
+          "competitors": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competitors"
+          },
+          "competitor_edits": {
+            "items": {
+              "$ref": "#/components/schemas/CompetitorEdit"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Competitor Edits"
           }
         },
         "additionalProperties": false,
@@ -17496,6 +18438,67 @@
           "content_hash"
         ],
         "title": "InterviewSynthesis"
+      },
+      "KnowledgeChunk": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "token_count": {
+            "type": "integer",
+            "title": "Token Count"
+          },
+          "embedding_model": {
+            "type": "string",
+            "title": "Embedding Model"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "crawl_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crawl Run Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "document_id",
+          "chunk_index",
+          "text",
+          "token_count",
+          "embedding_model",
+          "content_hash"
+        ],
+        "title": "KnowledgeChunk",
+        "description": "A text chunk vectorised and stored in Qdrant."
       },
       "KnowledgeClaim": {
         "properties": {
@@ -18187,6 +19190,60 @@
           "edges"
         ],
         "title": "KnowledgeGraphReadModel"
+      },
+      "KnowledgeRollbackResult": {
+        "properties": {
+          "matched_count": {
+            "type": "integer",
+            "title": "Matched Count",
+            "default": 0
+          },
+          "rolled_back_count": {
+            "type": "integer",
+            "title": "Rolled Back Count",
+            "default": 0
+          },
+          "restored_count": {
+            "type": "integer",
+            "title": "Restored Count",
+            "default": 0
+          },
+          "archived_document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Archived Document Ids"
+          },
+          "restored_document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Restored Document Ids"
+          },
+          "skipped_document_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skipped Document Ids"
+          },
+          "vector_cleanup_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Cleanup Error"
+          }
+        },
+        "type": "object",
+        "title": "KnowledgeRollbackResult",
+        "description": "Result for rolling back polluted knowledge documents."
       },
       "KnowledgeStatsResponse": {
         "properties": {
@@ -20194,6 +21251,11 @@
             "type": "boolean",
             "title": "Self Found",
             "default": false
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
           }
         },
         "additionalProperties": false,
@@ -21066,6 +22128,30 @@
             },
             "type": "array",
             "title": "Suggested Redos"
+          },
+          "gate_status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "block"
+            ],
+            "title": "Gate Status",
+            "default": "pass"
+          },
+          "blocking_gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocking Gaps"
+          },
+          "writer_constraints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Writer Constraints"
           }
         },
         "additionalProperties": false,
@@ -21232,6 +22318,126 @@
         ],
         "title": "ReportApprovalStartResponse"
       },
+      "ReportArtifactLegacyInfo": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "report_md",
+              "report_artifact_v2"
+            ],
+            "title": "Source"
+          },
+          "report_md_alias": {
+            "type": "boolean",
+            "title": "Report Md Alias",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "ReportArtifactLegacyInfo"
+      },
+      "ReportArtifactRenderCache": {
+        "properties": {
+          "core_markdown": {
+            "type": "string",
+            "title": "Core Markdown",
+            "default": ""
+          },
+          "support_markdown": {
+            "type": "string",
+            "title": "Support Markdown",
+            "default": ""
+          },
+          "audit_markdown": {
+            "type": "string",
+            "title": "Audit Markdown",
+            "default": ""
+          },
+          "full_markdown": {
+            "type": "string",
+            "title": "Full Markdown",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReportArtifactRenderCache"
+      },
+      "ReportArtifactV2": {
+        "properties": {
+          "artifact_version": {
+            "type": "integer",
+            "const": 2,
+            "title": "Artifact Version",
+            "default": 2
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "core_report": {
+            "$ref": "#/components/schemas/ReportLayer"
+          },
+          "support_appendix": {
+            "$ref": "#/components/schemas/ReportLayer"
+          },
+          "audit_log": {
+            "$ref": "#/components/schemas/ReportLayer"
+          },
+          "claim_card_bundles": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimCardBundle"
+            },
+            "type": "array",
+            "title": "Claim Card Bundles"
+          },
+          "decision_card_bundle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionCardBundle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "section_briefs": {
+            "items": {
+              "$ref": "#/components/schemas/SectionBrief"
+            },
+            "type": "array",
+            "title": "Section Briefs"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/ReportQualityAccount"
+          },
+          "render_cache": {
+            "$ref": "#/components/schemas/ReportArtifactRenderCache"
+          },
+          "legacy": {
+            "$ref": "#/components/schemas/ReportArtifactLegacyInfo"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id",
+          "core_report",
+          "render_cache",
+          "legacy"
+        ],
+        "title": "ReportArtifactV2"
+      },
       "ReportDiffLine": {
         "properties": {
           "kind": {
@@ -21255,6 +22461,138 @@
           "text"
         ],
         "title": "ReportDiffLine"
+      },
+      "ReportLayer": {
+        "properties": {
+          "layer": {
+            "type": "string",
+            "enum": [
+              "core",
+              "support",
+              "audit"
+            ],
+            "title": "Layer"
+          },
+          "markdown": {
+            "type": "string",
+            "title": "Markdown",
+            "default": ""
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ReportLayerSection"
+            },
+            "type": "array",
+            "title": "Sections"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "layer"
+        ],
+        "title": "ReportLayer"
+      },
+      "ReportLayerSection": {
+        "properties": {
+          "section_key": {
+            "type": "string",
+            "title": "Section Key"
+          },
+          "heading": {
+            "type": "string",
+            "title": "Heading"
+          },
+          "start_line": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Start Line"
+          },
+          "end_line": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "End Line"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "claim_card_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Claim Card Ids"
+          },
+          "decision_card_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Decision Card Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "section_key",
+          "heading",
+          "start_line",
+          "end_line"
+        ],
+        "title": "ReportLayerSection"
+      },
+      "ReportQualityAccount": {
+        "properties": {
+          "core_gate": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Core Gate"
+          },
+          "support_gate": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Support Gate"
+          },
+          "audit_gate": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Audit Gate"
+          },
+          "warnings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "blockers": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Blockers"
+          },
+          "revision_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision Count",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReportQualityAccount"
       },
       "ReportReleaseGate": {
         "properties": {
@@ -21454,6 +22792,36 @@
             "type": "string",
             "title": "Report Md",
             "default": ""
+          },
+          "core_report_md": {
+            "type": "string",
+            "title": "Core Report Md",
+            "default": ""
+          },
+          "support_appendix_md": {
+            "type": "string",
+            "title": "Support Appendix Md",
+            "default": ""
+          },
+          "audit_log_md": {
+            "type": "string",
+            "title": "Audit Log Md",
+            "default": ""
+          },
+          "full_report_md": {
+            "type": "string",
+            "title": "Full Report Md",
+            "default": ""
+          },
+          "report_artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportArtifactV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "claim_ids": {
             "items": {
@@ -21666,6 +23034,40 @@
             "type": "string",
             "title": "Content Hash",
             "default": ""
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "active"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
           }
         },
         "type": "object",
@@ -21909,7 +23311,8 @@
             "type": "string",
             "enum": [
               "dense",
-              "hybrid"
+              "hybrid",
+              "sparse"
             ],
             "title": "Mode",
             "default": "hybrid"
@@ -21946,6 +23349,121 @@
           "total"
         ],
         "title": "RetrievalResponse"
+      },
+      "ReviewThemeItem": {
+        "properties": {
+          "theme": {
+            "type": "string",
+            "title": "Theme"
+          },
+          "evidence": {
+            "type": "string",
+            "title": "Evidence",
+            "default": ""
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          },
+          "evidence_gap": {
+            "type": "boolean",
+            "title": "Evidence Gap",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "theme"
+        ],
+        "title": "ReviewThemeItem"
+      },
+      "ReviewThemeSummary": {
+        "properties": {
+          "competitor": {
+            "type": "string",
+            "title": "Competitor",
+            "default": ""
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension",
+            "default": "review"
+          },
+          "praise_themes": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewThemeItem"
+            },
+            "type": "array",
+            "title": "Praise Themes"
+          },
+          "complaint_themes": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewThemeItem"
+            },
+            "type": "array",
+            "title": "Complaint Themes"
+          },
+          "adoption_blockers": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewThemeItem"
+            },
+            "type": "array",
+            "title": "Adoption Blockers"
+          },
+          "switching_triggers": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewThemeItem"
+            },
+            "type": "array",
+            "title": "Switching Triggers"
+          },
+          "persona_segments": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Persona Segments"
+          },
+          "sentiment_hint": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "mixed",
+              "negative",
+              "unknown"
+            ],
+            "title": "Sentiment Hint",
+            "default": "unknown"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReviewThemeSummary"
       },
       "RevisionRecord": {
         "properties": {
@@ -22036,6 +23554,11 @@
             "minimum": 0.0,
             "title": "Convergence Ratio",
             "default": 1.0
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
           },
           "created_at": {
             "type": "string",
@@ -22371,6 +23894,40 @@
             "title": "Report Md",
             "default": ""
           },
+          "claim_card_bundles": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimCardBundle"
+            },
+            "type": "array",
+            "title": "Claim Card Bundles"
+          },
+          "decision_card_bundle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionCardBundle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "section_briefs": {
+            "items": {
+              "$ref": "#/components/schemas/SectionBrief"
+            },
+            "type": "array",
+            "title": "Section Briefs"
+          },
+          "report_artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportArtifactV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "raw_sources": {
             "items": {
               "$ref": "#/components/schemas/RawSource"
@@ -22532,7 +24089,28 @@
               "redo.routed",
               "benchmark.scored",
               "report.ready",
-              "runtime.command"
+              "runtime.command",
+              "writer_preflight",
+              "writer_segment_preflight",
+              "writer_segment_validated",
+              "writer_assembly_completed",
+              "writer_assemble_repair_completed",
+              "writer_quality_preflight",
+              "writer_quality_preflight_repair",
+              "writer_structured_repair_selected",
+              "writer_structured_section_started",
+              "writer_structured_section_completed",
+              "writer_structured_section_failed",
+              "writer_structured_report_validated",
+              "writer_publication_contract_validated",
+              "writer_report_artifact_v2_publication_validated",
+              "writer_publication_contract_repair_selected",
+              "writer_publication_contract_repaired",
+              "writer_recommendation_delta_checked",
+              "writer_structured_repair_failed_preserved_previous",
+              "writer_schema_first_failed_closed",
+              "writer_markdown_fallback_used",
+              "writer_unified_quality_result_recorded"
             ],
             "title": "Type"
           },
@@ -22993,6 +24571,21 @@
           "reason"
         ],
         "title": "RunQualitySignalCheck"
+      },
+      "RunRedoRequest": {
+        "properties": {
+          "issue_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "title": "Issue Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RunRedoRequest"
       },
       "RunSummary": {
         "properties": {
@@ -23612,6 +25205,93 @@
         ],
         "title": "RuntimeToolPolicyDecision"
       },
+      "SWOTAnalysis": {
+        "properties": {
+          "competitor": {
+            "type": "string",
+            "title": "Competitor",
+            "default": ""
+          },
+          "strengths": {
+            "items": {
+              "$ref": "#/components/schemas/SWOTItem"
+            },
+            "type": "array",
+            "title": "Strengths"
+          },
+          "weaknesses": {
+            "items": {
+              "$ref": "#/components/schemas/SWOTItem"
+            },
+            "type": "array",
+            "title": "Weaknesses"
+          },
+          "opportunities": {
+            "items": {
+              "$ref": "#/components/schemas/SWOTItem"
+            },
+            "type": "array",
+            "title": "Opportunities"
+          },
+          "threats": {
+            "items": {
+              "$ref": "#/components/schemas/SWOTItem"
+            },
+            "type": "array",
+            "title": "Threats"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SWOTAnalysis"
+      },
+      "SWOTItem": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          },
+          "evidence_gap": {
+            "type": "boolean",
+            "title": "Evidence Gap",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "SWOTItem"
+      },
       "ScenarioPack": {
         "properties": {
           "id": {
@@ -24022,6 +25702,97 @@
         "additionalProperties": false,
         "type": "object",
         "title": "SearchSmokeRequest"
+      },
+      "SectionBrief": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "section_key": {
+            "type": "string",
+            "title": "Section Key"
+          },
+          "layer": {
+            "type": "string",
+            "enum": [
+              "core",
+              "support",
+              "audit"
+            ],
+            "title": "Layer"
+          },
+          "required_questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Questions"
+          },
+          "allowed_claim_card_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Claim Card Ids"
+          },
+          "allowed_decision_card_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Decision Card Ids"
+          },
+          "allowed_source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Source Ids"
+          },
+          "must_include": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Must Include"
+          },
+          "must_not_claim": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Must Not Claim"
+          },
+          "tone": {
+            "type": "string",
+            "title": "Tone",
+            "default": ""
+          },
+          "minimum_depth": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Minimum Depth"
+          },
+          "citation_policy": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Citation Policy"
+          },
+          "repair_targets": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Repair Targets"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "section_key",
+          "layer"
+        ],
+        "title": "SectionBrief"
       },
       "SkillOutputSpec": {
         "properties": {

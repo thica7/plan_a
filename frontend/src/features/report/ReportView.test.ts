@@ -20,6 +20,13 @@ const source: RawSource = {
   snippet: "Cursor pricing details.",
   content_hash: "hash-001",
   confidence: 0.92,
+  candidate_origin: "web_fetch",
+  candidate_rank: null,
+  candidate_confidence: null,
+  fetch_method: "fetch_page",
+  quality_score: 0.92,
+  failure_reason: null,
+  metadata: {},
   extracted_at: "2026-06-03T00:00:00.000Z",
 };
 

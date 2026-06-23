@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from packages.agents.writer.publication_contract import validate_publication_contract
 from packages.agents.writer.repair import (
     apply_line_repair,
     build_writer_repair_plan,
@@ -9,6 +10,7 @@ from packages.agents.writer.repair import (
     report_regression_problem,
     section_regression_problem,
 )
+from packages.business_intel.report_sections import report_section_marker
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     AnalysisPlan,
@@ -211,6 +213,33 @@ def test_writer_repair_maps_rationale_only_decision_summary_to_section_repair() 
     assert plan.sections == ["decision_summary"]
 
 
+def test_writer_repair_maps_strong_conclusion_release_gate_to_decision_summary() -> None:
+    detail = _detail(report_md=_protectable_report())
+    issue = QCIssue(
+        id="issue-strong-conclusion-weak-source",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        target_subagent="security",
+        field_path="release_gate.strong_conclusion_uses_weak_source",
+        problem=(
+            "strong_conclusion_uses_weak_source: A strong report conclusion cites "
+            "weak or search-only evidence."
+        ),
+        redo_scope=RedoScope(
+            kind="writer_only",
+            target_subagent="security",
+            rationale="Rewrite the conclusion as tentative or recollect official sources.",
+        ),
+    )
+
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
+
+    assert plan.mode == "section"
+    assert plan.sections == ["decision_summary"]
+    assert plan.anti_regression_required is True
+
+
 def test_writer_repair_routes_release_gate_report_depth_to_full_rewrite() -> None:
     detail = _detail(report_md=_protectable_report())
     issue = QCIssue(
@@ -261,33 +290,123 @@ def test_writer_repair_routes_release_gate_depth_to_named_section_when_scoped() 
     assert plan.anti_regression_required is True
 
 
-def test_writer_repair_routes_deterministic_hygiene_damage_to_assemble() -> None:
-    damaged_report = (
-        _protectable_report()
-        + "\n\nFull list is available in Segment Evidence Pack JSON source_registry. "
-        "[source:source-0]"
-    )
-    detail = _detail(report_md=damaged_report)
+def test_writer_repair_infers_single_thin_section_for_generic_release_gate_depth() -> None:
+    detail = _detail(report_md=_release_depth_report_with_thin_decision_summary())
     issue = QCIssue(
-        id="issue-report-hygiene-required",
+        id="issue-generic-report-depth-required",
         severity="blocker",
         detected_by="coverage",
         target_agent="writer",
         field_path="release_gate.report_depth_required",
         problem=(
             "Report core richness metrics are below release minimums: "
-            "citation_hygiene_score=0.00 (<1.00)."
+            "core_section_depth_score=0.74 (<1.00)."
         ),
         redo_scope=RedoScope(
             kind="writer_only",
-            rationale="Repair report citation hygiene without rewriting the full report.",
+            rationale="Redo writer report with expanded evidence-backed core analysis.",
         ),
     )
 
     plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
 
-    assert plan.mode == "assemble"
-    assert "deterministic report structure damage" in plan.reason
+    assert plan.mode == "section"
+    assert plan.sections == ["decision_summary"]
+    assert plan.anti_regression_required is True
+
+
+def _release_depth_report_with_thin_decision_summary() -> str:
+    return """
+# Cursor vs Copilot Direct Battlecard
+
+## Executive Summary
+- Cursor is the pricing-transparency baseline for a direct L1 battlecard, while Copilot remains
+  the bundled-distribution counterweight that procurement teams will ask about. [source:pricing-1]
+- The practical recommendation should separate evidence-backed pricing clarity from still-open
+  enterprise rollout, governance, and switching-friction validation tasks. [source:feature-1]
+- Immediate action is to keep Cursor as the test baseline, gather security and buyer objection
+  evidence, and avoid presenting either vendor as an absolute winner. [source:pricing-1]
+
+## Decision Summary
+Cursor is the tentative baseline, but the decision needs more tradeoff detail. [source:pricing-1]
+
+## Competitive Findings
+- Pricing clarity gives Cursor the cleaner initial sales argument for teams that need a direct
+  standalone coding-agent comparison rather than a bundled platform conversation. [source:pricing-1]
+- Copilot's Microsoft adjacency remains the strongest procurement defense because many buyers
+  will value existing distribution, governance familiarity, and IDE continuity. [source:feature-1]
+- Persona fit is split: developer evaluators can trial Cursor directly, while platform owners may
+  prefer Copilot if rollout risk and procurement simplicity dominate. [source:pricing-1]
+- The decision implication is to sell Cursor on transparent value while treating Copilot as the
+  incumbent-friction benchmark that must be answered with evidence. [source:feature-1]
+
+## User Review Themes
+- Customer signal: direct evaluators need fast value proof and clear pricing before they invest
+  time in a replacement workflow. [source:pricing-1]
+- Adoption blocker: security review, procurement routing, and team rollout evidence remain open
+  enough that the report should keep its recommendation qualified. [source:feature-1]
+- Switching trigger: a team would move faster when standalone pricing and workflow fit are easy
+  to explain to both developers and budget owners. [source:pricing-1]
+- Evidence gap: the next collection pass should add buyer objections or user interview notes
+  before turning this into a final procurement recommendation. [source:feature-1]
+
+## Competitor Deep Dives
+- Cursor wins on standalone pricing clarity and focused developer workflow positioning, which
+  makes it a strong baseline for direct evaluation. [source:pricing-1]
+- Cursor watchout: enterprise rollout claims still need verified trust, security, and procurement
+  material before they become hard sales claims. [source:feature-1]
+- Copilot wins on bundled distribution and familiar IDE adjacency, giving it a strong default
+  defense in Microsoft-heavy accounts. [source:feature-1]
+- Copilot watchout: bundled familiarity can obscure whether the coding-agent value itself is
+  stronger for the target workflow. [source:pricing-1]
+
+## SWOT Analysis
+- Strengths: Cursor has pricing transparency and a focused evaluation story. [source:pricing-1]
+- Weaknesses: Cursor still needs firmer enterprise rollout proof. [source:feature-1]
+- Opportunities: Cursor can convert direct evaluator demand into a cleaner buyer narrative.
+  [source:pricing-1]
+- Threats: Copilot can defend through incumbent distribution and bundled procurement familiarity.
+  [source:feature-1]
+
+## Battlecard
+- Attack point: ask whether the buyer needs a focused coding workflow proof or simply a bundled
+  incumbent extension. [source:pricing-1]
+- Defense point: acknowledge Copilot's distribution advantage before returning to direct value,
+  pricing clarity, and adoption evidence. [source:feature-1]
+- Scenario: use Cursor when the buyer prioritizes fast developer evaluation and transparent
+  pricing over platform bundling. [source:pricing-1]
+- Evidence risk: do not overclaim security, governance, or enterprise rollout readiness until
+  those sources are collected. [source:feature-1]
+
+## Side-by-Side Decision Matrix
+| Dimension | Cursor | Copilot |
+| --- | --- | --- |
+| Price | clearer standalone pricing [source:pricing-1] | bundled context [source:feature-1] |
+| Feature | focused workflow story [source:pricing-1] | IDE adjacency [source:feature-1] |
+| Persona | direct evaluator fit [source:pricing-1] | platform owner continuity [source:feature-1] |
+| Security | verify first [source:feature-1] | validate governance [source:feature-1] |
+| Procurement | sell clarity [source:pricing-1] | answer bundled default [source:feature-1] |
+| Next step | collect objections [source:pricing-1] | collect rollout proof [source:feature-1] |
+
+## Source Quality & Coverage
+Verified source coverage exists for the pricing and feature dimensions. [source:pricing-1]
+
+## User Research Evidence
+User research evidence is directional and should be validated before final procurement claims.
+[source:pricing-1]
+
+## Scenario QA Checklist
+- Scenario: direct battlecard comparison with pricing, feature, and persona validation tasks.
+[source:feature-1]
+
+## Claim Validation & Evidence Risk
+The main evidence risk is overclaiming enterprise readiness before security and rollout sources
+are collected. [source:feature-1]
+
+## Evidence Appendix
+- pricing-1: Cursor pricing source. [source:pricing-1]
+- feature-1: Copilot feature source. [source:feature-1]
+""".strip()
 
 
 def test_writer_repair_claim_risk_review_wording_does_not_target_user_reviews() -> None:
@@ -329,39 +448,25 @@ def test_writer_repair_maps_battlecard_watchouts_to_battlecard_only() -> None:
     assert plan.sections == ["battlecard"]
 
 
-def test_writer_repair_routes_claim_self_consistency_warns_to_scoped_sections() -> None:
+def test_writer_repair_maps_side_by_side_decision_matrix_to_matrix_only() -> None:
     detail = _detail(report_md=_protectable_report())
-    issues: list[QCIssue] = []
-    for index, subagent in enumerate(
-        ["persona", "persona", "persona", "feature", "pricing"], start=1
-    ):
-        issues.append(
-            QCIssue(
-                id=f"claim-self-consistency-{index}",
-                severity="warn",
-                detected_by="coverage",
-                target_agent="collector",
-                target_subagent=subagent,
-                target_competitor="Cursor",
-                field_path="release_gate.claim_self_consistency_required",
-                problem=(
-                    "claim_self_consistency_required: validation is weak; "
-                    "recommended_action=rewrite_claim; failed_checks=text_support."
-                ),
-                redo_scope=RedoScope(
-                    kind="writer_only",
-                    target_subagent=subagent,
-                    target_competitor="Cursor",
-                    rationale="Rewrite weak claim or downgrade conclusion.",
-                ),
-            )
-        )
+    issue = QCIssue(
+        id="issue-side-by-side-matrix",
+        severity="blocker",
+        detected_by="citation",
+        target_agent="writer",
+        field_path="report_md.section[side_by_side_matrix]",
+        problem="Side-by-Side Decision Matrix needs fuller cited tradeoff rows.",
+        redo_scope=RedoScope(
+            kind="writer_only",
+            rationale="Repair Side-by-Side Decision Matrix only.",
+        ),
+    )
 
-    plan = build_writer_repair_plan(detail, issues, upstream_data_changed=False)
+    plan = build_writer_repair_plan(detail, [issue], upstream_data_changed=False)
 
     assert plan.mode == "section"
-    assert plan.sections == ["review_theme_summary", "competitive_findings"]
-    assert plan.anti_regression_required is True
+    assert plan.sections == ["side_by_side_matrix"]
 
 
 def test_apply_line_repair_removes_only_still_noisy_lines() -> None:
@@ -402,6 +507,81 @@ def test_replace_markdown_section_preserves_unrelated_sections() -> None:
     assert "- Strengths: keep swot. [source:pricing-1]" in updated
     assert "- Praise: users value direct workflow fit. [source:pricing-1]" in updated
     assert "Thin." not in updated
+
+
+def test_replace_markdown_section_strips_replacement_marker_for_existing_section() -> None:
+    original = (
+        "<!-- report-section:key=evidence_support layer=support -->\n"
+        "## Evidence & QA Support\n"
+        "Old support. [source:pricing-1]\n"
+    )
+    replacement = (
+        "<!-- report-section:key=evidence_support layer=support -->\n"
+        "## Evidence & QA Support\n"
+        "New support. [source:pricing-1]\n"
+    )
+
+    updated = replace_markdown_section(
+        original,
+        target_section="evidence_support",
+        output_language="en-US",
+        replacement_markdown=replacement,
+    )
+
+    assert updated.count("<!-- report-section:key=evidence_support layer=support -->") == 1
+    assert "Old support" not in updated
+    assert "New support. [source:pricing-1]" in updated
+
+
+def test_replace_markdown_section_preserves_schema_contract_marker_alignment() -> None:
+    original = "\n\n".join(
+        [
+            f"{report_section_marker('executive_summary', 'core')}\n"
+            "## Executive Summary\n"
+            "Keep summary. [source:raw-source-a]",
+            f"{report_section_marker('community_evidence_triangulation', 'core')}\n"
+            "## Community Evidence Triangulation\n"
+            "Community notes. [source:raw-source-a]",
+            f"{report_section_marker('side_by_side_matrix', 'core')}\n"
+            "## Side-by-Side Decision Matrix\n"
+            "| Dimension | Cursor |\n"
+            "| --- | --- |\n"
+            "| Pricing | Cited cell. [source:raw-source-a] |",
+            f"{report_section_marker('competitor_deep_dives', 'core')}\n"
+            "## Competitor Deep Dives\n"
+            "Deep dive. [source:raw-source-a]",
+            f"{report_section_marker('swot_analysis', 'core')}\n"
+            "## SWOT Analysis\n"
+            "SWOT. [source:raw-source-a]",
+            f"{report_section_marker('evidence_support', 'support')}\n"
+            "## Evidence & QA Support\n"
+            "Support. [source:raw-source-a]",
+            f"{report_section_marker('evidence_appendix', 'support')}\n"
+            "## Evidence Appendix\n"
+            "Old appendix. [source:raw-source-a]",
+        ]
+    )
+    replacement = (
+        "## Evidence Appendix\n"
+        "New appendix without internal terms. [source:raw-source-a]\n"
+    )
+
+    updated = replace_markdown_section(
+        original,
+        target_section="evidence_appendix",
+        output_language="en-US",
+        replacement_markdown=replacement,
+    )
+    result = validate_publication_contract(
+        updated,
+        structured_report=None,
+        allowed_source_ids={"raw-source-a"},
+        output_language="en-US",
+    )
+
+    assert result.passed
+    assert "Old appendix" not in updated
+    assert "New appendix without internal terms. [source:raw-source-a]" in updated
 
 
 def test_replace_markdown_section_replaces_zh_cn_heading_without_duplicate() -> None:
@@ -824,7 +1004,8 @@ def test_section_regression_allows_review_theme_fallback_evidence_gap() -> None:
     assert problem is None
 
 
-def test_report_regression_ignores_absolute_quality_gate_failure_without_relative_regression() -> None:
+def test_report_regression_ignores_absolute_quality_gate_failure_without_relative_regression(
+) -> None:
     previous = RunDetail(
         id="run-prev",
         topic="AI coding",

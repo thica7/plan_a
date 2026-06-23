@@ -23,6 +23,7 @@ from packages.schema.models import (
     PricingModel,
     PricingTier,
     RawSource,
+    ReflectionRecord,
 )
 
 
@@ -116,6 +117,68 @@ def test_evidence_pack_source_registry_represents_every_accepted_source() -> Non
         )
     )
     assert result.metrics.largest_source_projection_chars >= expected_projection_chars
+
+
+def test_evidence_pack_only_marks_vendor_trusted_sources_as_official() -> None:
+    sources = [
+        RawSource(
+            id="cursor-official",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            url="https://cursor.com/pricing",
+            snippet="Cursor Pro costs $20 per month.",
+            content_hash="cursor-official-hash",
+            confidence=0.96,
+        ),
+        RawSource(
+            id="cursor-third-party",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing guide",
+            url="https://example.com/cursor-pricing-guide",
+            snippet="A third-party guide estimates Cursor pricing.",
+            content_hash="cursor-third-party-hash",
+            confidence=0.9,
+        ),
+        RawSource(
+            id="cursor-community",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing forum",
+            url="https://forum.cursor.com/t/pricing",
+            snippet="Users discuss Cursor pricing.",
+            content_hash="cursor-community-hash",
+            confidence=0.92,
+            metadata={"community_evidence": True},
+        ),
+    ]
+
+    result = build_writer_evidence_pack(_detail_with_sources(sources))
+
+    group = result.pack.groups[0]
+    assert group.official_source_ids == ["cursor-official"]
+    assert "cursor-third-party" not in group.official_source_ids
+    assert "cursor-community" in group.community_source_ids
+
+    registry_by_id = {item.id: item for item in result.pack.source_registry}
+    assert registry_by_id["cursor-official"].authority_role == "vendor_official"
+    assert registry_by_id["cursor-third-party"].authority_role == "third_party"
+    assert registry_by_id["cursor-community"].authority_role == "community"
+
+    prompt_payload = json.loads(result.to_prompt_json())
+    roles_by_id = {
+        item["id"]: item["authority_role"]
+        for item in prompt_payload["source_registry"]
+    }
+    assert roles_by_id == {
+        "cursor-official": "vendor_official",
+        "cursor-third-party": "third_party",
+        "cursor-community": "community",
+    }
 
 
 def test_writer_evidence_pack_includes_all_raw_sources() -> None:
@@ -507,12 +570,12 @@ def test_segment_matrix_keeps_full_matrix_cell_value() -> None:
     )
 
     result = build_writer_evidence_pack(detail)
-    swot_segment = next(
+    matrix_segment = next(
         segment
         for segment in result.segment_inputs()
-        if segment["segment_name"] == "swot_matrix"
+        if segment["segment_name"] == "side_by_side_matrix"
     )
-    cells = swot_segment["matrix"]["cells"]
+    cells = matrix_segment["matrix"]["cells"]
 
     assert len(long_value) > 240
     assert cells[0]["value"] == long_value
@@ -1055,6 +1118,101 @@ def test_segment_inputs_keep_non_core_dimensions_in_broad_segments() -> None:
 
     assert "cursor-security" in by_name["decision_summary"]["allowed_source_ids"]
     assert "cursor-security" in by_name["support_appendix"]["allowed_source_ids"]
+
+
+def test_segment_inputs_split_matrix_swot_and_l1_battlecard() -> None:
+    sources = [
+        RawSource(
+            id="cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor Pro has visible pricing for developer teams.",
+            content_hash="cursor-pricing-hash",
+            confidence=0.92,
+        ),
+        RawSource(
+            id="copilot-feature",
+            competitor="GitHub Copilot",
+            dimension="feature",
+            source_type="webpage_verified",
+            title="GitHub Copilot feature",
+            snippet="GitHub Copilot benefits from Microsoft and GitHub workflow integration.",
+            content_hash="copilot-feature-hash",
+            confidence=0.91,
+        ),
+    ]
+    detail = _detail_with_sources(sources)
+    detail.plan.competitors = ["Cursor", "GitHub Copilot"]
+    detail.plan.dimensions = ["pricing", "feature"]
+    detail.plan.competitor_layer = "L1"
+
+    result = build_writer_evidence_pack(detail)
+    segments = result.segment_inputs()
+    by_name = {segment["segment_name"]: segment for segment in segments}
+
+    assert "swot_matrix" not in by_name
+    assert by_name["side_by_side_matrix"]["section_id"] == "side_by_side_matrix"
+    assert by_name["swot_analysis"]["section_id"] == "swot_analysis"
+    assert by_name["battlecard"]["section_id"] == "battlecard"
+    assert by_name["side_by_side_matrix"]["section_key"] == "side_by_side_matrix"
+    assert by_name["swot_analysis"]["section_key"] == "swot_analysis"
+    assert by_name["battlecard"]["section_key"] == "battlecard"
+    assert set(by_name["side_by_side_matrix"]["allowed_source_ids"]) == {
+        "cursor-pricing",
+        "copilot-feature",
+    }
+
+
+def test_repair_segment_inputs_maps_legacy_swot_matrix_to_split_sections() -> None:
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor pricing creates a buyer-facing advantage.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.92,
+    )
+    detail = _detail_with_sources([source])
+    detail.plan.competitor_layer = "L1"
+
+    result = build_writer_evidence_pack(detail)
+    payloads = result.repair_segment_inputs(["swot_matrix"])
+    segment_names = [
+        segment["segment_name"]
+        for payload in payloads
+        for segment in payload["segments"]
+    ]
+
+    assert segment_names == ["side_by_side_matrix", "swot_analysis"]
+
+
+def test_repair_segment_inputs_routes_side_by_side_decision_matrix_only() -> None:
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor pricing creates a buyer-facing advantage.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.92,
+    )
+    detail = _detail_with_sources([source])
+    detail.plan.competitor_layer = "L1"
+
+    result = build_writer_evidence_pack(detail)
+    payloads = result.repair_segment_inputs(["Side-by-Side Decision Matrix"])
+    segment_names = [
+        segment["segment_name"]
+        for payload in payloads
+        for segment in payload["segments"]
+    ]
+
+    assert segment_names == ["side_by_side_matrix"]
 
 
 def test_segment_inputs_treat_customer_dimensions_as_user_research() -> None:
@@ -2027,6 +2185,39 @@ def test_segment_inputs_include_user_research_gap_without_user_research_sources(
     assert segment["segment_input_chars"] > 0
 
 
+def test_segment_inputs_include_section_key_and_layer_metadata() -> None:
+    sources = [
+        RawSource(
+            id="cursor-pricing",
+            competitor="Cursor",
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Cursor pricing",
+            snippet="Cursor pricing evidence.",
+            content_hash="cursor-pricing-hash",
+            confidence=0.96,
+        )
+    ]
+
+    result = build_writer_evidence_pack(_detail_with_sources(sources))
+    segments_by_name = {
+        str(segment["segment_name"]): segment for segment in result.segment_inputs()
+    }
+
+    assert segments_by_name["decision_summary"]["section_key"] == "decision_summary"
+    assert segments_by_name["decision_summary"]["layer"] == "core"
+    assert segments_by_name["user_research"]["section_key"] == "review_theme_summary"
+    assert segments_by_name["user_research"]["layer"] == "core"
+    assert segments_by_name["side_by_side_matrix"]["section_key"] == "side_by_side_matrix"
+    assert segments_by_name["side_by_side_matrix"]["layer"] == "core"
+    assert segments_by_name["swot_analysis"]["section_key"] == "swot_analysis"
+    assert segments_by_name["swot_analysis"]["layer"] == "core"
+    assert segments_by_name["business_implications"]["section_key"] == "business_implications"
+    assert segments_by_name["business_implications"]["layer"] == "core"
+    assert segments_by_name["support_appendix"]["section_key"] == "evidence_support"
+    assert segments_by_name["support_appendix"]["layer"] == "support"
+
+
 def test_segment_citation_validation_rejects_unsupplied_source_id() -> None:
     source = RawSource(
         id="cursor-pricing",
@@ -2086,10 +2277,8 @@ def test_segment_citation_sanitizer_normalizes_spacing_and_combined_sources() ->
 
     assert "[source: raw-source-openai-codex-pricing]" not in sanitized
     assert "[source:raw-source-openai-codex-pricing]" in sanitized
-    assert (
-        "[source:raw-source-openai-codex-pricing][source:raw-source-openai-api-pricing]"
-        in sanitized
-    )
+    assert sanitized.count("[source:raw-source-openai-codex-pricing]") == 1
+    assert "[source:raw-source-openai-api-pricing]" in sanitized
     assert (
         result.validate_segment_citations(
             sanitized,
@@ -2111,6 +2300,59 @@ def test_segment_citation_sanitizer_normalizes_spacing_and_combined_sources() ->
 
     assert invalid_sources
     assert "raw-source-missing" in invalid_sources[0]
+
+
+def test_segment_citation_sanitizer_normalizes_full_width_colon() -> None:
+    source = RawSource(
+        id="raw-source-cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor pricing is documented.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+    )
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+
+    sanitized = result.sanitize_segment_citations(
+        "Cursor pricing is supported. [source：raw-source-cursor-pricing]",
+        allowed_source_ids={"raw-source-cursor-pricing"},
+    )
+
+    assert "[source：raw-source-cursor-pricing]" not in sanitized
+    assert "[source:raw-source-cursor-pricing]" in sanitized
+    assert result.validate_segment_citations(
+        sanitized,
+        allowed_source_ids={"raw-source-cursor-pricing"},
+    ) == []
+
+
+def test_segment_citation_sanitizer_normalizes_chinese_source_label() -> None:
+    source = RawSource(
+        id="raw-source-cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        snippet="Cursor pricing is documented.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.96,
+    )
+    result = build_writer_evidence_pack(_detail_with_sources([source]))
+    chinese_source_label = "\u6765\u6e90"
+
+    sanitized = result.sanitize_segment_citations(
+        f"Cursor pricing is supported. [{chinese_source_label}:raw-source-cursor-pricing]",
+        allowed_source_ids={"raw-source-cursor-pricing"},
+    )
+
+    assert f"[{chinese_source_label}:raw-source-cursor-pricing]" not in sanitized
+    assert "[source:raw-source-cursor-pricing]" in sanitized
+    assert result.validate_segment_citations(
+        sanitized,
+        allowed_source_ids={"raw-source-cursor-pricing"},
+    ) == []
 
 
 def test_segment_citation_sanitizer_prefixes_allowed_bare_raw_source_hash() -> None:
@@ -2254,3 +2496,95 @@ def test_segment_citation_validation_rejects_full_width_source_outside_allowlist
     )
 
     assert errors == ["cursor-pricing"]
+
+
+def test_report_brief_falls_back_for_manual_pack_result() -> None:
+    result = WriterEvidencePackResult(
+        pack=WriterEvidencePack(
+            source_registry=[
+                WriterSourceRegistryItem(
+                    id="cursor-pricing",
+                    competitor="Cursor",
+                    dimension="pricing",
+                    source_type="webpage_verified",
+                    title="Cursor pricing",
+                    confidence=0.9,
+                    represented_by=["fact:cursor-pricing"],
+                )
+            ],
+            matrix={"winner_by_dimension": {"pricing": "Cursor"}},
+        ),
+        metrics=WriterEvidencePackMetrics(),
+    )
+
+    payload = json.loads(result.to_report_brief_prompt_json())
+    telemetry = result.telemetry_payload()
+
+    assert payload["schema_version"] == "writer_report_brief.v1"
+    assert payload["allowed_source_ids"] == ["cursor-pricing"]
+    assert payload["gate_status"] == "pass"
+    assert "raw_sources" not in payload
+    assert any(
+        "comparison_matrix.winner_by_dimension" in constraint
+        for constraint in payload["writer_constraints"]
+    )
+    assert telemetry["writer_report_brief_gate_status"] == "pass"
+    assert telemetry["writer_report_brief_chars"] > 0
+
+
+def test_report_brief_inherits_reflector_gate_and_constraints() -> None:
+    source = RawSource(
+        id="cursor-pricing",
+        competitor="Cursor",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.example/pricing",
+        snippet="Cursor Pro is priced at $20/month for individual developers.",
+        content_hash="cursor-pricing-hash",
+        confidence=0.94,
+    )
+    detail = _detail_with_sources([source])
+    detail.plan.competitors = ["Cursor"]
+    detail.plan.dimensions = ["pricing"]
+    detail.comparison_matrix = ComparisonMatrix(
+        competitors=["Cursor"],
+        dimensions=["pricing"],
+        cells=[
+            ComparisonCell(
+                competitor="Cursor",
+                dimension="pricing",
+                value="Cursor Pro is priced at $20/month for individual developers.",
+                source_ids=["cursor-pricing"],
+                confidence=0.94,
+            )
+        ],
+        winner_by_dimension={"pricing": "Cursor"},
+        summary=["Cursor has clear individual pricing."],
+    )
+    detail.reflections.append(
+        ReflectionRecord(
+            iteration=1,
+            coverage_gaps=["Need independent pricing confirmation."],
+            gate_status="block",
+            blocking_gaps=["Comparison cell for Cursor / pricing has no source_ids."],
+            writer_constraints=["Mention pricing caveat before recommendation."],
+        )
+    )
+
+    result = build_writer_evidence_pack(detail)
+    payload = json.loads(result.to_report_brief_prompt_json())
+
+    assert result.report_brief is not None
+    assert result.report_brief.gate_status == "block"
+    assert result.report_brief.blocking_gaps == [
+        "Comparison cell for Cursor / pricing has no source_ids."
+    ]
+    assert "Mention pricing caveat before recommendation." in result.report_brief.writer_constraints
+    assert payload["schema_version"] == "writer_report_brief.v1"
+    assert payload["gate_status"] == "block"
+    assert payload["allowed_source_ids"] == ["cursor-pricing"]
+    assert payload["matrix"]["winner_by_dimension"]["pricing"] == "Cursor"
+    assert payload["evidence_groups"]
+    assert "raw_sources" not in payload
+    assert "groups" not in payload

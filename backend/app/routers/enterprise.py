@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import csv
 import html
 import io
@@ -69,6 +70,7 @@ from packages.enterprise import (
 from packages.enterprise import (
     report_release_gate_scope as _report_release_gate_scope,
 )
+from packages.enterprise.store import DEFAULT_WORKSPACE_ID
 from packages.evals import build_enterprise_evalops_report, build_evalops_release_contract
 from packages.governance import (
     ModelPolicyReport,
@@ -120,6 +122,7 @@ from packages.schema.api_dto import (
 from packages.schema.enterprise import (
     ArtifactCreateRequest,
     ArtifactCreateResult,
+    ArtifactPreview,
     ArtifactRecord,
     AuditLogRecord,
     BusinessIntelPlan,
@@ -201,6 +204,8 @@ RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 
 _KB_SYNC_JOBS: dict[str, KnowledgeEvidenceSyncJobRecord] = {}
 _KB_SYNC_JOBS_LOCK = RLock()
+_ARTIFACT_TEXT_PREVIEW_BYTES = 200_000
+_ARTIFACT_BINARY_PREVIEW_BYTES = 2_000_000
 
 
 @router.get("/enterprise/workspaces", response_model=list[WorkspaceRecord])
@@ -302,12 +307,20 @@ def list_notifications(
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
     workspace_id: str | None = None,
+    project_id: str | None = None,
     status: str | None = None,
     limit: int = 100,
 ) -> list[NotificationRecord]:
     scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "notification:read")
+    if project_id is not None:
+        project = store.get_project(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if project.workspace_id != scoped_workspace_id:
+            raise HTTPException(status_code=403, detail="Project is outside workspace scope")
     return store.list_notifications(
         workspace_id=scoped_workspace_id,
+        project_id=project_id,
         status=status,
         limit=limit,
     )
@@ -509,7 +522,11 @@ def get_runtime_policy_decision(
     estimated_input_tokens: Annotated[int, Query(ge=0)] = 0,
     estimated_output_tokens: Annotated[int, Query(ge=0)] = 0,
 ) -> RuntimePolicyDecision:
-    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "audit:read")
+    scoped_workspace_id = _required_scoped_workspace_id(
+        user,
+        workspace_id,
+        "audit:read",
+    )
     return build_runtime_policy_decision(
         settings,
         store=store,
@@ -1969,6 +1986,7 @@ def list_artifacts(
     project_id: str | None = None,
     evidence_id: str | None = None,
     report_version_id: str | None = None,
+    raw_source_id: str | None = None,
 ) -> list[ArtifactRecord]:
     artifacts, _ = _scoped_artifacts(
         store=store,
@@ -1977,6 +1995,7 @@ def list_artifacts(
         project_id=project_id,
         evidence_id=evidence_id,
         report_version_id=report_version_id,
+        raw_source_id=raw_source_id,
     )
     return artifacts
 
@@ -1989,6 +2008,7 @@ def get_artifact_lifecycle_report(
     project_id: str | None = None,
     evidence_id: str | None = None,
     report_version_id: str | None = None,
+    raw_source_id: str | None = None,
 ) -> ArtifactLifecycleReport:
     artifacts, scoped_workspace_id = _scoped_artifacts(
         store=store,
@@ -1997,6 +2017,7 @@ def get_artifact_lifecycle_report(
         project_id=project_id,
         evidence_id=evidence_id,
         report_version_id=report_version_id,
+        raw_source_id=raw_source_id,
     )
     return build_artifact_lifecycle_report(
         artifacts,
@@ -2077,6 +2098,55 @@ def create_source_snapshot(
         )
     except ArtifactStorageError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/enterprise/artifacts/{artifact_id}/preview", response_model=ArtifactPreview)
+def get_artifact_preview(
+    artifact_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    artifact_storage: ArtifactStorageDep,
+) -> ArtifactPreview:
+    artifact = store.get_artifact(artifact_id)
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    _require_workspace_access(user, artifact.workspace_id, "artifact:read")
+    try:
+        preview_type = _artifact_preview_type(artifact)
+        if preview_type == "text":
+            preview = artifact_storage.read_text(
+                artifact,
+                max_bytes=_ARTIFACT_TEXT_PREVIEW_BYTES,
+            )
+        elif preview_type in {"image", "pdf"}:
+            preview_bytes = artifact_storage.read_bytes(
+                artifact,
+                max_bytes=_ARTIFACT_BINARY_PREVIEW_BYTES,
+            )
+            preview = _binary_artifact_preview(artifact, preview_bytes, preview_type)
+        else:
+            preview = None
+    except ArtifactStorageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if isinstance(preview, ArtifactPreview):
+        return preview
+    if preview is None:
+        preview_type = "external" if artifact.storage_backend != "local" else "unavailable"
+        return ArtifactPreview(
+            artifact=artifact,
+            preview_type=preview_type,
+            preview_available=False,
+            external_uri=artifact.uri if artifact.storage_backend != "local" else None,
+        )
+    content_text, truncated = preview
+    return ArtifactPreview(
+        artifact=artifact,
+        preview_type="text",
+        preview_available=True,
+        content_text=content_text,
+        media_type=artifact.media_type,
+        truncated=truncated,
+    )
 
 
 @router.get("/enterprise/artifacts/{artifact_id}", response_model=ArtifactRecord)
@@ -2232,13 +2302,22 @@ def export_report_version(
     user: EnterpriseUserDep,
     artifact_storage: ArtifactStorageDep,
     format: str = "markdown",
+    scope: str | None = None,
 ) -> ArtifactCreateResult:
     version = _report_version_or_404(version_id, store, user, "report:read")
     _require_workspace_access(user, version.workspace_id, "artifact:write")
     project = _project_or_404(version.project_id, store, user, "artifact:write")
     if project.workspace_id != version.workspace_id:
         raise HTTPException(status_code=400, detail="Report workspace does not match project")
-    body, filename, media_type = _report_export_payload(version, format)
+    body, filename, media_type = _report_export_payload(version, format, scope=scope)
+    metadata = {
+        "report_version_id": version.id,
+        "report_version_number": version.version_number,
+        "report_status": version.status,
+        "export_format": _normalize_report_export_format(format),
+    }
+    if scope is not None:
+        metadata["report_scope"] = _normalize_report_export_scope(scope)
     request = ArtifactCreateRequest(
         workspace_id=version.workspace_id,
         project_id=version.project_id,
@@ -2253,12 +2332,7 @@ def export_report_version(
             "report_status": version.status,
         },
         content_text=body,
-        metadata={
-            "report_version_id": version.id,
-            "report_version_number": version.version_number,
-            "report_status": version.status,
-            "export_format": _normalize_report_export_format(format),
-        },
+        metadata=metadata,
     )
     try:
         artifact = artifact_storage.store(request, actor_id=user.user_id)
@@ -2284,6 +2358,60 @@ def _enforce_artifact_report_scope(
     return version
 
 
+def _artifact_preview_type(artifact: ArtifactRecord) -> str:
+    media_type = artifact.media_type.casefold().strip()
+    if media_type.startswith("text/") or media_type in {
+        "application/json",
+        "application/ld+json",
+        "application/xml",
+        "application/xhtml+xml",
+        "application/javascript",
+    }:
+        return "text"
+    if artifact.artifact_type in {
+        "web_snapshot",
+        "raw_text",
+        "interview_record",
+        "survey_response",
+        "manual_transcript",
+    }:
+        return "text"
+    if media_type.startswith("image/"):
+        return "image"
+    if media_type == "application/pdf" or artifact.artifact_type == "pdf":
+        return "pdf"
+    return "unavailable"
+
+
+def _binary_artifact_preview(
+    artifact: ArtifactRecord,
+    preview_bytes: tuple[bytes, bool] | None,
+    preview_type: str,
+) -> ArtifactPreview | None:
+    if preview_bytes is None:
+        return None
+    payload, truncated = preview_bytes
+    if truncated:
+        return ArtifactPreview(
+            artifact=artifact,
+            preview_type=preview_type,
+            preview_available=False,
+            media_type=artifact.media_type,
+            truncated=True,
+        )
+    content_base64 = base64.b64encode(payload).decode("ascii")
+    data_url = f"data:{artifact.media_type};base64,{content_base64}"
+    return ArtifactPreview(
+        artifact=artifact,
+        preview_type=preview_type,
+        preview_available=True,
+        content_base64=content_base64,
+        data_url=data_url,
+        media_type=artifact.media_type,
+        truncated=False,
+    )
+
+
 def _scoped_artifacts(
     *,
     store: EnterpriseStore,
@@ -2292,6 +2420,7 @@ def _scoped_artifacts(
     project_id: str | None,
     evidence_id: str | None,
     report_version_id: str | None,
+    raw_source_id: str | None,
 ) -> tuple[list[ArtifactRecord], str | None]:
     scoped_workspace_id = _scoped_workspace_id(user, workspace_id, "artifact:read")
     version: ReportVersionRecord | None = None
@@ -2320,6 +2449,7 @@ def _scoped_artifacts(
             project_id=project_id,
             evidence_id=evidence_id,
             report_version_id=report_version_id,
+            raw_source_id=raw_source_id,
         ),
         scoped_workspace_id,
     )
@@ -2741,14 +2871,40 @@ def _normalize_report_export_format(value: str) -> str:
     )
 
 
-def _report_export_payload(version: ReportVersionRecord, format: str) -> tuple[str, str, str]:
+def _normalize_report_export_scope(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized in {"core", "support", "audit", "full"}:
+        return normalized
+    raise HTTPException(
+        status_code=400,
+        detail="Unsupported report export scope. Use core, support, audit, or full.",
+    )
+
+
+def _report_markdown_for_scope(version: ReportVersionRecord, scope: str) -> str:
+    normalized = _normalize_report_export_scope(scope)
+    if normalized == "core":
+        return version.core_report_md or version.report_md
+    if normalized == "support":
+        return version.support_appendix_md
+    if normalized == "audit":
+        return version.audit_log_md
+    return version.full_report_md or version.report_md
+
+
+def _report_export_payload(
+    version: ReportVersionRecord,
+    format: str,
+    scope: str | None = None,
+) -> tuple[str, str, str]:
     normalized = _normalize_report_export_format(format)
+    report_md = version.report_md if scope is None else _report_markdown_for_scope(version, scope)
     filename_base = f"report-v{version.version_number}-{version.id}"
     if normalized == "markdown":
-        return version.report_md, f"{filename_base}.md", "text/markdown"
+        return report_md, f"{filename_base}.md", "text/markdown"
     if normalized == "html":
         title = html.escape(f"Report v{version.version_number} / {version.topic_normalized}")
-        body = html.escape(version.report_md)
+        body = html.escape(report_md)
         return (
             (
                 "<!doctype html>\n"
@@ -2776,7 +2932,7 @@ def _report_export_payload(version: ReportVersionRecord, format: str) -> tuple[s
     writer.writerow(["topic_normalized", version.topic_normalized])
     writer.writerow([])
     writer.writerow(["line_number", "text"])
-    for index, line in enumerate(version.report_md.splitlines(), start=1):
+    for index, line in enumerate(report_md.splitlines(), start=1):
         writer.writerow([index, line])
     return output.getvalue(), f"{filename_base}.csv", "text/csv"
 
@@ -3070,6 +3226,18 @@ def _scoped_workspace_id(
         _require_workspace_access(user, user.workspace_id, action)
         return user.workspace_id
     return None
+
+
+def _required_scoped_workspace_id(
+    user: EnterpriseUserContext,
+    workspace_id: str | None,
+    action: str,
+) -> str:
+    scoped_workspace_id = _scoped_workspace_id(user, workspace_id, action)
+    if scoped_workspace_id is not None:
+        return scoped_workspace_id
+    _require_workspace_access(user, DEFAULT_WORKSPACE_ID, action)
+    return DEFAULT_WORKSPACE_ID
 
 
 def _require_workspace_access(

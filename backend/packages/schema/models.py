@@ -36,6 +36,7 @@ class QCIssue(BaseModel):
     problem: str
     redo_scope: RedoScope
     self_found: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class RedoScopeSeedCase(BaseModel):
@@ -56,6 +57,9 @@ class ReflectionRecord(BaseModel):
     confidence_outliers: list[str] = Field(default_factory=list)
     cross_competitor_gaps: list[str] = Field(default_factory=list)
     suggested_redos: list[RedoScope] = Field(default_factory=list)
+    gate_status: Literal["pass", "warn", "block"] = "pass"
+    blocking_gaps: list[str] = Field(default_factory=list)
+    writer_constraints: list[str] = Field(default_factory=list)
 
 
 class AnalysisPlanTask(BaseModel):
@@ -315,6 +319,7 @@ class RevisionRecord(BaseModel):
     issue_count_before: int = 0
     issue_count_after: int = 0
     convergence_ratio: float = Field(default=1.0, ge=0.0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

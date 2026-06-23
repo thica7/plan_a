@@ -566,6 +566,21 @@ async def test_report_approval_activities_block_weak_report_version() -> None:
                 approver_id="approver-1",
             )
         )
+    notifications = [
+        item
+        for item in store.list_notifications("default-workspace")
+        if item.notification_type == "release_gate_blocked"
+    ]
+
+    assert notifications
+    notification = notifications[0]
+    assert notification.resource_id == report_version_id
+    assert notification.resource_type == "report_version"
+    assert notification.created_by == "report-approval-workflow"
+    assert notification.metadata["report_version_id"] == report_version_id
+    assert notification.metadata["blocker_count"] >= 1
+    assert notification.metadata["issue_count"] >= 1
+    assert notification.metadata["issues"]
 
 
 @pytest.mark.asyncio

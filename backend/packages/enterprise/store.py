@@ -58,7 +58,10 @@ from packages.schema.enterprise import (
     WorkspaceRecord,
     WorkspaceUsageSummary,
 )
-from packages.sources import normalize_report_version_sources
+from packages.sources import (
+    normalize_report_version_sources,
+    preserve_existing_report_layers_for_legacy_upsert,
+)
 
 DEFAULT_WORKSPACE_ID = "default-workspace"
 DEFAULT_USER_ID = "system-user"
@@ -144,6 +147,7 @@ class EnterpriseStore(Protocol):
         self,
         workspace_id: str | None = None,
         *,
+        project_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[NotificationRecord]: ...
@@ -237,6 +241,7 @@ class EnterpriseStore(Protocol):
         project_id: str | None = None,
         evidence_id: str | None = None,
         report_version_id: str | None = None,
+        raw_source_id: str | None = None,
     ) -> list[ArtifactRecord]: ...
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None: ...
@@ -739,6 +744,7 @@ class EnterpriseMemoryStore:
         self,
         workspace_id: str | None = None,
         *,
+        project_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[NotificationRecord]:
@@ -746,6 +752,8 @@ class EnterpriseMemoryStore:
             records = list(self.notifications.values())
             if workspace_id:
                 records = [item for item in records if item.workspace_id == workspace_id]
+            if project_id:
+                records = [item for item in records if item.project_id == project_id]
             if status:
                 records = [item for item in records if item.status == status]
             records = sorted(records, key=lambda item: item.created_at, reverse=True)
@@ -1072,6 +1080,7 @@ class EnterpriseMemoryStore:
         project_id: str | None = None,
         evidence_id: str | None = None,
         report_version_id: str | None = None,
+        raw_source_id: str | None = None,
     ) -> list[ArtifactRecord]:
         with self._lock:
             records = list(self.artifacts.values())
@@ -1083,6 +1092,10 @@ class EnterpriseMemoryStore:
                 records = [item for item in records if item.evidence_id == evidence_id]
             if report_version_id:
                 records = [item for item in records if item.report_version_id == report_version_id]
+            if raw_source_id:
+                records = [
+                    item for item in records if _artifact_matches_raw_source(item, raw_source_id)
+                ]
             return sorted(records, key=lambda item: item.created_at, reverse=True)
 
     def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
@@ -1182,11 +1195,12 @@ class EnterpriseMemoryStore:
 
     def upsert_report_version(self, version: ReportVersionRecord) -> ReportVersionRecord:
         with self._lock:
+            before_record = self.report_versions.get(version.id)
+            version = preserve_existing_report_layers_for_legacy_upsert(version, before_record)
             version = normalize_report_version_sources(
                 version,
                 self._report_scope_evidence_locked(version),
             )
-            before_record = self.report_versions.get(version.id)
             self.report_versions[version.id] = version
             self._append_audit(
                 workspace_id=version.workspace_id,
@@ -1705,6 +1719,28 @@ def source_registry_from_evidence(evidence: EvidenceRecord) -> SourceRegistryRec
             "last_dimension": evidence.dimension,
         },
     )
+
+
+def _artifact_matches_raw_source(artifact: ArtifactRecord, raw_source_id: str) -> bool:
+    expected = raw_source_id.strip()
+    if not expected:
+        return True
+    metadata = artifact.metadata
+    for key in ("raw_source_id", "kb_raw_source_id"):
+        value = metadata.get(key)
+        if value is not None and str(value).strip() == expected:
+            return True
+    lifecycle = metadata.get("artifact_lifecycle")
+    if isinstance(lifecycle, dict):
+        links = lifecycle.get("links")
+        if isinstance(links, dict):
+            value = links.get("raw_source_id") or links.get("kb_raw_source_id")
+            if value is not None and str(value).strip() == expected:
+                return True
+    source_tokens = metadata.get("source_tokens")
+    if isinstance(source_tokens, list):
+        return expected in {str(item).strip() for item in source_tokens if item is not None}
+    return False
 
 
 def _source_location(evidence: EvidenceRecord) -> tuple[str, str | None]:

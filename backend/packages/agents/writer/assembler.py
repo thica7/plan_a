@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import re
-from typing import Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 
 from packages.agents.writer.segment_contract import (
     CORE_HEADING_KEYS,
+    SECTION_ALLOWED_KEYS,
     SUPPORT_HEADING_KEYS,
     heading_key_for,
 )
+from packages.agents.writer.structured_report import StructuredReport
+from packages.business_intel.report_sections import SectionLayer, report_section_marker
 from packages.i18n.language import report_label
 
 CANONICAL_REPORT_ORDER: tuple[str, ...] = CORE_HEADING_KEYS + SUPPORT_HEADING_KEYS
@@ -40,14 +43,98 @@ class AssembledReport:
 
 
 @dataclass(frozen=True)
+class ReportSectionFragment:
+    markdown: str
+    section_key: str
+    layer: str
+    segment_name: str
+    competitor: str | None = None
+
+
+@dataclass(frozen=True)
+class StructuredReportAssemblyResult:
+    report: StructuredReport
+    telemetry: dict[str, object]
+
+
+class StructuredReportAssembler:
+    def assemble(
+        self,
+        *,
+        report: StructuredReport,
+        expected_competitors: list[str],
+    ) -> StructuredReportAssemblyResult:
+        expected = list(dict.fromkeys(expected_competitors))
+        deep_dive_names = [item.competitor for item in report.core.competitor_deep_dives]
+        user_theme_names = [
+            item.competitor
+            for item in report.core.user_review_themes.competitor_themes
+        ]
+        swot_names = [item.competitor for item in report.core.swot.competitors]
+        battlecard_names = [item.competitor for item in report.core.battlecard.plays]
+        telemetry = {
+            "expected_competitors": expected,
+            "missing_deep_dive_competitors": _missing(expected, deep_dive_names),
+            "duplicate_deep_dive_competitors": _duplicates(deep_dive_names),
+            "missing_user_theme_competitors": _missing(expected, user_theme_names),
+            "duplicate_user_theme_competitors": _duplicates(user_theme_names),
+            "missing_swot_competitors": _missing(expected, swot_names),
+            "duplicate_swot_competitors": _duplicates(swot_names),
+            "missing_battlecard_competitors": _missing(expected, battlecard_names),
+            "duplicate_battlecard_competitors": _duplicates(battlecard_names),
+        }
+        return StructuredReportAssemblyResult(report=report, telemetry=telemetry)
+
+
+@dataclass(frozen=True)
 class _SectionBlock:
     heading: str
     body: str
     key: str | None
 
 
+def assemble_report_fragments(
+    fragments: Sequence[ReportSectionFragment],
+    *,
+    output_language: object,
+    competitors: Sequence[str],
+) -> AssembledReport:
+    assembled = _assemble_report_blocks(
+        [
+            (fragment.markdown, fragment.section_key, fragment.layer)
+            for fragment in fragments
+        ],
+        output_language=output_language,
+        competitors=competitors,
+    )
+    layer_counts: dict[str, int] = {}
+    for fragment in fragments:
+        layer_counts[fragment.layer] = layer_counts.get(fragment.layer, 0) + 1
+    telemetry = {
+        **assembled.telemetry,
+        "input_fragment_count": len(fragments),
+        "fragment_layer_counts": layer_counts,
+        "fragment_section_keys": [fragment.section_key for fragment in fragments],
+        "fragment_segment_names": [fragment.segment_name for fragment in fragments],
+    }
+    return AssembledReport(markdown=assembled.markdown, telemetry=telemetry)
+
+
 def assemble_report_sections(
     markdown_sections: Sequence[str],
+    *,
+    output_language: object,
+    competitors: Sequence[str],
+) -> AssembledReport:
+    return _assemble_report_blocks(
+        [(markdown, "", "") for markdown in markdown_sections],
+        output_language=output_language,
+        competitors=competitors,
+    )
+
+
+def _assemble_report_blocks(
+    fragment_inputs: Sequence[tuple[str, str, str]],
     *,
     output_language: object,
     competitors: Sequence[str],
@@ -59,14 +146,38 @@ def assemble_report_sections(
     unknown_support_sections: list[_SectionBlock] = []
 
     output_language_text = str(output_language)
-    for markdown in markdown_sections:
+    for markdown, fragment_section_key, fragment_layer in fragment_inputs:
+        canonical_fragment_key = _canonical_fragment_key(fragment_section_key)
+        normalized_fragment_layer = _normalized_fragment_layer(fragment_layer)
         intro, sections = _parse_fragment(markdown, output_language_text)
+        if canonical_fragment_key is not None:
+            _append_canonical_fragment_sections(
+                known_sections,
+                known_counts,
+                canonical_fragment_key,
+                intro,
+                sections,
+            )
+            continue
+        if not sections:
+            if intro:
+                intro_blocks.append(intro)
+            continue
         if intro:
             intro_blocks.append(intro)
         for section in sections:
-            if section.key is not None:
-                known_sections.setdefault(section.key, []).append(section.body)
-                known_counts[section.key] = known_counts.get(section.key, 0) + 1
+            section_key = section.key
+            if section_key is not None:
+                _append_known_section(
+                    known_sections,
+                    known_counts,
+                    section_key,
+                    section.body,
+                )
+            elif normalized_fragment_layer == "support":
+                unknown_support_sections.append(section)
+            elif normalized_fragment_layer == "core":
+                unknown_core_sections.append(section)
             elif _looks_like_support_heading(section.heading):
                 unknown_support_sections.append(section)
             else:
@@ -107,7 +218,7 @@ def assemble_report_sections(
     )
     markdown = "\n\n".join(block for block in output_blocks if block).strip()
     telemetry: dict[str, object] = {
-        "input_fragment_count": len(markdown_sections),
+        "input_fragment_count": len(fragment_inputs),
         "output_section_count": len(output_section_keys)
         + len(unknown_core_sections)
         + len(unknown_support_sections),
@@ -123,6 +234,144 @@ def assemble_report_sections(
         "first_support_key": first_support_key,
     }
     return AssembledReport(markdown=markdown, telemetry=telemetry)
+
+
+def _append_known_section(
+    known_sections: dict[str, list[str]],
+    known_counts: dict[str, int],
+    key: str,
+    body: str,
+) -> None:
+    known_sections.setdefault(key, []).append(body)
+    known_counts[key] = known_counts.get(key, 0) + 1
+
+
+def _append_canonical_fragment_sections(
+    known_sections: dict[str, list[str]],
+    known_counts: dict[str, int],
+    canonical_fragment_key: str,
+    intro: str | None,
+    sections: Sequence[_SectionBlock],
+) -> None:
+    allowed_heading_keys = set(
+        SECTION_ALLOWED_KEYS.get(canonical_fragment_key, (canonical_fragment_key,))
+    )
+    appended = False
+    if intro:
+        _append_known_section(
+            known_sections,
+            known_counts,
+            canonical_fragment_key,
+            intro,
+        )
+        appended = True
+    for section in sections:
+        if section.key is not None and section.key in allowed_heading_keys:
+            _append_known_section(
+                known_sections,
+                known_counts,
+                section.key,
+                section.body,
+            )
+            appended = True
+        elif section.body:
+            _append_known_section(
+                known_sections,
+                known_counts,
+                canonical_fragment_key,
+                section.body,
+            )
+            appended = True
+    if not appended:
+        _append_known_section(
+            known_sections,
+            known_counts,
+            canonical_fragment_key,
+            "",
+        )
+
+
+def _canonical_fragment_key(section_key: str) -> str | None:
+    key = section_key.strip()
+    if key in CANONICAL_REPORT_ORDER:
+        return key
+    return None
+
+
+def _normalized_fragment_layer(layer: str) -> str:
+    normalized = layer.strip().casefold()
+    if normalized in {"support", "audit", "appendix"}:
+        return "support"
+    if normalized == "core":
+        return "core"
+    return ""
+
+
+def join_section_repair_parts(
+    parts: Sequence[str],
+    section_headings: str,
+) -> str:
+    requested_headings, requested_keys = _requested_repair_targets(section_headings)
+    has_requested_targets = bool(requested_headings or requested_keys)
+    seen_headings: set[str] = set()
+    cleaned_parts: list[str] = []
+    for part in parts:
+        include_current_block = not has_requested_targets
+        cleaned_lines: list[str] = []
+        for line in part.strip().splitlines():
+            heading = line.strip()
+            is_top_level_heading = heading.startswith("## ") and not heading.startswith(
+                "### "
+            )
+            if is_top_level_heading:
+                include_current_block = not has_requested_targets or _repair_heading_allowed(
+                    heading,
+                    requested_headings=requested_headings,
+                    requested_keys=requested_keys,
+                )
+                if not include_current_block:
+                    continue
+                if heading in seen_headings:
+                    continue
+                seen_headings.add(heading)
+            if include_current_block:
+                cleaned_lines.append(line)
+        cleaned_part = "\n".join(cleaned_lines).strip()
+        if cleaned_part:
+            cleaned_parts.append(cleaned_part)
+    return "\n\n".join(cleaned_parts)
+
+
+def _requested_repair_targets(section_headings: str) -> tuple[set[str], set[str]]:
+    requested_headings: set[str] = set()
+    requested_keys: set[str] = set()
+    for raw_line in section_headings.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if "->" in line:
+            section_key, heading = (part.strip() for part in line.split("->", 1))
+            requested_keys.update(SECTION_ALLOWED_KEYS.get(section_key, (section_key,)))
+        else:
+            heading = line
+        if heading.startswith("## ") and not heading.startswith("### "):
+            requested_headings.add(heading)
+            heading_key = heading_key_for(heading[3:].strip(), "zh-CN")
+            if heading_key is not None:
+                requested_keys.update(SECTION_ALLOWED_KEYS.get(heading_key, (heading_key,)))
+    return requested_headings, requested_keys
+
+
+def _repair_heading_allowed(
+    heading: str,
+    *,
+    requested_headings: set[str],
+    requested_keys: set[str],
+) -> bool:
+    if heading in requested_headings:
+        return True
+    heading_key = heading_key_for(heading[3:].strip(), "zh-CN")
+    return heading_key in requested_keys
 
 
 def _parse_fragment(
@@ -158,10 +407,17 @@ def _render_known_section(
     bodies: Sequence[str],
 ) -> str:
     body = "\n\n".join(body for body in bodies if body)
+    marker = report_section_marker(key, _section_layer_for_key(key))
     heading = f"## {report_label(output_language, key)}"
     if not body:
-        return heading
-    return f"{heading}\n{body}"
+        return f"{marker}\n{heading}"
+    return f"{marker}\n{heading}\n{body}"
+
+
+def _section_layer_for_key(key: str) -> SectionLayer:
+    if key in SUPPORT_HEADING_KEYS:
+        return "support"
+    return "core"
 
 
 def _render_unknown_section(section: _SectionBlock) -> str:
@@ -196,3 +452,18 @@ def _normalize_unknown_heading(heading: str) -> str:
 def _looks_like_support_heading(heading: str) -> bool:
     normalized = heading.casefold()
     return any(term in normalized for term in _UNKNOWN_SUPPORT_TERMS)
+
+
+def _missing(expected: list[str], actual: list[str]) -> list[str]:
+    actual_set = set(actual)
+    return [item for item in expected if item not in actual_set]
+
+
+def _duplicates(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for value in values:
+        if value in seen and value not in duplicates:
+            duplicates.append(value)
+        seen.add(value)
+    return duplicates

@@ -35,6 +35,20 @@ EXPECTED_EVENT_TYPES = {
     "writer_assemble_repair_completed",
     "writer_quality_preflight",
     "writer_quality_preflight_repair",
+    "writer_structured_repair_selected",
+    "writer_structured_section_started",
+    "writer_structured_section_completed",
+    "writer_structured_section_failed",
+    "writer_structured_report_validated",
+    "writer_publication_contract_validated",
+    "writer_report_artifact_v2_publication_validated",
+    "writer_publication_contract_repair_selected",
+    "writer_publication_contract_repaired",
+    "writer_recommendation_delta_checked",
+    "writer_structured_repair_failed_preserved_previous",
+    "writer_schema_first_failed_closed",
+    "writer_markdown_fallback_used",
+    "writer_unified_quality_result_recorded",
 }
 
 
@@ -56,6 +70,25 @@ def test_frontend_subscribes_to_backend_sse_event_types() -> None:
         assert f'"{event_type}"' in sse_types_source
 
 
+def test_generated_openapi_types_include_backend_sse_event_types() -> None:
+    base_dir = Path(__file__).resolve().parents[3]
+    openapi_types_source = (base_dir / "frontend" / "src" / "api" / "openapi.ts").read_text(
+        encoding="utf-8"
+    )
+
+    for event_type in EXPECTED_EVENT_TYPES:
+        assert f'"{event_type}"' in openapi_types_source
+
+
+def test_openapi_run_event_enum_includes_backend_sse_event_types() -> None:
+    base_dir = Path(__file__).resolve().parents[3]
+    openapi = json.loads((base_dir / "frontend" / "openapi.json").read_text(encoding="utf-8"))
+
+    event_enum = openapi["components"]["schemas"]["RunEvent"]["properties"]["type"]["enum"]
+
+    assert set(event_enum) == EXPECTED_EVENT_TYPES
+
+
 def test_run_event_to_sse_round_trips_payload() -> None:
     event = RunEvent(
         id=1,
@@ -72,3 +105,21 @@ def test_run_event_to_sse_round_trips_payload() -> None:
     assert sse["id"] == "1"
     assert sse["event"] == "qa_issue"
     assert data["payload"]["issue"]["id"] == "missing-pricing"
+
+
+def test_report_artifact_validation_event_to_sse_round_trips_payload() -> None:
+    event = RunEvent(
+        id=2,
+        run_id="run-1",
+        type="writer_report_artifact_v2_publication_validated",
+        agent="writer",
+        message="Writer ReportArtifactV2 publication contract validated.",
+        payload={"passed": True, "issue_count": 0},
+    )
+
+    sse = event.to_sse()
+    data = json.loads(sse["data"])
+
+    assert sse["id"] == "2"
+    assert sse["event"] == "writer_report_artifact_v2_publication_validated"
+    assert data["payload"]["passed"] is True

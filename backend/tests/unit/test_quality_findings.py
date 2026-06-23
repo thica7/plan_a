@@ -8,6 +8,7 @@ from packages.quality import (
     quality_findings_from_red_team,
     quality_findings_from_release_gate,
 )
+from packages.quality.final_result import build_final_quality_result
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
@@ -256,3 +257,43 @@ def test_evalops_regression_issue_uses_quality_finding_contract() -> None:
     assert finding.required_action == "human_review"
     assert finding.repairable is False
     assert finding.metadata["regression_gate_status"] == "warn"
+
+
+def _qc_issue(field_path: str, severity: str = "warn") -> QCIssue:
+    return QCIssue(
+        id=f"qc-{field_path}",
+        severity=severity,
+        detected_by="coverage",
+        target_agent="writer",
+        field_path=field_path,
+        problem=field_path,
+        redo_scope=RedoScope(kind="writer_only", rationale=field_path),
+    )
+
+
+def test_final_quality_result_includes_release_gate_warnings_when_deterministic_qa_is_clean() -> None:
+    result = build_final_quality_result(
+        deterministic_findings=[],
+        release_gate_findings=[
+            _qc_issue("release_gate.claim_self_consistency_required", severity="warn")
+        ],
+        readiness_score=88,
+    )
+
+    assert result.issue_count == 1
+    assert result.warn_count == 1
+    assert result.blocker_count == 0
+    assert result.quality_status == "completed_with_warnings"
+    assert result.revision_issue_count_after == 1
+
+
+def test_final_quality_result_marks_clean_when_no_findings() -> None:
+    result = build_final_quality_result(
+        deterministic_findings=[],
+        release_gate_findings=[],
+        readiness_score=100,
+    )
+
+    assert result.issue_count == 0
+    assert result.warn_count == 0
+    assert result.quality_status == "clean_pass"

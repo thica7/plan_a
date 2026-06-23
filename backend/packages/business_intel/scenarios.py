@@ -162,24 +162,22 @@ def recommend_scenario_pack(
                 requested_layer=requested_layer,
             )
 
-    text = " ".join([topic, *dimensions]).casefold()
-    if "pricing" in text and "market" not in text and len(competitors) <= 3:
-        return _pack("l1_pricing_pack")
-    if "security" in text or "enterprise" in text or "compliance" in text:
-        return _pack("enterprise_risk_review")
-
     layer = assess_competitor_layer(
         topic=topic,
         competitors=competitors,
         dimensions=dimensions,
         requested_layer=requested_layer,
     ).layer
+    text = " ".join([topic, *dimensions]).casefold()
+    if layer == "L2" and _enterprise_risk_signal(text):
+        return _pack("enterprise_risk_review")
     if layer == "L3":
         return _pack("l3_market_landscape")
     if layer == "L2":
         return _pack("l2_adjacent_workflow")
+    if layer == "L1" and _pricing_pack_signal(text, competitors):
+        return _pack("l1_pricing_pack")
     return _pack("l1_direct_battlecard")
-
 
 def generate_dynamic_scenario_pack(
     *,
@@ -256,6 +254,24 @@ def _dynamic_required_dimensions(layer: str, dimensions: list[str]) -> list[str]
         return ["feature", "integrations"]
     return ["pricing", "feature"]
 
+
+
+def _enterprise_risk_signal(text: str) -> bool:
+    return any(
+        keyword in text
+        for keyword in ("security", "enterprise", "compliance", "governance")
+    )
+
+
+def _pricing_pack_signal(text: str, competitors: list[str]) -> bool:
+    return (
+        "pricing" in text
+        and "market" not in text
+        and "landscape" not in text
+        and "workflow" not in text
+        and "enterprise" not in text
+        and len(competitors) <= 3
+    )
 
 def _slug(value: str) -> str:
     import re

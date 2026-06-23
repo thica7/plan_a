@@ -10,7 +10,7 @@ from packages.runtime import (
     RuntimeCommandError,
     RuntimeCommandService,
 )
-from packages.schema.api_dto import HitlResumeRequest, RunDetail
+from packages.schema.api_dto import HitlResumeRequest, RunDetail, RunRedoRequest
 
 router = APIRouter()
 RuntimeCommandServiceDep = Annotated[RuntimeCommandService, Depends(get_runtime_command_service)]
@@ -37,12 +37,13 @@ async def resume_run(
 @router.post("/runs/{run_id}/redo", response_model=RunDetail)
 async def start_manual_redo(
     run_id: str,
+    request: RunRedoRequest,
     runtime: RuntimeCommandServiceDep,
     user: EnterpriseUserDep,
 ) -> RunDetail:
     try:
         result = await runtime.request_redo(
-            RequestRedoCommand(run_id=run_id),
+            RequestRedoCommand(run_id=run_id, issue_ids=request.issue_ids),
             actor=user,
         )
     except RuntimeCommandError as exc:

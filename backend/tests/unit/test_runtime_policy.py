@@ -146,6 +146,25 @@ def test_enterprise_runtime_policy_route_explains_policy_before_run() -> None:
     ]
 
 
+def test_enterprise_runtime_policy_route_defaults_workspace() -> None:
+    store = EnterpriseMemoryStore()
+    app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
+    app.dependency_overrides[get_app_settings] = lambda: _settings(
+        backup_llm_api_key="backup-key",
+        backup_llm_model="deepseek/deepseek-v4-pro",
+        pplx_api_key="pplx-key",
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/enterprise/governance/runtime-policy")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["workspace_id"] == DEFAULT_WORKSPACE_ID
+    assert body["quota_allowed"] is True
+
+
 def _settings(**overrides: object) -> Settings:
     values = {
         "demo_mode": True,

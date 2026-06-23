@@ -25,6 +25,8 @@ from packages.business_intel import (
 from packages.business_intel.entity_resolver import trusted_source_candidates
 from packages.business_intel.homepage import verify_homepage
 from packages.business_intel.layers import assess_competitor_layer
+from packages.quality import quality_findings_from_release_gate
+from packages.schema.api_dto import RunDetail
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
@@ -38,7 +40,6 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
     SourceRegistryRecord,
 )
-from packages.schema.api_dto import RunDetail
 from packages.schema.models import AnalysisPlan, RawSource, RunMetrics
 from packages.skills.registry import SkillRegistry
 
@@ -66,6 +67,39 @@ def test_layer_assessment_detects_market_landscape() -> None:
     assert "many_competitors" in assessment.signals
 
 
+
+def test_pricing_dimension_does_not_override_workflow_or_market_scope() -> None:
+    workflow_plan = build_business_intel_plan(
+        topic="Enterprise AI search workflow pricing and switching risk",
+        competitors=["Glean", "Coveo", "Elastic"],
+        dimensions=["pricing", "integrations", "security"],
+    )
+    landscape_plan = build_business_intel_plan(
+        topic="AI coding assistant market landscape with pricing benchmarks",
+        competitors=["Cursor", "Copilot", "Windsurf", "Tabnine"],
+        dimensions=["pricing", "market", "benchmark"],
+    )
+
+    assert workflow_plan.competitor_layer.layer == "L2"
+    assert workflow_plan.scenario_pack.id in {
+        "enterprise_risk_review",
+        "l2_adjacent_workflow",
+    }
+    assert "pricing" in workflow_plan.recommended_dimensions
+    assert landscape_plan.competitor_layer.layer == "L3"
+    assert landscape_plan.scenario_pack.id == "l3_market_landscape"
+    assert "pricing" in landscape_plan.recommended_dimensions
+
+
+def test_focused_pricing_scope_still_selects_l1_pricing_pack() -> None:
+    plan = build_business_intel_plan(
+        topic="Cursor vs Copilot pricing packaging comparison",
+        competitors=["Cursor", "Copilot"],
+        dimensions=["pricing", "feature"],
+    )
+
+    assert plan.competitor_layer.layer == "L1"
+    assert plan.scenario_pack.id == "l1_pricing_pack"
 def test_business_plan_selects_scenario_and_rules() -> None:
     plan = build_business_intel_plan(
         topic="Enterprise AI assistant security review",
@@ -1550,6 +1584,203 @@ def test_claim_validator_marks_high_risk_status_and_conflicts() -> None:
     }
 
 
+
+def test_claim_validator_detects_structured_pricing_conflict() -> None:
+    competitor = _competitor()
+    pricing_evidence = EvidenceRecord(
+        id="evidence-pricing-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="pricing-conflict",
+        competitor_id=competitor.id,
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.sh/pricing",
+        snippet="Cursor Pro plan costs $30 per month for developer teams.",
+        content_hash="hash-pricing-conflict",
+        reliability_score=0.92,
+        quality_label="accepted",
+    )
+    claim = ClaimRecord(
+        id="claim-pricing-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        competitor_id=competitor.id,
+        claim_type="pricing",
+        claim_text="Cursor Pro plan costs $20 per month for developer teams.",
+        evidence_ids=["evidence-pricing-conflict"],
+        confidence=0.9,
+    )
+
+    report = validate_project_claims(
+        project_id="project-1",
+        claims=[claim],
+        evidence=[pricing_evidence],
+    )
+
+    result = report.results[0]
+    assert result.status == "unsupported"
+    assert result.validation_status == "not_applicable"
+    assert result.issue_ids
+    assert report.issues[0].issue_type == "conflicting_evidence"
+    assert report.issues[0].evidence_ids == ["evidence-pricing-conflict"]
+
+
+def test_claim_validator_detects_customer_data_training_conflict() -> None:
+    competitor = _competitor()
+    privacy_evidence = EvidenceRecord(
+        id="evidence-training-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="privacy-conflict",
+        competitor_id=competitor.id,
+        dimension="privacy",
+        source_type="webpage_verified",
+        title="Cursor privacy policy",
+        url="https://cursor.sh/privacy",
+        snippet="Cursor may use customer prompts to train models unless teams opt out.",
+        content_hash="hash-privacy-conflict",
+        reliability_score=0.92,
+        quality_label="accepted",
+    )
+    claim = ClaimRecord(
+        id="claim-training-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        competitor_id=competitor.id,
+        claim_type="privacy",
+        claim_text="Cursor does not train on customer data or customer code.",
+        evidence_ids=["evidence-training-conflict"],
+        confidence=0.9,
+    )
+
+    report = validate_project_claims(
+        project_id="project-1",
+        claims=[claim],
+        evidence=[privacy_evidence],
+    )
+
+    result = report.results[0]
+    assert result.high_risk is True
+    assert result.status == "unsupported"
+    assert result.validation_status == "conflicting"
+    assert result.recommended_action == "human_review"
+    assert report.issues[0].issue_type == "conflicting_evidence"
+    assert report.issues[0].evidence_ids == ["evidence-training-conflict"]
+
+
+def test_claim_validator_detects_data_retention_conflict() -> None:
+    competitor = _competitor()
+    retention_evidence = EvidenceRecord(
+        id="evidence-retention-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="retention-conflict",
+        competitor_id=competitor.id,
+        dimension="privacy",
+        source_type="webpage_verified",
+        title="Cursor enterprise privacy",
+        url="https://cursor.sh/privacy",
+        snippet="Cursor customer data retention is 90 days for enterprise logs.",
+        content_hash="hash-retention-conflict",
+        reliability_score=0.92,
+        quality_label="accepted",
+    )
+    claim = ClaimRecord(
+        id="claim-retention-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        competitor_id=competitor.id,
+        claim_type="privacy",
+        claim_text="Cursor retains customer data with 30-day retention for enterprise logs.",
+        evidence_ids=["evidence-retention-conflict"],
+        confidence=0.9,
+    )
+
+    report = validate_project_claims(
+        project_id="project-1",
+        claims=[claim],
+        evidence=[retention_evidence],
+    )
+
+    result = report.results[0]
+    assert result.high_risk is True
+    assert result.status == "unsupported"
+    assert result.validation_status == "conflicting"
+    assert report.issues[0].issue_type == "conflicting_evidence"
+    assert report.issues[0].evidence_ids == ["evidence-retention-conflict"]
+
+
+def test_release_gate_claim_conflict_includes_kb_audit_metadata() -> None:
+    competitor = _competitor()
+    evidence = EvidenceRecord(
+        id="evidence-pricing-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        raw_source_id="evidence-kb-pricing-001",
+        competitor_id=competitor.id,
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Cursor pricing",
+        url="https://cursor.sh/pricing",
+        snippet="Cursor Pro plan costs $30 per month for developer teams.",
+        content_hash="hash-pricing-conflict",
+        reliability_score=0.92,
+        quality_label="accepted",
+        metadata={
+            "kb_sync": True,
+            "kb_document_id": "kb-doc-pricing-v3",
+            "kb_document_version": 3,
+            "kb_document_status": "active",
+            "kb_raw_source_id": "collector-raw-pricing-001",
+            "kb_collector_run_id": "collector-run-1",
+            "kb_freshness_score": 0.86,
+        },
+    )
+    claim = ClaimRecord(
+        id="claim-pricing-conflict",
+        workspace_id="workspace-1",
+        project_id="project-1",
+        competitor_id=competitor.id,
+        claim_type="pricing",
+        claim_text="Cursor Pro plan costs $20 per month for developer teams.",
+        evidence_ids=[evidence.id],
+        confidence=0.9,
+    )
+
+    gate = evaluate_report_release_gate(
+        project=_project(),
+        report_version=_report_version(evidence_ids=[evidence.id], claim_ids=[claim.id]),
+        competitors=[competitor],
+        evidence=[evidence],
+        claims=[claim],
+    )
+
+    issue = next(
+        item
+        for item in gate.issues
+        if item.rule_id == "claim_self_consistency_required" and claim.id in item.claim_ids
+    )
+    assert issue.severity == "blocker"
+    assert issue.metadata["conflicting_evidence_ids"] == [evidence.id]
+    assert issue.metadata["claim_validation_issue_types"] == ["conflicting_evidence"]
+    audit = issue.metadata["evidence_audit_trail"][0]
+    assert audit["evidence_id"] == evidence.id
+    assert audit["raw_source_id"] == "evidence-kb-pricing-001"
+    assert audit["kb_document_id"] == "kb-doc-pricing-v3"
+    assert audit["kb_document_version"] == 3
+    assert audit["kb_raw_source_id"] == "collector-raw-pricing-001"
+    assert audit["kb_collector_run_id"] == "collector-run-1"
+
+    quality_finding = next(
+        item
+        for item in quality_findings_from_release_gate(gate)
+        if item.source_id == issue.id
+    )
+    assert quality_finding.metadata["conflicting_evidence_ids"] == [evidence.id]
+    assert quality_finding.metadata["evidence_audit_trail"][0]["kb_document_id"] == "kb-doc-pricing-v3"
+
 def test_report_release_gate_warns_on_high_risk_single_source_claim() -> None:
     competitor = _competitor()
     evidence = [
@@ -1608,6 +1839,52 @@ def test_report_release_gate_warns_on_high_risk_single_source_claim() -> None:
     assert "listed claim-validation issue types" in consistency_issues[0].recommendation
 
 
+def test_release_gate_claim_consistency_redo_scope_distinguishes_evidence_gaps_from_claim_repair() -> None:
+    missing_evidence = BusinessQAFinding(
+        id="release-missing-evidence",
+        rule_id="claim_self_consistency_required",
+        rule_name="Claim self-consistency",
+        severity="blocker",
+        competitor_name="Windsurf",
+        dimension="pricing",
+        message="Claim validation is unsupported; issue_types=missing_evidence.",
+        claim_ids=["claim-missing"],
+        evidence_ids=[],
+        metadata={"claim_validation_issue_types": ["missing_evidence"]},
+    )
+    conflicting_claim = BusinessQAFinding(
+        id="release-conflicting-claim",
+        rule_id="claim_self_consistency_required",
+        rule_name="Claim self-consistency",
+        severity="blocker",
+        competitor_name="Windsurf",
+        dimension="pricing",
+        message="Claim validation is unsupported; issue_types=conflicting_evidence.",
+        claim_ids=["claim-conflict"],
+        evidence_ids=["evidence-1"],
+        metadata={"claim_validation_issue_types": ["conflicting_evidence"]},
+    )
+    weak_text = BusinessQAFinding(
+        id="release-weak-text",
+        rule_id="claim_self_consistency_required",
+        rule_name="Claim self-consistency",
+        severity="warn",
+        competitor_name="Windsurf",
+        dimension="persona",
+        message="Claim validation is weak; issue_types=weak_text_support.",
+        claim_ids=["claim-weak-text"],
+        evidence_ids=["evidence-2"],
+        metadata={"claim_validation_issue_types": ["weak_text_support"]},
+    )
+
+    scopes = business_findings_to_redo_scopes(
+        [missing_evidence, conflicting_claim, weak_text]
+    )
+
+    assert [scope.kind for scope in scopes] == ["collector", "analyst", "analyst"]
+    assert [scope.target_subagent for scope in scopes] == ["pricing", "pricing", "persona"]
+
+
 def test_report_release_gate_warns_on_unresolved_run_qa_metadata() -> None:
     competitor = _competitor()
     evidence = [
@@ -1655,6 +1932,33 @@ def test_report_release_gate_warns_on_unresolved_run_qa_metadata() -> None:
                         "target_competitors": ["Cursor"],
                         "rationale": "Collect verified pricing tier evidence.",
                     },
+                    "metadata": {
+                        "issue_kind": "source_contradiction",
+                        "claim_area": "price:pro:month",
+                        "source_ids": ["kb-pricing", "live-pricing"],
+                        "source_evidence_pairs": [
+                            {
+                                "claim_area": "price:pro:month",
+                                "kb_source_id": "kb-pricing",
+                                "kb_position": "$20/month",
+                                "kb_document_id": "kb-doc-pricing-v3",
+                                "live_source_id": "live-pricing",
+                                "live_position": "$30/month",
+                            }
+                        ],
+                        "evidence_audit_trail": [
+                            {
+                                "raw_source_id": "kb-pricing",
+                                "kb_document_id": "kb-doc-pricing-v3",
+                                "kb_document_version": 3,
+                                "kb_document_status": "active",
+                            },
+                            {
+                                "raw_source_id": "live-pricing",
+                                "source_type": "webpage_verified",
+                            },
+                        ],
+                    },
                 }
             ]
         }
@@ -1674,7 +1978,19 @@ def test_report_release_gate_warns_on_unresolved_run_qa_metadata() -> None:
     assert issue.severity == "warn"
     assert issue.competitor_name == "Cursor"
     assert issue.dimension == "pricing"
+    assert issue.evidence_ids == ["kb-pricing", "live-pricing"]
+    assert issue.metadata["run_qa_finding_id"] == "qa-1"
+    assert issue.metadata["issue_kind"] == "source_contradiction"
+    assert issue.metadata["claim_area"] == "price:pro:month"
+    assert issue.metadata["source_evidence_pairs"][0]["kb_document_id"] == "kb-doc-pricing-v3"
+    assert issue.metadata["evidence_audit_trail"][0]["kb_document_id"] == "kb-doc-pricing-v3"
     assert issue.recommendation == "Collect verified pricing tier evidence."
+    quality_finding = next(
+        item
+        for item in quality_findings_from_release_gate(gate)
+        if item.source_id == issue.id
+    )
+    assert quality_finding.metadata["source_evidence_pairs"][0]["live_source_id"] == "live-pricing"
 
 
 def test_report_release_gate_blocks_blocker_run_qa_metadata() -> None:

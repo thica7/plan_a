@@ -20,6 +20,12 @@ from packages.schema.models import (
     ToolCallMessage,
     TraceSpan,
 )
+from packages.schema.report_artifact import (
+    ClaimCardBundle,
+    DecisionCardBundle,
+    ReportArtifactV2,
+    SectionBrief,
+)
 
 RunStatus = Literal[
     "queued",
@@ -66,6 +72,12 @@ class HitlResumeRequest(BaseModel):
     dimensions: list[str] | None = None
     competitors: list[str] | None = Field(default=None, max_length=8)
     competitor_edits: list[CompetitorEdit] = Field(default_factory=list, max_length=32)
+
+
+class RunRedoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    issue_ids: list[str] = Field(default_factory=list, max_length=16)
 
 
 class RunSummary(BaseModel):
@@ -217,6 +229,10 @@ class RunDetail(RunSummary):
     hitl_enabled: bool = False
     active_run_fingerprint: str | None = None
     report_md: str = ""
+    claim_card_bundles: list[ClaimCardBundle] = Field(default_factory=list)
+    decision_card_bundle: DecisionCardBundle | None = None
+    section_briefs: list[SectionBrief] = Field(default_factory=list)
+    report_artifact: ReportArtifactV2 | None = None
     raw_sources: list[RawSource] = Field(default_factory=list)
     competitor_kbs: dict[str, CompetitorKB] = Field(default_factory=dict)
     competitor_knowledge: dict[str, CompetitorKnowledge] = Field(default_factory=dict)

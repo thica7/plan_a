@@ -532,6 +532,15 @@ class RuntimeCommandService:
                 "Resolve the active HITL interrupt before manual redo.",
                 command_type="request_redo",
             )
+        if command.issue_ids and not self._run_service.can_start_redo(
+            command.run_id,
+            preferred_issue_ids=command.issue_ids,
+        ):
+            raise RuntimeCommandError(
+                409,
+                "Requested redo issue is no longer active.",
+                command_type="request_redo",
+            )
         if not self._run_service.can_start_redo(command.run_id):
             raise RuntimeCommandError(
                 409,
@@ -547,9 +556,15 @@ class RuntimeCommandService:
             metadata={
                 "qa_finding_count": len(detail.qa_findings),
                 "current_status": detail.status,
+                "issue_ids": list(command.issue_ids),
             },
         )
-        asyncio.create_task(self._run_service.run_scoped_redo(command.run_id))
+        asyncio.create_task(
+            self._run_service.run_scoped_redo(
+                command.run_id,
+                preferred_issue_ids=command.issue_ids,
+            )
+        )
         return _result(
             command_id=command_id,
             command_type="request_redo",
@@ -561,7 +576,10 @@ class RuntimeCommandService:
             run_id=detail.id,
             route="langgraph",
             payload=detail,
-            metadata={"qa_finding_count": len(detail.qa_findings)},
+            metadata={
+                "qa_finding_count": len(detail.qa_findings),
+                "issue_ids": list(command.issue_ids),
+            },
         )
 
     async def request_approval(
@@ -895,6 +913,11 @@ class RuntimeCommandService:
                 "version_number": next_version,
                 "status": "draft",
                 "report_md": request.report_md,
+                "core_report_md": "",
+                "support_appendix_md": "",
+                "audit_log_md": "",
+                "full_report_md": "",
+                "report_artifact": None,
                 "quality_metadata": metadata,
                 "created_at": datetime.utcnow(),
                 "published_at": None,

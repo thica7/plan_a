@@ -65,6 +65,65 @@ def test_support_contract_rejects_core_deep_dive_heading() -> None:
     assert result.errors == ["segment contains forbidden H2 headings"]
 
 
+def test_zh_segment_contract_retries_english_structural_h3() -> None:
+    contract = segment_contract_for(
+        {"segment_name": "decision_summary", "output_language": "zh-CN"}
+    )
+    markdown = (
+        f"## {report_label('zh-CN', 'executive_summary')}\n"
+        "Executive summary baseline. [source:cursor-pricing]\n\n"
+        f"## {report_label('zh-CN', 'decision_summary')}\n"
+        "建议以 Cursor 为基线。 [source:cursor-pricing]\n\n"
+        f"## {report_label('zh-CN', 'competitive_findings')}\n"
+        "### Pricing and Packaging\n"
+        "定价差异需要继续核验。 [source:cursor-pricing]\n"
+    )
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert result.status == "retry"
+    assert result.forbidden_headings == ["Pricing and Packaging"]
+    assert result.errors == ["segment contains English structural headings in zh-CN output"]
+
+
+def test_zh_segment_contract_retries_report_label_english_structural_h3() -> None:
+    contract = segment_contract_for(
+        {"segment_name": "side_by_side_matrix", "output_language": "zh-CN"}
+    )
+    markdown = (
+        f"## {report_label('zh-CN', 'side_by_side_matrix')}\n"
+        "### Side-by-Side Decision Matrix\n"
+        "矩阵解读不能使用英文结构标题。 [source:cursor-pricing]\n"
+    )
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert result.status == "retry"
+    assert result.forbidden_headings == ["Side-by-Side Decision Matrix"]
+    assert result.errors == ["segment contains English structural headings in zh-CN output"]
+
+
+def test_zh_segment_contract_allows_english_product_h3() -> None:
+    contract = segment_contract_for(
+        {
+            "segment_name": "competitor_deep_dives",
+            "section_id": "competitor_deep_dives",
+            "segment_competitor": "Cursor",
+            "output_language": "zh-CN",
+        }
+    )
+    markdown = (
+        f"## {report_label('zh-CN', 'competitor_deep_dives')}\n"
+        "### Cursor\n"
+        "Cursor 的产品名应保留英文。 [source:cursor-pricing]\n"
+    )
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert result.status == "pass"
+    assert result.errors == []
+
+
 def test_evidence_shard_contract_rejects_any_h2() -> None:
     contract = segment_contract_for(
         {"segment_kind": "evidence_shard", "output_language": "en-US"}
@@ -199,6 +258,180 @@ def test_decision_summary_contract_requires_competitive_findings() -> None:
     assert result.errors == ["segment is missing required H2 headings"]
 
 
+def test_schema_contract_decision_summary_requires_executive_summary() -> None:
+    contract = segment_contract_for(
+        {
+            "segment_name": "decision_summary",
+            "output_language": "en-US",
+            "require_executive_summary": True,
+        }
+    )
+    markdown = (
+        f"## {report_label('en-US', 'decision_summary')}\n"
+        "Decision only.\n\n"
+        f"## {report_label('en-US', 'competitive_findings')}\n"
+        "Findings."
+    )
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert result.status == "retry"
+    assert result.missing_required_heading_keys == ["executive_summary"]
+    assert result.errors == ["segment is missing required H2 headings"]
+
+
+def test_section_brief_segment_contract_honors_section_identity() -> None:
+    contract = segment_contract_for(
+        {
+            "segment_name": "brief-summary",
+            "segment_kind": "section_fragment",
+            "section_id": "side_by_side_matrix",
+            "section_key": "side_by_side_matrix",
+            "output_language": "en-US",
+            "schema_contract_source": "section_brief",
+            "section_brief": {
+                "id": "brief-side-by-side-matrix",
+                "section_key": "side_by_side_matrix",
+                "layer": "core",
+            },
+        }
+    )
+    markdown = f"## {report_label('en-US', 'side_by_side_matrix')}\nMatrix body."
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert contract.segment_name == "brief-summary"
+    assert contract.segment_kind == "section_fragment"
+    assert contract.section_id == "side_by_side_matrix"
+    assert contract.allowed_heading_keys == ("side_by_side_matrix",)
+    assert contract.required_heading_keys == ("side_by_side_matrix",)
+    assert result.status == "pass"
+
+
+def test_section_brief_segment_contract_requires_brief_object() -> None:
+    try:
+        segment_contract_for(
+            {
+                "segment_name": "brief-summary",
+                "segment_kind": "section_fragment",
+                "section_id": "decision_summary",
+                "schema_contract_source": "section_brief",
+            }
+        )
+    except ValueError as exc:
+        assert "section_brief" in str(exc)
+    else:
+        raise AssertionError("section_brief-backed segments must include section_brief")
+
+
+def test_section_brief_segment_contract_rejects_section_key_mismatch() -> None:
+    try:
+        segment_contract_for(
+            {
+                "segment_name": "brief-summary",
+                "segment_kind": "section_fragment",
+                "section_id": "side_by_side_matrix",
+                "section_key": "side_by_side_matrix",
+                "schema_contract_source": "section_brief",
+                "section_brief": {
+                    "id": "brief-swot",
+                    "section_key": "swot_analysis",
+                    "layer": "core",
+                },
+            }
+        )
+    except ValueError as exc:
+        assert "section_key" in str(exc)
+    else:
+        raise AssertionError("section_brief section_key must match segment section")
+
+
+def test_section_brief_segment_contract_rejects_segment_identity_disagreement() -> None:
+    try:
+        segment_contract_for(
+            {
+                "segment_name": "brief-summary",
+                "segment_kind": "section_fragment",
+                "section_id": "decision_summary",
+                "section_key": "swot_analysis",
+                "schema_contract_source": "section_brief",
+                "section_brief": {
+                    "id": "brief-decision-summary",
+                    "section_key": "decision_summary",
+                    "layer": "core",
+                },
+            }
+        )
+    except ValueError as exc:
+        assert "section_id" in str(exc)
+    else:
+        raise AssertionError("segment section_id and section_key must agree")
+
+
+def test_section_brief_segment_contract_requires_brief_section_key() -> None:
+    try:
+        segment_contract_for(
+            {
+                "segment_name": "brief-summary",
+                "segment_kind": "section_fragment",
+                "section_id": "side_by_side_matrix",
+                "section_key": "side_by_side_matrix",
+                "schema_contract_source": "section_brief",
+                "section_brief": {
+                    "id": "brief-side-by-side-matrix",
+                    "layer": "core",
+                },
+            }
+        )
+    except ValueError as exc:
+        assert "section_key" in str(exc)
+    else:
+        raise AssertionError("section_brief-backed segments require section_key")
+
+
+def test_section_brief_segment_contract_requires_segment_section_key() -> None:
+    try:
+        segment_contract_for(
+            {
+                "segment_name": "brief-summary",
+                "segment_kind": "section_fragment",
+                "section_id": "side_by_side_matrix",
+                "schema_contract_source": "section_brief",
+                "section_brief": {
+                    "id": "brief-side-by-side-matrix",
+                    "section_key": "side_by_side_matrix",
+                    "layer": "core",
+                },
+            }
+        )
+    except ValueError as exc:
+        assert "segment section_key" in str(exc)
+    else:
+        raise AssertionError("section_brief-backed segments require segment section_key")
+
+
+def test_section_brief_segment_contract_rejects_blank_segment_section_key() -> None:
+    try:
+        segment_contract_for(
+            {
+                "segment_name": "brief-summary",
+                "segment_kind": "section_fragment",
+                "section_id": "side_by_side_matrix",
+                "section_key": "  ",
+                "schema_contract_source": "section_brief",
+                "section_brief": {
+                    "id": "brief-side-by-side-matrix",
+                    "section_key": "side_by_side_matrix",
+                    "layer": "core",
+                },
+            }
+        )
+    except ValueError as exc:
+        assert "segment section_key" in str(exc)
+    else:
+        raise AssertionError("section_brief-backed segments reject blank section_key")
+
+
 def test_swot_matrix_contract_requires_side_by_side_matrix_and_swot() -> None:
     contract = segment_contract_for(
         {"segment_name": "swot_matrix", "output_language": "en-US"}
@@ -210,6 +443,53 @@ def test_swot_matrix_contract_requires_side_by_side_matrix_and_swot() -> None:
     assert result.status == "retry"
     assert result.missing_required_heading_keys == ["side_by_side_matrix"]
     assert result.errors == ["segment is missing required H2 headings"]
+
+
+def test_side_by_side_matrix_contract_rejects_swot_heading() -> None:
+    contract = segment_contract_for(
+        {"segment_name": "side_by_side_matrix", "output_language": "en-US"}
+    )
+    markdown = f"## {report_label('en-US', 'swot_analysis')}\nSWOT only."
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert contract.section_id == "side_by_side_matrix"
+    assert contract.allowed_heading_keys == ("side_by_side_matrix",)
+    assert contract.required_heading_keys == ("side_by_side_matrix",)
+    assert result.status == "retry"
+    assert result.invalid_heading_keys == ["swot_analysis"]
+    assert result.errors == ["segment contains H2 headings outside its allowed contract"]
+
+
+def test_swot_analysis_contract_rejects_matrix_heading() -> None:
+    contract = segment_contract_for(
+        {"segment_name": "swot_analysis", "output_language": "en-US"}
+    )
+    markdown = f"## {report_label('en-US', 'side_by_side_matrix')}\nMatrix only."
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert contract.section_id == "swot_analysis"
+    assert contract.allowed_heading_keys == ("swot_analysis",)
+    assert contract.required_heading_keys == ("swot_analysis",)
+    assert result.status == "retry"
+    assert result.invalid_heading_keys == ["side_by_side_matrix"]
+    assert result.errors == ["segment contains H2 headings outside its allowed contract"]
+
+
+def test_battlecard_contract_accepts_only_battlecard_heading() -> None:
+    contract = segment_contract_for(
+        {"segment_name": "battlecard", "output_language": "en-US"}
+    )
+    markdown = f"## {report_label('en-US', 'battlecard')}\nBattlecard body."
+
+    result = validate_segment_contract(markdown, contract)
+
+    assert contract.section_id == "battlecard"
+    assert contract.allowed_heading_keys == ("battlecard",)
+    assert contract.required_heading_keys == ("battlecard",)
+    assert result.status == "pass"
+    assert result.errors == []
 
 
 def test_unknown_h2_heading_retries_with_unknown_heading_error() -> None:

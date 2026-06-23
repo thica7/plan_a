@@ -60,7 +60,11 @@ def build_real_analysis_graph(service: Any, checkpointer: Any | None = None):
     )
     graph.add_edge("comparator", "reflector")
     graph.add_edge("reflector", "writer")
-    graph.add_edge("writer", "qa")
+    graph.add_conditional_edges(
+        "writer",
+        lambda state: _route_after_writer(service, state),
+        {"qa": "qa", "end": END},
+    )
     graph.add_edge("qa", "qa_hitl")
     graph.add_conditional_edges(
         "qa_hitl",
@@ -139,7 +143,11 @@ def build_scoped_redo_graph(service: Any, checkpointer: Any | None = None):
     )
     graph.add_edge("comparator", "reflector")
     graph.add_edge("reflector", "writer")
-    graph.add_edge("writer", "qa")
+    graph.add_conditional_edges(
+        "writer",
+        lambda state: _route_after_writer(service, state),
+        {"qa": "qa", "end": END},
+    )
     graph.add_edge("qa", "qa_hitl")
     graph.add_conditional_edges(
         "qa_hitl",
@@ -183,7 +191,11 @@ def build_demo_analysis_graph(service: Any, checkpointer: Any | None = None):
     )
     graph.add_edge("comparator", "reflector")
     graph.add_edge("reflector", "writer")
-    graph.add_edge("writer", "qa")
+    graph.add_conditional_edges(
+        "writer",
+        lambda state: _route_after_writer(service, state),
+        {"qa": "qa", "end": END},
+    )
     graph.add_edge("qa", "qa_hitl")
     graph.add_conditional_edges(
         "qa_hitl",
@@ -596,6 +608,13 @@ def _route_final_qa(state: GraphState) -> str:
     if route in _FINAL_QA_REDO_ROUTES:
         return route
     return "end"
+
+
+def _route_after_writer(service: Any, state: GraphState) -> str:
+    record = service._runs[state["run_id"]]
+    if record.detail.status in {"failed", "interrupted"}:
+        return "end"
+    return "qa"
 
 
 async def _final_qa_route_state(

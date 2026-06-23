@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime
 import re
+from datetime import datetime
 from urllib.parse import urlparse
 
 from packages.business_intel.claim_validator import validate_project_claims
 from packages.business_intel.evaluator import BAD_QUALITY_LABELS, evaluate_business_qa
 from packages.business_intel.planning import build_business_intel_plan
-from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.report_citation_policy import report_section_policy
+from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.scorer import score_project_readiness
 from packages.business_intel.source_reconciliation import (
     evidence_by_source_token,
@@ -768,6 +768,7 @@ def _claim_validation_issues(
     validation = validate_project_claims(project_id=project_id, claims=claims, evidence=evidence)
     claims_by_id = {claim.id: claim for claim in claims}
     validation_issues_by_id = {issue.id: issue for issue in validation.issues}
+    evidence_by_id = {item.id: item for item in evidence}
     issues: list[BusinessQAFinding] = []
     for result in validation.results:
         if result.status == "supported":
@@ -778,6 +779,27 @@ def _claim_validation_issues(
             issue.issue_type
             for issue_id in result.issue_ids
             if (issue := validation_issues_by_id.get(issue_id)) is not None
+        ]
+        claim_validation_issues = [
+            issue
+            for issue_id in result.issue_ids
+            if (issue := validation_issues_by_id.get(issue_id)) is not None
+        ]
+        conflicting_evidence_ids = sorted(
+            {
+                evidence_id
+                for issue in claim_validation_issues
+                if issue.issue_type == "conflicting_evidence"
+                for evidence_id in issue.evidence_ids
+            }
+        )
+        audit_evidence_ids = [
+            *result.usable_evidence_ids,
+            *[
+                evidence_id
+                for evidence_id in conflicting_evidence_ids
+                if evidence_id not in result.usable_evidence_ids
+            ],
         ]
         failed_checkers = [
             sample.checker for sample in result.validation_samples if sample.vote == "fail"
@@ -812,9 +834,61 @@ def _claim_validation_issues(
                     "Collect stronger independent evidence, resolve the listed claim-validation "
                     "issue types, or downgrade the claim before release."
                 ),
+                metadata={
+                    "claim_validation_status": result.validation_status,
+                    "claim_validation_issue_ids": result.issue_ids,
+                    "claim_validation_issue_types": claim_issue_types,
+                    "claim_validation_recommended_action": result.recommended_action,
+                    "claim_validation_failed_checkers": failed_checkers,
+                    "conflicting_evidence_ids": conflicting_evidence_ids,
+                    "evidence_audit_trail": _evidence_audit_trail(
+                        audit_evidence_ids, evidence_by_id
+                    ),
+                    "self_consistency_score": result.self_consistency_score,
+                    "text_support_score": result.text_support_score,
+                    "evidence_quality_score": result.evidence_quality_score,
+                    "triangulation_score": result.triangulation_score,
+                },
             )
         )
     return issues
+
+
+def _evidence_audit_trail(
+    evidence_ids: list[str],
+    evidence_by_id: dict[str, EvidenceRecord],
+) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for evidence_id in evidence_ids:
+        if evidence_id in seen:
+            continue
+        seen.add(evidence_id)
+        evidence = evidence_by_id.get(evidence_id)
+        if evidence is None:
+            continue
+        metadata = evidence.metadata
+        result.append(
+            {
+                "evidence_id": evidence.id,
+                "raw_source_id": evidence.raw_source_id,
+                "title": evidence.title,
+                "url": str(evidence.url) if evidence.url else "",
+                "quality_label": evidence.quality_label,
+                "source_type": evidence.source_type,
+                "kb_document_id": str(metadata.get("kb_document_id") or ""),
+                "kb_document_version": metadata.get("kb_document_version"),
+                "kb_document_status": str(metadata.get("kb_document_status") or ""),
+                "kb_raw_source_id": str(metadata.get("kb_raw_source_id") or ""),
+                "kb_collector_run_id": str(
+                    metadata.get("kb_collector_run_id") or ""
+                ),
+                "kb_freshness_score": metadata.get("kb_freshness_score"),
+            }
+        )
+        if len(result) >= 8:
+            break
+    return result
 
 
 def _report_citation_quality_issues(
@@ -972,6 +1046,7 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
         problem = str(_mapping_value(item, "problem") or _mapping_value(item, "id") or "")
         issue_id = str(_mapping_value(item, "id") or "unknown")
         recommendation = _run_qa_recommendation(item)
+        metadata = _run_qa_metadata(item, issue_id=issue_id, original_severity=original_severity)
         issues.append(
             _gate_issue(
                 "run_qa_findings_unresolved",
@@ -982,8 +1057,10 @@ def _run_quality_issues(report_version: ReportVersionRecord) -> list[BusinessQAF
                 ),
                 competitor_name=_run_qa_competitor(item),
                 dimension=_run_qa_dimension(item),
+                evidence_ids=_run_qa_evidence_ids(item, metadata),
                 severity="blocker" if original_severity == "blocker" else "warn",
                 recommendation=recommendation,
+                metadata=metadata,
             )
         )
     return issues
@@ -1020,6 +1097,45 @@ def _run_qa_recommendation(finding: object) -> str:
         if isinstance(rationale, str) and rationale.strip():
             return rationale.strip()
     return "Run scoped redo for the affected branch before publishing."
+
+
+def _run_qa_metadata(
+    finding: object,
+    *,
+    issue_id: str,
+    original_severity: str,
+) -> dict[str, object]:
+    raw_metadata = _mapping_value(finding, "metadata")
+    metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+    metadata.update(
+        {
+            "run_qa_finding_id": issue_id,
+            "run_qa_original_severity": original_severity,
+            "run_qa_detected_by": _mapping_value(finding, "detected_by") or "",
+            "run_qa_field_path": _mapping_value(finding, "field_path") or "",
+            "run_qa_target_agent": _mapping_value(finding, "target_agent") or "",
+            "run_qa_target_subagent": _run_qa_dimension(finding) or "",
+            "run_qa_target_competitor": _run_qa_competitor(finding) or "",
+        }
+    )
+    redo_scope = _mapping_value(finding, "redo_scope")
+    if isinstance(redo_scope, dict):
+        metadata["run_qa_redo_scope"] = redo_scope
+    return {key: value for key, value in metadata.items() if value not in ("", None, [])}
+
+
+def _run_qa_evidence_ids(finding: object, metadata: dict[str, object]) -> list[str]:
+    candidates: list[str] = []
+    for key in ("evidence_ids", "source_ids", "raw_source_ids"):
+        candidates.extend(_string_list(_mapping_value(finding, key)))
+        candidates.extend(_string_list(metadata.get(key)))
+    for item in _mapping_object_list(metadata.get("evidence_audit_trail")):
+        for key in ("evidence_id", "raw_source_id", "source_id"):
+            value = item.get(key)
+            if value is not None and str(value).strip():
+                candidates.append(str(value).strip())
+                break
+    return _unique_strings(candidates)
 
 
 def _readiness_issues(readiness: ProjectReadinessScore) -> list[BusinessQAFinding]:
@@ -1096,6 +1212,7 @@ def _gate_issue(
     dimension: str | None = None,
     severity: str = "blocker",
     recommendation: str,
+    metadata: dict[str, object] | None = None,
 ) -> BusinessQAFinding:
     return BusinessQAFinding(
         id=compute_release_gate_issue_id(rule_id, message, evidence_ids, claim_ids),
@@ -1109,6 +1226,7 @@ def _gate_issue(
         evidence_ids=evidence_ids or [],
         claim_ids=claim_ids or [],
         recommendation=recommendation,
+        metadata=metadata or {},
     )
 
 
@@ -1120,6 +1238,24 @@ def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item).strip()]
+
+
+def _unique_strings(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
+
+
+def _mapping_object_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
 
 
 def _online_failure_summary(value: object) -> str:

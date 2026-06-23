@@ -6,10 +6,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  backend-quality:
-    name: Backend quality checks
+  backend-lint:
+    name: Backend lint and secret scan
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -24,25 +24,123 @@ jobs:
       - name: Lint focused quality modules
         run: |
           python -m ruff check \
+            backend/app/routes/knowledge.py \
+            backend/app/routers/enterprise.py \
+            backend/packages/business_intel/claim_validator.py \
+            backend/packages/agents/qa/logic.py \
             backend/packages/business_intel/report_quality.py \
+            backend/packages/enterprise/postgres.py \
+            backend/packages/enterprise/store.py \
+            backend/packages/knowledge/models.py \
+            backend/packages/knowledge/repository.py \
+            backend/packages/knowledge/retrieval.py \
             backend/packages/llm/doubao_client.py \
+            backend/packages/rag/knowledge_bridge.py \
+            backend/packages/rag/structured_claims.py \
             backend/scripts/compare_real_run_quality.py \
             backend/scripts/scan_secrets.py \
-            backend/tests/unit/test_report_quality.py \
-            backend/tests/unit/test_llm_client.py \
             backend/tests/unit/test_compare_real_run_quality_script.py \
-            backend/tests/unit/test_secret_scan.py
+            backend/tests/unit/test_enterprise_store.py \
+            backend/tests/unit/test_knowledge_evidence_bridge.py \
+            backend/tests/unit/test_knowledge_rollback.py \
+            backend/tests/unit/test_llm_client.py \
+            backend/tests/unit/test_rag_kb_eval_set.py \
+            backend/tests/unit/test_rag_kb_collector_chain.py \
+            backend/tests/unit/test_report_quality.py \
+            backend/tests/unit/test_retrieval_params.py \
+            backend/tests/unit/test_secret_scan.py \
+            backend/tests/unit/test_structured_source_claims.py
 
-      - name: Run deterministic quality tests
+      - name: Scan for accidental provider secrets
+        run: python backend/scripts/scan_secrets.py
+
+      - name: Check OpenAPI JSON sync
+        run: |
+          python backend/scripts/export_openapi.py /tmp/competiscope-openapi.json
+          diff -u frontend/openapi.json /tmp/competiscope-openapi.json
+
+  backend-business-quality:
+    name: Backend business quality shard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend
+        run: python -m pip install -e "backend[dev]"
+
+      - name: Run deterministic business quality tests
         run: |
           pytest -q \
             backend/tests/unit/test_secret_scan.py \
             backend/tests/unit/test_report_quality.py \
             backend/tests/unit/test_compare_real_run_quality_script.py \
-            backend/tests/unit/test_llm_client.py
+            backend/tests/unit/test_llm_client.py \
+            backend/tests/unit/test_business_intel.py::test_claim_validator_marks_high_risk_status_and_conflicts \
+            backend/tests/unit/test_business_intel.py::test_claim_validator_detects_structured_pricing_conflict \
+            backend/tests/unit/test_business_intel.py::test_claim_validator_detects_customer_data_training_conflict \
+            backend/tests/unit/test_business_intel.py::test_claim_validator_detects_data_retention_conflict \
+            backend/tests/unit/test_business_intel.py::test_release_gate_claim_conflict_includes_kb_audit_metadata \
+            backend/tests/unit/test_enterprise_store.py::test_enterprise_store_round_trips_notifications_with_audit \
+            backend/tests/unit/test_enterprise_store.py::test_enterprise_router_exposes_projection
 
-      - name: Scan for accidental provider secrets
-        run: python backend/scripts/scan_secrets.py
+  backend-knowledge-acceptance:
+    name: Knowledge repository acceptance shard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend
+        run: python -m pip install -e "backend[dev]"
+
+      - name: Run repository versioning and rollback tests
+        run: |
+          pytest -q \
+            backend/tests/unit/test_document_versioning.py \
+            backend/tests/unit/test_knowledge_rollback.py \
+            backend/tests/unit/test_repository_migrations.py::test_repository_tracks_chunks_and_versions \
+            backend/tests/unit/test_repository_migrations.py::test_ingestion_persists_crawl_run_id_on_chunks
+
+  backend-rag-kb-quality:
+    name: RAG KB quality shard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend
+        run: python -m pip install -e "backend[dev]"
+
+      - name: Run RAG KB quality tests
+        run: |
+          pytest -q \
+            backend/tests/unit/test_rag_kb_eval_set.py \
+            backend/tests/unit/test_rag_kb_collector_chain.py \
+            backend/tests/unit/test_knowledge_evidence_bridge.py \
+            backend/tests/unit/test_structured_source_claims.py \
+            backend/tests/unit/test_retrieval_params.py::test_sparse_mode_uses_sqlite_without_dense_vector_search \
+            backend/tests/unit/test_retrieval_params.py::test_dense_mode_filters_hits_by_sqlite_document_status \
+            backend/tests/unit/test_run_service.py::test_collect_qa_flags_stale_kb_reused_source_for_refresh \
+            backend/tests/unit/test_run_service.py::test_collect_qa_flags_kb_live_source_contradiction \
+            backend/tests/unit/test_run_service.py::test_collector_warm_starts_from_rag_kb \
+            backend/tests/unit/test_run_service.py::test_collect_join_ingests_verified_raw_sources_into_kb \
+            backend/tests/unit/test_report_quality.py::test_writer_grounding_prompt_reuses_kb_only_via_source_tokens
 
   frontend-build:
     name: Frontend build
@@ -64,6 +162,16 @@ jobs:
       - name: Install frontend
         working-directory: frontend
         run: pnpm install --frozen-lockfile
+
+      - name: Check generated OpenAPI types
+        working-directory: frontend
+        run: |
+          pnpm openapi-typescript openapi.json -o src/api/openapi.ts
+          git diff --exit-code src/api/openapi.ts
+
+      - name: Test report source trace
+        working-directory: frontend
+        run: pnpm test -- src/features/report/ReportSourceTrace.test.tsx src/features/report/sourceBundle.test.ts src/stores/knowledgeStore.test.ts src/features/workbench/ReportReviewDesk.test.tsx src/features/workbench/ReleaseGateReviewQueue.test.tsx src/features/workbench/NotificationStream.test.tsx src/features/workbench/dataLoaders.test.ts src/features/workbench/OverviewPanels.test.tsx src/features/trace/TraceList.test.ts
 
       - name: Build frontend
         working-directory: frontend

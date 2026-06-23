@@ -34,6 +34,20 @@ RunEventType = Literal[
     "writer_assemble_repair_completed",
     "writer_quality_preflight",
     "writer_quality_preflight_repair",
+    "writer_structured_repair_selected",
+    "writer_structured_section_started",
+    "writer_structured_section_completed",
+    "writer_structured_section_failed",
+    "writer_structured_report_validated",
+    "writer_publication_contract_validated",
+    "writer_report_artifact_v2_publication_validated",
+    "writer_publication_contract_repair_selected",
+    "writer_publication_contract_repaired",
+    "writer_recommendation_delta_checked",
+    "writer_structured_repair_failed_preserved_previous",
+    "writer_schema_first_failed_closed",
+    "writer_markdown_fallback_used",
+    "writer_unified_quality_result_recorded",
 ]
 
 

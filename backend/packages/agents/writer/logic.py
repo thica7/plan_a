@@ -6,12 +6,27 @@ import math
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from packages.agents.writer.assembler import assemble_report_sections
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from packages.agents.writer.assembler import (
+    ReportSectionFragment,
+    assemble_report_fragments,
+    assemble_report_sections,
+)
+from packages.agents.writer.artifact_assembler import assemble_report_artifact_v2
+from packages.agents.writer.artifact_publication_contract import (
+    validate_report_artifact_publication,
+)
 from packages.agents.writer.evidence_pack import (
     SEGMENT_INPUT_TARGET_CHARS,
     build_writer_evidence_pack,
+)
+from packages.agents.writer.publication_contract import (
+    PublicationContractIssue,
+    PublicationContractResult,
+    validate_publication_contract,
 )
 from packages.agents.writer.quality_preflight import run_writer_quality_preflight
 from packages.agents.writer.repair import (
@@ -21,12 +36,51 @@ from packages.agents.writer.repair import (
     replace_markdown_section,
     report_regression_problem,
     section_regression_problem,
+    structured_repair_target_for_issue,
 )
 from packages.agents.writer.segment_contract import (
+    CORE_HEADING_KEYS,
+    SECTION_ALLOWED_KEYS,
+    SegmentContract,
+    SUPPORT_HEADING_KEYS,
+    heading_key_for,
     segment_contract_for,
     validate_segment_contract,
 )
+from packages.agents.writer.section_briefs import (
+    build_section_briefs,
+    segment_payloads_from_briefs,
+)
+from packages.agents.writer.structured_report import (
+    BattlecardSection,
+    CitedText,
+    CompetitorDeepDiveSection,
+    DecisionMatrixSection,
+    ExecutiveSummarySection,
+    ReportCore,
+    ReportMetadata,
+    ReportSupport,
+    StructuredReport,
+    SwotSection,
+    UserReviewThemesSection,
+)
+from packages.agents.writer.structured_hygiene import (
+    contains_internal_writer_term,
+    find_malformed_source_token_attempts,
+)
+from packages.agents.writer.structured_sections import (
+    StructuredReportGenerationError,
+    StructuredSectionGenerationError,
+)
+from packages.agents.writer.structured_repair import (
+    previous_recommendation_posture,
+    recommendation_delta_problem,
+)
 from packages.business_intel.release_gate import REPORT_RICHNESS_MINIMUMS
+from packages.business_intel.report_sections import (
+    build_report_section_index,
+    parse_report_section_marker,
+)
 from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.i18n.language import (
@@ -68,6 +122,20 @@ USER_RESEARCH_SOURCE_TYPE_ORDER = (
 )
 USER_RESEARCH_SOURCE_TYPES = set(USER_RESEARCH_SOURCE_TYPE_ORDER)
 CJK_TEXT_RE = re.compile(r"[\u3400-\u9fff]")
+PROMPT_SAFE_FIELD_ALIASES = {
+    "source_registry": "source_index",
+    "allowed_source_ids": "citation_source_ids",
+    "claim_cards": "evidence_claims",
+    "decision_cards": "decision_guidance",
+    "publication_repair_issues": "report_repair_notes",
+    "represented_by": "summarized_by",
+}
+PROMPT_DROPPED_INTERNAL_REFERENCE_KEYS = {
+    "allowed_claim_card_ids",
+    "allowed_decision_card_ids",
+    "claim_card_ids",
+    "decision_card_ids",
+}
 PRICING_LINE_TOKENS = (
     "price",
     "pricing",
@@ -144,6 +212,7 @@ WRITER_NORMALIZED_FIELD_LONG_KEY_PARTS = (
     "trigger",
 )
 WRITER_NORMALIZED_SNIPPET_LIMIT = 1600
+STRUCTURED_SECTION_INPUT_TARGET_CHARS = 28_000
 
 
 def writer_user_research_policy_text() -> str:
@@ -177,8 +246,899 @@ def _assemble_repair_quality_gate(
     }
 
 
+def _parse_structured_section_response(
+    response: str,
+    section_schema: type[BaseModel],
+    allowed_source_ids: set[str],
+) -> BaseModel:
+    cleaned_response = response.strip()
+    if not cleaned_response.startswith("{"):
+        raise ValueError("structured writer response must be a JSON object")
+    try:
+        payload = json.loads(cleaned_response)
+        payload = _normalize_structured_section_payload(payload)
+        section = section_schema.model_validate(payload)
+    except (json.JSONDecodeError, ValidationError) as exc:
+        raise ValueError(f"structured writer response validation failed: {exc}") from exc
+
+    cited_source_ids = _source_ids_from_section(section)
+    invalid_source_ids = cited_source_ids - allowed_source_ids
+    if invalid_source_ids:
+        invalid = ", ".join(sorted(invalid_source_ids))
+        raise ValueError(f"structured writer response used disallowed source_ids: {invalid}")
+    return section
+
+
+def _normalize_structured_section_payload(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_normalize_structured_section_payload(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    evidence_gap_hint = value.get("evidence_gap") is True
+    normalized = {
+        key: _normalize_structured_section_payload(child)
+        for key, child in value.items()
+        if key != "evidence_gap"
+    }
+    if normalized.get("evidence_role") == "evidence_gap" or evidence_gap_hint:
+        normalized["evidence_role"] = "evidence_gap"
+        normalized["confidence"] = "low"
+    return normalized
+
+
+def _structured_section_contract_instructions(
+    section_schema: type[BaseModel],
+) -> list[str]:
+    if section_schema is CitedTextListSection:
+        return [
+            (
+                'CitedTextListSection output must be exactly {"items": [...]} '
+                "where every item is a CitedText data object."
+            ),
+            (
+                "Schema JSON describes the shape; it is not the output. "
+                "Never return $defs, properties, required, title, type, or "
+                "additionalProperties as top-level keys."
+            ),
+        ]
+    if section_schema is BattlecardSection:
+        return [
+            (
+                "BattlecardSection is a cited derivative section. Every CitedText "
+                "in use_when, attack_points, defense_points, likely_objections, "
+                "and rebuttal_talk_tracks must include 1-3 source_ids inherited "
+                "from the source-backed matrix, SWOT, deep-dive, user, or "
+                "community evidence supporting that talk track."
+            ),
+            (
+                "Do not output inference with empty source_ids. If a talk track "
+                "cannot be cited from allowed_source_ids, move it to "
+                "proof_needed_before_external_use or evidence_limits as "
+                'evidence_role="evidence_gap", confidence="low".'
+            ),
+        ]
+    return []
+
+
+def _structured_section_generation_error(
+    segment: Mapping[str, object],
+    section_schema: type[BaseModel],
+    exc: BaseException,
+    *,
+    error_kind: str,
+    attempt: str,
+) -> StructuredSectionGenerationError:
+    section_id = str(segment.get("section_id") or "unknown")
+    section_key = str(segment.get("section_key") or section_id)
+    message = str(exc).strip() or exc.__class__.__name__
+    return StructuredSectionGenerationError(
+        section_key=section_key,
+        section_id=section_id,
+        schema_name=section_schema.__name__,
+        message=message,
+        error_kind=error_kind,
+        attempt=attempt,
+    )
+
+
+def _source_ids_from_section(section: BaseModel) -> set[str]:
+    source_ids: set[str] = set()
+
+    def collect(value: object) -> None:
+        if isinstance(value, dict):
+            raw_source_id = value.get("source_id")
+            if isinstance(raw_source_id, str):
+                source_id = raw_source_id.strip()
+                if source_id:
+                    source_ids.add(source_id)
+            raw_source_ids = value.get("source_ids")
+            if isinstance(raw_source_ids, list):
+                source_ids.update(
+                    source_id.strip()
+                    for source_id in raw_source_ids
+                    if isinstance(source_id, str) and source_id.strip()
+                )
+            for child in value.values():
+                collect(child)
+            return
+        if isinstance(value, list):
+            for child in value:
+                collect(child)
+
+    collect(section.model_dump())
+    return source_ids
+
+
+def _strong_writer_source_ids(detail: RunDetail) -> set[str]:
+    strong: set[str] = set()
+    for source in detail.raw_sources:
+        confidence = getattr(source, "confidence", None)
+        source_type = str(getattr(source, "source_type", "") or "").casefold()
+        metadata = getattr(source, "metadata", {}) or {}
+        if confidence is not None and float(confidence) >= 0.75:
+            strong.add(source.id)
+        if source_type in {"official", "documentation", "pricing"}:
+            strong.add(source.id)
+        if metadata.get("official_source") is True or metadata.get("trusted_source") is True:
+            strong.add(source.id)
+    return strong
+
+
+def _schema_first_real_run(detail: RunDetail, structured_enabled: bool) -> bool:
+    return structured_enabled and detail.execution_mode == "real"
+
+
+def _structured_markdown_fallback_allowed(
+    detail: RunDetail, structured_enabled: bool
+) -> bool:
+    if not structured_enabled:
+        return True
+    return not _schema_first_real_run(detail, structured_enabled)
+
+
+def build_structured_writer_section_plan(
+    *, competitors: list[str], dimensions: list[str]
+) -> list[dict[str, object]]:
+    return [
+        {
+            "section_id": "executive_summary",
+            "schema": "ExecutiveSummarySection",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "decision_summary",
+            "schema": "list[CitedText]",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "competitive_findings",
+            "schema": "list[CitedText]",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "user_review_themes",
+            "schema": "UserReviewThemesSection",
+            "owns_markdown_layout": False,
+        },
+        *[
+            {
+                "section_id": "competitor_deep_dive",
+                "competitor": competitor,
+                "schema": "CompetitorDeepDiveSection",
+                "owns_markdown_layout": False,
+            }
+            for competitor in competitors
+        ],
+        {
+            "section_id": "decision_matrix",
+            "dimensions": list(dimensions),
+            "schema": "DecisionMatrixSection",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "swot",
+            "schema": "SwotSection",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "battlecard",
+            "schema": "BattlecardSection",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "community_triangulation",
+            "schema": "list[CitedText]",
+            "owns_markdown_layout": False,
+        },
+        {
+            "section_id": "support",
+            "schema": "ReportSupport",
+            "owns_markdown_layout": False,
+        },
+    ]
+
+
 class WriterEvidencePreflightError(RuntimeError):
     """Raised when writer evidence cannot safely be sent to the LLM."""
+
+
+class CitedTextListSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[CitedText] = Field(min_length=1)
+
+
+def _structured_section_key(item: dict[str, object]) -> str:
+    section_id = str(item["section_id"])
+    if section_id == "competitor_deep_dive":
+        return f"competitor_deep_dive::{item['competitor']}"
+    return section_id
+
+
+def _structured_section_schema(schema_name: object) -> type[BaseModel]:
+    schemas: dict[str, type[BaseModel]] = {
+        "ExecutiveSummarySection": ExecutiveSummarySection,
+        "list[CitedText]": CitedTextListSection,
+        "UserReviewThemesSection": UserReviewThemesSection,
+        "CompetitorDeepDiveSection": CompetitorDeepDiveSection,
+        "DecisionMatrixSection": DecisionMatrixSection,
+        "SwotSection": SwotSection,
+        "BattlecardSection": BattlecardSection,
+        "ReportSupport": ReportSupport,
+    }
+    return schemas[str(schema_name)]
+
+
+def _structured_section_language_instruction(segment: dict[str, object]) -> str:
+    if normalize_output_language(segment.get("output_language")) == "zh-CN":
+        return (
+            "Write every narrative text field in Simplified Chinese. Preserve "
+            "product names, source IDs, URLs, and technical terms such as model "
+            "names and API names in their original language when appropriate."
+        )
+    return "Write every narrative text field in English."
+
+
+def _structured_section_inputs(
+    *, evidence_pack_result, competitors: list[str], dimensions: list[str]
+) -> dict[str, dict[str, object]]:
+    segment_inputs = _structured_budgeted_segment_inputs(evidence_pack_result)
+    base = None if segment_inputs else evidence_pack_result.to_prompt_json()
+    output_language = getattr(
+        getattr(evidence_pack_result, "pack", None),
+        "output_language",
+        "zh-CN",
+    )
+    inputs: dict[str, dict[str, object]] = {}
+    for item in build_structured_writer_section_plan(
+        competitors=competitors,
+        dimensions=dimensions,
+    ):
+        section_id = str(item["section_id"])
+        segment = {
+            "section_id": section_id,
+            "competitor": item.get("competitor"),
+            "dimensions": item.get("dimensions", dimensions),
+            "output_language": output_language,
+        }
+        if segment_inputs:
+            matching_segments = _select_structured_evidence_segments(
+                section_id=section_id,
+                competitor=item.get("competitor"),
+                segment_inputs=segment_inputs,
+            )
+            primary_segments = [
+                _project_structured_section_segment(
+                    segment,
+                    section_id=section_id,
+                )
+                for segment in matching_segments[:1]
+            ]
+            omitted_segments = matching_segments[1:]
+            segment["evidence_segments"] = primary_segments
+            segment["allowed_source_ids"] = _source_ids_from_structured_segments(
+                primary_segments
+            )
+            segment["additional_segment_count"] = len(omitted_segments)
+            segment["additional_segment_refs"] = [
+                _structured_segment_ref(omitted_segment)
+                for omitted_segment in omitted_segments
+            ]
+        else:
+            segment["evidence_pack"] = base
+        inputs[_structured_section_key(item)] = segment
+    return inputs
+
+
+def _project_structured_section_segment(
+    segment: dict[str, object],
+    *,
+    section_id: str,
+) -> dict[str, object]:
+    if _json_chars(segment) <= STRUCTURED_SECTION_INPUT_TARGET_CHARS:
+        return segment
+
+    projection_levels = (
+        {
+            "source_title_limit": 96,
+            "coverage_note_count": 2,
+            "coverage_note_limit": 140,
+            "fact_count": 2,
+            "signal_count": 1,
+            "kb_signal_count": 1,
+            "conflict_count": 1,
+            "quote_count": 4,
+            "text_limit": 180,
+            "matrix_summary_count": 3,
+            "matrix_value_limit": 220,
+            "source_detail_level": 2,
+            "group_source_id_count": 6,
+        },
+        {
+            "source_title_limit": 80,
+            "coverage_note_count": 1,
+            "coverage_note_limit": 100,
+            "fact_count": 1,
+            "signal_count": 1,
+            "kb_signal_count": 1,
+            "conflict_count": 1,
+            "quote_count": 2,
+            "text_limit": 140,
+            "matrix_summary_count": 2,
+            "matrix_value_limit": 160,
+            "source_detail_level": 2,
+            "group_source_id_count": 6,
+        },
+        {
+            "source_title_limit": 64,
+            "coverage_note_count": 0,
+            "coverage_note_limit": 80,
+            "fact_count": 1,
+            "signal_count": 0,
+            "kb_signal_count": 1,
+            "conflict_count": 0,
+            "quote_count": 0,
+            "text_limit": 100,
+            "matrix_summary_count": 1,
+            "matrix_value_limit": 100,
+            "source_detail_level": 1,
+            "group_source_id_count": 4,
+        },
+        {
+            "source_title_limit": 0,
+            "coverage_note_count": 0,
+            "coverage_note_limit": 0,
+            "fact_count": 1,
+            "signal_count": 0,
+            "kb_signal_count": 0,
+            "conflict_count": 0,
+            "quote_count": 0,
+            "text_limit": 80,
+            "matrix_summary_count": 1,
+            "matrix_value_limit": 60,
+            "source_detail_level": 0,
+            "group_source_id_count": 3,
+        },
+    )
+    original_chars = _json_chars(segment)
+    for level, config in enumerate(projection_levels, start=1):
+        projected = _compact_structured_section_segment(
+            segment,
+            section_id=section_id,
+            original_chars=original_chars,
+            projection_level=level,
+            config=config,
+        )
+        if _json_chars(projected) <= STRUCTURED_SECTION_INPUT_TARGET_CHARS:
+            return projected
+    return _compact_structured_section_segment(
+        segment,
+        section_id=section_id,
+        original_chars=original_chars,
+        projection_level=len(projection_levels),
+        config=projection_levels[-1],
+    )
+
+
+def _compact_structured_section_segment(
+    segment: dict[str, object],
+    *,
+    section_id: str,
+    original_chars: int,
+    projection_level: int,
+    config: Mapping[str, int],
+) -> dict[str, object]:
+    projected: dict[str, object] = {}
+    for key in (
+        "schema_version",
+        "segment_name",
+        "segment_kind",
+        "section_id",
+        "output_language",
+        "segment_essential",
+        "segment_competitor",
+        "segment_dimension",
+        "segment_batch",
+        "shard_output_format",
+        "coverage",
+    ):
+        if key in segment:
+            projected[key] = segment[key]
+    projected["section_id"] = projected.get("section_id") or section_id
+    projected["section_projection"] = "compact"
+    projected["section_projection_level"] = projection_level
+    projected["original_segment_input_chars"] = original_chars
+    projected["section_input_target_chars"] = STRUCTURED_SECTION_INPUT_TARGET_CHARS
+
+    source_registry = segment.get("source_registry")
+    if isinstance(source_registry, list):
+        projected["source_registry"] = [
+            _compact_section_source_registry_item(
+                item,
+                detail_level=config["source_detail_level"],
+                title_limit=config["source_title_limit"],
+            )
+            for item in source_registry
+            if isinstance(item, Mapping)
+        ]
+
+    groups = segment.get("groups")
+    if isinstance(groups, list):
+        projected["groups"] = [
+            _compact_section_group_payload(group, config=config)
+            for group in groups
+            if isinstance(group, Mapping)
+        ]
+
+    quotes = segment.get("quotes")
+    quote_count = config["quote_count"]
+    if isinstance(quotes, list) and quote_count > 0:
+        projected["quotes"] = [
+            _compact_section_quote_payload(quote, text_limit=config["text_limit"])
+            for quote in quotes[:quote_count]
+            if isinstance(quote, Mapping)
+        ]
+        projected["quotes_truncated_count"] = max(0, len(quotes) - quote_count)
+    elif isinstance(quotes, list):
+        projected["quote_count"] = len(quotes)
+        projected["quotes_omitted_for_section_projection"] = True
+
+    matrix = segment.get("matrix")
+    if isinstance(matrix, Mapping):
+        projected["matrix"] = _compact_section_matrix_payload(matrix, config=config)
+
+    structured_knowledge = segment.get("structured_knowledge")
+    if isinstance(structured_knowledge, Mapping):
+        projected["structured_knowledge"] = structured_knowledge
+
+    allowed_source_ids = _string_values(segment.get("allowed_source_ids"))
+    if allowed_source_ids:
+        projected["allowed_source_id_count"] = len(allowed_source_ids)
+
+    projected["segment_input_chars"] = _json_chars(projected)
+    return projected
+
+
+def _compact_section_source_registry_item(
+    item: Mapping[str, object],
+    *,
+    detail_level: int,
+    title_limit: int,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "id": item.get("id") or item.get("source_id"),
+        "competitor": item.get("competitor"),
+        "dimension": item.get("dimension"),
+        "source_type": item.get("source_type"),
+    }
+    if detail_level >= 1:
+        payload.update(
+            {
+                "confidence": item.get("confidence"),
+                "authority_role": item.get("authority_role"),
+            }
+        )
+    if detail_level >= 2:
+        payload.update(
+            {
+                "covered_competitors": _string_values(item.get("covered_competitors")),
+                "title": _compact_section_text(item.get("title"), title_limit),
+                "quality_score": item.get("quality_score"),
+                "has_normalized_fields": item.get("has_normalized_fields"),
+                "has_community_clusters": item.get("has_community_clusters"),
+                "no_signal_reason": item.get("no_signal_reason"),
+            }
+        )
+    return {
+        key: value
+        for key, value in payload.items()
+        if value not in (None, "", [])
+    }
+
+
+def _prompt_safe_writer_segment(segment: Mapping[str, object]) -> dict[str, object]:
+    payload = dict(segment)
+    payload.pop("allowed_claim_card_ids", None)
+    payload.pop("allowed_decision_card_ids", None)
+
+    section_brief = payload.get("section_brief")
+    if isinstance(section_brief, Mapping):
+        safe_brief = dict(section_brief)
+        safe_brief.pop("allowed_claim_card_ids", None)
+        safe_brief.pop("allowed_decision_card_ids", None)
+        payload["section_brief"] = safe_brief
+
+    claim_cards = payload.get("claim_cards")
+    if isinstance(claim_cards, list):
+        payload["claim_cards"] = [
+            _prompt_safe_claim_card(card)
+            for card in claim_cards
+            if isinstance(card, Mapping)
+        ]
+
+    decision_cards = payload.get("decision_cards")
+    if isinstance(decision_cards, list):
+        payload["decision_cards"] = [
+            _prompt_safe_decision_card(card)
+            for card in decision_cards
+            if isinstance(card, Mapping)
+        ]
+    return _reader_safe_prompt_field_names(payload)
+
+
+def _reader_safe_prompt_field_names(value: object) -> object:
+    if isinstance(value, Mapping):
+        payload: dict[str, object] = {}
+        for key, child in value.items():
+            if key in PROMPT_DROPPED_INTERNAL_REFERENCE_KEYS:
+                continue
+            safe_key = PROMPT_SAFE_FIELD_ALIASES.get(str(key), str(key))
+            payload[safe_key] = _reader_safe_prompt_field_names(child)
+        return payload
+    if isinstance(value, list):
+        return [_reader_safe_prompt_field_names(item) for item in value]
+    return value
+
+
+def _reader_safe_prompt_json_text(json_text: str) -> str:
+    try:
+        payload = json.loads(json_text)
+    except json.JSONDecodeError:
+        return json_text
+    return json.dumps(
+        _reader_safe_prompt_field_names(payload),
+        ensure_ascii=False,
+    )
+
+
+def _prompt_safe_claim_card(card: Mapping[str, object]) -> dict[str, object]:
+    payload = dict(card)
+    payload.pop("id", None)
+    return payload
+
+
+def _prompt_safe_decision_card(card: Mapping[str, object]) -> dict[str, object]:
+    payload = dict(card)
+    payload.pop("id", None)
+    payload.pop("claim_card_ids", None)
+    return payload
+
+
+def _prompt_safe_citation_error_ids(source_ids: Sequence[str]) -> list[str]:
+    return [
+        source_id
+        for source_id in _string_values(source_ids)
+        if not _is_internal_writer_reference_id(source_id)
+    ]
+
+
+def _is_internal_writer_reference_id(value: str) -> bool:
+    return value.startswith(("claim-", "decision-", "fact:", "signal:", "kb:"))
+
+
+def _compact_section_group_payload(
+    group: Mapping[str, object],
+    *,
+    config: Mapping[str, int],
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        key: value
+        for key, value in {
+            "competitor": group.get("competitor"),
+            "dimension": group.get("dimension"),
+            "confidence_summary": group.get("confidence_summary"),
+            "fact_count": group.get("fact_count"),
+            "unstructured_signal_count": group.get("unstructured_signal_count"),
+            "kb_signal_count": group.get("kb_signal_count"),
+            "conflict_count": group.get("conflict_count"),
+        }.items()
+        if value not in (None, "", [])
+    }
+    for source_key in (
+        "source_ids",
+        "official_source_ids",
+        "community_source_ids",
+        "user_research_source_ids",
+    ):
+        _add_compact_source_id_scope(
+            payload,
+            source_key,
+            group.get(source_key),
+            max_count=config["group_source_id_count"],
+        )
+    coverage_notes = _string_values(group.get("coverage_notes"))
+    note_count = config["coverage_note_count"]
+    if note_count > 0:
+        payload["coverage_notes"] = [
+            _compact_section_text(note, config["coverage_note_limit"])
+            for note in coverage_notes[:note_count]
+        ]
+    if len(coverage_notes) > note_count:
+        payload["coverage_notes_truncated_count"] = len(coverage_notes) - note_count
+
+    payload["facts"] = _compact_section_payload_list(
+        group.get("facts"),
+        limit=config["fact_count"],
+        text_limit=config["text_limit"],
+    )
+    payload["unstructured_signals"] = _compact_section_payload_list(
+        group.get("unstructured_signals"),
+        limit=config["signal_count"],
+        text_limit=config["text_limit"],
+    )
+    payload["kb_signals"] = _compact_section_payload_list(
+        group.get("kb_signals"),
+        limit=config["kb_signal_count"],
+        text_limit=config["text_limit"],
+    )
+    conflicts = group.get("conflicts")
+    payload["conflicts"] = _compact_section_payload_list(
+        conflicts,
+        limit=config["conflict_count"],
+        text_limit=config["text_limit"],
+    )
+    for key in ("facts", "unstructured_signals", "kb_signals", "conflicts"):
+        if not payload.get(key):
+            payload.pop(key, None)
+    return payload
+
+
+def _add_compact_source_id_scope(
+    payload: dict[str, object],
+    key: str,
+    value: object,
+    *,
+    max_count: int,
+) -> None:
+    source_ids = _string_values(value)
+    if not source_ids:
+        return
+    payload[key] = source_ids[:max_count]
+    payload[f"{key}_total_count"] = len(source_ids)
+    if len(source_ids) > max_count:
+        payload[f"{key}_truncated_count"] = len(source_ids) - max_count
+
+
+def _compact_section_payload_list(
+    value: object,
+    *,
+    limit: int,
+    text_limit: int,
+) -> list[object]:
+    if not isinstance(value, list) or limit <= 0:
+        return []
+    return [_compact_section_value(item, text_limit) for item in value[:limit]]
+
+
+def _compact_section_quote_payload(
+    quote: Mapping[str, object],
+    *,
+    text_limit: int,
+) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in {
+            "id": quote.get("id"),
+            "excerpt": _compact_section_text(quote.get("excerpt"), text_limit),
+            "full_text_source_ids": _string_values(quote.get("full_text_source_ids")),
+        }.items()
+        if value not in (None, "", [])
+    }
+
+
+def _compact_section_matrix_payload(
+    matrix: Mapping[str, object],
+    *,
+    config: Mapping[str, int],
+) -> dict[str, object]:
+    summary = _string_values(matrix.get("summary"))
+    cells = matrix.get("cells")
+    return {
+        key: value
+        for key, value in {
+            "winner_by_dimension": matrix.get("winner_by_dimension"),
+            "summary": [
+                _compact_section_text(item, config["matrix_value_limit"])
+                for item in summary[: config["matrix_summary_count"]]
+            ],
+            "summary_truncated_count": max(
+                0,
+                len(summary) - config["matrix_summary_count"],
+            ),
+            "cells": (
+                [
+                    _compact_section_matrix_cell(cell, config=config)
+                    for cell in cells
+                    if isinstance(cell, Mapping)
+                ]
+                if isinstance(cells, list)
+                else []
+            ),
+        }.items()
+        if value not in (None, "", [])
+    }
+
+
+def _compact_section_matrix_cell(
+    cell: Mapping[str, object],
+    *,
+    config: Mapping[str, int],
+) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in {
+            "competitor": cell.get("competitor"),
+            "dimension": cell.get("dimension"),
+            "value": _compact_section_text(cell.get("value"), config["matrix_value_limit"]),
+            "source_ids": _string_values(cell.get("source_ids")),
+            "confidence": cell.get("confidence"),
+        }.items()
+        if value not in (None, "", [])
+    }
+
+
+def _compact_section_value(value: object, text_limit: int) -> object:
+    if isinstance(value, str):
+        return _compact_section_text(value, text_limit)
+    if isinstance(value, Mapping):
+        compact: dict[str, object] = {}
+        for key, child in value.items():
+            if key in {"url", "short_source_note"}:
+                continue
+            compact_value = _compact_section_value(child, text_limit)
+            if compact_value not in (None, "", []):
+                compact[str(key)] = compact_value
+        return compact
+    if isinstance(value, list):
+        return [
+            compact_item
+            for item in value[:4]
+            for compact_item in [_compact_section_value(item, text_limit)]
+            if compact_item not in (None, "", [])
+        ]
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _compact_section_text(value: object, limit: int) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = " ".join(value.split())
+    if not text:
+        return None
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)].rstrip() + "..."
+
+
+def _string_values(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item.strip()]
+
+
+def _json_chars(value: object) -> int:
+    return len(json.dumps(value, ensure_ascii=False))
+
+
+def _structured_budgeted_segment_inputs(evidence_pack_result) -> list[dict[str, object]]:
+    if not hasattr(evidence_pack_result, "segment_inputs"):
+        return []
+    try:
+        segments = evidence_pack_result.segment_inputs()
+    except TypeError:
+        return []
+    if not isinstance(segments, list):
+        return []
+    return [dict(segment) for segment in segments if isinstance(segment, dict)]
+
+
+def _select_structured_evidence_segments(
+    *,
+    section_id: str,
+    competitor: object,
+    segment_inputs: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    target_segment_names = {
+        "executive_summary": {"decision_summary", "side_by_side_matrix"},
+        "decision_summary": {"decision_summary"},
+        "competitive_findings": {"decision_summary", "side_by_side_matrix"},
+        "user_review_themes": {"user_research"},
+        "competitor_deep_dive": {"competitor_deep_dives"},
+        "decision_matrix": {"decision_summary", "side_by_side_matrix"},
+        "swot": {"swot_analysis"},
+        "battlecard": {"decision_summary", "battlecard"},
+        "community_triangulation": {"user_research"},
+        "support": {"support_appendix"},
+    }.get(section_id, set())
+
+    selected: list[dict[str, object]] = []
+    for segment in segment_inputs:
+        segment_name = str(segment.get("segment_name") or segment.get("section_id") or "")
+        if segment_name not in target_segment_names:
+            continue
+        if section_id == "competitor_deep_dive" and competitor is not None:
+            segment_competitor = segment.get("segment_competitor") or segment.get(
+                "competitor"
+            )
+            if segment_competitor and str(segment_competitor) != str(competitor):
+                continue
+        selected.append(segment)
+    return selected
+
+
+def _structured_segment_ref(segment: dict[str, object]) -> dict[str, object]:
+    source_ids = _source_ids_from_structured_segments([segment])
+    ref = {
+        "segment_name": segment.get("segment_name") or segment.get("section_id"),
+        "segment_competitor": segment.get("segment_competitor")
+        or segment.get("competitor"),
+        "segment_batch": segment.get("segment_batch"),
+        "source_count": len(source_ids),
+    }
+    if len(source_ids) <= 6:
+        ref["allowed_source_ids"] = source_ids
+    else:
+        ref["representative_source_ids"] = source_ids[:6]
+        ref["allowed_source_ids_total_count"] = len(source_ids)
+        ref["allowed_source_ids_truncated_count"] = len(source_ids) - 6
+    return ref
+
+
+def _source_ids_from_structured_segments(
+    segments: list[dict[str, object]],
+) -> list[str]:
+    source_ids: set[str] = set()
+
+    def add_source_id(value: object) -> None:
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned:
+                source_ids.add(cleaned)
+
+    def collect_source_registry(value: object) -> None:
+        if isinstance(value, dict):
+            registry = value.get("source_registry")
+            if isinstance(registry, list):
+                for item in registry:
+                    if isinstance(item, dict):
+                        add_source_id(item.get("id"))
+                        add_source_id(item.get("source_id"))
+            allowed = value.get("allowed_source_ids")
+            if isinstance(allowed, list):
+                for source_id in allowed:
+                    add_source_id(source_id)
+            for child in value.values():
+                collect_source_registry(child)
+            return
+        if isinstance(value, list):
+            for child in value:
+                collect_source_registry(child)
+
+    collect_source_registry(segments)
+    return sorted(source_ids)
 
 
 class WriterAgentMixin:
@@ -210,6 +1170,9 @@ class WriterAgentMixin:
         writer_repair_decision = ""
         anti_regression_reason: str | None = None
         previous_report_protected = False
+        structured_recommendation_guard_preserved = False
+        structured_scoped_merge_applied = False
+        structured_scoped_regression_checked = False
         redo_issue_by_id: dict[str, QCIssue] = {}
         for message in redo_messages:
             for item in message.payload.get("issues", []):
@@ -236,6 +1199,11 @@ class WriterAgentMixin:
             if pending_redo.redo_scope.kind == "writer_only":
                 writer_only_pending_issue_ids = pending_issue_ids
         redo_issues = list(redo_issue_by_id.values())
+        structured_targets = [
+            target
+            for issue in redo_issues
+            if (target := structured_repair_target_for_issue(issue)) is not None
+        ]
         redo_source_message_ids = [message.id for message in redo_messages]
         if writer_only_pending_issue_ids:
             writer_only_messages_without_issue_ids: list[str] = []
@@ -285,9 +1253,8 @@ class WriterAgentMixin:
                 output_language=detail.output_language,
                 competitors=detail.plan.competitors,
             )
-            assembled_markdown = self._harden_report_markdown(detail, assembled.markdown)
-            preflight = run_writer_quality_preflight(detail, assembled_markdown)
-            quality_gate = _assemble_repair_quality_gate(detail, assembled_markdown)
+            preflight = run_writer_quality_preflight(detail, assembled.markdown)
+            quality_gate = _assemble_repair_quality_gate(detail, assembled.markdown)
             await self.emit(
                 detail.id,
                 "writer_assemble_repair_completed",
@@ -301,7 +1268,10 @@ class WriterAgentMixin:
                 },
             )
             if preflight.passed and quality_gate["quality_gate_passed"]:
-                detail.report_md = assembled_markdown
+                detail.report_md = self._harden_report_markdown(
+                    detail,
+                    assembled.markdown,
+                )
                 writer_mode = "writer repair: assemble"
                 assemble_repair_succeeded = True
             else:
@@ -471,98 +1441,310 @@ class WriterAgentMixin:
                     anti_regression_reason=anti_regression_reason,
                     previous_report_protected=previous_report_protected,
                 )
-            layer_context = self._writer_layer_context(detail)
-            memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
-            required_sections = self._writer_required_sections(detail)
-            grounding_prompt = await self._writer_grounding_prompt(detail)
-            user_research_policy = writer_user_research_policy_text()
-            language_guidance = language_instruction(detail.output_language)
             try:
-                if evidence_pack_result.metrics.segmented_writer_required:
-                    report_md = await self._writer_segmented_report_markdown(
-                        record,
-                        evidence_pack_result=evidence_pack_result,
-                        timeout_seconds=timeout_seconds,
-                        language_guidance=language_guidance,
-                        memory_context=memory_context,
-                        layer_context=layer_context,
-                        required_sections=required_sections,
+                structured_enabled = self._settings.writer_structured_report_enabled
+                schema_contract_report_generated = False
+                segmented_writer_required = bool(
+                    getattr(
+                        evidence_pack_result.metrics,
+                        "segmented_writer_required",
+                        False,
                     )
-                    writer_mode = "real segmented LLM call"
-                else:
-                    writer_context_json = evidence_pack_result.to_prompt_json()
-                    report_md = await asyncio.wait_for(
-                        self._trace_llm_text(
+                )
+                if structured_enabled:
+                    try:
+                        report_md = await self._writer_schema_contract_segment_report(
+                            record,
+                            evidence_pack_result,
+                            timeout_seconds,
+                        )
+                        publication_validation = validate_publication_contract(
+                            report_md,
+                            structured_report=None,
+                            allowed_source_ids={
+                                source.id for source in detail.raw_sources
+                            },
+                            output_language=detail.output_language,
+                        )
+                        publication_payload = (
+                            publication_validation.telemetry_payload()
+                        )
+                        await self.emit(
+                            detail.id,
+                            "writer_publication_contract_validated",
+                            "writer",
+                            None,
+                            "Writer publication contract validated.",
+                            publication_payload,
+                        )
+                        self._trace_local_tool(
                             record,
                             agent="writer",
                             subagent=None,
-                            name="report_writer",
-                            system=(
-                                "You are a senior enterprise competitive-intelligence analyst. "
-                                "Produce a concise decision-grade markdown first draft, not a short "
-                                "summary. Use an analysis-first structure: lead with an executive "
-                                "takeaway, decision summary, competitive findings, competitor deep "
-                                "dives, and the selected layer-specific analysis. Put source quality, "
-                                "scenario QA, claim risk, RAG gap-fill, verification tasks, and the "
-                                "evidence appendix after the core analysis as support material. Write "
-                                "with consulting depth: side-by-side matrices, dimension analysis, "
-                                "risks, buying implications, and explicit next validation tasks. Cite "
-                                "factual claims with existing source IDs using [source:ID]. Do not "
-                                "invent source IDs. "
-                                "Do not use web_search_result or confidence < 0.75 as the sole support "
-                                "for a winner, legal/security certification, pricing, or procurement "
-                                "recommendation. If evidence is incomplete, say the conclusion is "
-                                "tentative and list the exact evidence gap. Do not claim all sources "
-                                "are verified when any source_type is web_search_result or "
-                                "llm_public_knowledge. "
-                                "Follow the Grounded Evidence Contract exactly. "
-                                f"{language_guidance} "
-                                f"{user_research_policy} "
-                                "Honor confirmed memory guidance when it does not conflict with "
-                                "evidence, schema requirements, or compliance policy. "
-                                "Use the requested competitive layer to choose the report shape: L1 "
-                                "is a direct battlecard, L2 is adjacent workflow and enterprise-risk "
-                                "analysis, and L3 is market landscape and category strategy."
+                            name="writer_publication_contract_validated",
+                            input_text="schema_contract_segment_report",
+                            output_text=json.dumps(
+                                publication_payload,
+                                ensure_ascii=False,
+                                default=str,
                             ),
-                            user=(
-                                f"Topic: {detail.topic}\n"
-                                f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                                f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                                f"Competitive Layer: {detail.plan.competitor_layer}\n"
-                                f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
-                                "Scenario Recommended Dimensions: "
-                                f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
-                                f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
-                                f"Confirmed Memory Preferences:\n{memory_context}\n"
-                                f"Layer Report Context: {layer_context}\n"
-                                f"{grounding_prompt}\n"
-                                f"{self._writer_community_policy_text()}\n"
-                                f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
-                                f"Required sections:\n{required_sections}\n"
-                                "Target 16,000-20,000 characters for the first draft. Use about "
-                                "70-80% of the report on the Core analysis layer: decision summary, "
-                                "competitive findings, user review themes, competitor deep dives, "
-                                "SWOT, matrix interpretation, and layer-specific implications. "
-                                "Core section minimums: Decision Summary 800+ characters; "
-                                "Competitive Findings 1,200+; User Review Themes 1,000+ when "
-                                "review, community, survey, interview, or persona evidence exists; "
-                                "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
-                                "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
-                                "Threats for every competitor; Matrix Interpretation 900+; "
-                                "Layer-specific Battlecard/Workflow/Market section 1,200+. Keep "
-                                "the Support/audit layer concise and complete; it is the audit trail, "
-                                "not the main readout. Prefer deeper cited analysis and decision "
-                                "implications over repeated source IDs or QA boilerplate."
-                            ),
-                        ),
-                        timeout=timeout_seconds,
+                            metadata={
+                                "passed": publication_validation.passed,
+                                "issue_count": len(publication_validation.issues),
+                            },
+                        )
+                        if not publication_validation.passed:
+                            repaired_report_md = await self._repair_schema_contract_publication_issues(
+                                record,
+                                report_md=report_md,
+                                validation=publication_validation,
+                                timeout_seconds=timeout_seconds,
+                            )
+                            if repaired_report_md is not None:
+                                report_md = repaired_report_md
+                                publication_validation = validate_publication_contract(
+                                    report_md,
+                                    structured_report=None,
+                                    allowed_source_ids={
+                                        source.id for source in detail.raw_sources
+                                    },
+                                    output_language=detail.output_language,
+                                )
+                                publication_payload = (
+                                    publication_validation.telemetry_payload()
+                                )
+                                await self.emit(
+                                    detail.id,
+                                    "writer_publication_contract_validated",
+                                    "writer",
+                                    None,
+                                    "Writer publication contract validated after section repair.",
+                                    publication_payload,
+                                )
+                                self._trace_local_tool(
+                                    record,
+                                    agent="writer",
+                                    subagent=None,
+                                    name="writer_publication_contract_validated",
+                                    input_text="schema_contract_segment_report_repaired",
+                                    output_text=json.dumps(
+                                        publication_payload,
+                                        ensure_ascii=False,
+                                        default=str,
+                                    ),
+                                    metadata={
+                                        "passed": publication_validation.passed,
+                                        "issue_count": len(publication_validation.issues),
+                                    },
+                                )
+                        if not publication_validation.passed:
+                            raise ValueError(
+                                "schema-contract segment publication contract failed: "
+                                + ", ".join(publication_validation.issue_codes())
+                            )
+                        schema_contract_report_generated = True
+                        writer_mode = "real schema-contract segmented writer call"
+                        if pending_redo is not None:
+                            scoped_competitors: set[str] = set()
+                            scoped_dimensions: set[str] = set()
+                            for scope in pending_redo.redo_scopes:
+                                if scope.target_competitor:
+                                    scoped_competitors.add(scope.target_competitor)
+                                scoped_competitors.update(
+                                    competitor
+                                    for competitor in scope.target_competitors
+                                    if competitor
+                                )
+                                if scope.target_subagent:
+                                    scoped_dimensions.add(scope.target_subagent)
+                            previous_recommendation = previous_recommendation_posture(
+                                previous_structured_report=getattr(
+                                    record,
+                                    "structured_report_snapshot",
+                                    None,
+                                ),
+                                previous_report=previous_report,
+                            )
+                            candidate_recommendation = previous_recommendation_posture(
+                                previous_structured_report=None,
+                                previous_report=report_md,
+                            )
+                            if previous_recommendation and candidate_recommendation:
+                                recommendation_problem = recommendation_delta_problem(
+                                    previous_recommendation=previous_recommendation,
+                                    candidate_recommendation=candidate_recommendation,
+                                    scoped_competitors=scoped_competitors,
+                                    scoped_dimensions=scoped_dimensions,
+                                    candidate_rationale=report_md,
+                                )
+                                recommendation_accepted = recommendation_problem is None
+                                recommendation_reason = recommendation_problem or (
+                                    "recommendation retained or justified by scoped "
+                                    "evidence"
+                                )
+                                recommendation_payload: dict[str, object] = {
+                                    "accepted": recommendation_accepted,
+                                    "reason": recommendation_reason,
+                                    "previous_recommendation": previous_recommendation,
+                                    "candidate_recommendation": candidate_recommendation,
+                                    "scoped_competitors": sorted(scoped_competitors),
+                                    "scoped_dimensions": sorted(scoped_dimensions),
+                                }
+                                await self.emit(
+                                    detail.id,
+                                    "writer_recommendation_delta_checked",
+                                    "writer",
+                                    None,
+                                    "Schema-contract segment recommendation delta checked.",
+                                    recommendation_payload,
+                                )
+                                self._trace_local_tool(
+                                    record,
+                                    agent="writer",
+                                    subagent=None,
+                                    name="writer_recommendation_delta_checked",
+                                    input_text="schema_contract_segment_report",
+                                    output_text=json.dumps(
+                                        recommendation_payload,
+                                        ensure_ascii=False,
+                                        default=str,
+                                    ),
+                                    metadata={
+                                        "accepted": recommendation_accepted,
+                                        "reason": recommendation_reason,
+                                    },
+                                )
+                                if recommendation_problem:
+                                    anti_regression_reason = recommendation_problem
+                                    detail.report_md = (
+                                        self._preserve_hardened_previous_report(
+                                            detail,
+                                            previous_report,
+                                        )
+                                    )
+                                    report_md = detail.report_md
+                                    writer_mode = (
+                                        "preserved previous report after "
+                                        "recommendation delta guard"
+                                    )
+                                    structured_recommendation_guard_preserved = True
+                        if structured_targets:
+                            await self.emit(
+                                detail.id,
+                                "writer_structured_repair_selected",
+                                "writer",
+                                None,
+                                "Structured repair targets selected",
+                                {
+                                    "targets": list(dict.fromkeys(structured_targets)),
+                                    "llm_required": any(
+                                        target != "renderer"
+                                        for target in structured_targets
+                                    ),
+                                    "authoring_mode": "schema_contract_segment",
+                                },
+                            )
+                    except Exception as exc:  # noqa: BLE001 - structured path may be temporarily unavailable.
+                        fallback_reason = str(exc)[:500]
+                        if not _structured_markdown_fallback_allowed(
+                            detail,
+                            structured_enabled,
+                        ):
+                            writer_error = fallback_reason
+                            previous_report_preserved = bool(previous_report.strip())
+                            failed_closed_payload = {
+                                "reason": fallback_reason,
+                                "previous_report_preserved": previous_report_preserved,
+                                "writer_repair_mode": writer_repair_mode,
+                                "writer_repair_sections": list(writer_repair_sections),
+                            }
+                            await self.emit(
+                                detail.id,
+                                "writer_schema_first_failed_closed",
+                                "writer",
+                                None,
+                                "Schema-first writer failed; Markdown fallback disabled for real runs.",
+                                failed_closed_payload,
+                            )
+                            if previous_report_preserved:
+                                detail.report_md = self._preserve_hardened_previous_report(
+                                    detail,
+                                    previous_report,
+                                )
+                                writer_mode = (
+                                    "preserved previous report after schema-first writer error"
+                                )
+                                report_md = detail.report_md
+                            else:
+                                try:
+                                    await self._fail_writer_without_report(
+                                        record,
+                                        writer_error,
+                                        writer_repair_mode=writer_repair_mode,
+                                        writer_repair_sections=writer_repair_sections,
+                                        writer_repair_decision=writer_repair_decision,
+                                        anti_regression_reason=anti_regression_reason,
+                                        previous_report_protected=previous_report_protected,
+                                    )
+                                except RuntimeError:
+                                    return
+                        else:
+                            fallback_payload = {"reason": fallback_reason}
+                            await self.emit(
+                                detail.id,
+                                "writer_markdown_fallback_used",
+                                "writer",
+                                None,
+                                "Structured writer failed; using Markdown writer fallback.",
+                                fallback_payload,
+                            )
+                            self._trace_local_tool(
+                                record,
+                                agent="writer",
+                                subagent=None,
+                                name="writer_markdown_fallback_used",
+                                input_text="structured_writer_exception",
+                                output_text=fallback_reason,
+                                metadata=fallback_payload,
+                            )
+                            report_md = await self._writer_markdown_report_from_evidence_pack(
+                                record,
+                                evidence_pack_result,
+                                timeout_seconds,
+                            )
+                            writer_mode = (
+                                "real segmented LLM call"
+                                if segmented_writer_required
+                                else "real LLM call"
+                            )
+                else:
+                    report_md = await self._writer_markdown_report_from_evidence_pack(
+                        record,
+                        evidence_pack_result,
+                        timeout_seconds,
+                    )
+                    writer_mode = (
+                        "real segmented LLM call"
+                        if segmented_writer_required
+                        else "real LLM call"
                     )
                 self._require_writer_report_output(report_md)
-                hardened_report = self._harden_report_markdown(detail, report_md)
+                if schema_contract_report_generated:
+                    hardened_report = self._harden_schema_contract_report_markdown(
+                        detail,
+                        report_md,
+                    )
+                else:
+                    hardened_report = self._harden_report_markdown(detail, report_md)
                 if (
                     previous_report.strip()
                     and repair_plan is not None
                     and repair_plan.anti_regression_required
+                    and not structured_recommendation_guard_preserved
+                    and not (
+                        structured_scoped_merge_applied
+                        and structured_scoped_regression_checked
+                    )
                 ):
                     repair_comparison_metrics = detail.metrics.model_copy(
                         update={
@@ -600,7 +1782,7 @@ class WriterAgentMixin:
                         candidate_detail,
                         protected_sections=protected_sections,
                     )
-                if anti_regression_reason:
+                if anti_regression_reason and not structured_recommendation_guard_preserved:
                     detail.report_md = self._preserve_hardened_previous_report(
                         detail,
                         previous_report,
@@ -608,6 +1790,18 @@ class WriterAgentMixin:
                     writer_mode = "preserved previous report after writer anti-regression"
                 else:
                     detail.report_md = hardened_report
+                    schema_contract_final_report_md = (
+                        hardened_report
+                        if (
+                            schema_contract_report_generated
+                            and not structured_recommendation_guard_preserved
+                        )
+                        else None
+                    )
+                    await self._publish_schema_contract_report_artifact_if_current(
+                        record,
+                        schema_contract_final_report_md=schema_contract_final_report_md,
+                    )
             except TimeoutError as exc:
                 timeout_reason = str(exc) or f"writer LLM exceeded {timeout_seconds:g}s"
                 writer_error = timeout_reason
@@ -720,6 +1914,682 @@ class WriterAgentMixin:
         if not report_md.strip():
             raise RuntimeError("Writer returned empty report content")
 
+    async def _publish_schema_contract_report_artifact_if_current(
+        self,
+        record: RunRecord,
+        *,
+        schema_contract_final_report_md: str | None,
+    ) -> bool:
+        detail = record.detail
+        if (
+            not schema_contract_final_report_md
+            or detail.report_md != schema_contract_final_report_md
+        ):
+            self._clear_stale_report_artifact(detail)
+            return False
+        await self._publish_schema_contract_report_artifact(record)
+        return True
+
+    async def _publish_schema_contract_report_artifact(self, record: RunRecord) -> None:
+        detail = record.detail
+        artifact, validation = self._build_schema_contract_report_artifact(detail)
+        validation_payload = validation.telemetry_payload()
+        await self.emit(
+            detail.id,
+            "writer_report_artifact_v2_publication_validated",
+            "writer",
+            None,
+            "Writer ReportArtifactV2 publication contract validated.",
+            validation_payload,
+        )
+        self._trace_local_tool(
+            record,
+            agent="writer",
+            subagent=None,
+            name="writer_report_artifact_v2_publication_validated",
+            input_text="schema_contract_report_artifact_v2",
+            output_text=json.dumps(
+                validation_payload,
+                ensure_ascii=False,
+                default=str,
+            ),
+            metadata={
+                "passed": validation.passed,
+                "issue_count": len(validation.issues),
+            },
+        )
+        if not validation.passed:
+            raise ValueError(
+                "report artifact v2 publication contract failed: "
+                + ", ".join(validation.issue_codes())
+            )
+        detail.report_artifact = artifact
+        detail.report_md = artifact.render_cache.full_markdown
+
+    def _build_schema_contract_report_artifact(self, detail: RunDetail):
+        artifact = assemble_report_artifact_v2(
+            detail,
+            {"final_report": detail.report_md},
+        )
+        validation = validate_report_artifact_publication(
+            artifact,
+            allowed_source_ids={source.id for source in detail.raw_sources},
+        )
+        return artifact, validation
+
+    def _set_schema_contract_report_artifact(self, detail: RunDetail) -> None:
+        artifact, validation = self._build_schema_contract_report_artifact(detail)
+        if not validation.passed:
+            raise ValueError(
+                "report artifact v2 publication contract failed: "
+                + ", ".join(validation.issue_codes())
+            )
+        detail.report_artifact = artifact
+        detail.report_md = artifact.render_cache.full_markdown
+
+    def _clear_stale_report_artifact(self, detail: RunDetail) -> None:
+        artifact = detail.report_artifact
+        if artifact is None:
+            return
+        if artifact.legacy.source != "report_artifact_v2":
+            return
+        if artifact.render_cache.full_markdown != detail.report_md:
+            detail.report_artifact = None
+
+    async def _writer_structured_report(
+        self,
+        record: RunRecord,
+        evidence_pack_result,
+        timeout_seconds: float,
+    ) -> StructuredReport:
+        detail = record.detail
+        competitors = list(detail.plan.competitors)
+        dimensions = list(detail.plan.dimensions)
+        allowed_source_ids = {source.id for source in detail.raw_sources}
+        section_inputs = _structured_section_inputs(
+            evidence_pack_result=evidence_pack_result,
+            competitors=competitors,
+            dimensions=dimensions,
+        )
+        sections: dict[str, BaseModel] = {}
+        plan = build_structured_writer_section_plan(
+            competitors=competitors,
+            dimensions=dimensions,
+        )
+        total_sections = len(plan)
+        for index, item in enumerate(plan, start=1):
+            key = _structured_section_key(item)
+            section_schema = _structured_section_schema(item["schema"])
+            section_inputs[key]["section_key"] = key
+            if "allowed_source_ids" in section_inputs[key]:
+                section_allowed_source_ids = {
+                    source_id
+                    for source_id in section_inputs[key]["allowed_source_ids"]
+                    if isinstance(source_id, str)
+                }
+            else:
+                section_allowed_source_ids = allowed_source_ids
+            event_payload: dict[str, object] = {
+                "section_key": key,
+                "section_id": str(item["section_id"]),
+                "section_index": index,
+                "section_total": total_sections,
+                "section_schema": section_schema.__name__,
+                "allowed_source_count": len(section_allowed_source_ids),
+            }
+            if item.get("competitor") is not None:
+                event_payload["competitor"] = str(item["competitor"])
+            await self.emit(
+                detail.id,
+                "writer_structured_section_started",
+                "writer",
+                key,
+                f"Writing structured report section {index}/{total_sections}: {key}",
+                event_payload,
+            )
+            try:
+                sections[key] = await self._writer_structured_section_json(
+                    record,
+                    segment=section_inputs[key],
+                    section_schema=section_schema,
+                    allowed_source_ids=section_allowed_source_ids,
+                    timeout_seconds=timeout_seconds,
+                )
+            except StructuredSectionGenerationError as exc:
+                await self.emit(
+                    detail.id,
+                    "writer_structured_section_failed",
+                    "writer",
+                    key,
+                    f"Structured report section failed {index}/{total_sections}: {key}",
+                    {
+                        **event_payload,
+                        "schema_name": exc.schema_name,
+                        "error": exc.message,
+                        "error_kind": exc.error_kind,
+                        "attempt": exc.attempt,
+                    },
+                )
+                raise StructuredReportGenerationError((exc,)) from exc
+            await self.emit(
+                detail.id,
+                "writer_structured_section_completed",
+                "writer",
+                key,
+                f"Structured report section completed {index}/{total_sections}: {key}",
+                event_payload,
+            )
+
+        executive_summary = sections["executive_summary"]
+        decision_summary = sections["decision_summary"]
+        competitive_findings = sections["competitive_findings"]
+        user_review_themes = sections["user_review_themes"]
+        deep_dives = [
+            sections[f"competitor_deep_dive::{competitor}"]
+            for competitor in competitors
+        ]
+        decision_matrix = sections["decision_matrix"]
+        swot = sections["swot"]
+        battlecard = sections["battlecard"]
+        community_triangulation = sections["community_triangulation"]
+        support = sections["support"]
+
+        return StructuredReport(
+            output_language=detail.output_language,
+            topic=detail.topic,
+            competitors=competitors,
+            dimensions=dimensions,
+            core=ReportCore(
+                executive_summary=executive_summary,
+                decision_summary=decision_summary.items,
+                competitive_findings=competitive_findings.items,
+                user_review_themes=user_review_themes,
+                competitor_deep_dives=deep_dives,
+                decision_matrix=decision_matrix,
+                swot=swot,
+                battlecard=battlecard,
+                community_triangulation=community_triangulation.items,
+            ),
+            support=support,
+            metadata=ReportMetadata(
+                writer_mode="structured",
+                segment_count=int(
+                    getattr(evidence_pack_result.metrics, "segment_count", 0)
+                ),
+                source_count=len(detail.raw_sources),
+                warnings=[],
+                structured_report_version="1",
+            ),
+        )
+
+    async def _writer_markdown_report_from_evidence_pack(
+        self,
+        record: RunRecord,
+        evidence_pack_result,
+        timeout_seconds: float,
+    ) -> str:
+        detail = record.detail
+        layer_context = self._writer_layer_context(detail)
+        memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
+        required_sections = self._writer_required_sections(detail)
+        grounding_prompt = await self._writer_grounding_prompt(detail)
+        user_research_policy = writer_user_research_policy_text()
+        language_guidance = language_instruction(detail.output_language)
+        if evidence_pack_result.metrics.segmented_writer_required:
+            return await self._writer_segmented_report_markdown(
+                record,
+                evidence_pack_result=evidence_pack_result,
+                timeout_seconds=timeout_seconds,
+                language_guidance=language_guidance,
+                memory_context=memory_context,
+                layer_context=layer_context,
+                required_sections=required_sections,
+            )
+
+        writer_context_json = _reader_safe_prompt_json_text(
+            evidence_pack_result.to_prompt_json()
+        )
+        return await asyncio.wait_for(
+            self._trace_llm_text(
+                record,
+                agent="writer",
+                subagent=None,
+                name="report_writer",
+                system=(
+                    "You are a senior enterprise competitive-intelligence analyst. "
+                    "Produce a concise decision-grade markdown first draft, not a short "
+                    "summary. Use an analysis-first structure: lead with an executive "
+                    "takeaway, decision summary, competitive findings, competitor deep "
+                    "dives, and the selected layer-specific analysis. Put source quality, "
+                    "scenario QA, claim risk, RAG gap-fill, verification tasks, and the "
+                    "evidence appendix after the core analysis as support material. Write "
+                    "with consulting depth: side-by-side matrices, dimension analysis, "
+                    "risks, buying implications, and explicit next validation tasks. Cite "
+                    "factual claims with existing source IDs using [source:ID]. Do not "
+                    "invent source IDs. "
+                    "Do not use web_search_result or confidence < 0.75 as the sole support "
+                    "for a winner, legal/security certification, pricing, or procurement "
+                    "recommendation. If evidence is incomplete, say the conclusion is "
+                    "tentative and list the exact evidence gap. Do not claim all sources "
+                    "are verified when any source_type is web_search_result or "
+                    "llm_public_knowledge. "
+                    "Follow the Grounded Evidence Contract exactly. "
+                    f"{language_guidance} "
+                    f"{user_research_policy} "
+                    "Honor confirmed memory guidance when it does not conflict with "
+                    "evidence, schema requirements, or compliance policy. "
+                    "Use the requested competitive layer to choose the report shape: L1 "
+                    "is a direct battlecard, L2 is adjacent workflow and enterprise-risk "
+                    "analysis, and L3 is market landscape and category strategy."
+                ),
+                user=(
+                    f"Topic: {detail.topic}\n"
+                    f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                    f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                    f"Competitive Layer: {detail.plan.competitor_layer}\n"
+                    f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
+                    "Scenario Recommended Dimensions: "
+                    f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
+                    f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
+                    f"Confirmed Memory Preferences:\n{memory_context}\n"
+                    f"Layer Report Context: {layer_context}\n"
+                    f"{grounding_prompt}\n"
+                    f"{self._writer_community_policy_text()}\n"
+                    f"Report Evidence Context JSON: {writer_context_json}\n\n"
+                    f"Required sections:\n{required_sections}\n"
+                    "Target 16,000-20,000 characters for the first draft. Use about "
+                    "70-80% of the report on the Core analysis layer: decision summary, "
+                    "competitive findings, user review themes, competitor deep dives, "
+                    "SWOT, matrix interpretation, and layer-specific implications. "
+                    "Core section minimums: Decision Summary 800+ characters; "
+                    "Competitive Findings 1,200+; User Review Themes 1,000+ when "
+                    "review, community, survey, interview, or persona evidence exists; "
+                    "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
+                    "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
+                    "Threats for every competitor; Matrix Interpretation 900+; "
+                    "Layer-specific Battlecard/Workflow/Market section 1,200+. Keep "
+                    "the Support/audit layer concise and complete; it is the audit trail, "
+                    "not the main readout. Prefer deeper cited analysis and decision "
+                    "implications over repeated source IDs or QA boilerplate."
+                ),
+            ),
+            timeout=timeout_seconds,
+        )
+
+    async def _writer_schema_contract_segment_report(
+        self,
+        record: RunRecord,
+        evidence_pack_result,
+        timeout_seconds: float,
+    ) -> str:
+        detail = record.detail
+        section_briefs = build_section_briefs(detail)
+        detail.section_briefs = section_briefs
+        brief_segments = segment_payloads_from_briefs(detail, section_briefs)
+        return await self._writer_segmented_report_markdown(
+            record,
+            evidence_pack_result=evidence_pack_result,
+            timeout_seconds=timeout_seconds,
+            language_guidance=language_instruction(detail.output_language),
+            memory_context="\n".join(detail.plan.memory_prompt_context) or "none",
+            layer_context=self._writer_layer_context(detail),
+            required_sections=self._writer_required_sections(detail),
+            segments_override=brief_segments,
+            allow_required_section_backfill=False,
+        )
+
+    async def _repair_schema_contract_publication_issues(
+        self,
+        record: RunRecord,
+        *,
+        report_md: str,
+        validation: PublicationContractResult,
+        timeout_seconds: float,
+    ) -> str | None:
+        detail = record.detail
+        repairable_issues = [
+            issue
+            for issue in validation.issues
+            if issue.repair_target == "structured_section"
+        ]
+        if not repairable_issues or len(repairable_issues) != len(validation.issues):
+            return None
+        target_sections = self._publication_issue_section_keys(
+            report_md,
+            repairable_issues,
+        )
+        if not target_sections:
+            return None
+        await self.emit(
+            detail.id,
+            "writer_publication_contract_repair_selected",
+            "writer",
+            None,
+            "Writer publication contract issues mapped to section repair.",
+            {
+                "sections": target_sections,
+                "issue_codes": sorted({issue.code for issue in repairable_issues}),
+                "issues": [
+                    {
+                        "code": issue.code,
+                        "line_number": issue.line_number,
+                        "message": issue.message,
+                        "excerpt": issue.excerpt,
+                    }
+                    for issue in repairable_issues
+                ],
+            },
+        )
+        repaired_section_md = await self._writer_section_repair_markdown(
+            record,
+            sections=target_sections,
+            previous_report=report_md,
+            publication_issues=repairable_issues,
+        )
+        section_replacements = self._publication_section_repair_replacements(
+            repaired_section_md,
+            target_sections=target_sections,
+            output_language=detail.output_language,
+        )
+        missing_sections = [
+            section
+            for section in target_sections
+            if not section_replacements.get(section, "").strip()
+        ]
+        if missing_sections:
+            await self.emit(
+                detail.id,
+                "writer_publication_contract_repair_incomplete",
+                "writer",
+                None,
+                "Writer publication contract repair did not return every target section.",
+                {
+                    "sections": target_sections,
+                    "missing_sections": missing_sections,
+                    "issue_codes": sorted(
+                        {issue.code for issue in repairable_issues}
+                    ),
+                },
+            )
+            return None
+        repaired_report_md = report_md
+        for section in target_sections:
+            repaired_report_md = replace_markdown_section(
+                repaired_report_md,
+                section,
+                detail.output_language,
+                section_replacements[section],
+            )
+        await self.emit(
+            detail.id,
+            "writer_publication_contract_repaired",
+            "writer",
+            None,
+            "Writer publication contract issues repaired by section rewrite.",
+            {
+                "sections": target_sections,
+                "issue_codes": sorted({issue.code for issue in repairable_issues}),
+                "before_chars": len(report_md),
+                "after_chars": len(repaired_report_md),
+            },
+        )
+        return repaired_report_md
+
+    def _publication_section_repair_replacements(
+        self,
+        repaired_markdown: str,
+        *,
+        target_sections: Sequence[str],
+        output_language: str,
+    ) -> dict[str, str]:
+        target_set = set(target_sections)
+        h2_matches = list(re.finditer(r"(?m)^##\s+(.+?)\s*$", repaired_markdown))
+        if not h2_matches:
+            if len(target_sections) == 1:
+                return {target_sections[0]: repaired_markdown.strip()}
+            return {}
+
+        replacements: dict[str, str] = {}
+        for index, match in enumerate(h2_matches):
+            block_start = self._report_section_start_with_marker(
+                repaired_markdown,
+                match.start(),
+            )
+            block_end = (
+                self._report_section_start_with_marker(
+                    repaired_markdown,
+                    h2_matches[index + 1].start(),
+                )
+                if index + 1 < len(h2_matches)
+                else len(repaired_markdown)
+            )
+            section_key = self._report_section_marker_key_before_heading(
+                repaired_markdown,
+                match.start(),
+            ) or heading_key_for(match.group(1).strip(), output_language)
+            if section_key not in target_set or section_key in replacements:
+                continue
+            replacements[section_key] = repaired_markdown[
+                block_start:block_end
+            ].strip()
+
+        if replacements:
+            return replacements
+        if len(target_sections) == 1 and len(h2_matches) == 1:
+            return {target_sections[0]: repaired_markdown.strip()}
+        return {}
+
+    def _report_section_marker_key_before_heading(
+        self,
+        markdown: str,
+        heading_start: int,
+    ) -> str | None:
+        previous_line_end = heading_start
+        while previous_line_end > 0 and markdown[previous_line_end - 1] in " \t\r\n":
+            previous_line_end -= 1
+        previous_line_start = markdown.rfind("\n", 0, previous_line_end) + 1
+        marker = parse_report_section_marker(
+            markdown[previous_line_start:previous_line_end].strip()
+        )
+        return marker.section_key if marker is not None else None
+
+    def _publication_issue_section_keys(
+        self,
+        report_md: str,
+        issues: Sequence[PublicationContractIssue],
+    ) -> list[str]:
+        index = build_report_section_index(report_md)
+        keys: list[str] = []
+        for issue in issues:
+            key = _section_key_at_line(index.sections, issue.line_number)
+            if key is None:
+                return []
+            if key not in keys:
+                keys.append(key)
+        return keys
+
+    async def _writer_structured_section_json(
+        self,
+        record: RunRecord,
+        *,
+        segment: dict[str, object],
+        section_schema: type[BaseModel],
+        allowed_source_ids: set[str],
+        timeout_seconds: float,
+    ) -> BaseModel:
+        prompt = self._structured_section_prompt(
+            segment=segment,
+            section_schema=section_schema,
+            allowed_source_ids=allowed_source_ids,
+        )
+        try:
+            response = await asyncio.wait_for(
+                self._trace_llm_text(
+                    record,
+                    agent="writer",
+                    subagent=None,
+                    name="structured_report_section",
+                    system=(
+                        "You are a senior enterprise competitive-intelligence analyst "
+                        "writing one structured report section."
+                    ),
+                    user=prompt,
+                ),
+                timeout=timeout_seconds,
+            )
+        except TimeoutError as exc:
+            raise _structured_section_generation_error(
+                segment,
+                section_schema,
+                exc,
+                error_kind="timeout",
+                attempt="initial",
+            ) from exc
+        except Exception as exc:
+            raise _structured_section_generation_error(
+                segment,
+                section_schema,
+                exc,
+                error_kind="llm_exception",
+                attempt="initial",
+            ) from exc
+        try:
+            return _parse_structured_section_response(
+                response,
+                section_schema,
+                allowed_source_ids,
+            )
+        except ValueError as exc:
+            retry_prompt = self._structured_section_prompt(
+                segment=segment,
+                section_schema=section_schema,
+                allowed_source_ids=allowed_source_ids,
+                previous_validation_error=str(exc),
+            )
+            try:
+                retry_response = await asyncio.wait_for(
+                    self._trace_llm_text(
+                        record,
+                        agent="writer",
+                        subagent=None,
+                        name="structured_report_section_retry",
+                        system=(
+                            "You are fixing a structured writer JSON response. "
+                            "Return valid JSON only."
+                        ),
+                        user=retry_prompt,
+                    ),
+                    timeout=timeout_seconds,
+                )
+            except TimeoutError as retry_exc:
+                raise _structured_section_generation_error(
+                    segment,
+                    section_schema,
+                    retry_exc,
+                    error_kind="timeout",
+                    attempt="retry",
+                ) from retry_exc
+            except Exception as retry_exc:
+                raise _structured_section_generation_error(
+                    segment,
+                    section_schema,
+                    retry_exc,
+                    error_kind="llm_exception",
+                    attempt="retry",
+                ) from retry_exc
+            try:
+                return _parse_structured_section_response(
+                    retry_response,
+                    section_schema,
+                    allowed_source_ids,
+                )
+            except ValueError as retry_exc:
+                raise _structured_section_generation_error(
+                    segment,
+                    section_schema,
+                    retry_exc,
+                    error_kind="validation",
+                    attempt="retry",
+                ) from retry_exc
+            except Exception as retry_exc:
+                raise _structured_section_generation_error(
+                    segment,
+                    section_schema,
+                    retry_exc,
+                    error_kind="unexpected",
+                    attempt="retry",
+                ) from retry_exc
+        except Exception as exc:
+            raise _structured_section_generation_error(
+                segment,
+                section_schema,
+                exc,
+                error_kind="unexpected",
+                attempt="initial",
+            ) from exc
+
+    def _structured_section_prompt(
+        self,
+        *,
+        segment: dict[str, object],
+        section_schema: type[BaseModel],
+        allowed_source_ids: set[str],
+        previous_validation_error: str | None = None,
+    ) -> str:
+        schema_json = json.dumps(
+            section_schema.model_json_schema(),
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        allowed_source_ids_json = json.dumps(
+            sorted(allowed_source_ids),
+            ensure_ascii=False,
+        )
+        segment_json = json.dumps(
+            segment,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        ).replace("[source:", "[source token:")
+        previous_error = (previous_validation_error or "none").replace(
+            "[source:",
+            "[source token:",
+        )
+        language_guidance = _structured_section_language_instruction(segment)
+        instructions = [
+            "Return JSON only.",
+            "Do not write Markdown headings.",
+            language_guidance,
+            "Do not include markdown citation tokens inside text fields.",
+            "Put citations only in source_ids.",
+            "Use only allowed_source_ids.",
+            (
+                "Choose evidence_role precisely: official/product/vendor facts use "
+                "official_fact only when the cited source_registry item has "
+                "authority_role=vendor_official; third-party webpage_verified "
+                "sources are not official by default. user/community/forum signals "
+                "use community_signal; "
+                "simulated interviews/surveys use simulated_research; reasoned "
+                "conclusions use inference; missing/unsupported evidence uses "
+                "evidence_gap."
+            ),
+            (
+                "Evidence gaps are absence-of-evidence statements: set "
+                'evidence_role="evidence_gap", confidence="low", and do not '
+                "add legacy evidence_gap fields."
+            ),
+        ]
+        instructions.extend(_structured_section_contract_instructions(section_schema))
+        instructions.extend(
+            [
+                f"Schema JSON: {schema_json}",
+                f"allowed_source_ids JSON: {allowed_source_ids_json}",
+                f"Segment JSON: {segment_json}",
+                f"Previous validation error: {previous_error}",
+            ]
+        )
+        return "\n".join(instructions)
+
     async def _writer_segmented_report_markdown(
         self,
         record: RunRecord,
@@ -730,30 +2600,57 @@ class WriterAgentMixin:
         memory_context: str,
         layer_context: str,
         required_sections: str,
+        segments_override: Sequence[dict[str, object]] | None = None,
+        allow_required_section_backfill: bool = True,
     ) -> str:
         detail = record.detail
+        segment_inputs = (
+            [dict(segment) for segment in segments_override]
+            if segments_override is not None
+            else list(evidence_pack_result.segment_inputs())
+        )
+        if not allow_required_section_backfill:
+            segment_inputs = self._schema_contract_segment_inputs(segment_inputs)
         sections = await self._writer_segment_markdown_parts(
             record,
             evidence_pack_result=evidence_pack_result,
-            segments=evidence_pack_result.segment_inputs(),
+            segments=segment_inputs,
             timeout_seconds=timeout_seconds,
             language_guidance=language_guidance,
             memory_context=memory_context,
             layer_context=layer_context,
             required_sections=required_sections,
         )
-        assembled = assemble_report_sections(
+        assembly_sections = self._writer_assembly_fragments(
             sections,
+            output_language=detail.output_language,
+        )
+        assembled = assemble_report_fragments(
+            assembly_sections,
             output_language=detail.output_language,
             competitors=detail.plan.competitors,
         )
+        legacy_heading_telemetry = self._writer_legacy_heading_assembly_telemetry(
+            sections,
+            output_language=detail.output_language,
+        )
+        assembly_telemetry = {
+            **assembled.telemetry,
+            **self._writer_segment_fragment_telemetry(sections),
+            "legacy_heading_duplicate_section_count_before": (
+                legacy_heading_telemetry["duplicate_section_count_before"]
+            ),
+            "legacy_heading_merged_section_keys": (
+                legacy_heading_telemetry["merged_section_keys"]
+            ),
+        }
         await self.emit(
             detail.id,
             "writer_assembly_completed",
             "writer",
             None,
             "Writer segmented report assembled",
-            assembled.telemetry,
+            assembly_telemetry,
         )
         preflight = run_writer_quality_preflight(detail, assembled.markdown)
         await self.emit(
@@ -766,6 +2663,12 @@ class WriterAgentMixin:
         )
         if preflight.passed:
             return assembled.markdown
+
+        if not allow_required_section_backfill:
+            raise RuntimeError(
+                "Schema-contract segmented report failed quality preflight: "
+                f"{', '.join(preflight.failure_reasons)}"
+            )
 
         hardened = self._harden_report_markdown(detail, assembled.markdown)
         repaired = assemble_report_sections(
@@ -794,6 +2697,29 @@ class WriterAgentMixin:
             f"{', '.join(repaired_preflight.failure_reasons)}"
         )
 
+    def _schema_contract_segment_inputs(
+        self,
+        segments: Sequence[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        schema_segments: list[dict[str, object]] = []
+        for segment in segments:
+            section_id = str(
+                segment.get("section_id")
+                or segment.get("section_key")
+                or segment.get("segment_name")
+                or ""
+            )
+            if section_id == "decision_summary":
+                schema_segments.append(
+                    {
+                        **segment,
+                        "require_executive_summary": True,
+                    }
+                )
+                continue
+            schema_segments.append(dict(segment))
+        return schema_segments
+
     async def _writer_segment_markdown_parts(
         self,
         record: RunRecord,
@@ -805,22 +2731,22 @@ class WriterAgentMixin:
         memory_context: str,
         layer_context: str,
         required_sections: str,
-    ) -> list[str]:
+    ) -> list[ReportSectionFragment]:
         detail = record.detail
-        sections: list[str] = []
+        sections: list[ReportSectionFragment] = []
         shards_by_section: dict[tuple[str, str | None], list[str]] = {}
         section_allowed_source_ids: dict[tuple[str, str | None], set[str]] = {}
-        for segment in segments:
-            segment_md, contract = await self._writer_validated_segment_markdown(
-                record,
-                evidence_pack_result=evidence_pack_result,
-                segment=segment,
-                timeout_seconds=timeout_seconds,
-                language_guidance=language_guidance,
-                memory_context=memory_context,
-                layer_context=layer_context,
-                required_sections=required_sections,
-            )
+        segment_results = await self._writer_parallel_validated_segments(
+            record,
+            evidence_pack_result=evidence_pack_result,
+            segments=segments,
+            timeout_seconds=timeout_seconds,
+            language_guidance=language_guidance,
+            memory_context=memory_context,
+            layer_context=layer_context,
+            required_sections=required_sections,
+        )
+        for segment, segment_md, contract in segment_results:
             if contract.segment_kind == "evidence_shard":
                 section_id = contract.section_id
                 segment_competitor = (
@@ -843,30 +2769,196 @@ class WriterAgentMixin:
                     if isinstance(source_id, str)
                 )
                 continue
-            sections.append(segment_md)
-
-        for (section_id, segment_competitor), shard_notes in shards_by_section.items():
-            section_segment = self._writer_section_segment_from_shards(
-                detail,
-                section_id=section_id,
-                segment_competitor=segment_competitor,
-                shard_notes=shard_notes,
-                allowed_source_ids=section_allowed_source_ids[
-                    (section_id, segment_competitor)
-                ],
+            sections.append(
+                self._writer_report_section_fragment(
+                    markdown=segment_md,
+                    segment=segment,
+                    contract=contract,
+                )
             )
-            section_md, _ = await self._writer_validated_segment_markdown(
+
+        section_segments: list[dict[str, object]] = []
+        for (section_id, segment_competitor), shard_notes in shards_by_section.items():
+            section_segments.append(
+                self._writer_section_segment_from_shards(
+                    detail,
+                    section_id=section_id,
+                    segment_competitor=segment_competitor,
+                    shard_notes=shard_notes,
+                    allowed_source_ids=section_allowed_source_ids[
+                        (section_id, segment_competitor)
+                    ],
+                )
+            )
+        section_results = await self._writer_parallel_validated_segments(
+            record,
+            evidence_pack_result=evidence_pack_result,
+            segments=section_segments,
+            timeout_seconds=timeout_seconds,
+            language_guidance=language_guidance,
+            memory_context=memory_context,
+            layer_context=layer_context,
+            required_sections=required_sections,
+        )
+        for section_segment, section_md, section_contract in section_results:
+            sections.append(
+                self._writer_report_section_fragment(
+                    markdown=section_md,
+                    segment=section_segment,
+                    contract=section_contract,
+                )
+            )
+        return sections
+
+    async def _writer_parallel_validated_segments(
+        self,
+        record: RunRecord,
+        *,
+        evidence_pack_result,
+        segments: Sequence[dict[str, object]],
+        timeout_seconds: float,
+        language_guidance: str,
+        memory_context: str,
+        layer_context: str,
+        required_sections: str,
+    ) -> list[tuple[dict[str, object], str, SegmentContract]]:
+        if not segments:
+            return []
+
+        async def run_segment(
+            segment: dict[str, object],
+        ) -> tuple[dict[str, object], str, SegmentContract]:
+            segment_md, contract = await self._writer_validated_segment_markdown(
                 record,
                 evidence_pack_result=evidence_pack_result,
-                segment=section_segment,
+                segment=segment,
                 timeout_seconds=timeout_seconds,
                 language_guidance=language_guidance,
                 memory_context=memory_context,
                 layer_context=layer_context,
                 required_sections=required_sections,
             )
-            sections.append(section_md)
-        return sections
+            return segment, segment_md, contract
+
+        tasks = [asyncio.create_task(run_segment(dict(segment))) for segment in segments]
+        try:
+            return await asyncio.gather(*tasks)
+        except Exception:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+
+    def _writer_report_section_fragment(
+        self,
+        *,
+        markdown: str,
+        segment: Mapping[str, object],
+        contract: SegmentContract,
+    ) -> ReportSectionFragment:
+        segment_competitor = segment.get("segment_competitor")
+        return ReportSectionFragment(
+            markdown=markdown,
+            section_key=str(segment.get("section_key") or contract.section_id),
+            layer=str(
+                segment.get("layer")
+                or (
+                    "support"
+                    if contract.segment_kind == "support_fragment"
+                    else "core"
+                )
+            ),
+            segment_name=str(segment.get("segment_name") or contract.segment_name),
+            competitor=segment_competitor
+            if isinstance(segment_competitor, str) and segment_competitor
+            else None,
+        )
+
+    def _writer_assembly_fragments(
+        self,
+        fragments: Sequence[ReportSectionFragment],
+        *,
+        output_language: object,
+    ) -> list[ReportSectionFragment]:
+        output_language_text = str(output_language)
+        assembly_fragments: list[ReportSectionFragment] = []
+        for fragment in fragments:
+            matches = list(re.finditer(r"(?m)^##\s+(.+?)\s*$", fragment.markdown))
+            if not matches:
+                assembly_fragments.append(fragment)
+                continue
+
+            intro = fragment.markdown[: matches[0].start()].strip()
+            if intro:
+                assembly_fragments.append(
+                    ReportSectionFragment(
+                        markdown=intro,
+                        section_key="",
+                        layer=fragment.layer,
+                        segment_name=fragment.segment_name,
+                        competitor=fragment.competitor,
+                    )
+                )
+
+            for index, match in enumerate(matches):
+                next_match = matches[index + 1] if index + 1 < len(matches) else None
+                block = fragment.markdown[
+                    match.start() : next_match.start() if next_match else None
+                ].strip()
+                heading_key = heading_key_for(match.group(1), output_language_text)
+                layer = (
+                    "support"
+                    if heading_key in SUPPORT_HEADING_KEYS
+                    else fragment.layer
+                )
+                assembly_fragments.append(
+                    ReportSectionFragment(
+                        markdown=block,
+                        section_key=heading_key or "",
+                        layer=layer,
+                        segment_name=fragment.segment_name,
+                        competitor=fragment.competitor,
+                    )
+                )
+        return assembly_fragments
+
+    def _writer_segment_fragment_telemetry(
+        self,
+        fragments: Sequence[ReportSectionFragment],
+    ) -> dict[str, object]:
+        layer_counts: dict[str, int] = {}
+        for fragment in fragments:
+            layer_counts[fragment.layer] = layer_counts.get(fragment.layer, 0) + 1
+        return {
+            "input_fragment_count": len(fragments),
+            "fragment_layer_counts": layer_counts,
+            "fragment_section_keys": [fragment.section_key for fragment in fragments],
+            "fragment_segment_names": [fragment.segment_name for fragment in fragments],
+        }
+
+    def _writer_legacy_heading_assembly_telemetry(
+        self,
+        fragments: Sequence[ReportSectionFragment],
+        *,
+        output_language: object,
+    ) -> dict[str, object]:
+        output_language_text = str(output_language)
+        heading_counts: dict[str, int] = {}
+        for fragment in fragments:
+            for match in re.finditer(r"(?m)^##\s+(.+?)\s*$", fragment.markdown):
+                heading_key = heading_key_for(match.group(1), output_language_text)
+                if heading_key is not None:
+                    heading_counts[heading_key] = heading_counts.get(heading_key, 0) + 1
+        canonical_order = CORE_HEADING_KEYS + SUPPORT_HEADING_KEYS
+        return {
+            "duplicate_section_count_before": sum(
+                count - 1 for count in heading_counts.values() if count > 1
+            ),
+            "merged_section_keys": [
+                key for key in canonical_order if heading_counts.get(key, 0) > 1
+            ],
+        }
 
     def _writer_section_segment_from_shards(
         self,
@@ -886,6 +2978,8 @@ class WriterAgentMixin:
             "segment_name": segment_name,
             "segment_kind": "section_fragment",
             "section_id": section_id,
+            "section_key": section_id,
+            "layer": "support" if section_id == "evidence_support" else "core",
             "segment_competitor": segment_competitor,
             "output_language": detail.output_language,
             "segment_input_chars": 0,
@@ -1025,6 +3119,46 @@ class WriterAgentMixin:
                 "Writer segment cited invalid source IDs after retry: "
                 f"{', '.join(invalid_sources)}"
             )
+        publication_hygiene_errors = self._writer_segment_publication_hygiene_errors(
+            segment_md
+        )
+        if publication_hygiene_errors:
+            retry_count = max(1, segment_retry_count + 1)
+            segment_md = await self._writer_segment_markdown(
+                record,
+                segment=segment_with_contract,
+                timeout_seconds=timeout_seconds,
+                language_guidance=language_guidance,
+                memory_context=memory_context,
+                layer_context=layer_context,
+                required_sections=required_sections,
+                retry_count=retry_count,
+                contract_errors=publication_hygiene_errors,
+            )
+            segment_retry_count = retry_count
+            segment_md = self._sanitize_writer_segment_citations(
+                evidence_pack_result,
+                segment_md,
+                allowed_source_ids=allowed_source_ids,
+            )
+            invalid_sources = evidence_pack_result.validate_segment_citations(
+                segment_md,
+                allowed_source_ids=allowed_source_ids,
+            )
+            if invalid_sources:
+                raise RuntimeError(
+                    "Writer segment cited invalid source IDs after publication "
+                    f"hygiene retry: {', '.join(invalid_sources)}"
+                )
+            publication_hygiene_errors = (
+                self._writer_segment_publication_hygiene_errors(segment_md)
+            )
+            if publication_hygiene_errors:
+                raise RuntimeError(
+                    "Writer segment violated publication hygiene after retry: "
+                    f"{segment['segment_name']}: "
+                    f"{'; '.join(publication_hygiene_errors)}"
+                )
         truncation_error = self._writer_segment_truncation_error(segment_md)
         if truncation_error:
             retry_count = max(1, segment_retry_count + 1)
@@ -1196,6 +3330,15 @@ class WriterAgentMixin:
                     "Writer segment violated heading contract after retry: "
                     f"{segment['segment_name']}: {'; '.join(validation.errors)}"
                 )
+            publication_hygiene_errors = (
+                self._writer_segment_publication_hygiene_errors(segment_md)
+            )
+            if publication_hygiene_errors:
+                raise RuntimeError(
+                    "Writer segment violated publication hygiene after contract retry: "
+                    f"{segment['segment_name']}: "
+                    f"{'; '.join(publication_hygiene_errors)}"
+                )
             await self.emit(
                 detail.id,
                 "writer_segment_validated",
@@ -1219,6 +3362,27 @@ class WriterAgentMixin:
                 },
             )
         return segment_md.strip(), contract
+
+    def _writer_segment_publication_hygiene_errors(self, markdown: str) -> list[str]:
+        malformed_count = 0
+        internal_term_found = False
+        for line in (markdown or "").splitlines():
+            malformed_count += len(find_malformed_source_token_attempts(line))
+            internal_term_found = internal_term_found or contains_internal_writer_term(
+                line
+            )
+        errors: list[str] = []
+        if malformed_count:
+            errors.append(
+                "segment contains malformed Markdown source citation syntax; "
+                "use exact [source:ID] citations"
+            )
+        if internal_term_found:
+            errors.append(
+                "segment contains internal writer or evidence-pack terminology; "
+                "remove internal writer process labels"
+            )
+        return errors
 
     def _writer_segment_truncation_error(self, markdown: str) -> str | None:
         stripped = markdown.strip()
@@ -1288,95 +3452,68 @@ class WriterAgentMixin:
         competitor = str(segment.get("segment_competitor") or "").strip()
         source_warning = (
             "Do not copy placeholder source IDs from examples. Use only IDs from "
-            "allowed_source_ids in Segment Evidence Pack JSON."
+            "the citation source list in the segment context."
         )
-        deep_dive_competitor = competitor or "<segment_competitor>"
-        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
-        localized_subheadings = {
-            "pricing_packaging": (
-                "\u5b9a\u4ef7\u4e0e\u5305\u88c5"
-                if is_zh
-                else "Pricing and Packaging"
-            ),
-            "feature_workflow": (
-                "\u529f\u80fd\u4e0e\u5de5\u4f5c\u6d41\u80fd\u529b"
-                if is_zh
-                else "Feature and Workflow Capability"
-            ),
-            "user_persona_adoption": (
-                "\u7528\u6237\u753b\u50cf\u4e0e\u91c7\u7528"
-                if is_zh
-                else "User Persona and Adoption"
-            ),
-            "cross_competitor": (
-                "\u8de8\u7ade\u54c1\u98ce\u9669\u4e0e\u542f\u793a"
-                if is_zh
-                else "Cross-Competitor Risks and Implications"
-            ),
-            "direct_user_community": (
-                "\u76f4\u63a5\u7528\u6237/\u793e\u533a\u4fe1\u53f7"
-                if is_zh
-                else "Direct User / Community Signals"
-            ),
-            "simulated_research": (
-                "\u6a21\u62df\u8c03\u7814/\u8bbf\u8c08\u4fe1\u53f7"
-                if is_zh
-                else "Simulated Survey and Interview Signals"
-            ),
-            "adoption_blockers": (
-                "\u91c7\u7528\u969c\u788d" if is_zh else "Adoption Blockers"
-            ),
-            "switching_triggers": (
-                "\u5207\u6362\u89e6\u53d1" if is_zh else "Switching Triggers"
-            ),
-            "evidence_gaps": (
-                "\u8bc1\u636e\u7f3a\u53e3" if is_zh else "Evidence Gaps"
-            ),
-            "positioning_core": (
-                "\u5b9a\u4f4d\u4e0e\u6838\u5fc3\u4ef7\u503c"
-                if is_zh
-                else "Positioning and Core Value"
-            ),
-            "feature_capabilities": (
-                "\u529f\u80fd\u80fd\u529b" if is_zh else "Feature Capabilities"
-            ),
-            "community_feedback": (
-                "\u793e\u533a\u53cd\u9988\u3001\u91c7\u7528\u969c\u788d\u4e0e\u5207\u6362\u89e6\u53d1"
-                if is_zh
-                else "Community Feedback, Adoption Blockers, and Switching Triggers"
-            ),
-            "competitive_plays": (
-                "\u7ade\u4e89\u6253\u6cd5\u4e0e\u8bc1\u636e\u7f3a\u53e3"
-                if is_zh
-                else "Competitive Plays and Evidence Gaps"
-            ),
-            "strengths": "\u4f18\u52bf" if is_zh else "Strengths",
-            "weaknesses": "\u52a3\u52bf" if is_zh else "Weaknesses",
-            "opportunities": "\u673a\u4f1a" if is_zh else "Opportunities",
-            "threats": "\u5a01\u80c1" if is_zh else "Threats",
-            "official_vs_community": (
-                "\u5b98\u65b9\u4e8b\u5b9e\u4e0e\u793e\u533a\u89c2\u5bdf"
-                if is_zh
-                else "Official Facts vs Community Observations"
-            ),
-            "repeated_signals": (
-                "\u91cd\u590d\u4fe1\u53f7" if is_zh else "Repeated Signals"
-            ),
-            "contested_signals": (
-                "\u6709\u4e89\u8bae\u6216\u4f4e\u7f6e\u4fe1\u4fe1\u53f7"
-                if is_zh
-                else "Contested or Low-Confidence Signals"
-            ),
-            "dimension": "\u7ef4\u5ea6" if is_zh else "Dimension",
-            "competitor_1": "\u7ade\u54c1 1" if is_zh else "<competitor 1>",
-            "competitor_2": "\u7ade\u54c1 2" if is_zh else "<competitor 2>",
-        }
-
-        def subheading(key: str) -> str:
-            return localized_subheadings[key]
 
         def h2(key: str) -> str:
             return f"## {report_label(detail.output_language, key)}"
+
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        outline_labels = {
+            "competitor_placeholder": ("<竞品>", "<competitor>"),
+            "competitor_1": ("<竞品 1>", "<competitor 1>"),
+            "competitor_2": ("<竞品 2>", "<competitor 2>"),
+            "dimension": ("维度", "Dimension"),
+            "pricing_packaging": ("定价与包装", "Pricing and Packaging"),
+            "feature_workflow": ("功能与工作流能力", "Feature and Workflow Capability"),
+            "user_persona_adoption": ("用户画像与采用", "User Persona and Adoption"),
+            "cross_risks": ("跨竞品风险与影响", "Cross-Competitor Risks and Implications"),
+            "direct_user_community": ("直接用户/社区信号", "Direct User / Community Signals"),
+            "simulated_survey": ("模拟问卷与访谈信号", "Simulated Survey and Interview Signals"),
+            "adoption_blockers": ("采用阻碍", "Adoption Blockers"),
+            "switching_triggers": ("切换触发", "Switching Triggers"),
+            "evidence_gaps": ("证据缺口", "Evidence Gaps"),
+            "official_vs_community": ("官方事实与社区观察", "Official Facts vs Community Observations"),
+            "repeated_signals": ("重复出现的信号", "Repeated Signals"),
+            "contested_signals": ("有争议或低置信信号", "Contested or Low-Confidence Signals"),
+            "positioning_core_value": ("定位与核心价值", "Positioning and Core Value"),
+            "feature_capabilities": ("功能能力", "Feature Capabilities"),
+            "community_feedback": (
+                "社区反馈、采用阻碍与切换触发",
+                "Community Feedback, Adoption Blockers, and Switching Triggers",
+            ),
+            "competitive_plays": ("竞争打法与证据缺口", "Competitive Plays and Evidence Gaps"),
+            "strengths": ("优势", "Strengths"),
+            "weaknesses": ("劣势", "Weaknesses"),
+            "opportunities": ("机会", "Opportunities"),
+            "threats": ("威胁", "Threats"),
+            "attack_point": ("攻击点", "Attack Point"),
+            "defense_rebuttal": ("防守/反驳", "Defense / Rebuttal"),
+            "best_fit_buyer": ("最适合买方场景", "Best-Fit Buyer Scenario"),
+            "proof_needed": ("使用前所需证据", "Proof Needed Before Use"),
+            "workflow_overlap": ("工作流重叠", "Workflow Overlap"),
+            "enterprise_buying_risk": ("企业采购风险", "Enterprise Buying Risk"),
+            "switching_cost_controls": ("切换成本与控制点", "Switching Cost and Controls"),
+            "category_segments": ("品类分段", "Category Segments"),
+            "strategic_clusters": ("战略集群", "Strategic Clusters"),
+            "trend_uncertainty": ("趋势信号与不确定性", "Trend Signals and Uncertainty"),
+            "decision_implications": ("决策影响", "Decision Implications"),
+            "operating_risks": ("运营风险", "Operating Risks"),
+            "next_validation": ("下一步验证任务", "Next Validation Tasks"),
+        }
+
+        def outline_label(key: str) -> str:
+            zh, en = outline_labels[key]
+            return zh if is_zh else en
+
+        def h3(key: str) -> str:
+            return f"### {outline_label(key)}"
+
+        def h4(key: str) -> str:
+            return f"#### {outline_label(key)}"
+
+        competitor_placeholder = outline_label("competitor_placeholder")
+        deep_dive_competitor = competitor or competitor_placeholder
 
         if contract.segment_kind == "evidence_shard":
             return "\n".join(
@@ -1402,10 +3539,10 @@ class WriterAgentMixin:
                     "- Recommended decision / buying posture.",
                     "- Confidence level and what must not be overstated.",
                     h2("competitive_findings"),
-                    f"### {subheading('pricing_packaging')}",
-                    f"### {subheading('feature_workflow')}",
-                    f"### {subheading('user_persona_adoption')}",
-                    f"### {subheading('cross_competitor')}",
+                    h3("pricing_packaging"),
+                    h3("feature_workflow"),
+                    h3("user_persona_adoption"),
+                    h3("cross_risks"),
                     (
                         "Must include: at least three cited bullets and one "
                         "cross-competitor comparison."
@@ -1418,16 +3555,16 @@ class WriterAgentMixin:
                 [
                     "Required segment outline:",
                     h2("review_theme_summary"),
-                    "### <competitor>",
-                    f"#### {subheading('direct_user_community')}",
-                    f"#### {subheading('simulated_research')}",
-                    f"#### {subheading('adoption_blockers')}",
-                    f"#### {subheading('switching_triggers')}",
-                    f"#### {subheading('evidence_gaps')}",
+                    f"### {competitor_placeholder}",
+                    h4("direct_user_community"),
+                    h4("simulated_survey"),
+                    h4("adoption_blockers"),
+                    h4("switching_triggers"),
+                    h4("evidence_gaps"),
                     h2("community_evidence_triangulation"),
-                    f"### {subheading('official_vs_community')}",
-                    f"### {subheading('repeated_signals')}",
-                    f"### {subheading('contested_signals')}",
+                    h3("official_vs_community"),
+                    h3("repeated_signals"),
+                    h3("contested_signals"),
                     (
                         "Must include: separate direct user/community signals from "
                         "simulated survey/interview signals."
@@ -1441,15 +3578,112 @@ class WriterAgentMixin:
                     "Required segment outline:",
                     h2("competitor_deep_dives"),
                     f"### {deep_dive_competitor}",
-                    f"#### {subheading('positioning_core')}",
-                    f"#### {subheading('pricing_packaging')}",
-                    f"#### {subheading('feature_capabilities')}",
-                    f"#### {subheading('user_persona_adoption')}",
-                    f"#### {subheading('community_feedback')}",
-                    f"#### {subheading('competitive_plays')}",
+                    h4("positioning_core_value"),
+                    h4("pricing_packaging"),
+                    h4("feature_capabilities"),
+                    h4("user_persona_adoption"),
+                    h4("community_feedback"),
+                    h4("competitive_plays"),
                     (
                         "Must include: exactly one competitor ownership H3 matching "
                         "segment_competitor."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "side_by_side_matrix":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("side_by_side_matrix"),
+                    (
+                        f"| {outline_label('dimension')} | "
+                        f"{outline_label('competitor_1')} | "
+                        f"{outline_label('competitor_2')} |"
+                    ),
+                    "|---|---|---|",
+                    (
+                        "Must include: one cited row per decision dimension and a short "
+                        "matrix interpretation after the table."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "swot_analysis":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("swot_analysis"),
+                    f"### {competitor_placeholder}",
+                    h4("strengths"),
+                    h4("weaknesses"),
+                    h4("opportunities"),
+                    h4("threats"),
+                    (
+                        "Must include: all four SWOT quadrants for every competitor. "
+                        "Use evidence-gap notes instead of unsupported claims."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "battlecard":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("battlecard"),
+                    f"### {competitor_placeholder}",
+                    h4("attack_point"),
+                    h4("defense_rebuttal"),
+                    h4("best_fit_buyer"),
+                    h4("proof_needed"),
+                    (
+                        "Must include: competitor-specific attack point, defense or "
+                        "objection handling, use-when scenario, and evidence risk."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "workflow_enterprise_risk":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("workflow_enterprise_risk"),
+                    h3("workflow_overlap"),
+                    h3("enterprise_buying_risk"),
+                    h3("switching_cost_controls"),
+                    (
+                        "Must include: workflow overlap, ecosystem leverage, enterprise "
+                        "controls, and risks that change the recommendation."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "market_landscape":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("market_landscape"),
+                    h3("category_segments"),
+                    h3("strategic_clusters"),
+                    h3("trend_uncertainty"),
+                    (
+                        "Must include: market segmentation, strategic options, and "
+                        "uncertainty boundaries."
+                    ),
+                    source_warning,
+                ]
+            )
+        if section_id == "business_implications":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("business_implications"),
+                    h3("decision_implications"),
+                    h3("operating_risks"),
+                    h3("next_validation"),
+                    (
+                        "Must include: what the evidence changes for product, GTM, "
+                        "procurement, or follow-up analysis."
                     ),
                     source_warning,
                 ]
@@ -1460,16 +3694,17 @@ class WriterAgentMixin:
                     "Required segment outline:",
                     h2("side_by_side_matrix"),
                     (
-                        f"| {subheading('dimension')} | {subheading('competitor_1')} | "
-                        f"{subheading('competitor_2')} |"
+                        f"| {outline_label('dimension')} | "
+                        f"{outline_label('competitor_1')} | "
+                        f"{outline_label('competitor_2')} |"
                     ),
                     "|---|---|---|",
                     h2("swot_analysis"),
-                    "### <competitor>",
-                    f"#### {subheading('strengths')}",
-                    f"#### {subheading('weaknesses')}",
-                    f"#### {subheading('opportunities')}",
-                    f"#### {subheading('threats')}",
+                    f"### {competitor_placeholder}",
+                    h4("strengths"),
+                    h4("weaknesses"),
+                    h4("opportunities"),
+                    h4("threats"),
                     (
                         "Must include: matrix interpretation and all four SWOT quadrants "
                         "for every competitor."
@@ -1497,6 +3732,10 @@ class WriterAgentMixin:
                     (
                         "Must include: concise source-quality, coverage, confidence, "
                         "and gap support without restarting core analysis."
+                    ),
+                    (
+                        "Do not write an exact total source count unless it is copied "
+                        "from deterministic source telemetry in the segment context."
                     ),
                     source_warning,
                 ]
@@ -1532,7 +3771,10 @@ class WriterAgentMixin:
         contract_missing_required_heading_keys: list[str] | None = None,
     ) -> str:
         detail = record.detail
-        segment_json = json.dumps(segment, ensure_ascii=False)
+        segment_json = json.dumps(
+            _prompt_safe_writer_segment(segment),
+            ensure_ascii=False,
+        )
         allowed_h2_headings = ", ".join(
             heading
             for heading in segment.get("allowed_h2_headings", [])
@@ -1548,12 +3790,29 @@ class WriterAgentMixin:
             for heading in segment.get("forbidden_h2_headings", [])
             if isinstance(heading, str)
         )
+        heading_language_instruction = ""
+        if normalize_output_language(detail.output_language) == "zh-CN":
+            heading_language_instruction = (
+                "For zh-CN output, write structural H3/H4 headings and table "
+                "headers in Chinese. Keep product names, API names, model names, "
+                "and source IDs in their original language.\n"
+            )
         segment_outline = self._writer_segment_required_outline(detail, segment)
         citation_warning = ""
         if citation_error_ids:
-            citation_warning = (
+            safe_error_ids = _prompt_safe_citation_error_ids(citation_error_ids)
+            citation_error_summary = (
                 "Previous segment cited source IDs outside this segment: "
-                f"{', '.join(citation_error_ids)}. Rewrite using only allowed_source_ids. "
+                f"{', '.join(safe_error_ids)}."
+                if safe_error_ids
+                else (
+                    "Previous segment cited non-source internal IDs that cannot be "
+                    "used as citations."
+                )
+            )
+            citation_warning = (
+                f"{citation_error_summary} Rewrite using only this segment's "
+                "citation source IDs. "
                 "Use exact [source:ID] syntax with no space after source:. Do not put "
                 "multiple source IDs inside one [source:...] token; cite multiple "
                 "sources as consecutive citations such as [source:A][source:B].\n"
@@ -1563,23 +3822,42 @@ class WriterAgentMixin:
             forbidden = ", ".join(contract_forbidden_headings or [])
             missing = ", ".join(contract_missing_required_heading_keys or [])
             contract_warning = (
-                "Previous segment violated its heading contract: "
+                "Previous segment violated its heading contract or publication contract: "
                 f"{'; '.join(contract_errors)}. "
                 f"Missing required H2 heading keys: {missing or 'none'}. "
                 f"Forbidden H2 headings found: {forbidden or 'none'}. "
                 "Rewrite only this segment and obey the segment contract exactly.\n"
             )
         user_research_gap_instruction = ""
+        section_id = str(
+            segment.get("section_id")
+            or segment.get("section_key")
+            or segment.get("segment_name")
+            or ""
+        )
+        section_brief = segment.get("section_brief")
+        repair_targets = segment.get("repair_targets")
+        if not isinstance(repair_targets, Mapping) and isinstance(
+            section_brief, Mapping
+        ):
+            repair_targets = section_brief.get("repair_targets")
+        scoped_empty = (
+            isinstance(repair_targets, Mapping)
+            and repair_targets.get("scoped_card_status") == "empty"
+        )
         if (
-            segment.get("segment_name") == "user_research"
+            (section_id == "review_theme_summary" or scoped_empty)
             and not segment.get("groups")
             and not segment.get("allowed_source_ids")
         ):
             user_research_gap_instruction = (
-                "This user_research segment has no groups or allowed sources; write "
+                "This review-theme segment has no groups or allowed sources; write "
                 "the section as an evidence gap/absence note and do not invent user "
                 "research findings.\n"
             )
+        publication_repair_instruction = self._writer_publication_repair_instruction(
+            _publication_issues_from_segment(segment)
+        )
         shard_instruction = ""
         if segment.get("segment_kind") == "evidence_shard":
             shard_instruction += (
@@ -1603,11 +3881,10 @@ class WriterAgentMixin:
                     "You are a senior enterprise competitive-intelligence analyst writing "
                     "one section group of a larger markdown report. Return only markdown "
                     "for this segment. Cite factual claims only with source IDs in "
-                    "allowed_source_ids. Do not invent source IDs. Use exact [source:ID] "
-                    "syntax with no space after source:. Do not combine multiple source "
-                    "IDs inside one [source:...] token; write consecutive citations "
-                    "like [source:A][source:B]. Do not put citations in headings or "
-                    "table header rows. "
+                    "the segment's citation source list. Do not invent source IDs. "
+                    "Use exact [source:ID] syntax with no space after source:. Do not "
+                    "combine multiple source IDs inside one [source:...] token; write "
+                    "consecutive citations like [source:A][source:B]. "
                     "Do not use web_search_result or confidence < 0.75 as the sole support "
                     "for a winner, legal/security certification, pricing, or procurement "
                     "recommendation. If evidence is incomplete, say the conclusion is "
@@ -1632,21 +3909,21 @@ class WriterAgentMixin:
                     f"{required_h2_headings or 'none'}\n"
                     "Forbidden H2 headings for this segment: "
                     f"{forbidden_h2_headings or 'none'}\n"
+                    f"{heading_language_instruction}"
                     f"{segment_outline}\n"
                     f"{citation_warning}"
                     f"{contract_warning}"
                     f"{user_research_gap_instruction}"
+                    f"{publication_repair_instruction}"
                     f"{shard_instruction}"
                     "Do not write headings outside this segment's contract. "
                     "Do not write support or appendix sections unless "
                     "segment_kind=support_fragment. If segment_kind=evidence_shard, "
-                    "do not write any ## H2 headings. Never mention Segment Evidence Pack, "
-                    "Writer Evidence Pack, source_registry, allowed_source_ids, or other "
-                    "writer-internal field names in the reader-facing markdown.\n"
+                    "do not write any ## H2 headings.\n"
                     f"Confirmed Memory Preferences:\n{memory_context}\n"
                     f"Layer Report Context: {layer_context}\n"
                     f"{self._writer_community_policy_text()}\n"
-                    f"Segment Evidence Pack JSON: {segment_json}\n\n"
+                    f"Segment Context JSON: {segment_json}\n\n"
                     f"Required sections for full report:\n{required_sections}\n"
                     "Write with consulting depth for this segment. Keep support material "
                     "concise and preserve [source:ID] citation syntax."
@@ -1661,6 +3938,7 @@ class WriterAgentMixin:
         *,
         sections: Sequence[str],
         previous_report: str,
+        publication_issues: Sequence[PublicationContractIssue] | None = None,
     ) -> str:
         detail = record.detail
         evidence_pack_result = build_writer_evidence_pack(detail)
@@ -1691,13 +3969,19 @@ class WriterAgentMixin:
                 for segment in repair_segments
             )
             writer_context_jsons = [
-                json.dumps(payload, ensure_ascii=False) for payload in repair_payloads
+                json.dumps(
+                    _reader_safe_prompt_field_names(payload),
+                    ensure_ascii=False,
+                )
+                for payload in repair_payloads
             ]
         else:
             repair_payloads = []
             repair_segments = []
             repair_has_evidence_shards = False
-            writer_context_jsons = [evidence_pack_result.to_prompt_json()]
+            writer_context_jsons = [
+                _reader_safe_prompt_json_text(evidence_pack_result.to_prompt_json())
+            ]
         telemetry_payload = (
             evidence_pack_result.telemetry_payload()
             if hasattr(evidence_pack_result, "telemetry_payload")
@@ -1733,7 +4017,14 @@ class WriterAgentMixin:
         )
         if repair_has_evidence_shards:
             timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
-            repaired_sections = await self._writer_segment_markdown_parts(
+            repair_segments = [
+                self._with_publication_repair_issues(
+                    segment,
+                    publication_issues=publication_issues,
+                )
+                for segment in repair_segments
+            ]
+            repaired_fragments = await self._writer_segment_markdown_parts(
                 record,
                 evidence_pack_result=evidence_pack_result,
                 segments=repair_segments,
@@ -1743,7 +4034,15 @@ class WriterAgentMixin:
                 layer_context=self._writer_layer_context(detail),
                 required_sections=self._writer_required_sections(detail),
             )
-            return self._join_section_repair_parts(repaired_sections, section_headings)
+            repaired_parts = self._filter_section_repair_parts_to_requested_sections(
+                [fragment.markdown for fragment in repaired_fragments],
+                sections=sections,
+                output_language=detail.output_language,
+            )
+            return self._join_section_repair_parts(
+                repaired_parts,
+                section_headings,
+            )
 
         repaired_sections = []
         for writer_context_json in writer_context_jsons:
@@ -1771,12 +4070,34 @@ class WriterAgentMixin:
                         "Use the exact requested level-2 heading for each returned section.\n"
                         "You must preserve existing [source:ID] syntax.\n"
                         f"{self._writer_community_policy_text()}\n"
-                        f"Writer Evidence Pack JSON: {writer_context_json}\n\n"
+                        f"{self._writer_publication_repair_instruction(publication_issues)}"
+                        f"Report Evidence Context JSON: {writer_context_json}\n\n"
                         f"Previous report:\n{previous_report}"
                     ),
                 )
             )
         return self._join_section_repair_parts(repaired_sections, section_headings)
+
+    def _with_publication_repair_issues(
+        self,
+        segment: dict[str, object],
+        *,
+        publication_issues: Sequence[PublicationContractIssue] | None,
+    ) -> dict[str, object]:
+        if not publication_issues:
+            return segment
+        return {
+            **segment,
+            "publication_repair_issues": [
+                {
+                    "code": issue.code,
+                    "line_number": issue.line_number,
+                    "message": issue.message,
+                    "excerpt": issue.excerpt,
+                }
+                for issue in publication_issues
+            ],
+        }
 
     def _writer_community_policy_text(self) -> str:
         return (
@@ -1787,12 +4108,117 @@ class WriterAgentMixin:
             "commitments unless an official source also supports the same claim."
         )
 
+    def _writer_publication_repair_instruction(
+        self,
+        issues: Sequence[PublicationContractIssue] | None,
+    ) -> str:
+        base = (
+            "Do not mention internal JSON or implementation field names in the report "
+            "body. Refer to implementation objects as sources, evidence, "
+            "or the source list in reader-facing language.\n"
+        )
+        if not issues:
+            return base
+        issue_lines = []
+        for issue in issues:
+            excerpt = issue.excerpt or issue.message
+            issue_lines.append(
+                f"- line {issue.line_number}: {issue.code}; remove or rewrite "
+                f"this excerpt: {excerpt}"
+            )
+        return (
+            base
+            + "Previous assembled report failed publication contract for this "
+            + "section. Repair only the listed issue(s):\n"
+            + "\n".join(issue_lines)
+            + "\n"
+        )
+
     def _writer_section_heading_instruction(self, detail: RunDetail, section: str) -> str:
         try:
             heading = report_label(detail.output_language, section)
         except KeyError:
             heading = section
         return f"{section} -> ## {heading}"
+
+    def _filter_section_repair_parts_to_requested_sections(
+        self,
+        parts: Sequence[str],
+        *,
+        sections: Sequence[str],
+        output_language: object,
+    ) -> list[str]:
+        output_language_text = str(output_language)
+        requested_keys = self._requested_section_keys(sections, output_language_text)
+        if not requested_keys:
+            return list(parts)
+
+        filtered_parts: list[str] = []
+        for part in parts:
+            filtered_part = self._filter_section_repair_part_to_requested_sections(
+                part,
+                requested_keys=requested_keys,
+                output_language=output_language_text,
+            )
+            if filtered_part is None:
+                filtered_parts.append(part)
+            elif filtered_part:
+                filtered_parts.append(filtered_part)
+        return filtered_parts
+
+    def _requested_section_keys(
+        self,
+        sections: Sequence[str],
+        output_language: str,
+    ) -> set[str]:
+        requested_keys: set[str] = set()
+        for section in sections:
+            section_text = str(section).strip()
+            if not section_text:
+                continue
+            requested_keys.add(section_text)
+            if (
+                section_text not in CORE_HEADING_KEYS
+                and section_text not in SUPPORT_HEADING_KEYS
+            ):
+                requested_keys.update(SECTION_ALLOWED_KEYS.get(section_text, ()))
+            section_heading_key = heading_key_for(section_text, output_language)
+            if section_heading_key is not None:
+                requested_keys.add(section_heading_key)
+            try:
+                label_key = heading_key_for(
+                    report_label(output_language, section_text),
+                    output_language,
+                )
+            except KeyError:
+                label_key = None
+            if label_key is not None:
+                requested_keys.add(label_key)
+        return requested_keys
+
+    def _filter_section_repair_part_to_requested_sections(
+        self,
+        part: str,
+        *,
+        requested_keys: set[str],
+        output_language: str,
+    ) -> str | None:
+        matches = list(re.finditer(r"(?m)^##\s+(.+?)\s*$", part))
+        if not matches:
+            return None
+
+        blocks: list[str] = []
+        for index, match in enumerate(matches):
+            heading_key = heading_key_for(match.group(1), output_language)
+            if heading_key not in requested_keys:
+                continue
+            next_match = matches[index + 1] if index + 1 < len(matches) else None
+            block = part[
+                match.start() : next_match.start() if next_match else None
+            ].strip()
+            if block:
+                blocks.append(block)
+        return "\n\n".join(blocks).strip()
 
     def _join_section_repair_parts(
         self,
@@ -1828,7 +4254,24 @@ class WriterAgentMixin:
         detail: RunDetail,
         previous_report: str,
     ) -> str:
-        return self._harden_report_markdown(detail, previous_report)
+        if self._has_report_section_markers(previous_report):
+            preserved_report = self._harden_schema_contract_report_markdown(
+                detail,
+                previous_report,
+            )
+        else:
+            preserved_report = self._harden_report_markdown(detail, previous_report)
+        if detail.report_md != preserved_report:
+            detail.report_md = preserved_report
+        if self._has_report_section_markers(preserved_report):
+            self._set_schema_contract_report_artifact(detail)
+            return detail.report_md
+        else:
+            self._clear_stale_report_artifact(detail)
+        return preserved_report
+
+    def _has_report_section_markers(self, markdown: str) -> bool:
+        return bool(re.search(r"^<!--\s*report-section:", markdown, flags=re.MULTILINE))
 
     def _backfill_layer_sections(
         self,
@@ -1847,12 +4290,21 @@ class WriterAgentMixin:
         is_zh = normalize_output_language(detail.output_language) == "zh-CN"
         layer = detail.plan.competitor_layer
         if layer == "L1":
-            return [
-                "",
-                f"## {heading}",
-                *self._backfill_l1_battlecard_bullets(detail, source_ids, is_zh=is_zh),
-            ]
-        if layer == "L2":
+            if is_zh:
+                bullets = [
+                    f"- 直接战报定位：把当前赢家作为短期替代或对抗话术的候选主线，但只在引用证据覆盖的范围内使用。{refs}",
+                    f"- 反对意见处理：优先围绕定价、包装、功能对齐、采购阻力和切换触发组织回答，不把弱单元格包装成确定结论。{refs}",
+                    f"- 行动偏向：使用置信度最高的维度赢家作为初始战报骨架，并在发布前验证单来源、低置信度或社区观察支持的声明。{refs}",
+                    f"- 落地检查：每条战报话术都要同时包含可引用证据、目标买家、可能反驳点和下一步验证任务，避免只给一句赢家判断。{refs}",
+                ]
+            else:
+                bullets = [
+                    f"- Direct-use position: treat the current winners as candidate near-term replacement or objection-handling lines only within the cited evidence boundary.{refs}",
+                    f"- Objection handling: organize responses around pricing, packaging, feature parity, procurement friction, and switching triggers without turning weak cells into settled conclusions.{refs}",
+                    f"- Action bias: use the highest-confidence dimension winners as the initial battlecard spine, then verify single-source, low-confidence, or community-observed claims before publication.{refs}",
+                    f"- Deployment check: every battlecard line should pair cited evidence, target buyer, likely rebuttal, and next validation task instead of stopping at a one-sentence winner claim.{refs}",
+                ]
+        elif layer == "L2":
             if is_zh:
                 bullets = [
                     f"- 相邻工作流威胁：从工作流重叠、集成杠杆和切换成本阅读矩阵，而不是只比较孤立功能。{refs}",
@@ -1898,81 +4350,6 @@ class WriterAgentMixin:
                     f"- Next action: fill the sources that could change winner judgments before expanding support-layer audit material.{refs}",
                 ]
         return ["", f"## {heading}", *bullets]
-
-    def _backfill_l1_battlecard_bullets(
-        self,
-        detail: RunDetail,
-        source_ids: list[str],
-        *,
-        is_zh: bool,
-    ) -> list[str]:
-        competitors = detail.plan.competitors[:4] or [detail.topic]
-        dimensions = ", ".join(detail.plan.dimensions[:3]) or (
-            "\u6838\u5fc3\u7ef4\u5ea6" if is_zh else "core dimensions"
-        )
-        bullets: list[str] = []
-        for competitor in competitors:
-            refs = self._format_source_refs(
-                self._battlecard_source_ids_for_competitor(
-                    detail, competitor, fallback_source_ids=source_ids
-                )
-            )
-            if is_zh:
-                bullets.extend(
-                    [
-                        (
-                            f"- {competitor} \u4e70\u65b9\u89e6\u53d1\uff1a\u5f53\u5ba2\u6237\u4f18\u5148\u8ba8\u8bba "
-                            f"{dimensions} \u7684\u53ef\u9a8c\u8bc1\u5dee\u5f02\u65f6\uff0c\u7528\u5df2\u5f15\u7528\u8bc1\u636e\u6253\u5f00\u5bf9\u8bdd\uff0c"
-                            f"\u4e0d\u628a\u5f31\u8bc1\u636e\u653e\u5927\u6210\u7edd\u5bf9\u8d62\u5bb6\u3002{refs}"
-                        ),
-                        (
-                            f"- {competitor} \u53cd\u5bf9\u610f\u89c1\u56de\u5e94\uff1a\u5148\u627f\u8ba4\u5355\u6765\u6e90\u3001"
-                            "\u793e\u533a\u89c2\u5bdf\u6216\u6a21\u62df\u8c03\u7814\u7684\u8bc1\u636e\u8fb9\u754c\uff0c"
-                            "\u518d\u8981\u6c42\u5ba2\u6237\u7528 POC\u3001\u91c7\u8d2d\u6216\u5b89\u5168\u6750\u6599\u9a8c\u8bc1\u3002"
-                            f"{refs}"
-                        ),
-                    ]
-                )
-            else:
-                bullets.extend(
-                    [
-                        (
-                            f"- {competitor} Buyer trigger: lead when the account asks for "
-                            f"verifiable differences across {dimensions}; keep the point tied "
-                            f"to cited evidence instead of presenting a universal winner.{refs}"
-                        ),
-                        (
-                            f"- {competitor} Objection response: acknowledge single-source, "
-                            "community-observed, or simulated-research limits first, then turn "
-                            f"the unresolved point into a POC, procurement, or security validation task.{refs}"
-                        ),
-                    ]
-                )
-        return bullets
-
-    def _battlecard_source_ids_for_competitor(
-        self,
-        detail: RunDetail,
-        competitor: str,
-        *,
-        fallback_source_ids: list[str],
-    ) -> list[str]:
-        competitor_key = competitor.casefold()
-        source_ids: list[str] = []
-        seen: set[str] = set()
-        for source in detail.raw_sources:
-            matches = source.competitor.casefold() == competitor_key or any(
-                item.casefold() == competitor_key for item in source.covered_competitors
-            )
-            if not matches or source.id in seen:
-                continue
-            seen.add(source.id)
-            source_ids.append(source.id)
-            if len(source_ids) >= 2:
-                break
-        if source_ids:
-            return source_ids
-        return fallback_source_ids[:2]
 
     def _backfill_executive_summary_section(
         self, detail: RunDetail, source_ids: list[str]
@@ -2596,154 +4973,39 @@ class WriterAgentMixin:
 
     def _harden_report_markdown(self, detail: RunDetail, markdown: str) -> str:
         repaired = repair_mojibake_text(markdown)
-        required = self._ensure_report_required_sections(detail, repaired)
-        battlecard_repaired = self._repair_template_battlecard_section(detail, required)
-        sanitized = self._sanitize_report_hygiene(
+        return self._ensure_report_claim_citations(
             detail,
             self._repair_report_source_tokens(
                 detail,
-                battlecard_repaired,
+                self._ensure_report_required_sections(detail, repaired),
             ),
         )
-        cited = self._ensure_report_claim_citations(detail, sanitized)
-        return self._sanitize_report_hygiene(detail, cited)
 
-    def _repair_template_battlecard_section(
-        self, detail: RunDetail, markdown: str
+    def _harden_schema_contract_report_markdown(
+        self,
+        detail: RunDetail,
+        markdown: str,
     ) -> str:
-        if self._layer_section_label_key(detail) != "battlecard":
-            return markdown
-        section = self._find_report_h2_section(markdown, self._report_label_aliases("battlecard"))
-        if section is None:
-            return markdown
-        section_body = section[2].casefold()
-        template_phrases = (
-            "direct battlecard positioning",
-            "direct-use position",
-            "objection handling",
-            "action bias",
-            "deployment check",
-            "every battlecard line should",
-            "current winner as the short-term",
-            "直接战报定位",
-            "反对意见处理",
-            "行动偏向",
-            "落地检查",
-            "当前赢家作为短期",
-        )
-        if not any(phrase in section_body for phrase in template_phrases):
-            return markdown
-        replacement = "\n".join(
-            self._backfill_layer_sections_lines(detail, self._matrix_source_ids(detail))
-        ).strip()
-        return replace_markdown_section(
-            markdown,
-            "battlecard",
-            detail.output_language,
-            replacement,
-        )
-
-    def _find_report_h2_section(
-        self, markdown: str, aliases: Iterable[str]
-    ) -> tuple[int, int, str] | None:
-        matches = list(self._iter_report_h2_headings(markdown))
-        alias_list = list(aliases)
-        for index, match in enumerate(matches):
-            if not any(
-                self._report_heading_matches(match.group(1), alias)
-                for alias in alias_list
-            ):
-                continue
-            end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
-            return match.start(), end, markdown[match.end() : end]
-        return None
-
-    def _sanitize_report_hygiene(self, detail: RunDetail, markdown: str) -> str:
-        lines = markdown.splitlines()
-        sanitized_lines: list[str] = []
-        evidence_appendix_aliases = self._report_label_aliases("evidence_appendix")
-        in_evidence_appendix = False
-        for index, line in enumerate(lines):
-            if self._report_line_contains_writer_internal_terms(line):
-                continue
-            sanitized = self._localize_common_template_heading(detail, line)
-            stripped = sanitized.strip()
-            h2_match = re.match(r"^\s*##\s+(.+?)\s*#*\s*$", stripped)
-            if h2_match is not None:
-                in_evidence_appendix = any(
-                    self._report_heading_matches(h2_match.group(1), alias)
-                    for alias in evidence_appendix_aliases
-                )
-            if stripped.startswith("#"):
-                sanitized = SOURCE_TOKEN_RE.sub("", sanitized).rstrip()
-            elif self._report_table_header_line_has_citation(lines, index):
-                sanitized = SOURCE_TOKEN_RE.sub("", sanitized).rstrip()
-            elif in_evidence_appendix and stripped.startswith("-"):
-                sanitized = SOURCE_TOKEN_RE.sub("", sanitized).rstrip()
-            sanitized_lines.append(sanitized)
-        return "\n".join(sanitized_lines).strip()
-
-    def _localize_common_template_heading(self, detail: RunDetail, line: str) -> str:
-        if normalize_output_language(detail.output_language) != "zh-CN":
-            return line
-        match = re.match(r"^(\s*#{3,4}\s+)(.+?)(\s*)$", line)
-        if match is None:
-            return line
-        prefix, heading, suffix = match.groups()
-        localized = self._zh_common_template_heading(heading)
-        if localized is None:
-            return line
-        return f"{prefix}{localized}{suffix}"
-
-    def _zh_common_template_heading(self, heading: str) -> str | None:
-        normalized = re.sub(r"\s+", " ", heading.strip()).casefold()
-        return {
-            "pricing and packaging": "\u5b9a\u4ef7\u4e0e\u5305\u88c5",
-            "feature and workflow capability": "\u529f\u80fd\u4e0e\u5de5\u4f5c\u6d41\u80fd\u529b",
-            "user persona and adoption": "\u7528\u6237\u753b\u50cf\u4e0e\u91c7\u7528",
-            "cross-competitor risks and implications": "\u8de8\u7ade\u54c1\u98ce\u9669\u4e0e\u542f\u793a",
-            "direct user / community signals": "\u76f4\u63a5\u7528\u6237/\u793e\u533a\u4fe1\u53f7",
-            "simulated survey and interview signals": "\u6a21\u62df\u8c03\u7814/\u8bbf\u8c08\u4fe1\u53f7",
-            "adoption blockers": "\u91c7\u7528\u969c\u788d",
-            "switching triggers": "\u5207\u6362\u89e6\u53d1",
-            "evidence gaps": "\u8bc1\u636e\u7f3a\u53e3",
-            "positioning and core value": "\u5b9a\u4f4d\u4e0e\u6838\u5fc3\u4ef7\u503c",
-            "feature capabilities": "\u529f\u80fd\u80fd\u529b",
-            "community feedback, adoption blockers, and switching triggers": "\u793e\u533a\u53cd\u9988\u3001\u91c7\u7528\u969c\u788d\u4e0e\u5207\u6362\u89e6\u53d1",
-            "competitive plays and evidence gaps": "\u7ade\u4e89\u6253\u6cd5\u4e0e\u8bc1\u636e\u7f3a\u53e3",
-            "strengths": "\u4f18\u52bf",
-            "weaknesses": "\u52a3\u52bf",
-            "opportunities": "\u673a\u4f1a",
-            "threats": "\u5a01\u80c1",
-            "official facts vs community observations": "\u5b98\u65b9\u4e8b\u5b9e\u4e0e\u793e\u533a\u89c2\u5bdf",
-            "repeated signals": "\u91cd\u590d\u4fe1\u53f7",
-            "contested or low-confidence signals": "\u6709\u4e89\u8bae\u6216\u4f4e\u7f6e\u4fe1\u4fe1\u53f7",
-        }.get(normalized)
-
-    def _report_line_contains_writer_internal_terms(self, line: str) -> bool:
-        return any(
-            term in line
-            for term in (
-                "Segment Evidence Pack",
-                "Writer Evidence Pack",
-                "source_registry",
-                "allowed_source_ids",
-                "represented_by",
+        repaired = repair_mojibake_text(markdown)
+        repaired = self._repair_report_source_tokens(detail, repaired)
+        preflight = run_writer_quality_preflight(detail, repaired)
+        if not preflight.passed:
+            raise RuntimeError(
+                "Schema-contract report failed quality preflight after hardening: "
+                f"{', '.join(preflight.failure_reasons)}"
             )
+        publication_validation = validate_publication_contract(
+            repaired,
+            structured_report=None,
+            allowed_source_ids={source.id for source in detail.raw_sources},
+            output_language=detail.output_language,
         )
-
-    def _report_table_header_line_has_citation(
-        self, lines: Sequence[str], index: int
-    ) -> bool:
-        line = lines[index].strip()
-        if not line.startswith("|") or "[source:" not in line.casefold():
-            return False
-        next_line = ""
-        for candidate in lines[index + 1 :]:
-            if candidate.strip():
-                next_line = candidate.strip()
-                break
-        return bool(next_line) and re.fullmatch(r"\|?[\s|\-:]+\|?", next_line) is not None
+        if not publication_validation.passed:
+            raise ValueError(
+                "schema-contract report failed publication contract after hardening: "
+                + ", ".join(publication_validation.issue_codes())
+            )
+        return repaired
 
     def _ensure_report_required_sections(self, detail: RunDetail, markdown: str) -> str:
         hardened = markdown.strip()
@@ -3053,9 +5315,20 @@ class WriterAgentMixin:
         pre_support_unknown_sections: list[str] = []
         tail_unknown_sections: list[str] = []
         for index, match in enumerate(matches):
-            section_end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
+            section_start = self._report_section_start_with_marker(
+                markdown,
+                match.start(),
+            )
+            section_end = (
+                self._report_section_start_with_marker(
+                    markdown,
+                    matches[index + 1].start(),
+                )
+                if index + 1 < len(matches)
+                else len(markdown)
+            )
             heading = match.group(1).strip()
-            section = markdown[match.start() : section_end].strip()
+            section = markdown[section_start:section_end].strip()
             order_index = next(
                 (
                     index
@@ -3075,7 +5348,11 @@ class WriterAgentMixin:
         if not known_sections:
             return markdown
 
-        preamble = markdown[: matches[0].start()].strip()
+        first_section_start = self._report_section_start_with_marker(
+            markdown,
+            matches[0].start(),
+        )
+        preamble = markdown[:first_section_start].strip()
         support_start_index = len(heading_groups) - len(
             self._support_report_heading_alias_groups()
         )
@@ -3100,6 +5377,20 @@ class WriterAgentMixin:
             ]
             if part
         )
+
+    def _report_section_start_with_marker(
+        self,
+        markdown: str,
+        heading_start: int,
+    ) -> int:
+        previous_line_end = heading_start
+        while previous_line_end > 0 and markdown[previous_line_end - 1] in " \t\r\n":
+            previous_line_end -= 1
+        previous_line_start = markdown.rfind("\n", 0, previous_line_end) + 1
+        previous_line = markdown[previous_line_start:previous_line_end].strip()
+        if re.fullmatch(r"<!--\s*report-section:[^>]*-->", previous_line):
+            return previous_line_start
+        return heading_start
 
     def _ordered_report_heading_groups(self, detail: RunDetail) -> list[list[str]]:
         return [
@@ -3299,23 +5590,15 @@ class WriterAgentMixin:
             sources=detail.raw_sources,
             qa_findings=detail.qa_findings,
         )
-        # Enrich with KB retrieval context
-        try:
-            from packages.tools.rag_retrieve import rag_retrieve_tool
-            query = getattr(detail.plan, "topic", "") or ""
-            if query:
-                kb_results = await rag_retrieve_tool.ainvoke({
-                    "query": query,
-                    "competitors": list(detail.plan.competitors),
-                    "dimensions": list(detail.plan.dimensions),
-                    "top_k": 5,
-                })
-                if kb_results:
-                    grounding += "\n\n## Additional KB Evidence\n"
-                    for r in kb_results[:5]:
-                        grounding += f"- {r}\n"
-        except Exception:
-            pass  # Non-fatal: RAG enrichment is optional
+        kb_source_ids = [
+            source.id for source in detail.raw_sources if source.candidate_origin == "rag_kb"
+        ]
+        if kb_source_ids:
+            grounding += "\n\n## KB-Reused Evidence\n"
+            grounding += (
+                "Use KB-reused evidence only through these existing source tokens: "
+                f"{', '.join(f'[source:{source_id}]' for source_id in kb_source_ids[:8])}.\n"
+            )
         return grounding
 
     def _writer_context_package(self, detail: RunDetail) -> dict[str, object]:
@@ -4339,13 +6622,9 @@ class WriterAgentMixin:
         return f"[source:{replacement_ids[0]}]"
 
     def _ensure_report_claim_citations(self, detail: RunDetail, markdown: str) -> str:
-        lines = markdown.splitlines()
         hardened_lines: list[str] = []
-        for index, line in enumerate(lines):
+        for line in markdown.splitlines():
             if not self._report_line_needs_citation(line):
-                hardened_lines.append(line)
-                continue
-            if self._report_table_header_line(lines, index):
                 hardened_lines.append(line)
                 continue
             if self._extract_cited_source_ids(line):
@@ -4363,20 +6642,13 @@ class WriterAgentMixin:
                 hardened_lines.append(f"{stripped} {citation_text}")
         return "\n".join(hardened_lines)
 
-    def _report_table_header_line(self, lines: Sequence[str], index: int) -> bool:
-        line = lines[index].strip()
-        if not line.startswith("|"):
-            return False
-        next_line = ""
-        for candidate in lines[index + 1 :]:
-            if candidate.strip():
-                next_line = candidate.strip()
-                break
-        return bool(next_line) and re.fullmatch(r"\|?[\s|\-:]+\|?", next_line) is not None
-
     def _report_line_needs_citation(self, line: str) -> bool:
         stripped = line.strip()
         if not stripped:
+            return False
+        if stripped.startswith("<!--") and "report-section:" in stripped:
+            return False
+        if stripped.startswith("|"):
             return False
         if stripped.startswith("#"):
             return False
@@ -4510,3 +6782,47 @@ class WriterAgentMixin:
             if preferred_user_research_ids:
                 source_ids = [*preferred_user_research_ids, *source_ids]
         return unique(source_ids)
+
+
+def _publication_issues_from_segment(
+    segment: Mapping[str, object],
+) -> list[PublicationContractIssue]:
+    raw_issues = segment.get("publication_repair_issues")
+    if not isinstance(raw_issues, list):
+        return []
+    issues: list[PublicationContractIssue] = []
+    for item in raw_issues:
+        if not isinstance(item, Mapping):
+            continue
+        issues.append(
+            PublicationContractIssue(
+                code=str(item.get("code") or "publication_contract"),
+                line_number=_safe_int(item.get("line_number")),
+                message=str(item.get("message") or ""),
+                repair_target="structured_section",
+                excerpt=str(item.get("excerpt") or ""),
+            )
+        )
+    return issues
+
+
+def _section_key_at_line(sections: Sequence[object], line_number: int) -> str | None:
+    current_key: str | None = None
+    for section in sections:
+        line_start = getattr(section, "line_start", 0)
+        if line_start > line_number:
+            break
+        section_key = getattr(section, "section_key", None)
+        if isinstance(section_key, str) and section_key:
+            current_key = section_key
+    return current_key
+
+
+def _safe_int(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return 0

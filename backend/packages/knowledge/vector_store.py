@@ -118,6 +118,7 @@ class VectorStore:
                 dimension=pl.get("dimension"),
                 source_type=pl.get("source_type", ""),
                 content_hash=pl.get("content_hash", ""),
+                metadata=pl.get("metadata", {}) if isinstance(pl.get("metadata"), dict) else {},
             ))
         return hits
 

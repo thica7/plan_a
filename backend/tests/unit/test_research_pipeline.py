@@ -17,6 +17,7 @@ from packages.research.discovery import (
     search_result_candidates,
     trusted_registry_candidates,
 )
+from packages.research.coverage_contract import evaluate_coverage_contract
 from packages.research.evaluation import quality_gaps_from_extractions
 from packages.research.evaluation.release_gate import quality_gaps_from_release_gate
 from packages.research.evidence import (
@@ -38,6 +39,7 @@ from packages.research.extraction import (
 )
 from packages.research.extraction.quality import quote_quality_problem
 from packages.research.models import (
+    CandidateLedgerEntry,
     CapturedPage,
     EvidenceItem,
     EvidenceQuote,
@@ -51,6 +53,7 @@ from packages.research.pipeline import run_research_pipeline
 from packages.research.repair import repair_tasks_from_gaps
 from packages.research.repair.redos import repair_tasks_to_redo_scopes
 from packages.research.repair.strategies import repair_task_from_gap
+from packages.research.source_fitness import classify_source_fitness
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
     BusinessQAFinding,
@@ -60,6 +63,27 @@ from packages.schema.enterprise import (
 from packages.schema.models import RawSource
 from packages.search import SearchResult
 from packages.tools.evidence_fetch import EvidenceFetchResult
+
+
+class _FakeFetchResult:
+    def __init__(
+        self,
+        *,
+        url: str,
+        title: str,
+        text: str,
+        ok: bool = True,
+        quality_score: float = 1.0,
+    ) -> None:
+        self.url = url
+        self.title = title
+        self.text = text
+        self.markdown = text
+        self.snippet = text[:700]
+        self.ok = ok
+        self.quality_score = quality_score
+        self.status_code = 200 if ok else 500
+        self.fetch_method = "test_fetch"
 
 
 def test_research_discovery_separates_trusted_and_homepage_candidates() -> None:
@@ -112,6 +136,167 @@ def test_research_candidate_ranking_prefers_trusted_origin() -> None:
     )
 
     assert ranked[0].url == "https://docs.anthropic.com/en/docs/claude-code/overview"
+
+
+def test_pricing_source_fitness_classifies_changelog_as_non_pricing_source() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agent",
+        competitor="Windsurf",
+        dimension="pricing",
+        homepage_hint="https://windsurf.com",
+    )
+    candidate = SourceCandidate(
+        title="Windsurf plugin changelog",
+        url="https://docs.devin.ai/windsurf/plugins/changelog",
+        origin="trusted_registry",
+        competitor="Windsurf",
+        dimension="pricing",
+    )
+    page = CapturedPage(
+        candidate_id=candidate.id,
+        requested_url=candidate.url,
+        final_url=candidate.url,
+        status="ok",
+        title="Changelog - Devin Docs",
+        text="Changelog for Windsurf plugin updates. Pricing navigation appears in the docs shell.",
+        markdown="Changelog for Windsurf plugin updates. Pricing navigation appears in the docs shell.",
+        snippet="Changelog for Windsurf plugin updates. Pricing navigation appears in the docs shell.",
+        content_hash="hash",
+        fetch_method="test",
+        quality_score=1.0,
+        text_length=82,
+    )
+
+    fitness = classify_source_fitness(brief, candidate, page)
+
+    assert fitness.fitness == "changelog"
+    assert "current_plan_price_support" not in fitness.coverage_intents
+
+
+def test_pricing_changelog_fitness_rejects_raw_source_admission() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agent",
+        competitor="Windsurf",
+        dimension="pricing",
+        homepage_hint="https://windsurf.com",
+    )
+    candidate = SourceCandidate(
+        title="Windsurf plugin changelog",
+        url="https://docs.devin.ai/windsurf/plugins/changelog",
+        origin="trusted_registry",
+        competitor="Windsurf",
+        dimension="pricing",
+        confidence=0.9,
+    )
+    page = CapturedPage(
+        candidate_id=candidate.id,
+        requested_url=candidate.url,
+        final_url=candidate.url,
+        status="ok",
+        title="Changelog - Devin Docs",
+        text="Windsurf plugin changelog with pricing navigation and $20 text in the docs shell.",
+        markdown="Windsurf plugin changelog with pricing navigation and $20 text in the docs shell.",
+        snippet="Windsurf plugin changelog with pricing navigation and $20 text in the docs shell.",
+        content_hash="hash",
+        fetch_method="test",
+        quality_score=1.0,
+        text_length=78,
+    )
+    evidence = EvidenceItem(
+        competitor="Windsurf",
+        dimension="pricing",
+        field="price_points",
+        value=["$20"],
+        source_candidate_id=candidate.id,
+        captured_page_id=page.id,
+        source_url=page.final_url,
+        quote="Windsurf plugin changelog with pricing navigation and $20 text in the docs shell.",
+        confidence=0.9,
+        status="accepted",
+    )
+    result = ResearchResult(
+        brief=brief,
+        candidates=[candidate],
+        captured_pages=[page],
+        evidence_items=[evidence],
+    )
+    diagnostics: list[dict[str, object]] = []
+
+    sources = raw_sources_from_research_result(
+        brief,
+        result,
+        batch_sources=[],
+        target_source_count=1,
+        requires_accepted_evidence=True,
+        source_exists=lambda _url, _sources: False,
+        confidence_for_source=lambda _candidate, _page, _snippet, _items: 0.95,
+        fallback_snippet=lambda captured: captured.snippet,
+        rejection_diagnostics=diagnostics,
+    )
+
+    assert sources == []
+    assert diagnostics[0]["reason"] == "source_quality_problem"
+    assert "changelog" in str(diagnostics[0]["detail"]).casefold()
+
+
+@pytest.mark.asyncio
+async def test_research_pipeline_records_candidate_ledger_statuses() -> None:
+    brief = ResearchBrief(
+        run_id="run-ledger",
+        topic="AI coding agent",
+        competitor="ExampleAI",
+        dimension="pricing",
+        homepage_hint=None,
+        include_trusted_sources=False,
+        include_homepage_candidates=False,
+        target_source_count=1,
+        max_search_queries=0,
+        max_candidates=2,
+        max_fetches=2,
+        max_repair_rounds=0,
+    )
+    accepted = SourceCandidate(
+        title="ExampleAI pricing",
+        url="https://example.ai/pricing",
+        origin="manual",
+        competitor="ExampleAI",
+        dimension="pricing",
+        confidence=0.9,
+    )
+    failed = SourceCandidate(
+        title="ExampleAI old pricing",
+        url="https://example.ai/old-pricing",
+        origin="manual",
+        competitor="ExampleAI",
+        dimension="pricing",
+        confidence=0.8,
+    )
+
+    async def fake_fetch(url: str) -> _FakeFetchResult | None:
+        if url.endswith("/old-pricing"):
+            return None
+        return _FakeFetchResult(
+            url=url,
+            title="ExampleAI Pricing",
+            text="ExampleAI pricing plans include Pro at $20 per month and Enterprise contact sales.",
+        )
+
+    result = await run_research_pipeline(
+        brief,
+        fetch=fake_fetch,
+        seed_candidates=[accepted, failed],
+    )
+
+    ledger_by_url = {entry.url: entry for entry in result.candidate_ledger}
+
+    assert ledger_by_url["https://example.ai/pricing"].status == "accepted"
+    assert ledger_by_url["https://example.ai/pricing"].selected is True
+    assert ledger_by_url["https://example.ai/pricing"].fetched is True
+    assert ledger_by_url["https://example.ai/pricing"].source_fitness == "official_pricing"
+    assert ledger_by_url["https://example.ai/old-pricing"].status == "skipped"
+    assert result.metrics["candidate_ledger_count"] == 2
 
 
 def test_search_candidate_confidence_requires_competitor_relevance() -> None:
@@ -208,6 +393,170 @@ def test_capture_selection_defers_low_confidence_homepage_candidates() -> None:
         "https://docs.anthropic.com/en/docs/claude-code/sdk",
     ]
     assert selection.skipped_reasons[guessed.id] == "deferred_low_confidence_homepage_derived"
+
+
+def test_pricing_intent_selection_keeps_canonical_pricing_candidate() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agent",
+        competitor="Windsurf",
+        dimension="pricing",
+        homepage_hint="https://windsurf.com",
+        target_source_count=2,
+        max_fetches=3,
+    )
+    docs = [
+        SourceCandidate(
+            title=f"Windsurf docs {index}",
+            url=f"https://docs.devin.ai/windsurf/plugins/page-{index}",
+            origin="trusted_registry",
+            competitor="Windsurf",
+            dimension="pricing",
+            confidence=0.98,
+            rank=index,
+        )
+        for index in range(3)
+    ]
+    pricing = SourceCandidate(
+        title="Windsurf official pricing",
+        url="https://windsurf.com/pricing",
+        origin="homepage_derived",
+        competitor="Windsurf",
+        dimension="pricing",
+        confidence=0.45,
+        rank=99,
+    )
+
+    selection = select_capture_candidates(brief, [*docs, pricing])
+
+    selected_or_overflow = [candidate.url for candidate in selection.selected + selection.overflow_queue]
+    assert "https://windsurf.com/pricing" in selected_or_overflow
+    assert selection.selected_intents["official_pricing_page"] == [pricing.id]
+
+
+def test_pricing_coverage_contract_fails_without_current_official_pricing() -> None:
+    brief = ResearchBrief(
+        run_id="run-1",
+        topic="AI coding agent",
+        competitor="Windsurf",
+        dimension="pricing",
+        homepage_hint="https://windsurf.com",
+    )
+    changelog_candidate = SourceCandidate(
+        title="Windsurf changelog",
+        url="https://docs.devin.ai/windsurf/plugins/changelog",
+        origin="trusted_registry",
+        competitor="Windsurf",
+        dimension="pricing",
+    )
+    changelog_page = CapturedPage(
+        candidate_id=changelog_candidate.id,
+        requested_url=changelog_candidate.url,
+        final_url=changelog_candidate.url,
+        status="ok",
+        title="Changelog - Devin Docs",
+        text="Windsurf plugin changelog with $20 navigation text.",
+        markdown="Windsurf plugin changelog with $20 navigation text.",
+        snippet="Windsurf plugin changelog with $20 navigation text.",
+        content_hash="hash",
+        fetch_method="test",
+        quality_score=1.0,
+        text_length=50,
+    )
+    ledger = [
+        CandidateLedgerEntry(
+            candidate_id=changelog_candidate.id,
+            url=changelog_candidate.url,
+            origin=changelog_candidate.origin,
+            intent="official_docs",
+            status="accepted",
+            selected=True,
+            fetched=True,
+            source_fitness="changelog",
+            coverage_intent="official_docs",
+            final_url=changelog_candidate.url,
+            page_status="ok",
+            evidence_status="accepted",
+        )
+    ]
+
+    coverage = evaluate_coverage_contract(
+        brief,
+        candidates=[changelog_candidate],
+        pages=[changelog_page],
+        evidence_items=[],
+        ledger=ledger,
+    )
+
+    assert coverage.passed is False
+    assert "official_pricing_page" in coverage.missing_intents
+    assert "current_plan_price_support" in coverage.missing_intents
+    assert coverage.repair_hints
+
+
+@pytest.mark.asyncio
+async def test_research_pipeline_backfills_overflow_until_pricing_coverage_passes() -> None:
+    brief = ResearchBrief(
+        run_id="run-backfill",
+        topic="AI coding agent",
+        competitor="Windsurf",
+        dimension="pricing",
+        homepage_hint="https://windsurf.com",
+        include_trusted_sources=False,
+        include_homepage_candidates=False,
+        target_source_count=1,
+        max_search_queries=0,
+        max_candidates=3,
+        max_fetches=2,
+        max_repair_rounds=0,
+    )
+    stale_docs = SourceCandidate(
+        title="Windsurf docs usage",
+        url="https://docs.devin.ai/windsurf/plugins/cascade/cascade-overview",
+        origin="trusted_registry",
+        competitor="Windsurf",
+        dimension="pricing",
+        confidence=0.98,
+        rank=0,
+    )
+    pricing = SourceCandidate(
+        title="Windsurf official pricing",
+        url="https://windsurf.com/pricing",
+        origin="homepage_derived",
+        competitor="Windsurf",
+        dimension="pricing",
+        confidence=0.45,
+        rank=1,
+    )
+    fetched_urls: list[str] = []
+
+    async def fake_fetch(url: str) -> _FakeFetchResult:
+        fetched_urls.append(url)
+        if url.endswith("/cascade-overview"):
+            return _FakeFetchResult(
+                url=url,
+                title="Windsurf Cascade overview",
+                text="Windsurf product documentation for Cascade features.",
+            )
+        return _FakeFetchResult(
+            url=url,
+            title="Windsurf Pricing",
+            text="Windsurf pricing plans include Pro at $20 per month and Enterprise contact sales.",
+        )
+
+    result = await run_research_pipeline(
+        brief,
+        fetch=fake_fetch,
+        seed_candidates=[stale_docs, pricing],
+    )
+
+    assert fetched_urls == [
+        "https://docs.devin.ai/windsurf/plugins/cascade/cascade-overview",
+        "https://windsurf.com/pricing",
+    ]
+    assert result.coverage is not None
+    assert result.coverage.passed is True
+    assert result.metrics["adaptive_backfill_fetch_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -454,6 +803,30 @@ def test_source_quality_accepts_trusted_windsurf_docs_redirect_with_devin_rebran
             "plugins, agentic coding workflows, autocomplete, MCP, and developer "
             "IDE features for engineering teams."
         ),
+    )
+
+    assert source_quality_problem(source) is None
+
+
+def test_source_quality_accepts_windsurf_pricing_redirect_when_quote_omits_identity() -> None:
+    source = RawSource(
+        id="pricing-windsurf-devin-official",
+        competitor="Windsurf",
+        dimension="pricing",
+        source_type="webpage_verified",
+        title="Plans and Pricing | Devin",
+        url="https://devin.ai/pricing",
+        snippet=(
+            "Plans and Pricing include Free $0, Pro $20 per month, "
+            "Teams plans, increased quotas, and Enterprise contact sales."
+        ),
+        content_hash="windsurf-devin-pricing-hash",
+        confidence=0.96,
+        metadata={
+            "requested_url": "https://windsurf.com/pricing",
+            "final_url": "https://devin.ai/pricing",
+            "redirected": True,
+        },
     )
 
     assert source_quality_problem(source) is None

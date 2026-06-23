@@ -30,6 +30,20 @@ class ArtifactStorage(Protocol):
         actor_id: str | None = None,
     ) -> ArtifactRecord: ...
 
+    def read_text(
+        self,
+        artifact: ArtifactRecord,
+        *,
+        max_bytes: int = 200_000,
+    ) -> tuple[str, bool] | None: ...
+
+    def read_bytes(
+        self,
+        artifact: ArtifactRecord,
+        *,
+        max_bytes: int = 2_000_000,
+    ) -> tuple[bytes, bool] | None: ...
+
 
 class LocalArtifactStorage:
     def __init__(self, root: str | Path) -> None:
@@ -93,6 +107,41 @@ class LocalArtifactStorage:
             ),
         )
 
+    def read_text(
+        self,
+        artifact: ArtifactRecord,
+        *,
+        max_bytes: int = 200_000,
+    ) -> tuple[str, bool] | None:
+        result = self.read_bytes(artifact, max_bytes=max_bytes)
+        if result is None:
+            return None
+        payload, truncated = result
+        return payload.decode("utf-8", errors="replace"), truncated
+
+    def read_bytes(
+        self,
+        artifact: ArtifactRecord,
+        *,
+        max_bytes: int = 2_000_000,
+    ) -> tuple[bytes, bool] | None:
+        if not artifact.uri.startswith("local://"):
+            return None
+        relative_path = Path(artifact.uri.removeprefix("local://"))
+        target_path = (self.root / relative_path).resolve()
+        root_path = self.root.resolve()
+        if root_path != target_path and root_path not in target_path.parents:
+            raise ArtifactStorageError("Artifact target path escapes storage root.")
+        if not target_path.exists() or not target_path.is_file():
+            return None
+        limit = max(1, max_bytes)
+        with target_path.open("rb") as handle:
+            payload = handle.read(limit + 1)
+        truncated = len(payload) > limit
+        if truncated:
+            payload = payload[:limit]
+        return payload, truncated
+
 
 class ExternalArtifactStorage:
     def __init__(self, backend: Literal["external", "s3", "oss"]) -> None:
@@ -117,6 +166,22 @@ class ExternalArtifactStorage:
             )
         record.metadata = {**record.metadata, "configured_storage_backend": self.backend}
         return record
+
+    def read_text(
+        self,
+        artifact: ArtifactRecord,
+        *,
+        max_bytes: int = 200_000,
+    ) -> tuple[str, bool] | None:
+        return None
+
+    def read_bytes(
+        self,
+        artifact: ArtifactRecord,
+        *,
+        max_bytes: int = 2_000_000,
+    ) -> tuple[bytes, bool] | None:
+        return None
 
 
 def build_artifact_storage(

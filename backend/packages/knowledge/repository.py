@@ -24,6 +24,7 @@ from .models import (
     DocumentCreate,
     KnowledgeChunk,
     KnowledgeDocument,
+    KnowledgeRollbackResult,
 )
 
 # ---------------------------------------------------------------------------
@@ -833,6 +834,155 @@ class KnowledgeRepository:
                 (now, target_document_id),
             )
         return await self.get_document(target_document_id)
+
+    async def rollback_documents(
+        self,
+        *,
+        document_ids: list[str] | None = None,
+        run_id: str | None = None,
+        raw_source_id: str | None = None,
+        crawl_run_id: str | None = None,
+        restore_previous: bool = True,
+    ) -> KnowledgeRollbackResult:
+        """Archive polluted active documents and optionally restore previous versions."""
+        selectors_present = any((document_ids, run_id, raw_source_id, crawl_run_id))
+        if not selectors_present:
+            raise ValueError("At least one rollback selector is required")
+
+        now = datetime.now(UTC).isoformat()
+        archived_ids: list[str] = []
+        restored_ids: list[str] = []
+        skipped_ids: list[str] = []
+
+        async with self._write_transaction() as db:
+            clauses = ["d.is_active = 1", "d.status IN ('active', 'stale')"]
+            params: list[Any] = []
+            if document_ids:
+                unique_document_ids = sorted({item for item in document_ids if item})
+                placeholders = ", ".join("?" for _ in unique_document_ids)
+                clauses.append(f"d.id IN ({placeholders})")
+                params.extend(unique_document_ids)
+            if run_id:
+                clauses.append(
+                    """
+                    (
+                        json_extract(d.metadata_json, '$.run_id') = ?
+                        OR json_extract(d.metadata_json, '$.collector_run_id') = ?
+                    )
+                    """
+                )
+                params.extend([run_id, run_id])
+            if raw_source_id:
+                clauses.append(
+                    """
+                    (
+                        json_extract(d.metadata_json, '$.raw_source_id') = ?
+                        OR json_extract(d.metadata_json, '$.kb_raw_source_id') = ?
+                    )
+                    """
+                )
+                params.extend([raw_source_id, raw_source_id])
+            if crawl_run_id:
+                clauses.append(
+                    """
+                    EXISTS (
+                        SELECT 1
+                        FROM chunks c
+                        WHERE c.document_id = d.id AND c.crawl_run_id = ?
+                    )
+                    """
+                )
+                params.append(crawl_run_id)
+
+            async with db.execute(
+                f"""
+                SELECT d.*
+                FROM documents d
+                WHERE {' AND '.join(clauses)}
+                ORDER BY d.version DESC, d.fetched_at DESC, d.rowid DESC
+                """,
+                params,
+            ) as cur:
+                rows = await cur.fetchall()
+
+            archive_ids = [row["id"] for row in rows]
+            if not archive_ids:
+                return KnowledgeRollbackResult()
+
+            placeholders = ", ".join("?" for _ in archive_ids)
+            cursor = await db.execute(
+                f"""
+                UPDATE documents
+                SET is_active = 0, status = 'archived', indexed_at = ?
+                WHERE id IN ({placeholders})
+                """,
+                [now, *archive_ids],
+            )
+            archived_ids = archive_ids if cursor.rowcount < 0 else archive_ids[: cursor.rowcount]
+
+            if restore_previous:
+                archived_set = set(archive_ids)
+                canonical_urls = sorted(
+                    {
+                        row["canonical_url"]
+                        for row in rows
+                        if row["canonical_url"]
+                    }
+                )
+                for canonical_url in canonical_urls:
+                    async with db.execute(
+                        """
+                        SELECT id
+                        FROM documents
+                        WHERE canonical_url = ?
+                          AND is_active = 1
+                          AND status IN ('active', 'stale')
+                        LIMIT 1
+                        """,
+                        (canonical_url,),
+                    ) as cur:
+                        active = await cur.fetchone()
+                    if active is not None:
+                        continue
+
+                    exclude_placeholders = ", ".join("?" for _ in archived_set)
+                    async with db.execute(
+                        f"""
+                        SELECT id
+                        FROM documents
+                        WHERE canonical_url = ?
+                          AND id NOT IN ({exclude_placeholders})
+                          AND status = 'archived'
+                        ORDER BY version DESC, fetched_at DESC, rowid DESC
+                        LIMIT 1
+                        """,
+                        [canonical_url, *archived_set],
+                    ) as cur:
+                        previous = await cur.fetchone()
+                    if previous is None:
+                        skipped_ids.extend(
+                            row["id"] for row in rows if row["canonical_url"] == canonical_url
+                        )
+                        continue
+
+                    await db.execute(
+                        """
+                        UPDATE documents
+                        SET is_active = 1, status = 'active', indexed_at = ?
+                        WHERE id = ?
+                        """,
+                        (now, previous["id"]),
+                    )
+                    restored_ids.append(previous["id"])
+
+        return KnowledgeRollbackResult(
+            matched_count=len(archive_ids),
+            rolled_back_count=len(archived_ids),
+            restored_count=len(restored_ids),
+            archived_document_ids=archived_ids,
+            restored_document_ids=restored_ids,
+            skipped_document_ids=skipped_ids,
+        )
 
     # -- Chunks -------------------------------------------------------------
 

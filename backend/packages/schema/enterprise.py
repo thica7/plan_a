@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 from packages.schema.models import RedoScope, SkillSpec
 from packages.schema.quality import QualityFinding
 from packages.schema.rag import RetrievalRecord
+from packages.schema.report_artifact import ReportArtifactV2
 
 CompetitorLayer = Literal["L1", "L2", "L3", "unknown"]
 EvidenceQualityLabel = Literal["unreviewed", "accepted", "rejected", "stale"]
@@ -27,6 +28,7 @@ ArtifactType = Literal[
     "other",
 ]
 ArtifactStorageBackend = Literal["local", "external", "s3", "oss"]
+ArtifactPreviewKind = Literal["text", "image", "pdf", "external", "unavailable"]
 NotificationChannel = Literal["in_app", "email", "webhook", "feishu"]
 NotificationSeverity = Literal["info", "success", "warning", "critical"]
 NotificationStatus = Literal["queued", "sent", "failed", "read"]
@@ -456,6 +458,20 @@ class ArtifactCreateResult(BaseModel):
     artifact: ArtifactRecord
 
 
+class ArtifactPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact: ArtifactRecord
+    preview_type: ArtifactPreviewKind = "unavailable"
+    preview_available: bool = False
+    content_text: str = ""
+    content_base64: str = ""
+    data_url: str = ""
+    media_type: str = ""
+    truncated: bool = False
+    external_uri: str | None = None
+
+
 class SourceSnapshotCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -734,6 +750,11 @@ class ReportVersionRecord(BaseModel):
     competitor_set_hash: str
     status: Literal["draft", "in_review", "approved", "rejected", "published", "archived"] = "draft"
     report_md: str = ""
+    core_report_md: str = ""
+    support_appendix_md: str = ""
+    audit_log_md: str = ""
+    full_report_md: str = ""
+    report_artifact: ReportArtifactV2 | None = None
     claim_ids: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
     quality_metadata: dict[str, Any] = Field(default_factory=dict)
@@ -925,6 +946,7 @@ class BusinessQAFinding(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     claim_ids: list[str] = Field(default_factory=list)
     recommendation: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class BusinessQAEvaluation(BaseModel):

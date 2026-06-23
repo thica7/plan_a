@@ -6,7 +6,6 @@ from pathlib import Path
 from app.events import RunEvent
 from packages.schema.api_dto import RunDetail, RunSummary
 
-
 SUMMARY_COLUMNS: dict[str, str] = {
     "idempotency_key": "text not null default ''",
     "workspace_id": "text not null default 'default-workspace'",

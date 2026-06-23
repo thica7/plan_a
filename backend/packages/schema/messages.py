@@ -17,6 +17,7 @@ from packages.schema.models import (
     ReflectionRecord,
     ToolCallMessage,
 )
+from packages.schema.report_artifact import ClaimCardBundle, DecisionCardBundle
 from packages.schema.survey import SurveyEvidenceBundle
 
 
@@ -73,6 +74,7 @@ class RawSourceDigestMessagePayload(_MessagePayload):
     source_ids: list[str] = Field(default_factory=list)
     before_count: int | None = Field(default=None, ge=0)
     after_count: int | None = Field(default=None, ge=0)
+    kb_ingest: dict[str, Any] = Field(default_factory=dict)
 
 
 class CommunitySearchSummaryMessagePayload(_MessagePayload):
@@ -83,6 +85,8 @@ class CommunitySearchSummaryMessagePayload(_MessagePayload):
     candidate_count: int = Field(ge=0)
     candidate_ids: list[str] = Field(default_factory=list)
     no_result: bool = False
+    failed: bool = False
+    error: str | None = None
 
 
 class QCIssueCollectionMessagePayload(_MessagePayload):
@@ -116,6 +120,15 @@ class CompetitorKnowledgeMessagePayload(_MessagePayload):
     knowledge: CompetitorKnowledge | dict[str, Any] = Field(default_factory=dict)
     source_ids: list[str] = Field(default_factory=list)
     mode: str | None = None
+
+
+class ClaimCardBundleReadyMessagePayload(_MessagePayload):
+    bundle: ClaimCardBundle
+
+
+class DecisionCardBundleReadyMessagePayload(_MessagePayload):
+    schema_name: Literal["DecisionCardBundle"] = "DecisionCardBundle"
+    bundle: DecisionCardBundle
 
 
 class CompetitorKBDigestMessagePayload(_MessagePayload):
@@ -152,6 +165,7 @@ class RedoRequestMessagePayload(_MessagePayload):
     redo_scope: RedoScope
     issues: list[QCIssue] = Field(default_factory=list)
     issue_ids: list[str] = Field(default_factory=list)
+    requested_issue_ids: list[str] = Field(default_factory=list)
     routing: str | None = None
 
 
@@ -193,9 +207,11 @@ AGENT_MESSAGE_PAYLOAD_SCHEMAS: dict[str, type[BaseModel]] = {
     "CollectTaskPayload": CollectTaskMessagePayload,
     "CollectorDispatchPlan": DispatchPlanMessagePayload,
     "CommunitySearchSummary": CommunitySearchSummaryMessagePayload,
+    "ClaimCardBundle": ClaimCardBundleReadyMessagePayload,
     "CompetitorKBDigest": CompetitorKBDigestMessagePayload,
     "CompetitorKnowledge": CompetitorKnowledgeMessagePayload,
     "ComparisonMatrix": ComparisonMatrixMessagePayload,
+    "DecisionCardBundle": DecisionCardBundleReadyMessagePayload,
     "HitlLifecyclePayload": HitlLifecycleMessagePayload,
     "HitlMemoryFeedbackPayload": HitlMemoryFeedbackMessagePayload,
     "KBCacheEntry": KBCacheEntryMessagePayload,

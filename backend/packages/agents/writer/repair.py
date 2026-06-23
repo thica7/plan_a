@@ -5,7 +5,10 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from packages.agents.writer.quality_preflight import run_writer_quality_preflight
-from packages.business_intel.report_quality import compare_run_quality
+from packages.business_intel.report_quality import (
+    compare_run_quality,
+    core_section_depth_diagnostics,
+)
 from packages.i18n.language import report_label
 from packages.identity.source_resolver import normalize_source_token, source_tokens
 from packages.research.evidence import publishable_text_noise_problem
@@ -59,6 +62,15 @@ SECTION_REPAIR_HINTS: dict[str, tuple[str, ...]] = {
         "deep dive watchouts",
         "per-competitor wins/watchouts",
     ),
+    "side_by_side_matrix": (
+        "side_by_side_matrix",
+        "side-by-side",
+        "side by side",
+        "decision matrix",
+        "comparison matrix",
+        "横向决策矩阵",
+        "对比矩阵",
+    ),
     "battlecard": ("battlecard", "response guidance", "sales response", "objection"),
     "workflow_enterprise_risk": ("workflow", "enterprise risk", "switching cost"),
     "market_landscape": ("market landscape", "category strategy", "competitor clusters"),
@@ -110,6 +122,74 @@ class MarkdownSection:
     end: int
 
 
+def structured_repair_target_for_issue(issue: QCIssue) -> str | None:
+    code = _structured_issue_code(issue)
+    path = issue.field_path or ""
+    if code == "battlecard_template_only":
+        return "core.battlecard"
+    if code == "executive_summary_template_only":
+        return "core.executive_summary"
+    if code in {
+        "citation_in_table_header",
+        "citation_in_heading",
+        "english_structural_heading_in_zh",
+    }:
+        return "renderer"
+    if code == "internal_term_leak":
+        return _structured_path_prefix(path)
+    if code == "release_gate.claim_self_consistency_required":
+        lowered = _structured_issue_haystack(issue)
+        if "user_review" in lowered or "persona" in lowered:
+            return "core.user_review_themes"
+        if "pricing" in lowered:
+            return "core.decision_matrix"
+        if "feature" in lowered:
+            return "core.competitor_deep_dives"
+    return None
+
+
+def _structured_issue_haystack(issue: QCIssue) -> str:
+    return " ".join(
+        value
+        for value in [
+            issue.field_path,
+            issue.problem,
+            issue.target_subagent or "",
+            issue.redo_scope.target_subagent or "",
+            issue.redo_scope.rationale,
+        ]
+        if value
+    ).casefold()
+
+
+def _structured_issue_code(issue: QCIssue) -> str:
+    raw_code = getattr(issue, "code", "")
+    if isinstance(raw_code, str) and raw_code:
+        return raw_code
+    if issue.field_path == "release_gate.claim_self_consistency_required":
+        return issue.field_path
+    if issue.problem in {
+        "battlecard_template_only",
+        "executive_summary_template_only",
+        "citation_in_table_header",
+        "citation_in_heading",
+        "english_structural_heading_in_zh",
+        "internal_term_leak",
+        "release_gate.claim_self_consistency_required",
+    }:
+        return issue.problem
+    return ""
+
+
+def _structured_path_prefix(path: str) -> str:
+    if path.startswith("core."):
+        parts = path.split(".")
+        if len(parts) >= 2:
+            field = parts[1].split("[", 1)[0]
+            return ".".join([parts[0], field])
+    return "structured_section"
+
+
 def build_writer_repair_plan(
     detail: RunDetail,
     issues: list[QCIssue],
@@ -128,16 +208,16 @@ def build_writer_repair_plan(
             previous_report_protectable=True,
             anti_regression_required=False,
         )
-    if not protectable:
-        return WriterRepairPlan(
-            mode="full",
-            reason="report is not protectable; full rewrite required",
-            previous_report_protectable=False,
-        )
 
     if _has_release_gate_report_depth_issue(issues):
         sections = _target_sections(issues)
-        if len(sections) == 1:
+        if not sections:
+            sections = _infer_release_gate_depth_sections(detail)
+        scoped_report_protectable = protectable or (
+            len(sections) == 1
+            and _previous_report_is_protectable_except_sections(detail, sections)
+        )
+        if len(sections) == 1 and scoped_report_protectable:
             return WriterRepairPlan(
                 mode="section",
                 reason=(
@@ -148,11 +228,24 @@ def build_writer_repair_plan(
                 sections=sections,
                 anti_regression_required=True,
             )
+        if not protectable:
+            return WriterRepairPlan(
+                mode="full",
+                reason="report is not protectable; full rewrite required",
+                previous_report_protectable=False,
+            )
         return WriterRepairPlan(
             mode="full",
             reason="release_gate.report_depth_required requires full core rewrite",
             previous_report_protectable=True,
             anti_regression_required=True,
+        )
+
+    if not protectable:
+        return WriterRepairPlan(
+            mode="full",
+            reason="report is not protectable; full rewrite required",
+            previous_report_protectable=False,
         )
 
     line_numbers = _report_line_numbers(issues)
@@ -239,6 +332,10 @@ def replace_markdown_section(
     if target is None:
         updated = f"{markdown.rstrip()}\n\n{replacement}".strip()
         return _restore_canonical_section_order(updated, output_language)
+    target_marker = _leading_report_section_marker(markdown[target.start : target.end])
+    replacement = _strip_leading_report_section_marker(replacement)
+    if target_marker:
+        replacement = f"{target_marker}\n{replacement}"
     before = markdown[: target.start].rstrip()
     after = markdown[target.end :].lstrip()
     updated = f"{before}\n\n{replacement}\n\n{after}".strip()
@@ -373,6 +470,43 @@ def _previous_report_is_protectable(detail: RunDetail) -> bool:
     )
 
 
+def _previous_report_is_protectable_except_sections(
+    detail: RunDetail,
+    sections: list[str],
+) -> bool:
+    if not detail.report_md.strip():
+        return False
+
+    comparison = compare_run_quality(detail)
+    if comparison.report_quality_signal:
+        return True
+
+    ignored_metrics = _protectable_metrics_for_sections(sections)
+    metric_by_name = {metric.name: metric.target_value for metric in comparison.metrics}
+    return all(
+        metric_by_name.get(name, 0.0) >= minimum
+        for name, minimum in PROTECTABLE_MINIMUMS.items()
+        if name not in ignored_metrics
+    )
+
+
+def _protectable_metrics_for_sections(sections: list[str]) -> set[str]:
+    metric_by_section = {
+        "decision_summary": "decision_summary_section_score",
+        "competitive_findings": "competitive_findings_section_score",
+        "competitor_deep_dives": "competitor_deep_dive_section_score",
+        "battlecard": "layer_analysis_section_score",
+        "workflow_enterprise_risk": "layer_analysis_section_score",
+        "market_landscape": "layer_analysis_section_score",
+        "business_implications": "layer_analysis_section_score",
+    }
+    return {
+        metric_name
+        for section in sections
+        if (metric_name := metric_by_section.get(section)) is not None
+    }
+
+
 def _report_line_numbers(issues: list[QCIssue]) -> list[int]:
     numbers: list[int] = []
     for issue in issues:
@@ -384,6 +518,14 @@ def _report_line_numbers(issues: list[QCIssue]) -> list[int]:
 
 def _has_release_gate_report_depth_issue(issues: list[QCIssue]) -> bool:
     return any(issue.field_path == "release_gate.report_depth_required" for issue in issues)
+
+
+def _infer_release_gate_depth_sections(detail: RunDetail) -> list[str]:
+    return [
+        diagnostic.section_key
+        for diagnostic in core_section_depth_diagnostics(detail)
+        if diagnostic.score < 1.0
+    ]
 
 
 def _has_deterministic_report_structure_damage(detail: RunDetail) -> bool:
@@ -432,10 +574,13 @@ def _clean_upstream_target_sections(issues: list[QCIssue]) -> list[str]:
 
 
 def _issue_target_sections(issue: QCIssue) -> list[str]:
+    field_path = issue.field_path or ""
+    if field_path == "release_gate.strong_conclusion_uses_weak_source":
+        return ["decision_summary"]
     haystack = " ".join(
         value
         for value in [
-            issue.field_path,
+            field_path,
             issue.problem,
             issue.target_subagent or "",
             issue.redo_scope.target_subagent or "",
@@ -513,18 +658,31 @@ def _section_key_for_heading(heading: str, output_language: str) -> str | None:
 
 def _sections(markdown: str) -> list[MarkdownSection]:
     matches = list(re.finditer(r"^\s*##(?!#)\s+(.+?)\s*#*\s*$", markdown, flags=re.MULTILINE))
+    starts = [_section_start_with_marker(markdown, match.start()) for match in matches]
     sections: list[MarkdownSection] = []
     for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
+        start = starts[index]
+        end = starts[index + 1] if index + 1 < len(starts) else len(markdown)
         sections.append(
             MarkdownSection(
                 heading=match.group(1).strip(),
                 body=markdown[match.end() : end].strip(),
-                start=match.start(),
+                start=start,
                 end=end,
             )
         )
     return sections
+
+
+def _section_start_with_marker(markdown: str, heading_start: int) -> int:
+    marker_line_end = heading_start
+    while marker_line_end > 0 and markdown[marker_line_end - 1] in " \t\r\n":
+        marker_line_end -= 1
+    marker_line_start = markdown.rfind("\n", 0, marker_line_end) + 1
+    marker_line = markdown[marker_line_start:marker_line_end].strip()
+    if re.fullmatch(r"<!--\s*report-section:[^>]*-->", marker_line):
+        return marker_line_start
+    return heading_start
 
 
 def _section_aliases(section_key: str, output_language: str) -> tuple[str, ...]:
@@ -562,6 +720,26 @@ def _compact_heading(value: str) -> str:
 
 def _normalize_section_replacement(replacement_markdown: str) -> str:
     return replacement_markdown.strip()
+
+
+def _strip_leading_report_section_marker(markdown: str) -> str:
+    lines = markdown.splitlines()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if lines and re.fullmatch(r"<!--\s*report-section:[^>]*-->", lines[0].strip()):
+        lines.pop(0)
+        while lines and not lines[0].strip():
+            lines.pop(0)
+    return "\n".join(lines).strip()
+
+
+def _leading_report_section_marker(markdown: str) -> str | None:
+    lines = markdown.splitlines()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if lines and re.fullmatch(r"<!--\s*report-section:[^>]*-->", lines[0].strip()):
+        return lines[0].strip()
+    return None
 
 
 USER_RESEARCH_SOURCE_TYPES = {

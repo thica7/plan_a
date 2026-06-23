@@ -1,4 +1,4 @@
-import { Database, GitCompareArrows, MessageSquareWarning } from "lucide-react";
+import { Database, GitCompareArrows, MessageSquareWarning, RotateCcw } from "lucide-react";
 import type {
   ClaimRecord,
   EvidenceQualityLabel,
@@ -9,13 +9,26 @@ import type {
 } from "../../api/types";
 import { EmptyState, LoadingState, MetricCard, Panel, StatusPill } from "../../components/ui";
 import { useTranslation } from "../../stores/i18n";
+import type { KnowledgeRollbackRequest, KnowledgeRollbackResult } from "../../stores/knowledgeStore";
+import {
+  buildReleaseIssueAuditRows,
+  buildReleaseIssueRollbackTarget,
+} from "./releaseGateReview";
+
+export { buildReleaseIssueAuditRows, buildReleaseIssueRollbackTarget } from "./releaseGateReview";
 
 
 interface ReportReviewDeskProps {
   diff: ReportVersionDiff | null;
   evidenceById: Map<string, EvidenceRecord>;
   isDiffLoading: boolean;
+  gateRedoIssueId?: string | null;
+  gateRedoResult?: ReleaseIssueRedoResult | null;
+  kbRollbackIssueId?: string | null;
+  kbRollbackResult?: ReleaseIssueRollbackResult | null;
   onEvidenceQuality: (evidenceId: string, qualityLabel: EvidenceQualityLabel) => void;
+  onRedoGateIssue?: (issueId: string) => void | Promise<void>;
+  onRollbackKbIssue?: (issueId: string, request: KnowledgeRollbackRequest) => void | Promise<void>;
   onSelectClaim: (claim: ClaimRecord) => void;
   onSelectEvidence: (evidence: EvidenceRecord) => void;
   previousVersion: ReportVersionRecord | null;
@@ -28,7 +41,13 @@ export function ReportReviewDesk({
   diff,
   evidenceById,
   isDiffLoading,
+  gateRedoIssueId = null,
+  gateRedoResult = null,
+  kbRollbackIssueId = null,
+  kbRollbackResult = null,
   onEvidenceQuality,
+  onRedoGateIssue,
+  onRollbackKbIssue,
   onSelectClaim,
   onSelectEvidence,
   previousVersion,
@@ -39,7 +58,15 @@ export function ReportReviewDesk({
   return (
     <aside className="report-review-desk">
       <DiffPanel diff={diff} isLoading={isDiffLoading} previousVersion={previousVersion} />
-      <ReleaseIssuesPanel releaseGate={releaseGate} />
+      <ReleaseIssuesPanel
+        gateRedoIssueId={gateRedoIssueId}
+        gateRedoResult={gateRedoResult}
+        kbRollbackIssueId={kbRollbackIssueId}
+        kbRollbackResult={kbRollbackResult}
+        onRedoGateIssue={onRedoGateIssue}
+        onRollbackKbIssue={onRollbackKbIssue}
+        releaseGate={releaseGate}
+      />
       <ClaimReviewPanel onSelectClaim={onSelectClaim} scopedClaims={scopedClaims} />
       <EvidenceScopePanel
         evidenceById={evidenceById}
@@ -92,18 +119,91 @@ function DiffPanel({
   );
 }
 
-function ReleaseIssuesPanel({ releaseGate }: { releaseGate: ReportReleaseGate | null }) {
+function ReleaseIssuesPanel({
+  gateRedoIssueId,
+  gateRedoResult,
+  kbRollbackIssueId,
+  kbRollbackResult,
+  onRedoGateIssue,
+  onRollbackKbIssue,
+  releaseGate,
+}: {
+  gateRedoIssueId: string | null;
+  gateRedoResult: ReleaseIssueRedoResult | null;
+  kbRollbackIssueId: string | null;
+  kbRollbackResult: ReleaseIssueRollbackResult | null;
+  onRedoGateIssue?: (issueId: string) => void | Promise<void>;
+  onRollbackKbIssue?: (issueId: string, request: KnowledgeRollbackRequest) => void | Promise<void>;
+  releaseGate: ReportReleaseGate | null;
+}) {
   const { t } = useTranslation();
   return (
     <Panel title={t("workbench.gateIssues")} icon={<MessageSquareWarning size={16} aria-hidden />}>
       {releaseGate ? (
         <div className="recommendation-list compact">
-          {releaseGate.issues.slice(0, 5).map((issue) => (
-            <article className={`recommendation-card ${issue.severity}`} key={issue.id}>
-              <strong>{issue.rule_name}</strong>
-              <p>{issue.message}</p>
-            </article>
-          ))}
+          {releaseGate.issues.slice(0, 5).map((issue) => {
+            const auditRows = buildReleaseIssueAuditRows(issue);
+            const rollbackTarget = buildReleaseIssueRollbackTarget(issue);
+            const redoResult = gateRedoResult?.issueId === issue.id ? gateRedoResult : null;
+            const isRedoing = gateRedoIssueId === issue.id;
+            const rollbackResult = kbRollbackResult?.issueId === issue.id ? kbRollbackResult.result : null;
+            const isRollingBack = kbRollbackIssueId === issue.id;
+            return (
+              <article className={`recommendation-card ${issue.severity}`} key={issue.id}>
+                <strong>{issue.rule_name}</strong>
+                <p>{issue.message}</p>
+                {auditRows.length > 0 ? (
+                  <dl className="release-issue-audit-grid" aria-label={`Audit trail for ${issue.id}`}>
+                    {auditRows.map((row) => (
+                      <div key={`${row.label}-${row.value}`}>
+                        <dt>{row.label}</dt>
+                        <dd>{row.href ? <a className="link link-primary" href={row.href}>{row.value}</a> : row.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
+                {rollbackTarget || onRedoGateIssue ? (
+                  <div className="release-issue-actions">
+                    {rollbackTarget && onRollbackKbIssue ? (
+                      <button
+                        className="table-action-button"
+                        disabled={Boolean(kbRollbackIssueId)}
+                        onClick={() => void onRollbackKbIssue(rollbackTarget.issueId, rollbackTarget.request)}
+                        title={`Rollback ${rollbackTarget.selectorSummary}`}
+                        type="button"
+                      >
+                        <RotateCcw size={14} aria-hidden />
+                        {isRollingBack ? "Rolling back" : "Rollback KB evidence"}
+                      </button>
+                    ) : null}
+                    {onRedoGateIssue ? (
+                      <button
+                        className="table-action-button"
+                        disabled={Boolean(gateRedoIssueId)}
+                        onClick={() => void onRedoGateIssue(issue.id)}
+                        title="Run scoped redo for the affected branch"
+                        type="button"
+                      >
+                        {isRedoing ? "Redoing" : "Redo affected branch"}
+                      </button>
+                    ) : null}
+                    {rollbackTarget ? <span>{rollbackTarget.selectorSummary}</span> : null}
+                  </div>
+                ) : null}
+                {redoResult ? (
+                  <p className="release-issue-feedback">
+                    Scoped redo started for {redoResult.runId}; current status {redoResult.status}.
+                  </p>
+                ) : null}
+                {rollbackResult ? (
+                  <p className="release-issue-feedback">
+                    Rollback matched {rollbackResult.matched_count}, archived {rollbackResult.rolled_back_count},
+                    restored {rollbackResult.restored_count}.
+                  </p>
+                ) : null}
+              </article>
+            );
+          })}
           {releaseGate.issues.length === 0 ? <p className="muted-line">No active release gate issues.</p> : null}
         </div>
       ) : (
@@ -111,6 +211,17 @@ function ReleaseIssuesPanel({ releaseGate }: { releaseGate: ReportReleaseGate | 
       )}
     </Panel>
   );
+}
+
+export interface ReleaseIssueRedoResult {
+  issueId: string;
+  runId: string;
+  status: string;
+}
+
+export interface ReleaseIssueRollbackResult {
+  issueId: string;
+  result: KnowledgeRollbackResult;
 }
 
 function ClaimReviewPanel({

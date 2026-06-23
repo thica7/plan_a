@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import re
-from typing import Literal, Mapping
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Literal
 
+from packages.agents.writer.heading_hygiene import (
+    ENGLISH_STRUCTURAL_HEADINGS,
+    normalize_heading_text,
+)
+from packages.agents.writer.structured_hygiene import SOURCE_TOKEN_RE
 from packages.i18n.language import report_label
 
 SegmentKind = Literal[
@@ -57,6 +63,12 @@ SECTION_ALLOWED_KEYS: dict[str, tuple[str, ...]] = {
         "community_evidence_triangulation",
     ),
     "competitor_deep_dives": ("competitor_deep_dives",),
+    "side_by_side_matrix": ("side_by_side_matrix",),
+    "swot_analysis": ("swot_analysis",),
+    "battlecard": ("battlecard",),
+    "workflow_enterprise_risk": ("workflow_enterprise_risk",),
+    "market_landscape": ("market_landscape",),
+    "business_implications": ("business_implications",),
     "swot_matrix": (
         "comparison_matrix",
         "side_by_side_matrix",
@@ -73,6 +85,12 @@ SECTION_REQUIRED_KEYS: dict[str, tuple[str, ...]] = {
     "decision_summary": ("decision_summary", "competitive_findings"),
     "review_theme_summary": ("review_theme_summary",),
     "competitor_deep_dives": ("competitor_deep_dives",),
+    "side_by_side_matrix": ("side_by_side_matrix",),
+    "swot_analysis": ("swot_analysis",),
+    "battlecard": ("battlecard",),
+    "workflow_enterprise_risk": ("workflow_enterprise_risk",),
+    "market_landscape": ("market_landscape",),
+    "business_implications": ("business_implications",),
     "swot_matrix": ("side_by_side_matrix", "swot_analysis"),
 }
 HEADING_KEY_ALIASES: dict[str, tuple[str, ...]] = {
@@ -101,6 +119,7 @@ HEADING_KEY_ALIASES: dict[str, tuple[str, ...]] = {
 
 _H2_RE = re.compile(r"(?m)^##\s+(.+?)\s*$")
 _H3_RE = re.compile(r"(?m)^###\s+(.+?)\s*$")
+_H3_H4_RE = re.compile(r"(?m)^#{3,4}\s+(.+?)\s*$")
 _DASH_TRANSLATION = str.maketrans(
     {
         "\u2010": "-",
@@ -161,6 +180,8 @@ def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
     segment_kind = _segment_kind(segment.get("segment_kind"))
     segment_name = _segment_name_for(segment, segment_kind)
     section_id = _section_id_for(segment)
+    if segment.get("schema_contract_source") == "section_brief":
+        _validate_section_brief_contract_identity(segment, section_id)
     segment_competitor = _string_value(segment.get("segment_competitor"))
     essential = bool(segment.get("segment_essential", True))
 
@@ -182,6 +203,12 @@ def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
 
     allowed_heading_keys = SECTION_ALLOWED_KEYS.get(section_id, (section_id,))
     required_heading_keys = SECTION_REQUIRED_KEYS.get(section_id, ())
+    if (
+        section_id == "decision_summary"
+        and bool(segment.get("require_executive_summary"))
+        and "executive_summary" not in required_heading_keys
+    ):
+        required_heading_keys = ("executive_summary", *required_heading_keys)
     forbidden_heading_keys = _forbidden_heading_keys(segment_kind, section_id)
     if segment_kind == "final_report":
         section_id = "final_report"
@@ -297,6 +324,20 @@ def validate_segment_contract(
             missing_required_heading_keys=missing_required_heading_keys,
         )
 
+    english_structural_headings = _english_structural_h3_h4_headings(
+        markdown, contract.output_language
+    )
+    if english_structural_headings:
+        return SegmentValidationResult(
+            status="retry",
+            errors=["segment contains English structural headings in zh-CN output"],
+            h2_headings=h2_headings,
+            forbidden_headings=english_structural_headings,
+            forbidden_heading_keys=[],
+            invalid_heading_keys=[],
+            missing_required_heading_keys=[],
+        )
+
     if (
         contract.segment_kind == "section_fragment"
         and contract.section_id == "competitor_deep_dives"
@@ -388,6 +429,19 @@ def _h3_headings(markdown: str) -> list[str]:
     return [match.group(1).strip() for match in _H3_RE.finditer(markdown)]
 
 
+def _english_structural_h3_h4_headings(
+    markdown: str, output_language: str
+) -> list[str]:
+    if output_language != "zh-CN":
+        return []
+    headings: list[str] = []
+    for match in _H3_H4_RE.finditer(markdown):
+        heading = SOURCE_TOKEN_RE.sub("", match.group(1)).strip()
+        if normalize_heading_text(heading) in ENGLISH_STRUCTURAL_HEADINGS:
+            headings.append(heading)
+    return headings
+
+
 def _section_id_for(segment: Mapping[str, object]) -> str:
     section_id = _string_value(segment.get("section_id"))
     if section_id:
@@ -421,6 +475,35 @@ def _segment_kind(value: object) -> SegmentKind:
     }:
         return value  # type: ignore[return-value]
     return "section_fragment"
+
+
+def _validate_section_brief_contract_identity(
+    segment: Mapping[str, object],
+    section_id: str,
+) -> None:
+    section_brief = segment.get("section_brief")
+    if not isinstance(section_brief, Mapping) or not section_brief:
+        raise ValueError(
+            "schema_contract_source='section_brief' requires a truthy section_brief Mapping"
+        )
+    brief_section_key = _string_value(section_brief.get("section_key"))
+    if not brief_section_key:
+        raise ValueError(
+            "schema_contract_source='section_brief' requires section_brief.section_key"
+        )
+    segment_section_key = _string_value(segment.get("section_key"))
+    if not segment_section_key:
+        raise ValueError(
+            "schema_contract_source='section_brief' requires segment section_key"
+        )
+    if segment_section_key != section_id:
+        raise ValueError(
+            "section_brief-backed segment section_id and section_key must agree"
+        )
+    if brief_section_key != section_id:
+        raise ValueError(
+            "section_brief section_key must match segment section_id"
+        )
 
 
 def _string_value(value: object) -> str | None:

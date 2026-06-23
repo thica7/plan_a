@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -66,7 +67,10 @@ from packages.schema.enterprise import (
     WorkspaceRecord,
     WorkspaceUsageSummary,
 )
-from packages.sources import normalize_report_version_sources
+from packages.sources import (
+    normalize_report_version_sources,
+    preserve_existing_report_layers_for_legacy_upsert,
+)
 
 _MIGRATION_LOCK = threading.Lock()
 _MIGRATED_DATABASE_URLS: set[str] = set()
@@ -391,7 +395,7 @@ class EnterprisePostgresStore:
             ).fetchone()
             if report_row is None:
                 return None
-            report_version = ReportVersionRecord.model_validate(dict(report_row))
+            report_version = self._model_from_row(ReportVersionRecord, report_row)
             report_claim_ids = self._linked_ids(
                 conn,
                 table="report_version_claims",
@@ -684,6 +688,7 @@ class EnterprisePostgresStore:
         self,
         workspace_id: str | None = None,
         *,
+        project_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[NotificationRecord]:
@@ -692,6 +697,9 @@ class EnterprisePostgresStore:
         if workspace_id:
             clauses.append("workspace_id = %s")
             params.append(workspace_id)
+        if project_id:
+            clauses.append("project_id = %s")
+            params.append(project_id)
         if status:
             clauses.append("status = %s")
             params.append(status)
@@ -1266,6 +1274,7 @@ class EnterprisePostgresStore:
         project_id: str | None = None,
         evidence_id: str | None = None,
         report_version_id: str | None = None,
+        raw_source_id: str | None = None,
     ) -> list[ArtifactRecord]:
         sql = "SELECT * FROM artifacts"
         params: list[str] = []
@@ -1282,6 +1291,25 @@ class EnterprisePostgresStore:
         if report_version_id:
             clauses.append("report_version_id = %s")
             params.append(report_version_id)
+        if raw_source_id:
+            clauses.append(
+                "("
+                "metadata->>'raw_source_id' = %s OR "
+                "metadata->>'kb_raw_source_id' = %s OR "
+                "metadata->'artifact_lifecycle'->'links'->>'raw_source_id' = %s OR "
+                "metadata->'artifact_lifecycle'->'links'->>'kb_raw_source_id' = %s OR "
+                "metadata->'source_tokens' ? %s"
+                ")"
+            )
+            params.extend(
+                [
+                    raw_source_id,
+                    raw_source_id,
+                    raw_source_id,
+                    raw_source_id,
+                    raw_source_id,
+                ]
+            )
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY created_at DESC"
@@ -1466,19 +1494,14 @@ class EnterprisePostgresStore:
         return self._model_from_row(ReportVersionRecord, row) if row else None
 
     def upsert_report_version(self, version: ReportVersionRecord) -> ReportVersionRecord:
+        before_record = self.get_report_version(version.id)
+        version = preserve_existing_report_layers_for_legacy_upsert(version, before_record)
         version = normalize_report_version_sources(
             version,
             self._report_scope_evidence(version),
         )
         with self._connect(self.database_url, row_factory=self._dict_row) as conn:
             with conn.cursor() as cur:
-                before_row = cur.execute(
-                    "SELECT * FROM report_versions WHERE id = %s",
-                    (version.id,),
-                ).fetchone()
-                before_record = (
-                    self._model_from_row(ReportVersionRecord, before_row) if before_row else None
-                )
                 self._upsert_report_version(cur, version)
                 self._append_audit(
                     cur,
@@ -1647,10 +1670,30 @@ class EnterprisePostgresStore:
 
     @staticmethod
     def _model_from_mapping(model: type[BaseModel], data: dict[str, Any]) -> Any:
+        if model is ReportVersionRecord:
+            data = EnterprisePostgresStore._normalize_report_version_mapping(data)
         allowed_fields = set(model.model_fields)
         return model.model_validate(
             {key: value for key, value in data.items() if key in allowed_fields}
         )
+
+    @staticmethod
+    def _normalize_report_version_mapping(data: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(data)
+        artifact = normalized.get("report_artifact")
+        if isinstance(artifact, str):
+            stripped = artifact.strip()
+            if not stripped:
+                artifact = None
+            else:
+                try:
+                    artifact = json.loads(stripped)
+                except json.JSONDecodeError:
+                    artifact = stripped
+        if artifact == {}:
+            artifact = None
+        normalized["report_artifact"] = artifact
+        return normalized
 
     def _linked_ids(
         self,
@@ -2269,17 +2312,30 @@ class EnterprisePostgresStore:
         self._replace_claim_evidence_links(cur, claim)
 
     def _upsert_report_version(self, cur: Any, report: ReportVersionRecord) -> None:
+        report_artifact = (
+            report.report_artifact.model_dump(mode="json")
+            if report.report_artifact is not None
+            else {}
+        )
         cur.execute(
             """
             INSERT INTO report_versions (
                 id, workspace_id, project_id, run_id, parent_version_id, version_number,
                 topic_normalized, competitor_layer, competitor_set_hash, status,
-                report_md, claim_ids, evidence_ids, quality_metadata, created_at, published_at
+                report_md, core_report_md, support_appendix_md, audit_log_md, full_report_md,
+                report_artifact, claim_ids, evidence_ids, quality_metadata, created_at, published_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 report_md = EXCLUDED.report_md,
+                core_report_md = EXCLUDED.core_report_md,
+                support_appendix_md = EXCLUDED.support_appendix_md,
+                audit_log_md = EXCLUDED.audit_log_md,
+                full_report_md = EXCLUDED.full_report_md,
+                report_artifact = EXCLUDED.report_artifact,
                 claim_ids = EXCLUDED.claim_ids,
                 evidence_ids = EXCLUDED.evidence_ids,
                 quality_metadata = EXCLUDED.quality_metadata,
@@ -2297,6 +2353,11 @@ class EnterprisePostgresStore:
                 report.competitor_set_hash,
                 report.status,
                 self._text(report.report_md),
+                self._text(report.core_report_md),
+                self._text(report.support_appendix_md),
+                self._text(report.audit_log_md),
+                self._text(report.full_report_md),
+                self._json(report_artifact),
                 report.claim_ids,
                 report.evidence_ids,
                 self._json(report.quality_metadata),

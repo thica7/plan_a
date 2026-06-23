@@ -8,6 +8,7 @@ from typing import Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from packages.business_intel.entity_resolver import is_trusted_url_for_competitor
 from packages.identity.source_resolver import (
     is_valid_source_token,
     normalize_source_token,
@@ -19,6 +20,7 @@ from packages.schema.api_dto import RunDetail
 from packages.schema.models import RawSource
 
 SCHEMA_VERSION = "writer_evidence_pack.v1"
+REPORT_BRIEF_SCHEMA_VERSION = "writer_report_brief.v1"
 UNSTRUCTURED_SIGNAL_LIMIT = 420
 SOURCE_NOTE_LIMIT = 180
 QUOTE_EXCERPT_LIMIT = 400
@@ -29,8 +31,13 @@ SINGLE_CALL_CONTEXT_TARGET_CHARS = 240_000
 SEGMENT_INPUT_TARGET_CHARS = SINGLE_CALL_CONTEXT_TARGET_CHARS
 SEGMENT_SOURCE_BATCH_SIZE = 4
 SEGMENT_FACT_BATCH_SIZE = 32
+LEGACY_STRATEGIC_SEGMENT_ALIASES: dict[str, tuple[str, ...]] = {
+    "swot_matrix": ("side_by_side_matrix", "swot_analysis"),
+}
 SOURCE_CITATION_RE = re.compile(
-    r"(?:\[source:([^\]]+)\]|\u3010source:([^\u3011]+)\u3011)"
+    r"(?:\[(?:source|\u6765\u6e90)[:\uFF1A]([^\]]+)\]"
+    r"|\u3010(?:source|\u6765\u6e90)[:\uFF1A]([^\u3011]+)\u3011)",
+    re.IGNORECASE,
 )
 T = TypeVar("T")
 NORMALIZED_FIELD_DROP_KEYS = {
@@ -59,6 +66,12 @@ class WriterSourceRegistryItem(BaseModel):
     url: str | None = None
     confidence: float
     candidate_origin: str = "unknown"
+    authority_role: Literal[
+        "vendor_official",
+        "community",
+        "user_research",
+        "third_party",
+    ] = "third_party"
     quality_score: float = 0.0
     short_source_note: str = ""
     has_normalized_fields: bool = False
@@ -151,12 +164,36 @@ class WriterEvidencePack(BaseModel):
 
     schema_version: str = SCHEMA_VERSION
     output_language: str = "zh-CN"
+    competitor_layer: str = "unknown"
     source_registry: list[WriterSourceRegistryItem] = Field(default_factory=list)
     groups: list[WriterEvidenceGroup] = Field(default_factory=list)
     quotes: list[WriterQuote] = Field(default_factory=list)
     matrix: dict[str, object] = Field(default_factory=dict)
     structured_knowledge: dict[str, object] = Field(default_factory=dict)
     coverage: dict[str, object] = Field(default_factory=dict)
+
+
+
+class WriterReportBrief(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str = REPORT_BRIEF_SCHEMA_VERSION
+    output_language: str = "zh-CN"
+    gate_status: Literal["pass", "warn", "block"] = "pass"
+    blocking_gaps: list[str] = Field(default_factory=list)
+    writer_constraints: list[str] = Field(default_factory=list)
+    allowed_source_ids: list[str] = Field(default_factory=list)
+    source_registry: list[dict[str, object]] = Field(default_factory=list)
+    evidence_groups: list[dict[str, object]] = Field(default_factory=list)
+    quotes: list[dict[str, object]] = Field(default_factory=list)
+    matrix: dict[str, object] = Field(default_factory=dict)
+    structured_knowledge: dict[str, object] = Field(default_factory=dict)
+    coverage: dict[str, object] = Field(default_factory=dict)
+    qa_findings: list[dict[str, object]] = Field(default_factory=list)
+    reflection_gaps: list[str] = Field(default_factory=list)
+
+    def to_prompt_json(self) -> str:
+        return json.dumps(self.model_dump(mode="json"), ensure_ascii=False)
 
 
 class WriterEvidencePackMetrics(BaseModel):
@@ -185,12 +222,24 @@ class WriterEvidencePackResult(BaseModel):
     pack: WriterEvidencePack
     metrics: WriterEvidencePackMetrics
     warnings: list[str] = Field(default_factory=list)
+    report_brief: WriterReportBrief | None = None
 
     def to_prompt_json(self) -> str:
         return json.dumps(_prompt_safe_pack_payload(self.pack), ensure_ascii=False)
 
+    def to_report_brief_prompt_json(self) -> str:
+        return self._resolved_report_brief().to_prompt_json()
+
+    def _resolved_report_brief(self) -> WriterReportBrief:
+        if self.report_brief is not None:
+            return self.report_brief
+        return _fallback_report_brief_from_pack(self.pack)
+
     def telemetry_payload(self) -> dict[str, object]:
         payload = self.metrics.model_dump(mode="json")
+        brief = self._resolved_report_brief()
+        payload["writer_report_brief_chars"] = len(brief.to_prompt_json())
+        payload["writer_report_brief_gate_status"] = brief.gate_status
         payload["preflight_warnings"] = list(self.warnings)
         return payload
 
@@ -252,18 +301,19 @@ class WriterEvidencePackResult(BaseModel):
             segments.extend(
                 self._competitor_deep_dive_segments(competitor, competitor_groups)
             )
-        segments.extend(
-            self._budgeted_source_segments(
-                "swot_matrix",
-                groups=groups,
-                allowed_source_ids=all_source_ids,
-                group_projection="summary",
-                quote_projection="none",
-                matrix_projection="compact",
-                structured_competitors=[],
-                structured_projection="compact",
+        for strategic_segment_name in self._strategic_section_segment_names():
+            segments.extend(
+                self._budgeted_source_segments(
+                    strategic_segment_name,
+                    groups=groups,
+                    allowed_source_ids=all_source_ids,
+                    group_projection="summary",
+                    quote_projection="none",
+                    matrix_projection="compact",
+                    structured_competitors=[],
+                    structured_projection="compact",
+                )
             )
-        )
         segments.extend(
             self._budgeted_source_segments(
                 "support_appendix",
@@ -278,6 +328,24 @@ class WriterEvidencePackResult(BaseModel):
             )
         )
         return segments
+
+    def _strategic_section_segment_names(self) -> list[str]:
+        layer_section_by_layer = {
+            "L1": "battlecard",
+            "L2": "workflow_enterprise_risk",
+            "L3": "market_landscape",
+            "unknown": "business_implications",
+        }
+        return _unique(
+            [
+                "side_by_side_matrix",
+                "swot_analysis",
+                layer_section_by_layer.get(
+                    self.pack.competitor_layer,
+                    "business_implications",
+                ),
+            ]
+        )
 
     def repair_segment_inputs(
         self,
@@ -335,8 +403,13 @@ class WriterEvidencePackResult(BaseModel):
             for segment in segments
             for source_id in _string_list(segment.get("allowed_source_ids"))
         )
+        brief = self._resolved_report_brief()
         payload: dict[str, object] = {
             "schema_version": self.pack.schema_version,
+            "report_brief_schema_version": brief.schema_version,
+            "gate_status": brief.gate_status,
+            "writer_constraints": list(brief.writer_constraints),
+            "reflection_gaps": list(brief.reflection_gaps),
             "repair_sections": section_names,
             "segment_names": sorted(
                 {
@@ -905,8 +978,13 @@ class WriterEvidencePackResult(BaseModel):
                         if isinstance(quote, Mapping):
                             referenced_quote_ids.update(_string_list(quote.get("id")))
         allowed = set(allowed_source_ids)
+        brief = self._resolved_report_brief()
         payload: dict[str, object] = {
             "schema_version": self.pack.schema_version,
+            "report_brief_schema_version": brief.schema_version,
+            "gate_status": brief.gate_status,
+            "writer_constraints": list(brief.writer_constraints),
+            "reflection_gaps": list(brief.reflection_gaps),
             "segment_name": name,
             **_segment_contract_metadata(name, self.pack.output_language),
             "segment_competitor": segment_competitor,
@@ -1189,6 +1267,7 @@ def _prompt_safe_pack_payload(pack: WriterEvidencePack) -> dict[str, object]:
     return {
         "schema_version": pack.schema_version,
         "output_language": pack.output_language,
+        "competitor_layer": pack.competitor_layer,
         "source_registry": [
             _prompt_safe_registry_item(item) for item in pack.source_registry
         ],
@@ -1205,6 +1284,58 @@ def _prompt_safe_pack_payload(pack: WriterEvidencePack) -> dict[str, object]:
     }
 
 
+def _fallback_report_brief_from_pack(pack: WriterEvidencePack) -> WriterReportBrief:
+    return _report_brief_from_pack(pack)
+
+
+def _report_brief_from_pack(
+    pack: WriterEvidencePack,
+    *,
+    gate_status: Literal["pass", "warn", "block"] = "pass",
+    blocking_gaps: list[str] | None = None,
+    writer_constraints: list[str] | None = None,
+    qa_findings: list[dict[str, object]] | None = None,
+    reflection_gaps: list[str] | None = None,
+) -> WriterReportBrief:
+    blocking_gaps = blocking_gaps or []
+    reflection_gaps = reflection_gaps or []
+    constraints = [
+        "Use comparison_matrix.winner_by_dimension as the only winner source; "
+        "do not recompute winners from raw sources.",
+        "Use only allowed_source_ids for citations; never invent source IDs.",
+    ]
+    if gate_status == "block":
+        constraints.append(
+            "Treat the report as draft-only until blocking coverage gaps are resolved."
+        )
+    elif gate_status == "warn":
+        constraints.append(
+            "Surface coverage and confidence gaps in support sections before any recommendation."
+        )
+    for gap in blocking_gaps:
+        constraints.append(f"Do not overstate conclusions affected by: {gap}")
+    constraints.extend(writer_constraints or [])
+    allowed_source_ids = [item.id for item in pack.source_registry]
+    return WriterReportBrief(
+        output_language=pack.output_language,
+        gate_status=gate_status,
+        blocking_gaps=_unique(blocking_gaps),
+        writer_constraints=_unique(constraints),
+        allowed_source_ids=allowed_source_ids,
+        source_registry=[_prompt_safe_registry_item(item) for item in pack.source_registry],
+        evidence_groups=[
+            _prompt_safe_group_payload(group, projection="full") for group in pack.groups
+        ],
+        quotes=[
+            _prompt_safe_quote_payload(quote, compact=True) for quote in pack.quotes
+        ],
+        matrix=pack.matrix,
+        structured_knowledge=pack.structured_knowledge,
+        coverage=pack.coverage,
+        qa_findings=qa_findings or [],
+        reflection_gaps=_unique(reflection_gaps),
+    )
+
 def _segment_contract_metadata(
     segment_name: str,
     output_language: str,
@@ -1213,14 +1344,22 @@ def _segment_contract_metadata(
         "decision_summary": "decision_summary",
         "user_research": "review_theme_summary",
         "competitor_deep_dives": "competitor_deep_dives",
+        "side_by_side_matrix": "side_by_side_matrix",
+        "swot_analysis": "swot_analysis",
+        "battlecard": "battlecard",
+        "workflow_enterprise_risk": "workflow_enterprise_risk",
+        "market_landscape": "market_landscape",
+        "business_implications": "business_implications",
         "swot_matrix": "swot_matrix",
         "support_appendix": "evidence_support",
     }
     section_id = section_id_by_name.get(segment_name, segment_name)
-    is_support = segment_name == "support_appendix"
+    is_support = segment_name == "support_appendix" or section_id == "evidence_support"
     return {
         "segment_kind": "support_fragment" if is_support else "section_fragment",
         "section_id": section_id,
+        "section_key": section_id,
+        "layer": "support" if is_support else "core",
         "output_language": output_language,
         "segment_essential": not is_support,
     }
@@ -1237,6 +1376,7 @@ def _prompt_safe_registry_item(item: WriterSourceRegistryItem) -> dict[str, obje
         "url": item.url,
         "confidence": item.confidence,
         "candidate_origin": item.candidate_origin,
+        "authority_role": item.authority_role,
         "quality_score": item.quality_score,
         "short_source_note": item.short_source_note,
         "has_normalized_fields": item.has_normalized_fields,
@@ -1420,6 +1560,22 @@ COMMUNITY_SOURCE_TYPES = {
 }
 
 
+def _source_authority_role(
+    source: RawSource,
+) -> Literal["vendor_official", "community", "user_research", "third_party"]:
+    source_type = source.source_type.casefold()
+    if source.metadata.get("community_evidence") or source_type in COMMUNITY_SOURCE_TYPES:
+        return "community"
+    if source_type in USER_RESEARCH_SOURCE_TYPES:
+        return "user_research"
+    if source_type in {"official_docs", "official_webpage"}:
+        return "vendor_official"
+    if source_type == "webpage_verified" and source.url is not None:
+        if is_trusted_url_for_competitor(source.competitor, str(source.url)):
+            return "vendor_official"
+    return "third_party"
+
+
 def build_writer_evidence_pack(detail: RunDetail) -> WriterEvidencePackResult:
     builder = _WriterEvidencePackBuilder(detail)
     return builder.build()
@@ -1443,6 +1599,7 @@ class _WriterEvidencePackBuilder:
         self._detect_pricing_conflicts()
         pack = WriterEvidencePack(
             output_language=self.detail.output_language,
+            competitor_layer=self.detail.plan.competitor_layer,
             source_registry=list(self.registry_by_id.values()),
             groups=list(self.groups.values()),
             quotes=list(self.quotes_by_key.values()),
@@ -1451,10 +1608,54 @@ class _WriterEvidencePackBuilder:
         )
         pack.coverage = self._coverage_summary(pack)
         metrics = self._metrics(pack)
-        return WriterEvidencePackResult(pack=pack, metrics=metrics, warnings=self.warnings)
+        report_brief = self._report_brief(pack)
+        return WriterEvidencePackResult(
+            pack=pack,
+            metrics=metrics,
+            warnings=self.warnings,
+            report_brief=report_brief,
+        )
 
+    def _report_brief(self, pack: WriterEvidencePack) -> WriterReportBrief:
+        latest_reflection = self.detail.reflections[-1] if self.detail.reflections else None
+        gate_status: Literal["pass", "warn", "block"] = "pass"
+        blocking_gaps: list[str] = []
+        writer_constraints: list[str] = []
+        reflection_gaps: list[str] = []
+        if latest_reflection is not None:
+            gate_status = latest_reflection.gate_status
+            blocking_gaps = list(latest_reflection.blocking_gaps)
+            writer_constraints = list(latest_reflection.writer_constraints)
+            reflection_gaps = [
+                *latest_reflection.coverage_gaps,
+                *latest_reflection.confidence_outliers,
+                *latest_reflection.cross_competitor_gaps,
+            ]
+        qa_findings = [
+            {
+                "id": issue.id,
+                "severity": issue.severity,
+                "detected_by": issue.detected_by,
+                "target_agent": issue.target_agent,
+                "target_subagent": issue.target_subagent,
+                "target_competitor": issue.target_competitor,
+                "field_path": issue.field_path,
+                "problem": issue.problem,
+                "redo_scope": issue.redo_scope.model_dump(mode="json"),
+            }
+            for issue in self.detail.qa_findings[:12]
+        ]
+        return _report_brief_from_pack(
+            pack,
+            gate_status=gate_status,
+            blocking_gaps=blocking_gaps,
+            writer_constraints=writer_constraints,
+            qa_findings=qa_findings,
+            reflection_gaps=reflection_gaps,
+        )
     def _register_source(self, source: RawSource) -> None:
         fields = normalized_fields_from_source(source)
+        authority_role = _source_authority_role(source)
         item = WriterSourceRegistryItem(
             id=source.id,
             competitor=source.competitor,
@@ -1465,6 +1666,7 @@ class _WriterEvidencePackBuilder:
             url=str(source.url) if source.url else None,
             confidence=round(source.confidence, 3),
             candidate_origin=source.candidate_origin,
+            authority_role=authority_role,
             quality_score=round(source.quality_score, 3),
             short_source_note=_trim(_clean(source.title), SOURCE_NOTE_LIMIT),
             has_normalized_fields=bool(fields),
@@ -1473,13 +1675,11 @@ class _WriterEvidencePackBuilder:
         self.registry_by_id[source.id] = item
         group = self._group(source.competitor, source.dimension)
         group.source_ids = _unique([*group.source_ids, source.id])
-        if source.source_type.casefold() in OFFICIAL_SOURCE_TYPES:
+        if authority_role == "vendor_official":
             group.official_source_ids = _unique([*group.official_source_ids, source.id])
-        if source.source_type.casefold() in COMMUNITY_SOURCE_TYPES or source.metadata.get(
-            "community_evidence"
-        ):
+        if authority_role == "community":
             group.community_source_ids = _unique([*group.community_source_ids, source.id])
-        if source.source_type.casefold() in USER_RESEARCH_SOURCE_TYPES:
+        if authority_role == "user_research":
             group.user_research_source_ids = _unique(
                 [*group.user_research_source_ids, source.id]
             )
@@ -2012,7 +2212,25 @@ def _sanitize_segment_citations(markdown: str, allowed_source_ids: set[str]) -> 
             return "".join(f"[source:{token}]" for token in canonical_parts)
         return match.group(0)
 
-    return SOURCE_CITATION_RE.sub(replace, markdown or "")
+    normalized_markdown = SOURCE_CITATION_RE.sub(replace, markdown or "")
+    return "\n".join(
+        _dedupe_source_citations_in_line(line)
+        for line in normalized_markdown.splitlines()
+    )
+
+
+def _dedupe_source_citations_in_line(line: str) -> str:
+    seen: set[str] = set()
+
+    def replace_duplicate(match: re.Match[str]) -> str:
+        raw_token = next(group for group in match.groups() if group is not None)
+        token = normalize_source_token(raw_token)
+        if token in seen:
+            return ""
+        seen.add(token)
+        return match.group(0)
+
+    return SOURCE_CITATION_RE.sub(replace_duplicate, line)
 
 
 _PLACEHOLDER_SOURCE_TOKENS = {
@@ -2089,28 +2307,33 @@ def _repair_segment_names(sections: Sequence[str]) -> set[str]:
         names.add("user_research")
     if any(token in normalized for token in ("competitor", "deep", "vendor")):
         names.add("competitor_deep_dives")
+    for legacy_name, mapped_names in LEGACY_STRATEGIC_SEGMENT_ALIASES.items():
+        if legacy_name in normalized:
+            names.update(mapped_names)
+    if any(token in normalized for token in ("matrix", "side_by_side", "side-by-side")):
+        names.add("side_by_side_matrix")
     if "swot" in normalized:
-        names.add("swot_matrix")
+        names.add("swot_analysis")
+    if "battlecard" in normalized:
+        names.add("battlecard")
+    if any(token in normalized for token in ("workflow", "enterprise")):
+        names.add("workflow_enterprise_risk")
+    if "market" in normalized:
+        names.add("market_landscape")
+    if any(token in normalized for token in ("business", "implication")):
+        names.add("business_implications")
     if any(
         token in normalized
         for token in ("appendix", "evidence", "source", "support", "audit", "coverage")
     ):
         names.add("support_appendix")
-    if any(
-        token in normalized
-        for token in (
-            "executive",
-            "decision",
-            "finding",
-            "pricing",
-            "feature",
-            "security",
-            "workflow",
-            "market",
-            "battlecard",
-            "analysis",
-            "recommendation",
-        )
+    decision_tokens = ("executive", "decision", "finding", "recommendation")
+    broad_dimension_tokens = ("pricing", "feature", "security")
+    if (
+        any(token in normalized for token in decision_tokens)
+        and not names
+    ) or (
+        any(token in normalized for token in broad_dimension_tokens) and not names
     ) or ("summary" in normalized and not names):
         names.add("decision_summary")
     return names or {"decision_summary"}

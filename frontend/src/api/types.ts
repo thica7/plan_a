@@ -46,7 +46,7 @@ export interface RedoScope {
 export interface QCIssue {
   id: string;
   severity: "info" | "warn" | "blocker";
-  detected_by: "citation" | "consistency" | "coverage" | "schema" | "reflector";
+  detected_by: "citation" | "consistency" | "coverage" | "schema" | "reflector" | "text_quality";
   target_agent: string;
   target_subagent?: string | null;
   target_competitor?: string | null;
@@ -54,6 +54,7 @@ export interface QCIssue {
   problem: string;
   redo_scope: RedoScope;
   self_found: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface RawSource {
@@ -67,7 +68,133 @@ export interface RawSource {
   snippet: string;
   content_hash: string;
   confidence: number;
+  candidate_origin: string;
+  candidate_rank?: number | null;
+  candidate_confidence?: number | null;
+  fetch_method: string;
+  quality_score: number;
+  failure_reason?: string | null;
+  metadata: Record<string, unknown>;
   extracted_at: string;
+}
+
+export type ArtifactLayerName = "core" | "support" | "audit";
+export type EvidenceStrength = "strong" | "moderate" | "weak" | "insufficient";
+export type SupportLevel = "official" | "triangulated_community" | "single_source" | "simulated" | "inferred" | "gap";
+
+export interface ClaimCard {
+  id: string;
+  run_id: string;
+  competitor: string;
+  dimension: string;
+  claim_type: string;
+  claim: string;
+  source_ids: string[];
+  confidence: number;
+  evidence_strength: EvidenceStrength;
+  support_level: SupportLevel;
+  scope: string;
+  caveats: string[];
+  conflicts: string[];
+  applicability: string;
+  produced_by: "analyst";
+  producer_stage: string;
+  derived_from: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface ClaimCardBundle {
+  run_id: string;
+  competitor: string;
+  dimension: string;
+  cards: ClaimCard[];
+  source_ids: string[];
+  coverage: Record<string, unknown>;
+  gap_count: number;
+  generated_at: string;
+  producer_context: Record<string, unknown>;
+}
+
+export interface DecisionCard {
+  id: string;
+  run_id: string;
+  decision_type: string;
+  subject: string;
+  recommendation: string;
+  posture: string;
+  rationale: string;
+  claim_card_ids: string[];
+  source_ids: string[];
+  winner?: string | null;
+  alternatives: string[];
+  why_not: Record<string, string>;
+  risk_factors: string[];
+  evidence_strength: EvidenceStrength;
+  confidence: number;
+  produced_by: "comparator";
+  producer_stage: "comparator";
+  metadata: Record<string, unknown>;
+}
+
+export interface DecisionCardBundle {
+  run_id: string;
+  cards: DecisionCard[];
+  matrix_snapshot: Record<string, unknown>;
+  coverage_by_dimension: Record<string, unknown>;
+  recommendation_card_id?: string | null;
+  generated_at: string;
+  producer_context: Record<string, unknown>;
+}
+
+export interface SectionBrief {
+  id: string;
+  section_key: string;
+  layer: ArtifactLayerName;
+  required_questions: string[];
+  allowed_claim_card_ids: string[];
+  allowed_decision_card_ids: string[];
+  allowed_source_ids: string[];
+  must_include: string[];
+  must_not_claim: string[];
+  tone: string;
+  minimum_depth: Record<string, unknown>;
+  citation_policy: Record<string, unknown>;
+  repair_targets: Record<string, unknown>;
+}
+
+export interface ReportLayer {
+  layer: ArtifactLayerName;
+  markdown: string;
+  sections: Array<Record<string, unknown>>;
+}
+
+export interface ReportArtifactV2 {
+  artifact_version: 2;
+  run_id: string;
+  core_report: ReportLayer;
+  support_appendix: ReportLayer;
+  audit_log: ReportLayer;
+  claim_card_bundles: ClaimCardBundle[];
+  decision_card_bundle?: DecisionCardBundle | null;
+  section_briefs: SectionBrief[];
+  quality: {
+    core_gate: Record<string, unknown>;
+    support_gate: Record<string, unknown>;
+    audit_gate: Record<string, unknown>;
+    warnings: Array<Record<string, unknown>>;
+    blockers: Array<Record<string, unknown>>;
+    revision_count: number;
+  };
+  render_cache: {
+    core_markdown: string;
+    support_markdown: string;
+    audit_markdown: string;
+    full_markdown: string;
+  };
+  legacy: {
+    source: "report_artifact_v2" | "report_md";
+    report_md_alias: boolean;
+  };
 }
 
 export interface ReflectionRecord {
@@ -76,6 +203,9 @@ export interface ReflectionRecord {
   confidence_outliers: string[];
   cross_competitor_gaps: string[];
   suggested_redos: RedoScope[];
+  gate_status: "pass" | "warn" | "block";
+  blocking_gaps: string[];
+  writer_constraints: string[];
 }
 
 export interface CompetitorKB {
@@ -783,6 +913,10 @@ export interface RunDetail extends RunSummary {
   auto_redo_warn_enabled: boolean;
   hitl_enabled: boolean;
   report_md: string;
+  claim_card_bundles: ClaimCardBundle[];
+  decision_card_bundle?: DecisionCardBundle | null;
+  section_briefs: SectionBrief[];
+  report_artifact?: ReportArtifactV2 | null;
   raw_sources: RawSource[];
   competitor_kbs: Record<string, CompetitorKB>;
   competitor_knowledge: Record<string, CompetitorKnowledge>;
@@ -1117,6 +1251,7 @@ export interface BusinessQAFinding {
   evidence_ids: string[];
   claim_ids: string[];
   recommendation: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface BusinessQAEvaluation {
@@ -1563,6 +1698,9 @@ export type ArtifactType =
   | "screenshot"
   | "raw_text"
   | "report_export"
+  | "survey_response"
+  | "interview_record"
+  | "manual_transcript"
   | "other";
 
 export interface ArtifactRecord {
@@ -1571,6 +1709,7 @@ export interface ArtifactRecord {
   project_id: string;
   evidence_id?: string | null;
   run_id?: string | null;
+  report_version_id?: string | null;
   artifact_type: ArtifactType;
   filename: string;
   media_type: string;
@@ -1581,6 +1720,8 @@ export interface ArtifactRecord {
   source_url?: string | null;
   created_by?: string | null;
   created_at: string;
+  retention_policy?: string;
+  compliance_metadata?: Record<string, unknown>;
   metadata: Record<string, unknown>;
 }
 
@@ -1596,11 +1737,25 @@ export interface ArtifactCreateRequest {
   content_base64?: string | null;
   external_uri?: string | null;
   source_url?: string | null;
+  retention_policy?: string;
+  compliance_metadata?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 
 export interface ArtifactCreateResult {
   artifact: ArtifactRecord;
+}
+
+export interface ArtifactPreview {
+  artifact: ArtifactRecord;
+  preview_type: "text" | "image" | "pdf" | "external" | "unavailable";
+  preview_available: boolean;
+  content_text: string;
+  content_base64: string;
+  data_url: string;
+  media_type: string;
+  truncated: boolean;
+  external_uri?: string | null;
 }
 
 export interface SourceRegistryRecord {
@@ -1640,6 +1795,8 @@ export interface SourceSnapshotCreateRequest {
   display_name?: string;
   trust_level?: "official" | "verified" | "community" | "synthetic" | "unknown";
   robots_status?: "unknown" | "allowed" | "blocked" | "error";
+  retention_policy?: string;
+  compliance_metadata?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 
@@ -1770,6 +1927,11 @@ export interface ReportVersionRecord {
   competitor_set_hash: string;
   status: "draft" | "in_review" | "approved" | "rejected" | "published" | "archived";
   report_md: string;
+  core_report_md: string;
+  support_appendix_md: string;
+  audit_log_md: string;
+  full_report_md: string;
+  report_artifact?: ReportArtifactV2 | null;
   claim_ids: string[];
   evidence_ids: string[];
   quality_metadata?: Record<string, unknown>;

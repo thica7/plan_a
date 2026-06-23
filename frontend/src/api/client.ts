@@ -2,6 +2,7 @@ import type {
   AgentMessage,
   ArtifactCreateRequest,
   ArtifactCreateResult,
+  ArtifactPreview,
   ArtifactRecord,
   AuditLogRecord,
   BusinessIntelPlan,
@@ -75,6 +76,10 @@ import type {
   WorkspaceUsageSummary,
 } from "./types";
 import type { RunEvent } from "./sse_types";
+
+export interface RunRedoRequest {
+  issue_ids?: string[];
+}
 
 const AUTH_TOKEN_STORAGE_KEY = "competiscope.authToken";
 const USER_ID_STORAGE_KEY = "competiscope.userId";
@@ -277,9 +282,10 @@ export function resumeRun(runId: string, payload: HitlResumePayload) {
   });
 }
 
-export function redoRun(runId: string) {
+export function redoRun(runId: string, payload?: RunRedoRequest) {
   return request<RunDetail>(`/runs/${runId}/redo`, {
     method: "POST",
+    body: JSON.stringify(payload ?? {}),
   });
 }
 
@@ -380,11 +386,13 @@ export function updateWorkspaceQuota(
 
 export function listEnterpriseNotifications(params: {
   workspaceId?: string;
+  projectId?: string;
   status?: string;
   limit?: number;
 } = {}) {
   const search = new URLSearchParams();
   if (params.workspaceId) search.set("workspace_id", params.workspaceId);
+  if (params.projectId) search.set("project_id", params.projectId);
   if (params.status) search.set("status", params.status);
   if (params.limit) search.set("limit", String(params.limit));
   const query = search.toString();
@@ -410,11 +418,13 @@ export function listArtifacts(params: {
   workspaceId?: string;
   projectId?: string;
   evidenceId?: string;
+  rawSourceId?: string;
 } = {}) {
   const search = new URLSearchParams();
   if (params.workspaceId) search.set("workspace_id", params.workspaceId);
   if (params.projectId) search.set("project_id", params.projectId);
   if (params.evidenceId) search.set("evidence_id", params.evidenceId);
+  if (params.rawSourceId) search.set("raw_source_id", params.rawSourceId);
   const query = search.toString();
   return request<ArtifactRecord[]>(`/enterprise/artifacts${query ? `?${query}` : ""}`);
 }
@@ -447,6 +457,12 @@ export function upsertSourceRegistry(record: SourceRegistryRecord) {
 
 export function getArtifact(artifactId: string) {
   return request<ArtifactRecord>(`/enterprise/artifacts/${encodeURIComponent(artifactId)}`);
+}
+
+export function getArtifactPreview(artifactId: string) {
+  return request<ArtifactPreview>(
+    `/enterprise/artifacts/${encodeURIComponent(artifactId)}/preview`,
+  );
 }
 
 export function getProjectKnowledgeGraph(projectId: string) {
@@ -649,6 +665,20 @@ export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) 
     "writer_assemble_repair_completed",
     "writer_quality_preflight",
     "writer_quality_preflight_repair",
+    "writer_structured_repair_selected",
+    "writer_structured_section_started",
+    "writer_structured_section_completed",
+    "writer_structured_section_failed",
+    "writer_structured_report_validated",
+    "writer_publication_contract_validated",
+    "writer_report_artifact_v2_publication_validated",
+    "writer_publication_contract_repair_selected",
+    "writer_publication_contract_repaired",
+    "writer_recommendation_delta_checked",
+    "writer_structured_repair_failed_preserved_previous",
+    "writer_schema_first_failed_closed",
+    "writer_markdown_fallback_used",
+    "writer_unified_quality_result_recorded",
   ];
   for (const type of eventTypes) {
     source.addEventListener(type, (message) => {

@@ -23,6 +23,7 @@ from packages.schema.enterprise import (
     ReportVersionRecord,
 )
 from packages.schema.models import CompetitorKnowledge, KnowledgeClaim, QCIssue, RawSource
+from packages.schema.report_artifact import ReportArtifactV2
 from packages.sources import normalize_report_source_tokens, raw_source_alias_metadata
 
 _SURVEY_SOURCE_TYPES = {"survey_simulated", "survey_response"}
@@ -190,11 +191,31 @@ def _build_report_version(
     competitor_set_hash = compute_competitor_set_hash(competitor_ids)
     topic_normalized = compute_topic_normalized(detail.topic)
     evidence_ids = [evidence.id for evidence in evidence_records]
+    artifact = detail.report_artifact
+    if artifact is not None:
+        (
+            core_report_md,
+            support_appendix_md,
+            audit_log_md,
+            full_report_md,
+            report_artifact,
+        ) = _normalize_report_artifact_layers(artifact, evidence_records, evidence_ids)
+        report_md = full_report_md
+    else:
+        report_md = detail.report_md
     normalized_report = normalize_report_source_tokens(
-        detail.report_md,
+        report_md,
         evidence_records,
         scoped_evidence_ids=evidence_ids,
     )
+    if artifact is not None:
+        full_report_md = normalized_report.report_md
+    else:
+        core_report_md = normalized_report.report_md
+        support_appendix_md = ""
+        audit_log_md = ""
+        full_report_md = normalized_report.report_md
+        report_artifact = None
     release_claim_records = _release_claim_records(claim_records)
     report_version = ReportVersionRecord(
         id=compute_report_version_id(
@@ -211,6 +232,11 @@ def _build_report_version(
         competitor_layer=competitor_layer,
         competitor_set_hash=competitor_set_hash,
         report_md=normalized_report.report_md,
+        core_report_md=core_report_md,
+        support_appendix_md=support_appendix_md,
+        audit_log_md=audit_log_md,
+        full_report_md=full_report_md,
+        report_artifact=report_artifact,
         claim_ids=[claim.id for claim in release_claim_records],
         evidence_ids=normalized_report.evidence_ids,
         quality_metadata={
@@ -241,6 +267,61 @@ def _build_report_version(
         memory_prompt_context=detail.plan.memory_prompt_context,
     )
     return report_version.model_copy(update={"quality_metadata": quality_metadata})
+
+
+def _normalize_report_artifact_layers(
+    artifact: ReportArtifactV2,
+    evidence_records: list[EvidenceRecord],
+    evidence_ids: list[str],
+) -> tuple[str, str, str, str, ReportArtifactV2]:
+    core_report_md = normalize_report_source_tokens(
+        artifact.render_cache.core_markdown,
+        evidence_records,
+        scoped_evidence_ids=evidence_ids,
+    ).report_md
+    support_appendix_md = normalize_report_source_tokens(
+        artifact.render_cache.support_markdown,
+        evidence_records,
+        scoped_evidence_ids=evidence_ids,
+    ).report_md
+    audit_log_md = normalize_report_source_tokens(
+        artifact.render_cache.audit_markdown,
+        evidence_records,
+        scoped_evidence_ids=evidence_ids,
+    ).report_md
+    full_report_md = "\n\n".join(
+        markdown
+        for markdown in (core_report_md, support_appendix_md, audit_log_md)
+        if markdown
+    )
+    report_artifact = ReportArtifactV2.model_validate(
+        artifact.model_copy(
+            update={
+                "core_report": artifact.core_report.model_copy(
+                    update={"markdown": core_report_md}
+                ),
+                "support_appendix": artifact.support_appendix.model_copy(
+                    update={"markdown": support_appendix_md}
+                ),
+                "audit_log": artifact.audit_log.model_copy(update={"markdown": audit_log_md}),
+                "render_cache": artifact.render_cache.model_copy(
+                    update={
+                        "core_markdown": core_report_md,
+                        "support_markdown": support_appendix_md,
+                        "audit_markdown": audit_log_md,
+                        "full_markdown": full_report_md,
+                    }
+                ),
+            }
+        ).model_dump(mode="json")
+    )
+    return (
+        core_report_md,
+        support_appendix_md,
+        audit_log_md,
+        full_report_md,
+        report_artifact,
+    )
 
 
 def _index_evidence_by_source(
@@ -461,6 +542,7 @@ def _build_quality_metadata(
                 "field_path": issue.field_path,
                 "problem": issue.problem,
                 "redo_scope": issue.redo_scope.model_dump(mode="json"),
+                "metadata": issue.metadata,
             }
             for issue in run_quality_findings
         ],

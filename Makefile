@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 SHELL := bash
 
-.PHONY: dev-backend dev-frontend temporal-worker test-backend test-frontend sync-openapi secret-scan smoke-llm smoke-search smoke-fetch smoke-minimal-run smoke-enterprise-postgres smoke-temporal-thin-shell smoke-temporal-server smoke-phase2-business-intel smoke-phase3-strict phase4-readiness eval-baseline eval-baseline-full m0-check demo-build demo demo-down demo-logs help
+.PHONY: dev-backend dev-frontend temporal-worker qdrant-up qdrant-down test-backend test-frontend sync-openapi secret-scan smoke-llm smoke-search smoke-fetch smoke-minimal-run smoke-enterprise-postgres smoke-temporal-thin-shell smoke-temporal-server smoke-phase2-business-intel smoke-phase3-strict phase4-readiness eval-baseline eval-baseline-full m0-check demo-build demo demo-down demo-logs help
 
 dev-backend: ## Start FastAPI in reload mode
 	conda run -n bd-competiscope-v2 uvicorn app.main:app --reload --port 8000 --app-dir backend
@@ -11,6 +11,12 @@ dev-frontend: ## Start Vite dev server
 
 temporal-worker: ## Start the Phase 4 Temporal worker
 	conda run -n bd-competiscope-v2 python backend/scripts/run_temporal_worker.py
+
+qdrant-up: ## Start local Qdrant
+	docker compose up -d qdrant
+
+qdrant-down: ## Stop local Qdrant
+	docker compose stop qdrant
 
 test-backend: ## Run backend tests
 	conda run -n bd-competiscope-v2 pytest backend/tests -q

@@ -27,13 +27,19 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
     evidenceById,
     filteredEvidence,
     gapFillResult,
+    gateRedoIssueId,
+    gateRedoResult,
     handleEvidenceQuality,
     handleExport,
     handleGapFill,
+    handleKbRollbackIssue,
+    handleRedoGateIssue,
     handleReportAction,
     isFillingGaps,
     isLoadingProject,
     isLoadingProjects,
+    kbRollbackIssueId,
+    kbRollbackResult,
     isReportActionPending,
     lastExport,
     projects,
@@ -165,11 +171,17 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
           gapFillResult={gapFillResult}
           isFillingGaps={isFillingGaps}
           isReportActionPending={isReportActionPending}
+          gateRedoIssueId={gateRedoIssueId}
+          gateRedoResult={gateRedoResult}
+          kbRollbackIssueId={kbRollbackIssueId}
+          kbRollbackResult={kbRollbackResult}
           lastExport={lastExport}
           onEvidenceQuality={handleEvidenceQuality}
           onExport={handleExport}
           onFillGaps={handleGapFill}
           onReportAction={handleReportAction}
+          onRedoGateIssue={handleRedoGateIssue}
+          onRollbackKbIssue={handleKbRollbackIssue}
           onSelectClaim={inspectClaim}
           onSelectEvidence={inspectEvidence}
           onSelectReport={inspectReport}

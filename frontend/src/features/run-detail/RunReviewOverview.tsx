@@ -5,6 +5,7 @@ import type { RunEvent } from "../../api/sse_types";
 import { MetricCard, Panel, StatusPill } from "../../components/ui";
 import type { ReportSourceBundle } from "../report/sourceBundle";
 import { SwimlaneView } from "../swimlane/SwimlaneView";
+import { AgentHandoffSummary } from "./AgentHandoffSummary";
 import type { ReflectionItem, RunDetailView } from "./types";
 import { useTranslation } from "../../stores/i18n";
 import { parseUTC } from "../workbench/format";
@@ -87,6 +88,8 @@ export function RunReviewOverview({
             </button>
           </Panel>
         </div>
+
+        <AgentHandoffSummary detail={detail} messages={detail.agent_messages} mode="compact" />
 
         <Panel className="run-flow-panel" title={t('reviewOverview.agentGraph')} icon={<GitBranch size={16} aria-hidden />}>
           <SwimlaneView

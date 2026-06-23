@@ -4,7 +4,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from langgraph.types import Command, interrupt
 
@@ -56,7 +56,9 @@ from packages.identity import (
     compute_run_id_for_idempotency_key,
     compute_topic_normalized,
     new_run_id,
+    normalize_source_token,
     runtime_prefixed_id,
+    source_tokens,
     stable_prefixed_id,
 )
 from packages.llm import DoubaoClient
@@ -77,6 +79,7 @@ from packages.orchestrator.graph import (
     build_real_analysis_graph,
     build_scoped_redo_graph,
 )
+from packages.quality import FinalQualityResult, build_final_quality_result
 from packages.refs import merge_ordered_refs, normalize_dimension_refs
 from packages.research.evaluation import quality_gaps_from_release_gate
 from packages.research.repair import (
@@ -103,6 +106,7 @@ from packages.schema.models import (
     RawSource,
     RedoScope,
     ReflectionRecord,
+    RevisionRecord,
     RunMetrics,
     ToolCallMessage,
     TraceSpan,
@@ -111,6 +115,9 @@ from packages.schema.survey import UserResearchImportRequest, UserResearchImport
 from packages.search import PerplexitySearchClient, SearchResult
 from packages.skills.registry import SkillRegistry
 from packages.tools import WebSearchRequest, fetch_evidence_page, robots_check, web_search
+
+if TYPE_CHECKING:
+    from packages.agents.writer.structured_report import StructuredReport
 
 CORE_SCHEMA_DIMENSIONS = ("pricing", "feature", "persona")
 ACTIVE_RUN_DUPLICATE_WINDOW_SECONDS = 300
@@ -225,6 +232,7 @@ class PendingGraphRedo:
     issue_ids: list[str]
     qa_issue_ids_before: list[str]
     issue_count_before: int
+    structured_targets: dict[str, Any] = field(default_factory=dict)
     auto_continue: bool = False
 
 
@@ -238,6 +246,8 @@ class RunRecord:
     active_graph_kind: Literal["real", "demo", "scoped_redo"] | None = None
     active_thread_id: str | None = None
     pending_graph_redo: PendingGraphRedo | None = None
+    structured_report_snapshot: "StructuredReport | None" = None
+    previous_structured_report_snapshot: "StructuredReport | None" = None
 
 
 class RunService(
@@ -694,10 +704,22 @@ class RunService(
             return messages or None
         return None
 
-    def can_start_redo(self, run_id: str) -> bool:
+    def can_start_redo(
+        self,
+        run_id: str,
+        *,
+        preferred_issue_ids: list[str] | None = None,
+    ) -> bool:
         record = self._runs.get(run_id)
+        if not record or not record.detail.qa_findings or self._redo_limit_reached(record.detail):
+            return False
+        if not preferred_issue_ids:
+            return True
         return bool(
-            record and record.detail.qa_findings and not self._redo_limit_reached(record.detail)
+            self._select_redo_issues(
+                record.detail,
+                preferred_issue_ids=preferred_issue_ids,
+            )
         )
 
     def has_pending_interrupt(self, run_id: str) -> bool:
@@ -1086,7 +1108,13 @@ class RunService(
             )
         return record.detail
 
-    async def run_scoped_redo(self, run_id: str, *, auto_continue: bool = False) -> None:
+    async def run_scoped_redo(
+        self,
+        run_id: str,
+        *,
+        auto_continue: bool = False,
+        preferred_issue_ids: list[str] | None = None,
+    ) -> None:
         record = self._runs.get(run_id)
         if record is None:
             return
@@ -1109,7 +1137,17 @@ class RunService(
             await self.emit(run_id, "node_completed", "hitl", None, "No QA findings to redo.")
             return
 
-        issues = self._select_redo_issues(detail)
+        issues = self._select_redo_issues(detail, preferred_issue_ids=preferred_issue_ids)
+        if not issues:
+            await self.emit(
+                run_id,
+                "node_completed",
+                "hitl",
+                None,
+                "Requested redo issue is no longer active.",
+                {"issue_ids": preferred_issue_ids or []},
+            )
+            return
         scope = self._merge_redo_scopes(issues)
         before_report = detail.report_md
         before_issue_count = len(detail.qa_findings)
@@ -1119,16 +1157,28 @@ class RunService(
         detail.status = "running"
         detail.updated_at = datetime.utcnow()
         self._persist_run(run_id)
+        structured_targets = self._structured_redo_targets(issues)
+        event_metadata = {
+            "redo_scope": scope.model_dump(mode="json"),
+            "issues": [item.model_dump(mode="json") for item in issues],
+            "requested_issue_ids": preferred_issue_ids or [],
+        }
+        redo_payload = {
+            "redo_scope": scope.model_dump(mode="json"),
+            "issues": [item.model_dump(mode="json") for item in issues],
+            "issue_ids": selected_issue_ids,
+            "requested_issue_ids": preferred_issue_ids or [],
+        }
+        if structured_targets:
+            event_metadata["structured_targets"] = structured_targets
+            redo_payload["structured_targets"] = structured_targets
         await self.emit(
             run_id,
             "node_started",
             "orchestrator",
             scope.target_subagent,
             f"Scoped redo started: {scope.kind}.",
-            {
-                "redo_scope": scope.model_dump(mode="json"),
-                "issues": [item.model_dump(mode="json") for item in issues],
-            },
+            event_metadata,
         )
         self._append_agent_message(
             record,
@@ -1138,11 +1188,7 @@ class RunService(
             else "orchestrator",
             message_type="redo_request",
             payload_schema="RedoRequestPayload",
-            payload={
-                "redo_scope": scope.model_dump(mode="json"),
-                "issues": [item.model_dump(mode="json") for item in issues],
-                "issue_ids": selected_issue_ids,
-            },
+            payload=redo_payload,
         )
 
         try:
@@ -1157,6 +1203,7 @@ class RunService(
                     issue_ids=selected_issue_ids,
                     qa_issue_ids_before=before_issue_ids,
                     issue_count_before=before_issue_count,
+                    structured_targets=structured_targets,
                     auto_continue=auto_continue,
                 )
                 await self._record_pending_graph_redo(record)
@@ -1171,6 +1218,7 @@ class RunService(
                 issue_ids=selected_issue_ids,
                 qa_issue_ids_before=before_issue_ids,
                 issue_count_before=before_issue_count,
+                structured_targets=structured_targets,
                 auto_continue=auto_continue,
             )
             await self._run_real_scoped_redo(record, scope)
@@ -1523,21 +1571,7 @@ class RunService(
             message_types={"raw_sources_collected"},
         )
         detail.raw_sources = self._normalize_collected_sources(detail, dimensions)
-        # Auto-ingest collected sources into KB
-        try:
-            from packages.tools.ingest_document import ingest_document_tool
-            for source in detail.raw_sources:
-                if source.text:
-                    await ingest_document_tool.ainvoke({
-                        "url": source.url or "",
-                        "title": source.title or "",
-                        "text": source.text[:50000],
-                        "competitor": source.competitor or "",
-                        "dimension": source.dimension or "",
-                        "source_type": source.source_type or "web",
-                    })
-        except Exception:
-            pass  # Non-fatal: KB ingestion should not block pipeline
+        kb_ingest = await self._sync_collected_sources_to_kb(record, detail, detail.raw_sources)
         self._append_agent_message(
             record,
             from_agent="collect_join",
@@ -1547,6 +1581,7 @@ class RunService(
             payload={
                 "dimensions": dimensions,
                 "source_ids": [source.id for source in detail.raw_sources],
+                "kb_ingest": kb_ingest,
             },
         )
         detail.updated_at = datetime.utcnow()
@@ -1944,10 +1979,12 @@ class RunService(
             if scope.kind == "collector":
                 if scoped_competitors:
                     target_competitors = scoped_competitors
+                    cited_source_ids = self._report_cited_raw_source_ids(detail.report_md)
                     removed_source_ids = self._remove_sources_for_collector_redo(
                         detail,
                         dimension=dimension,
                         scoped_competitors=scoped_competitors,
+                        preserve_source_ids=cited_source_ids,
                     )
                     dependent_competitors = self._competitors_with_removed_source_dependency(
                         detail,
@@ -1959,9 +1996,12 @@ class RunService(
                     ):
                         self._clear_competitor_dimension_output(detail, competitor, dimension)
                 else:
-                    detail.raw_sources = [
-                        source for source in detail.raw_sources if source.dimension != dimension
-                    ]
+                    self._remove_sources_for_collector_redo(
+                        detail,
+                        dimension=dimension,
+                        scoped_competitors=[],
+                        preserve_source_ids=self._report_cited_raw_source_ids(detail.report_md),
+                    )
                     self._clear_dimension_outputs(detail, dimension)
             elif scoped_competitors:
                 target_competitors = scoped_competitors
@@ -1991,20 +2031,42 @@ class RunService(
         *,
         dimension: str,
         scoped_competitors: list[str],
+        preserve_source_ids: set[str] | None = None,
     ) -> set[str]:
+        preserve_source_ids = preserve_source_ids or set()
         removed_source_ids: set[str] = set()
         retained_sources: list[RawSource] = []
         for source in detail.raw_sources:
-            should_remove = source.dimension == dimension and any(
-                self._source_matches_competitor(source, competitor)
-                for competitor in scoped_competitors
+            should_remove = source.dimension == dimension and (
+                not scoped_competitors
+                or any(
+                    self._source_matches_competitor(source, competitor)
+                    for competitor in scoped_competitors
+                )
             )
             if should_remove:
+                if source.id in preserve_source_ids:
+                    metadata = {
+                        **source.metadata,
+                        "redo_preserved_for_existing_citation": True,
+                        "redo_preserved_dimension": dimension,
+                        "redo_preserved_competitors": scoped_competitors,
+                    }
+                    retained_sources.append(source.model_copy(update={"metadata": metadata}))
+                    continue
                 removed_source_ids.add(source.id)
                 continue
             retained_sources.append(source)
         detail.raw_sources = retained_sources
         return removed_source_ids
+
+    @staticmethod
+    def _report_cited_raw_source_ids(report_md: str) -> set[str]:
+        return {
+            normalized
+            for token in source_tokens(report_md)
+            if (normalized := normalize_source_token(token))
+        }
 
     def _competitors_with_removed_source_dependency(
         self,
@@ -2056,6 +2118,7 @@ class RunService(
         before_issue_ids = [item.id for item in detail.qa_findings]
         selected_issue_ids = [item.id for item in issues]
         revision_iteration = len(detail.revisions) + 1
+        structured_targets = self._structured_redo_targets(issues)
         record.pending_graph_redo = PendingGraphRedo(
             iteration=revision_iteration,
             stage=scope.kind,
@@ -2065,7 +2128,16 @@ class RunService(
             issue_ids=selected_issue_ids,
             qa_issue_ids_before=before_issue_ids,
             issue_count_before=len(detail.qa_findings),
+            structured_targets=structured_targets,
         )
+        redo_payload = {
+            "redo_scope": scope.model_dump(mode="json"),
+            "issues": [item.model_dump(mode="json") for item in issues],
+            "issue_ids": selected_issue_ids,
+            "routing": "graph_conditional_edge",
+        }
+        if structured_targets:
+            redo_payload["structured_targets"] = structured_targets
         self._append_agent_message(
             record,
             from_agent="qa",
@@ -2074,25 +2146,23 @@ class RunService(
             else "orchestrator",
             message_type="redo_request",
             payload_schema="RedoRequestPayload",
-            payload={
-                "redo_scope": scope.model_dump(mode="json"),
-                "issues": [item.model_dump(mode="json") for item in issues],
-                "issue_ids": selected_issue_ids,
-                "routing": "graph_conditional_edge",
-            },
+            payload=redo_payload,
         )
         dimensions, target_competitors = self._prepare_redo_scope_inputs(detail, scope)
+        event_metadata = {
+            "redo_scope": scope.model_dump(mode="json"),
+            "dimensions": dimensions,
+            "target_competitors": target_competitors,
+        }
+        if structured_targets:
+            event_metadata["structured_targets"] = structured_targets
         await self.emit(
             detail.id,
             "node_started",
             "orchestrator",
             scope.target_subagent,
             f"QA routed graph redo through DAG edge: {scope.kind}.",
-            {
-                "redo_scope": scope.model_dump(mode="json"),
-                "dimensions": dimensions,
-                "target_competitors": target_competitors,
-            },
+            event_metadata,
         )
         return {
             "redo_kind": scope.kind,
@@ -2182,6 +2252,34 @@ class RunService(
             self._journal.append_event(event)
         for queue in list(record.subscribers):
             await queue.put(event)
+
+    def _append_run_event_sync(
+        self,
+        record: RunRecord,
+        event_type: str,
+        agent: str | None,
+        subagent: str | None,
+        message: str,
+        payload: dict[str, Any] | None = None,
+    ) -> RunEvent:
+        # Synchronous accounting paths cannot await emit(); keep persistence,
+        # journaling, and active subscriber delivery aligned with emit().
+        event = build_run_event(
+            event_id=len(record.events) + 1,
+            run_id=record.detail.id,
+            event_type=event_type,
+            agent=agent,
+            subagent=subagent,
+            message=message,
+            payload=payload or {},
+        )
+        record.events.append(event)
+        self._persist_run(record.detail.id)
+        if self._journal is not None:
+            self._journal.append_event(event)
+        for queue in list(record.subscribers):
+            queue.put_nowait(event)
+        return event
 
     def _append_agent_message(
         self,
@@ -2698,29 +2796,42 @@ class RunService(
         metadata = dict(projection.report_version.quality_metadata)
         initial_gaps = quality_gaps_from_release_gate(gate)
         initial_tasks = repair_tasks_from_gaps(initial_gaps)
-        report_repair = apply_release_gate_warning_report_repair(
-            projection.report_version.report_md,
-            gate=gate,
-            tasks=initial_tasks,
-        )
         gate_for_metadata = gate
-        if report_repair.changed:
-            projection.report_version = projection.report_version.model_copy(
-                update={"report_md": report_repair.report_md}
+        report_repair_metadata: dict[str, Any]
+        if projection.report_version.report_artifact is None:
+            report_repair = apply_release_gate_warning_report_repair(
+                projection.report_version.report_md,
+                gate=gate,
+                tasks=initial_tasks,
             )
-            after_gate = self._evaluate_report_release_gate(projection)
-            if after_gate is not None:
-                gate_for_metadata = after_gate
-                report_repair = apply_release_gate_warning_report_repair(
-                    projection.report_version.report_md,
-                    gate=gate,
-                    tasks=initial_tasks,
-                    after_gate=after_gate,
+            if report_repair.changed:
+                projection.report_version = projection.report_version.model_copy(
+                    update={"report_md": report_repair.report_md}
                 )
-                if report_repair.changed:
-                    projection.report_version = projection.report_version.model_copy(
-                        update={"report_md": report_repair.report_md}
+                after_gate = self._evaluate_report_release_gate(projection)
+                if after_gate is not None:
+                    gate_for_metadata = after_gate
+                    report_repair = apply_release_gate_warning_report_repair(
+                        projection.report_version.report_md,
+                        gate=gate,
+                        tasks=initial_tasks,
+                        after_gate=after_gate,
                     )
+                    if report_repair.changed:
+                        projection.report_version = projection.report_version.model_copy(
+                            update={"report_md": report_repair.report_md}
+                        )
+            report_repair_metadata = report_repair.metadata()
+        else:
+            self._attach_release_gate_artifact_quality(projection, gate)
+            report_repair_metadata = {
+                "changed": False,
+                "skipped": "report_artifact_v2",
+                "before_warn_count": gate.warn_count,
+                "before_blocker_count": gate.blocker_count,
+                "target_count": 0,
+                "targets": [],
+            }
         gaps = quality_gaps_from_release_gate(gate_for_metadata)
         tasks = repair_tasks_from_gaps(gaps)
         release_gate_metadata = {
@@ -2756,7 +2867,7 @@ class RunService(
                 for issue in gate_for_metadata.issues
             ],
             "repair_tasks": [task.model_dump(mode="json") for task in tasks],
-            "warning_repair": report_repair.metadata(),
+            "warning_repair": report_repair_metadata,
             "redo_scopes": [
                 scope.model_dump(mode="json")
                 for scope in repair_tasks_to_redo_scopes(tasks)
@@ -2778,6 +2889,72 @@ class RunService(
             update={"quality_metadata": metadata}
         )
         return True
+
+    def _attach_release_gate_artifact_quality(
+        self,
+        projection: EnterpriseRunProjection,
+        gate: ReportReleaseGate,
+    ) -> None:
+        artifact = projection.report_version.report_artifact
+        if artifact is None:
+            return
+
+        warnings = list(artifact.quality.warnings)
+        blockers = list(artifact.quality.blockers)
+        seen_warning_ids = {str(item.get("id")) for item in warnings if item.get("id")}
+        seen_blocker_ids = {str(item.get("id")) for item in blockers if item.get("id")}
+        for issue in gate.issues:
+            payload = (
+                issue.model_dump(mode="json")
+                if hasattr(issue, "model_dump")
+                else dict(issue)
+            )
+            issue_id = str(payload.get("id") or "")
+            if issue.severity == "blocker":
+                if issue_id and issue_id in seen_blocker_ids:
+                    continue
+                blockers.append(payload)
+                if issue_id:
+                    seen_blocker_ids.add(issue_id)
+            else:
+                if issue_id and issue_id in seen_warning_ids:
+                    continue
+                warnings.append(payload)
+                if issue_id:
+                    seen_warning_ids.add(issue_id)
+
+        gate_payload = {
+            "status": gate.status,
+            "allowed": gate.allowed,
+            "readiness_score": gate.readiness.score if gate.readiness else None,
+            "readiness_risk_level": gate.readiness.risk_level if gate.readiness else None,
+            "blocker_count": gate.blocker_count,
+            "warn_count": gate.warn_count,
+            "issue_count": gate.issue_count,
+        }
+        projection.report_version = projection.report_version.model_copy(
+            update={
+                "report_artifact": artifact.model_copy(
+                    update={
+                        "quality": artifact.quality.model_copy(
+                            update={
+                                "core_gate": gate_payload,
+                                "support_gate": {
+                                    "status": "not_applicable",
+                                    "reason": "release_gate_applies_to_core_report",
+                                },
+                                "audit_gate": {
+                                    "status": "not_applicable",
+                                    "reason": "release_gate_applies_to_core_report",
+                                },
+                                "warnings": warnings,
+                                "blockers": blockers,
+                            }
+                        )
+                    }
+                )
+            }
+        )
 
     def _apply_release_gate_run_status(
         self,
@@ -2806,11 +2983,18 @@ class RunService(
             if not issue.field_path.startswith("release_gate.")
         ]
         if gate is None:
-            if len(retained) != len(detail.qa_findings):
-                detail.qa_findings = retained
-                detail.updated_at = datetime.utcnow()
-                self._refresh_quality_metrics(detail)
-                self._sync_latest_revision_issue_count(detail)
+            final_quality = build_final_quality_result(
+                deterministic_findings=retained,
+                release_gate_findings=[],
+                readiness_score=None,
+                issue_count_before=self._final_quality_issue_count_before(detail),
+            )
+            detail.qa_findings = final_quality.findings
+            detail.updated_at = datetime.utcnow()
+            self._refresh_quality_metrics(detail)
+            self._sync_latest_revision_from_final_quality(detail, final_quality)
+            self._sync_latest_revision_recorded_event(record)
+            self._record_unified_quality_result_event(record, final_quality)
             return []
 
         gaps = quality_gaps_from_release_gate(gate)
@@ -2839,33 +3023,120 @@ class RunService(
                     problem=gap.reason,
                     redo_scope=scope,
                     self_found=True,
+                    metadata={
+                        **dict(gap.metadata),
+                        "release_gate_issue_id": gap.metadata.get("release_gate_issue_id"),
+                        "release_gate_gap_id": gap.id,
+                        "release_gate_task_id": task.id,
+                    },
                 )
             )
 
-        detail.qa_findings = [*retained, *release_issues]
+        readiness_score = gate.readiness.score if gate.readiness is not None else None
+        final_quality = build_final_quality_result(
+            deterministic_findings=retained,
+            release_gate_findings=release_issues,
+            readiness_score=readiness_score,
+            issue_count_before=self._final_quality_issue_count_before(detail),
+        )
+        detail.qa_findings = final_quality.findings
         detail.updated_at = datetime.utcnow()
         self._refresh_quality_metrics(detail)
-        self._sync_latest_revision_issue_count(detail)
+        self._sync_latest_revision_from_final_quality(detail, final_quality)
+        self._sync_latest_revision_recorded_event(record)
+        self._record_unified_quality_result_event(record, final_quality)
         return release_issues
 
-    def _sync_latest_revision_issue_count(self, detail: RunDetail) -> None:
+    def _final_quality_issue_count_before(self, detail: RunDetail) -> int:
+        if detail.revisions:
+            return detail.revisions[-1].issue_count_before
+        return len(detail.qa_findings)
+
+    def _record_unified_quality_result_event(
+        self,
+        record: RunRecord,
+        final_quality: FinalQualityResult,
+    ) -> None:
+        self._append_run_event_sync(
+            record,
+            "writer_unified_quality_result_recorded",
+            "quality",
+            None,
+            "Unified final quality result recorded.",
+            final_quality.telemetry_payload(),
+        )
+
+    def _sync_latest_revision_from_final_quality(
+        self,
+        detail: RunDetail,
+        final_quality: FinalQualityResult,
+    ) -> None:
         if not detail.revisions:
             return
         latest = detail.revisions[-1]
-        if latest.after_md and latest.after_md != detail.report_md:
+        updates: dict[str, Any] = {}
+        if latest.after_md != detail.report_md:
+            updates["after_md"] = detail.report_md
+        if latest.issue_count_after != final_quality.revision_issue_count_after:
+            updates["issue_count_after"] = final_quality.revision_issue_count_after
+        if latest.convergence_ratio != final_quality.revision_convergence_ratio:
+            updates["convergence_ratio"] = final_quality.revision_convergence_ratio
+        if not updates:
+            self._sync_report_artifact_revision_count(detail)
             return
-        issue_count_after = len(detail.qa_findings)
-        if latest.issue_count_after == issue_count_after:
+        detail.revisions[-1] = latest.model_copy(update=updates)
+        self._sync_report_artifact_revision_count(detail)
+
+    def _sync_report_artifact_revision_count(self, detail: RunDetail) -> None:
+        artifact = detail.report_artifact
+        if artifact is None:
             return
-        detail.revisions[-1] = latest.model_copy(
+        revision_count = len(detail.revisions)
+        if artifact.quality.revision_count == revision_count:
+            return
+        detail.report_artifact = artifact.model_copy(
             update={
-                "issue_count_after": issue_count_after,
-                "convergence_ratio": self._convergence_ratio(
-                    latest.issue_count_before,
-                    issue_count_after,
-                ),
+                "quality": artifact.quality.model_copy(
+                    update={"revision_count": revision_count}
+                )
             }
         )
+
+    def _sync_latest_revision_recorded_event(self, record: RunRecord) -> None:
+        detail = record.detail
+        if not detail.revisions:
+            return
+        latest = detail.revisions[-1]
+        latest_payload = latest.model_dump(mode="json")
+        for event in reversed(record.events):
+            if event.type != "revision_recorded":
+                continue
+            revision_payload = event.payload.get("revision")
+            if not isinstance(revision_payload, dict):
+                continue
+            if revision_payload.get("id") != latest.id:
+                continue
+            if revision_payload == latest_payload:
+                return
+            self._append_run_event_sync(
+                record,
+                "revision_recorded",
+                "orchestrator",
+                None,
+                (
+                    f"Revision {latest.iteration} final quality counts recorded with "
+                    f"convergence ratio {latest.convergence_ratio:.2f}."
+                ),
+                self._revision_recorded_payload(latest),
+            )
+            return
+
+    def _revision_recorded_payload(self, revision: RevisionRecord) -> dict[str, Any]:
+        payload: dict[str, Any] = {"revision": revision.model_dump(mode="json")}
+        structured_targets = revision.metadata.get("structured_targets")
+        if structured_targets:
+            payload["structured_targets"] = structured_targets
+        return payload
 
     def _release_gate_detected_by(self, scope: RedoScope) -> str:
         if scope.kind == "writer_only":
@@ -3062,8 +3333,18 @@ class RunService(
         issue_ids: list[str],
         qa_issue_ids_before: list[str],
         issue_count_before: int,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         detail = record.detail
+        revision_metadata = dict(metadata or {})
+        if "structured_targets" not in revision_metadata:
+            selected_issue_ids = set(issue_ids)
+            selected_issues = [
+                issue for issue in detail.qa_findings if issue.id in selected_issue_ids
+            ]
+            structured_targets = self._structured_redo_targets(selected_issues)
+            if structured_targets:
+                revision_metadata["structured_targets"] = structured_targets
         revision = build_revision_record(
             detail,
             iteration=iteration,
@@ -3074,6 +3355,7 @@ class RunService(
             issue_ids=issue_ids,
             qa_issue_ids_before=qa_issue_ids_before,
             issue_count_before=issue_count_before,
+            metadata=revision_metadata,
         )
         detail.revisions.append(revision)
         detail.updated_at = datetime.utcnow()
@@ -3087,7 +3369,7 @@ class RunService(
                 f"Revision {iteration} recorded with convergence ratio "
                 f"{revision.convergence_ratio:.2f}."
             ),
-            {"revision": revision.model_dump(mode="json")},
+            self._revision_recorded_payload(revision),
         )
 
     async def _record_pending_graph_redo(self, record: RunRecord) -> None:
@@ -3105,6 +3387,11 @@ class RunService(
             issue_ids=pending.issue_ids,
             qa_issue_ids_before=pending.qa_issue_ids_before,
             issue_count_before=pending.issue_count_before,
+            metadata=(
+                {"structured_targets": pending.structured_targets}
+                if pending.structured_targets
+                else None
+            ),
         )
 
     def _convergence_ratio(self, issue_count_before: int, issue_count_after: int) -> float:
@@ -3141,12 +3428,38 @@ class RunService(
 
         return sorted(detail.qa_findings, key=rank)[0]
 
-    def _select_redo_issues(self, detail: RunDetail) -> list[QCIssue]:
+    def _select_redo_issues(
+        self,
+        detail: RunDetail,
+        *,
+        preferred_issue_ids: list[str] | None = None,
+    ) -> list[QCIssue]:
+        if preferred_issue_ids:
+            requested = {issue_id.strip() for issue_id in preferred_issue_ids if issue_id.strip()}
+            matched = [
+                issue
+                for issue in detail.qa_findings
+                if self._issue_selection_keys(issue) & requested
+            ]
+            if not matched:
+                return []
+            if len(matched) == 1:
+                return matched
+            primary = self._select_redo_issue_from_pool(matched)
+            return self._expand_redo_issue_batch(primary, matched)
+
         clustered = self._select_largest_batchable_redo_cluster(detail)
         if clustered:
             return clustered
 
         primary = self._select_redo_issue(detail)
+        return self._expand_redo_issue_batch(primary, detail.qa_findings)
+
+    def _expand_redo_issue_batch(
+        self,
+        primary: QCIssue,
+        candidates: list[QCIssue],
+    ) -> list[QCIssue]:
         primary_scope = primary.redo_scope
         if primary_scope.kind not in {"collector", "analyst"} or not primary_scope.target_subagent:
             return [primary]
@@ -3158,7 +3471,7 @@ class RunService(
             for competitor in [primary_scope.target_competitor, *primary_scope.target_competitors]
             if competitor
         }
-        for candidate in sorted(detail.qa_findings, key=lambda issue: issue.id):
+        for candidate in sorted(candidates, key=lambda issue: issue.id):
             if candidate.id in selected_ids:
                 continue
             scope = candidate.redo_scope
@@ -3182,6 +3495,35 @@ class RunService(
             if len(selected) >= 3:
                 break
         return selected
+
+    def _select_redo_issue_from_pool(self, issues: list[QCIssue]) -> QCIssue:
+        if len(issues) == 1:
+            return issues[0]
+        kind_rank = {
+            "collector": 0,
+            "analyst": 1,
+            "comparator": 2,
+            "writer_only": 3,
+            "full": 4,
+        }
+        return sorted(
+            issues,
+            key=lambda issue: (
+                {"blocker": 0, "warn": 1, "info": 2}.get(issue.severity, 3),
+                0 if issue.redo_scope.target_competitor else 1,
+                kind_rank.get(issue.redo_scope.kind, 5),
+                0 if issue.detected_by in {"schema", "citation", "coverage"} else 1,
+                issue.id,
+            ),
+        )[0]
+
+    def _issue_selection_keys(self, issue: QCIssue) -> set[str]:
+        keys = {issue.id}
+        for key in ("release_gate_issue_id", "run_qa_finding_id", "release_gate_task_id"):
+            value = issue.metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                keys.add(value.strip())
+        return keys
 
     def _select_largest_batchable_redo_cluster(self, detail: RunDetail) -> list[QCIssue]:
         if not detail.qa_findings:
@@ -3267,6 +3609,30 @@ class RunService(
                 + "; ".join(issue.problem for issue in issues[:3])
             ),
         )
+
+    def _structured_redo_targets(self, issues: list[QCIssue]) -> dict[str, Any]:
+        structured_targets: dict[str, Any] = {}
+        for issue in issues:
+            issue_targets = {
+                "source_id": issue.metadata.get("source_id"),
+                "claim_card_id": issue.metadata.get("claim_card_id"),
+                "decision_card_id": issue.metadata.get("decision_card_id"),
+                "section_key": issue.metadata.get("section_key"),
+                "artifact_layer": issue.metadata.get("artifact_layer"),
+            }
+            issue_targets = {
+                key: value for key, value in issue_targets.items() if value
+            }
+            for key, value in issue_targets.items():
+                existing = structured_targets.get(key)
+                if existing is None:
+                    structured_targets[key] = value
+                elif existing != value:
+                    values = existing if isinstance(existing, list) else [existing]
+                    if value not in values:
+                        values.append(value)
+                    structured_targets[key] = values
+        return structured_targets
 
     def _redo_scope_key(self, scope: RedoScope) -> str:
         competitors = (
