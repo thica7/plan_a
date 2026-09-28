@@ -1559,7 +1559,10 @@ def _localized_heading_score(detail: RunDetail) -> float:
 
 
 def _has_cjk_heading(markdown: str) -> bool:
-    return any(re.search(r"[\u3400-\u9fff]", heading) for heading in _all_markdown_headings(markdown))
+    return any(
+        re.search(r"[\u3400-\u9fff]", heading)
+        for heading in _all_markdown_headings(markdown)
+    )
 
 
 BATTLECARD_TEMPLATE_PHRASES = (

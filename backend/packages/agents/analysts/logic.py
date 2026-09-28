@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import re
@@ -142,132 +141,6 @@ class AnalystAgentMixin:
             "Analyst dispatch completed.",
             {"fanout": "competitor_x_slice"},
         )
-
-    async def _run_analyst_react(
-        self,
-        record: RunRecord,
-        dimension: str,
-        context: SubagentContext,
-        dimension_sources: list[dict[str, Any]],
-    ) -> dict[str, Any] | None:
-        detail = record.detail
-        observations: list[dict[str, object]] = []
-        inspected = False
-        validated_source_ids: set[str] = set()
-        qa_feedback = [
-            item
-            for competitor in detail.plan.competitors
-            for item in self._qa_feedback_for_branch(detail, "analyst", dimension, competitor)
-        ]
-        max_turns = self._analyst_task_max_turns(detail.plan, dimension)
-        for turn in range(1, max_turns + 1):
-            payload = await self._trace_llm_json(
-                record,
-                agent="analyst",
-                subagent=dimension,
-                name=f"{dimension}_analyst_react_turn_{turn}",
-                system=(
-                    "You are a bounded analyst ReAct runner. Decide exactly one next action. "
-                    "Allowed actions are inspect_sources, validate_citations, finish. "
-                    "Use only the provided RawSource JSON. Do not invent facts. "
-                    "Finish only when findings are grouped by competitor and cite source IDs "
-                    "when possible."
-                ),
-                user=(
-                    f"Topic: {detail.topic}\n"
-                    f"Dimension: {dimension}\n"
-                    f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                    f"Sources JSON: {json.dumps(dimension_sources, ensure_ascii=False)}\n"
-                    f"QA feedback for redo: {json.dumps(qa_feedback, ensure_ascii=False)}\n"
-                    f"Observations JSON: {json.dumps(observations, ensure_ascii=False)}\n\n"
-                    "Return one action. For finish, include competitor_findings, "
-                    "source_ids_used, and caveats."
-                ),
-                schema_hint=(
-                    '{"action":"inspect_sources|validate_citations|finish",'
-                    '"source_ids":["source-id"],"rationale":"short reason",'
-                    '"competitor_findings":{"competitor":["finding with source id"]},'
-                    '"source_ids_used":["source-id"],"caveats":["caveat"]}'
-                ),
-                context=context,
-            )
-            action = str(payload.get("action") or "").strip().lower()
-            if action == "inspect_sources":
-                observation = self._inspect_sources_tool(
-                    record, dimension, context, dimension_sources
-                )
-                inspected = True
-                observations.append({"turn": turn, "action": action, "observation": observation})
-                continue
-            if action == "validate_citations":
-                requested_source_ids = self._string_list(
-                    payload.get("source_ids") or payload.get("source_ids_used")
-                )
-                observation = self._validate_source_ids_tool(
-                    record,
-                    dimension,
-                    context,
-                    dimension_sources,
-                    requested_source_ids,
-                )
-                validated_source_ids.update(
-                    str(source_id) for source_id in observation["valid_source_ids"]
-                )
-                observations.append({"turn": turn, "action": action, "observation": observation})
-                continue
-            if action == "finish":
-                normalized = self._normalize_competitor_findings(detail, payload)
-                if not any(findings for findings in normalized.values()):
-                    observations.append({"turn": turn, "action": action, "error": "empty_findings"})
-                    continue
-                if not inspected:
-                    observation = self._inspect_sources_tool(
-                        record, dimension, context, dimension_sources
-                    )
-                    inspected = True
-                    observations.append(
-                        {
-                            "turn": turn,
-                            "action": "inspect_sources",
-                            "observation": observation,
-                            "reason": "required_before_finish",
-                        }
-                    )
-                used_source_ids = self._source_ids_from_analyst_payload(payload, dimension_sources)
-                unvalidated_source_ids = [
-                    source_id
-                    for source_id in used_source_ids
-                    if source_id not in validated_source_ids
-                ]
-                if used_source_ids and unvalidated_source_ids:
-                    observation = self._validate_source_ids_tool(
-                        record,
-                        dimension,
-                        context,
-                        dimension_sources,
-                        unvalidated_source_ids,
-                    )
-                    validated_source_ids.update(
-                        str(source_id) for source_id in observation["valid_source_ids"]
-                    )
-                    observations.append(
-                        {
-                            "turn": turn,
-                            "action": "validate_citations",
-                            "observation": observation,
-                            "reason": "required_before_finish",
-                        }
-                    )
-                    if (
-                        observation["unknown_source_ids"]
-                        and turn < max_turns
-                    ):
-                        continue
-                return self._ensure_analyst_citations(detail, dimension, payload, normalized)
-            observations.append(
-                {"turn": turn, "action": action or "unknown", "error": "unsupported_action"}
-            )
-        return None
 
     def _source_ids_from_analyst_payload(
         self,
@@ -673,8 +546,7 @@ class AnalystAgentMixin:
             qa_feedback=qa_feedback,
         )
         try:
-            payload = await asyncio.wait_for(
-                self._trace_llm_json(
+            payload = await self._trace_llm_json(
                     record,
                     agent="analyst",
                     subagent=branch_id,
@@ -695,8 +567,7 @@ class AnalystAgentMixin:
                     ),
                     schema_hint=self._structured_knowledge_schema_hint(dimension),
                     context=context,
-                ),
-                timeout=branch_timeout,
+                    timeout_seconds=branch_timeout,
             )
         except TimeoutError:
             payload = self._deterministic_structured_knowledge_payload(
@@ -951,77 +822,6 @@ class AnalystAgentMixin:
             competitor=competitor,
             dimension=dimension,
             source=source,
-        )
-
-    async def _real_analyst_step(self, record: RunRecord, dimension: str) -> None:
-        detail = record.detail
-        context = SubagentContext(run_id=detail.id, agent="analyst", subagent=dimension)
-        detail.current_node = "analyst"
-        await self.emit(
-            detail.id,
-            "node_started",
-            "analyst",
-            dimension,
-            f"Calling {dimension} analyst.",
-            {"context": context.metadata()},
-        )
-        dimension_sources = [
-            source.model_dump(mode="json")
-            for source in detail.raw_sources
-            if source.dimension == dimension
-        ]
-        react_payload: dict[str, object] = {}
-        if self._settings.analyst_react_enabled:
-            try:
-                payload = await self._run_analyst_react(
-                    record, dimension, context, dimension_sources
-                )
-                if payload is not None:
-                    self._merge_kb_slice(
-                        detail, dimension, self._normalize_competitor_findings(detail, payload)
-                    )
-                    detail.updated_at = datetime.utcnow()
-                    await self.emit(
-                        detail.id,
-                        "node_completed",
-                        "analyst",
-                        dimension,
-                        f"ReAct analyst completed {dimension} slice.",
-                        {"analysis": payload, "context": context.metadata()},
-                    )
-                    return
-            except Exception as exc:  # noqa: BLE001 - bounded ReAct falls back to one-shot analysis.
-                react_payload["react_error"] = str(exc)
-
-        payload = await self._trace_llm_json(
-            record,
-            agent="analyst",
-            subagent=dimension,
-            name=f"{dimension}_analyst",
-            system=(
-                "You are an analyst subagent. Convert source candidates into "
-                "comparison-ready findings."
-            ),
-            user=(
-                f"Topic: {detail.topic}\n"
-                f"Dimension: {dimension}\n"
-                f"Sources JSON: {json.dumps(dimension_sources, ensure_ascii=False)}\n\n"
-                "Return concise findings grouped by competitor. Use only the provided sources."
-            ),
-            schema_hint='{"competitor_findings":{"competitor":["finding"]},"caveats":["caveat"]}',
-            context=context,
-        )
-        self._merge_kb_slice(
-            detail, dimension, self._normalize_competitor_findings(detail, payload)
-        )
-        detail.updated_at = datetime.utcnow()
-        await self.emit(
-            detail.id,
-            "node_completed",
-            "analyst",
-            dimension,
-            f"Analyst completed {dimension} slice.",
-            {"analysis": payload, "react": react_payload, "context": context.metadata()},
         )
 
     async def _real_analyst_join_step(

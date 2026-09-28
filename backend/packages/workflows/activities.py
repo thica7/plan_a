@@ -81,6 +81,7 @@ class CompetitiveIntelActivities:
                 execution_mode=request.execution_mode,
                 auto_redo_warn_enabled=request.auto_redo_warn_enabled,
                 hitl_enabled=request.hitl_enabled,
+                output_language=request.output_language,
             )
         )
         return _run_state(detail)

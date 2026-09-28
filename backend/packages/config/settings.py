@@ -123,6 +123,12 @@ class Settings:
     comparator_timeout_seconds: float = 120.0
     writer_timeout_seconds: float = 600.0
     writer_structured_report_enabled: bool = True
+    graph_max_concurrency: int = 4
+    llm_max_concurrency: int = 4
+    writer_segment_max_concurrency: int = 3
+    writer_max_segments: int = 64
+    run_llm_max_calls: int = 160
+    run_llm_max_repairs: int = 32
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
@@ -255,6 +261,14 @@ def get_settings() -> Settings:
             minimum=0,
             maximum=6,
         ),
+        graph_max_concurrency=_env_int("GRAPH_MAX_CONCURRENCY", 4, minimum=1, maximum=64),
+        llm_max_concurrency=_env_int("LLM_MAX_CONCURRENCY", 4, minimum=1, maximum=64),
+        writer_segment_max_concurrency=_env_int(
+            "WRITER_SEGMENT_MAX_CONCURRENCY", 3, minimum=1, maximum=32,
+        ),
+        writer_max_segments=_env_int("WRITER_MAX_SEGMENTS", 64, minimum=1, maximum=256),
+        run_llm_max_calls=_env_int("RUN_LLM_MAX_CALLS", 160, minimum=1, maximum=2000),
+        run_llm_max_repairs=_env_int("RUN_LLM_MAX_REPAIRS", 32, minimum=0, maximum=500),
         analyst_react_enabled=_env_bool("ANALYST_REACT_ENABLED", True),
         analyst_react_max_turns=max(1, min(6, int(os.getenv("ANALYST_REACT_MAX_TURNS", "3")))),
         analyst_react_fanout_threshold=_env_int(
@@ -430,4 +444,3 @@ if __name__ == "__main__":
         print(f"llm_timeout_seconds={settings.llm_timeout_seconds}")
         print(f"hitl_timeout_seconds={settings.hitl_timeout_seconds}")
         sys.exit(0)
-

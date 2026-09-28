@@ -9,12 +9,10 @@ import httpx
 
 from packages.config import Settings
 from packages.governance import build_model_route_decision
+from packages.llm.errors import LLMError, LLMExecutionLimitError
+from packages.llm.execution_budget import current_llm_execution
 from packages.llm.json_extract import JsonExtractionError, extract_json_object
 from packages.schema.enterprise import ModelProviderKind, ModelRouteDecision
-
-
-class LLMError(RuntimeError):
-    pass
 
 
 class _RetryableLLMError(LLMError):
@@ -74,6 +72,8 @@ class DoubaoClient:
                     user=user,
                 )
                 return self._extract_json(content)
+            except LLMExecutionLimitError:
+                raise
             except Exception as exc:
                 errors.append(f"{provider.name}: {exc}")
                 self._last_usage = None
@@ -95,6 +95,8 @@ class DoubaoClient:
                     system=system,
                     user=user,
                 )
+            except LLMExecutionLimitError:
+                raise
             except LLMError as exc:
                 errors.append(f"{provider.name}: {exc}")
                 self._last_usage = None
@@ -127,6 +129,9 @@ class DoubaoClient:
         attempts = max(1, self._settings.llm_max_retries + 1)
         for attempt in range(attempts):
             try:
+                execution = current_llm_execution.get()
+                if execution is not None:
+                    execution.reserve_transport()
                 response = await self._post_chat_completion(url, payload, headers)
                 if response.status_code >= 400:
                     message = (

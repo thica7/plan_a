@@ -688,6 +688,15 @@ def _structured_report_md() -> str:
 Cursor has clearer standalone pricing evidence, while Copilot benefits from broader enterprise
 distribution. The recommendation is evidence-backed but still requires security and procurement
 verification before publication. [source:source-0] [source:source-1]
+For teams comparing the two options, pricing clarity alone should not decide the purchase:
+the buyer should verify deployment controls, migration effort, and the expected number of
+active seats. Cursor offers a focused workflow to pilot with a small engineering group,
+while Copilot can fit teams already buying through an established enterprise agreement.
+The next decision checkpoint is a side-by-side pilot with current official terms and
+security documentation, followed by a cost comparison using the same seat assumptions.
+Until those checks are complete, treat the recommendation as a draft buying hypothesis
+rather than a verified claim about total cost or productivity. [source:source-0]
+[source:source-1] [source:source-2] [source:source-3]
 
 ## Decision Summary
 - Choose Cursor when the buyer values a focused AI coding workspace, transparent standalone

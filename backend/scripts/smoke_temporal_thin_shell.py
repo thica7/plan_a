@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
 from packages.orchestrator.service import RunService
+from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.skills.registry import SkillRegistry
 from packages.workflows.activities import CompetitiveIntelActivities
 from packages.workflows.models import CompetitiveIntelWorkflowInput
@@ -28,6 +29,7 @@ async def main() -> None:
             llm_temperature=0.2,
         ),
         enterprise_store=store,
+        graph_checkpointer=GraphCheckpointer.in_memory(),
     )
     activities = CompetitiveIntelActivities(service)
     request = CompetitiveIntelWorkflowInput(

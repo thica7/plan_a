@@ -135,6 +135,7 @@ class ComparatorAgentMixin:
                         agent="comparator",
                         subagent=None,
                         name="comparison_matrix",
+                        is_repair=attempt > 1,
                         system=(
                             "You are a comparator. Build a compact "
                             "cross-competitor matrix summary."

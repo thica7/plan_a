@@ -4,14 +4,15 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from test_writer_structured_renderer import _report
 
 from packages.agents.writer.assembler import StructuredReportAssembler
 from packages.agents.writer.logic import (
-    CitedTextListSection,
     STRUCTURED_SECTION_INPUT_TARGET_CHARS,
+    CitedTextListSection,
     WriterAgentMixin,
-    build_structured_writer_section_plan,
     _structured_section_inputs,
+    build_structured_writer_section_plan,
 )
 from packages.agents.writer.structured_report import (
     BattlecardSection,
@@ -22,7 +23,6 @@ from packages.agents.writer.structured_sections import StructuredSectionGenerati
 from packages.orchestrator.service import RunRecord
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import AnalysisPlan, RawSource
-from test_writer_structured_renderer import _report
 
 
 def test_structured_assembler_accepts_complete_report_and_emits_coverage_telemetry() -> None:
@@ -57,7 +57,7 @@ class _WriterHarness(WriterAgentMixin):
         self.prompts: list[str] = []
         self.emitted_events: list[tuple[str, str, str | None, str | None, str, dict[str, object] | None]] = []
 
-    async def _trace_llm_text(self, record, *, agent, subagent, name, system, user) -> str:
+    async def _trace_llm_text(self, record, *, agent, subagent, name, system, user, is_repair=False) -> str:
         self.prompts.append(system + "\n" + user)
         return self.responses.pop(0)
 

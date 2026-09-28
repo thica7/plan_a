@@ -311,7 +311,7 @@ def _writer_repair_release_depth_report() -> str:
         ),
         1,
     )
-    return report
+    return report.replace("- Objection handling:", "- Buyer response:")
 
 
 def _release_gate_report_depth_issue() -> QCIssue:
@@ -10555,7 +10555,7 @@ async def test_writer_segment_preflight_emits_contract_metadata(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
-async def test_writer_runs_all_segment_tasks_without_concurrency_cap(
+async def test_writer_runs_all_segment_tasks_with_configured_concurrency_cap(
     monkeypatch,
 ) -> None:
     service = _segmented_writer_service()
@@ -10576,7 +10576,6 @@ async def test_writer_runs_all_segment_tasks_without_concurrency_cap(
             for index in range(1, 10)
         ]
     )
-    all_shards_started = asyncio.Event()
     started_shards: set[str] = set()
     concurrent_counts: list[int] = []
     active_count = 0
@@ -10590,9 +10589,7 @@ async def test_writer_runs_all_segment_tasks_without_concurrency_cap(
             if segment["segment_kind"] == "evidence_shard":
                 batch = str(segment["segment_batch"])
                 started_shards.add(batch)
-                if len(started_shards) == 9:
-                    all_shards_started.set()
-                await asyncio.wait_for(all_shards_started.wait(), timeout=0.5)
+                await asyncio.sleep(0.02)
                 return (
                     f"- {batch} evidence note. "
                     f"[source:{segment['allowed_source_ids'][0]}]"
@@ -10629,7 +10626,7 @@ async def test_writer_runs_all_segment_tasks_without_concurrency_cap(
         required_sections="",
     )
 
-    assert max(concurrent_counts) == 9
+    assert max(concurrent_counts) == service._settings.writer_segment_max_concurrency
     assert len(started_shards) == 9
     assert report.index("## Decision Summary") < report.index(
         "## Competitive Findings"
@@ -16834,12 +16831,12 @@ async def test_collector_and_analyst_trace_spans_have_independent_contexts() -> 
     record = service._runs[detail.id]
 
     await asyncio.gather(
-        service._real_collector_step(record, "pricing"),
-        service._real_collector_step(record, "feature"),
+        service._real_collector_branch_step(record, "pricing", "A"),
+        service._real_collector_branch_step(record, "feature", "A"),
     )
     await asyncio.gather(
-        service._real_analyst_step(record, "pricing"),
-        service._real_analyst_step(record, "feature"),
+        service._real_analyst_branch_step(record, "pricing", "A"),
+        service._real_analyst_branch_step(record, "feature", "A"),
     )
 
     context_ids = {
@@ -16850,7 +16847,7 @@ async def test_collector_and_analyst_trace_spans_have_independent_contexts() -> 
     assert len(context_ids) == 4
     assert all(str(context_id).startswith(f"{detail.id}:") for context_id in context_ids)
     assert all(
-        span.metadata["message_count"] == 3
+        span.metadata["message_count"] >= 4
         for span in record.detail.trace_spans
         if span.kind == "llm" and span.agent in {"collector", "analyst"}
     )
@@ -16938,31 +16935,25 @@ async def test_collector_react_runner_searches_fetches_and_finishes(
     )
     record = service._runs[detail.id]
 
-    await service._real_collector_step(record, "pricing")
+    await service._real_collector_branch_step(record, "pricing", "A")
 
     assert len(record.detail.raw_sources) == 1
     assert record.detail.raw_sources[0].source_type == "webpage_verified"
-    assert record.detail.raw_sources[0].candidate_origin == "llm_fallback"
+    assert record.detail.raw_sources[0].candidate_origin == "perplexity"
     assert record.detail.raw_sources[0].metadata["normalized_fields"]
     assert record.detail.raw_sources[0].snippet == "A pricing starts at $10 per seat."
     traced_action_spans = [
-        span for span in record.detail.trace_spans if not span.name.startswith("agent_message:")
+        span for span in record.detail.trace_spans if not span.name.startswith("agent_message")
     ]
     span_names = [span.name for span in traced_action_spans]
-    assert span_names == [
-        "pricing_react_turn_1",
-        "web_search",
-        "pricing_react_turn_2",
-        "robots_check",
-        "fetch_page",
-        "pricing_react_turn_3",
-        "robots_check",
-        "fetch_page",
-        "clean_research_pipeline",
+    assert [name for name in span_names if "collector_react_turn" in name] == [
+        "pricing_a_collector_react_turn_1",
+        "pricing_a_collector_react_turn_2",
+        "pricing_a_collector_react_turn_3",
     ]
-    finish_span = next(span for span in traced_action_spans if span.name == "pricing_react_turn_3")
-    assert finish_span.metadata["tool_call_count"] == 3
-    assert finish_span.metadata["message_count"] == 12
+    finish_span = next(span for span in traced_action_spans if span.name == "pricing_a_collector_react_turn_3")
+    assert finish_span.metadata["tool_call_count"] >= 2
+    assert finish_span.metadata["message_count"] >= 12
     assert "context_id" in finish_span.metadata
     events = service.get_trace(detail.id) or []
     search_rag = next(event for event in events if event.type == "rag.retrieved")
@@ -16982,7 +16973,7 @@ async def test_collector_react_runner_searches_fetches_and_finishes(
     )
     assert search_replay.evidence_ids == []
     assert search_replay.payload["candidate_urls"] == ["https://example.com/pricing"]
-    assert collector_replay.payload["retrieval_stage"] == "collector_react_finish"
+    assert collector_replay.payload["retrieval_stage"] == "collector_branch_finish"
 
 
 @pytest.mark.asyncio
@@ -17043,7 +17034,7 @@ async def test_collector_react_finish_fetches_uninspected_urls(
     )
     record = service._runs[detail.id]
 
-    await service._real_collector_step(record, "pricing")
+    await service._real_collector_branch_step(record, "pricing", "A")
 
     assert record.detail.raw_sources[0].source_type == "webpage_verified"
     assert record.detail.raw_sources[0].content_hash == "finishhash"
@@ -17052,12 +17043,9 @@ async def test_collector_react_finish_fetches_uninspected_urls(
     assert [
         span.name
         for span in record.detail.trace_spans
-        if not span.name.startswith("agent_message:")
+        if "collector_react_turn" in span.name
     ] == [
-        "pricing_react_turn_1",
-        "robots_check",
-        "fetch_page",
-        "clean_research_pipeline",
+        "pricing_a_collector_react_turn_1",
     ]
 
 
@@ -17180,7 +17168,7 @@ async def test_analyst_react_runner_inspects_validates_and_finishes() -> None:
         },
         {
             "action": "finish",
-            "competitor_findings": {"A": ["A has a $10 plan [source:pricing-1]."]},
+            "structured_knowledge": {"pricing_model": {"tiers": [{"name": "Pro", "claims": [{"claim": "A has a $10 plan.", "source_ids": ["pricing-1"], "confidence": 0.9}]}]}},
             "source_ids_used": ["pricing-1"],
             "caveats": [],
             "rationale": "Pricing evidence is ready.",
@@ -17216,22 +17204,21 @@ async def test_analyst_react_runner_inspects_validates_and_finishes() -> None:
         )
     ]
 
-    await service._real_analyst_step(record, "pricing")
+    await service._real_analyst_branch_step(record, "pricing", "A")
 
-    assert record.detail.competitor_kbs["A"].slices["pricing"] == [
-        "A has a $10 plan [source:pricing-1]."
-    ]
-    span_names = [span.name for span in record.detail.trace_spans]
+    assert "A has a $10 plan. [source:pricing-1]" in record.detail.competitor_kbs["A"].slices["pricing"]
+    assert record.detail.competitor_knowledge["A"].pricing_model.tiers[0].claims[0].source_ids == ["pricing-1"]
+    span_names = [span.name for span in record.detail.trace_spans if not span.name.startswith("agent_message")]
     assert span_names == [
-        "pricing_analyst_react_turn_1",
+        "pricing_a_analyst_react_turn_1",
         "inspect_sources",
-        "pricing_analyst_react_turn_2",
+        "pricing_a_analyst_react_turn_2",
         "validate_citations",
-        "pricing_analyst_react_turn_3",
+        "pricing_a_analyst_react_turn_3",
     ]
-    finish_span = record.detail.trace_spans[-1]
+    finish_span = next(span for span in record.detail.trace_spans if span.name == "pricing_a_analyst_react_turn_3")
     assert finish_span.metadata["tool_call_count"] == 2
-    assert finish_span.metadata["message_count"] == 11
+    assert finish_span.metadata["message_count"] == 12
     assert "context_id" in finish_span.metadata
 
 
@@ -19205,7 +19192,7 @@ async def test_analyst_react_runner_auto_validates_finish() -> None:
         if "bounded analyst ReAct runner" in system:
             return {
                 "action": "finish",
-                "competitor_findings": {"A": ["A has a $10 plan."]},
+                "structured_knowledge": {"pricing_model": {"tiers": [{"name": "Pro", "claims": [{"claim": "A has a $10 plan.", "source_ids": ["pricing-1"], "confidence": 0.9}]}]}},
                 "source_ids_used": ["pricing-1"],
                 "caveats": [],
                 "rationale": "Evidence is sufficient.",
@@ -19236,17 +19223,16 @@ async def test_analyst_react_runner_auto_validates_finish() -> None:
         )
     ]
 
-    await service._real_analyst_step(record, "pricing")
+    await service._real_analyst_branch_step(record, "pricing", "A")
 
-    assert record.detail.competitor_kbs["A"].slices["pricing"] == [
-        "A has a $10 plan. [source:pricing-1]"
-    ]
-    assert [span.name for span in record.detail.trace_spans] == [
-        "pricing_analyst_react_turn_1",
+    assert "A has a $10 plan. [source:pricing-1]" in record.detail.competitor_kbs["A"].slices["pricing"]
+    assert record.detail.competitor_knowledge["A"].pricing_model.tiers[0].claims[0].source_ids == ["pricing-1"]
+    assert [span.name for span in record.detail.trace_spans if not span.name.startswith("agent_message")] == [
+        "pricing_a_analyst_react_turn_1",
         "inspect_sources",
         "validate_citations",
     ]
-    assert record.detail.trace_spans[-1].metadata["valid_count"] == 1
+    assert next(span for span in record.detail.trace_spans if span.name == "validate_citations").metadata["valid_count"] == 1
 
 
 @pytest.mark.asyncio

@@ -10,19 +10,20 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from packages.agents.writer.artifact_assembler import assemble_report_artifact_v2
+from packages.agents.writer.artifact_publication_contract import (
+    validate_report_artifact_publication,
+)
 from packages.agents.writer.assembler import (
     ReportSectionFragment,
     assemble_report_fragments,
     assemble_report_sections,
 )
-from packages.agents.writer.artifact_assembler import assemble_report_artifact_v2
-from packages.agents.writer.artifact_publication_contract import (
-    validate_report_artifact_publication,
-)
 from packages.agents.writer.evidence_pack import (
     SEGMENT_INPUT_TARGET_CHARS,
     build_writer_evidence_pack,
 )
+from packages.agents.writer.execution import bounded_segment_map
 from packages.agents.writer.publication_contract import (
     PublicationContractIssue,
     PublicationContractResult,
@@ -38,18 +39,26 @@ from packages.agents.writer.repair import (
     section_regression_problem,
     structured_repair_target_for_issue,
 )
+from packages.agents.writer.section_briefs import (
+    build_section_briefs,
+    segment_payloads_from_briefs,
+)
 from packages.agents.writer.segment_contract import (
     CORE_HEADING_KEYS,
     SECTION_ALLOWED_KEYS,
-    SegmentContract,
     SUPPORT_HEADING_KEYS,
+    SegmentContract,
     heading_key_for,
     segment_contract_for,
     validate_segment_contract,
 )
-from packages.agents.writer.section_briefs import (
-    build_section_briefs,
-    segment_payloads_from_briefs,
+from packages.agents.writer.structured_hygiene import (
+    contains_internal_writer_term,
+    find_malformed_source_token_attempts,
+)
+from packages.agents.writer.structured_repair import (
+    previous_recommendation_posture,
+    recommendation_delta_problem,
 )
 from packages.agents.writer.structured_report import (
     BattlecardSection,
@@ -64,24 +73,16 @@ from packages.agents.writer.structured_report import (
     SwotSection,
     UserReviewThemesSection,
 )
-from packages.agents.writer.structured_hygiene import (
-    contains_internal_writer_term,
-    find_malformed_source_token_attempts,
-)
 from packages.agents.writer.structured_sections import (
     StructuredReportGenerationError,
     StructuredSectionGenerationError,
 )
-from packages.agents.writer.structured_repair import (
-    previous_recommendation_posture,
-    recommendation_delta_problem,
-)
 from packages.business_intel.release_gate import REPORT_RICHNESS_MINIMUMS
+from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.report_sections import (
     build_report_section_index,
     parse_report_section_marker,
 )
-from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.scenarios import get_scenario_pack
 from packages.i18n.language import (
     language_instruction,
@@ -94,6 +95,7 @@ from packages.identity.source_resolver import (
     source_token_match_value,
     source_tokens,
 )
+from packages.llm.errors import LLMExecutionLimitError
 from packages.rag.grounded_prompt import build_run_grounding_prompt
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
@@ -1253,8 +1255,14 @@ class WriterAgentMixin:
                 output_language=detail.output_language,
                 competitors=detail.plan.competitors,
             )
-            preflight = run_writer_quality_preflight(detail, assembled.markdown)
-            quality_gate = _assemble_repair_quality_gate(detail, assembled.markdown)
+            assembled_report = assembled.markdown
+            gap_lines = self._backfill_rag_gap_fill_section(detail)
+            if gap_lines and not self._report_has_any_h2_heading(
+                assembled_report, self._report_label_aliases("rag_gap_fill")
+            ):
+                assembled_report += "\n\n" + self._section_body(gap_lines)
+            preflight = run_writer_quality_preflight(detail, assembled_report)
+            quality_gate = _assemble_repair_quality_gate(detail, assembled_report)
             await self.emit(
                 detail.id,
                 "writer_assemble_repair_completed",
@@ -1268,10 +1276,7 @@ class WriterAgentMixin:
                 },
             )
             if preflight.passed and quality_gate["quality_gate_passed"]:
-                detail.report_md = self._harden_report_markdown(
-                    detail,
-                    assembled.markdown,
-                )
+                detail.report_md = self._harden_report_markdown(detail, assembled_report)
                 writer_mode = "writer repair: assemble"
                 assemble_repair_succeeded = True
             else:
@@ -2473,6 +2478,7 @@ class WriterAgentMixin:
                         agent="writer",
                         subagent=None,
                         name="structured_report_section_retry",
+                        is_repair=True,
                         system=(
                             "You are fixing a structured writer JSON response. "
                             "Return valid JSON only."
@@ -2825,9 +2831,17 @@ class WriterAgentMixin:
         if not segments:
             return []
 
-        async def run_segment(
-            segment: dict[str, object],
-        ) -> tuple[dict[str, object], str, SegmentContract]:
+        max_segments = max(1, getattr(self._settings, "writer_max_segments", 64))
+        if len(segments) > max_segments:
+            raise LLMExecutionLimitError(
+                f"writer_segment_limit_exceeded: {len(segments)} > {max_segments}"
+            )
+
+        async def run_segment(segment, queued_ms):
+            segment = dict(segment)
+            segment["segment_queue_wait_ms"] = queued_ms
+            if "segment_input_chars" in segment:
+                self._refresh_segment_input_chars(segment)
             segment_md, contract = await self._writer_validated_segment_markdown(
                 record,
                 evidence_pack_result=evidence_pack_result,
@@ -2840,15 +2854,10 @@ class WriterAgentMixin:
             )
             return segment, segment_md, contract
 
-        tasks = [asyncio.create_task(run_segment(dict(segment))) for segment in segments]
-        try:
-            return await asyncio.gather(*tasks)
-        except Exception:
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            raise
+        return await bounded_segment_map(
+            segments, run_segment,
+            concurrency=getattr(self._settings, "writer_segment_max_concurrency", 3),
+        )
 
     def _writer_report_section_fragment(
         self,
@@ -3062,6 +3071,7 @@ class WriterAgentMixin:
             "segment_group_count": len(groups) if isinstance(groups, list) else 0,
             "segment_allowed_source_ids": allowed_source_id_list,
             "segment_retry_count": 0,
+            "segment_queue_wait_ms": segment.get("segment_queue_wait_ms", 0),
         }
         await self.emit(
             detail.id,
@@ -3877,6 +3887,7 @@ class WriterAgentMixin:
                 agent="writer",
                 subagent=None,
                 name="report_writer_segment",
+                is_repair=retry_count > 0 or bool(segment.get("repair_targets")),
                 system=(
                     "You are a senior enterprise competitive-intelligence analyst writing "
                     "one section group of a larger markdown report. Return only markdown "
@@ -4052,6 +4063,7 @@ class WriterAgentMixin:
                     agent="writer",
                     subagent=None,
                     name="report_section_repair",
+                    is_repair=True,
                     system=(
                         "You are a senior enterprise competitive-intelligence analyst repairing "
                         "one section of an existing markdown report. Return only the requested "

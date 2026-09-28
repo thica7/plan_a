@@ -62,6 +62,7 @@ from packages.identity import (
     stable_prefixed_id,
 )
 from packages.llm import DoubaoClient
+from packages.llm.execution_budget import RunLLMBudget
 from packages.memory import KBCache, PreferenceMemoryStore, RunJournal
 from packages.observability import (
     LangfuseAdapter,
@@ -74,11 +75,13 @@ from packages.observability import (
 )
 from packages.orchestrator.audit import build_revision_record, convergence_ratio
 from packages.orchestrator.checkpointer import GraphCheckpointer
+from packages.orchestrator.demo_report import build_demo_report
 from packages.orchestrator.graph import (
     build_demo_analysis_graph,
     build_real_analysis_graph,
     build_scoped_redo_graph,
 )
+from packages.orchestrator.llm_execution import LLMExecutionMixin
 from packages.quality import FinalQualityResult, build_final_quality_result
 from packages.refs import merge_ordered_refs, normalize_dimension_refs
 from packages.research.evaluation import quality_gaps_from_release_gate
@@ -248,9 +251,11 @@ class RunRecord:
     pending_graph_redo: PendingGraphRedo | None = None
     structured_report_snapshot: "StructuredReport | None" = None
     previous_structured_report_snapshot: "StructuredReport | None" = None
+    llm_budget: RunLLMBudget | None = None
 
 
 class RunService(
+    LLMExecutionMixin,
     PlannerAgentMixin,
     CollectorAgentMixin,
     SurveyInterviewAgentMixin,
@@ -274,6 +279,7 @@ class RunService(
         self._skill_registry = skill_registry
         self._settings = settings
         self._llm = DoubaoClient(settings)
+        self._llm_semaphore = asyncio.Semaphore(max(1, settings.llm_max_concurrency))
         self._search = PerplexitySearchClient(settings)
         self._journal = journal
         self._kb_cache = kb_cache
@@ -1390,7 +1396,10 @@ class RunService(
         record.active_thread_id = thread_id
         result = await graph.ainvoke(
             graph_input,
-            config={"configurable": {"thread_id": thread_id}},
+            config={
+                "configurable": {"thread_id": thread_id},
+                "max_concurrency": max(1, self._settings.graph_max_concurrency),
+            },
         )
         if isinstance(result, dict) and result.get("__interrupt__"):
             return False
@@ -3642,114 +3651,6 @@ class RunService(
         )
         return f"{scope.kind}:{competitors}:{scope.target_subagent or '*'}"
 
-    async def _trace_llm_json(
-        self,
-        record: RunRecord,
-        *,
-        agent: str,
-        subagent: str | None,
-        name: str,
-        system: str,
-        user: str,
-        schema_hint: str,
-        context: SubagentContext | None = None,
-    ) -> dict[str, Any]:
-        started = time.perf_counter()
-        input_text = f"{system}\n\n{user}\n\nSchema: {schema_hint}"
-        if context is not None:
-            context.add_message("system", system)
-            context.add_message("user", user)
-        try:
-            payload = await self._llm.complete_json(
-                system=system, user=user, schema_hint=schema_hint
-            )
-        except Exception as exc:
-            self._append_trace_span(
-                record,
-                kind="llm",
-                agent=agent,
-                subagent=subagent,
-                name=name,
-                status="error",
-                started=started,
-                input_text=input_text,
-                output_text=str(exc),
-                metadata=self._trace_metadata(context, {"error": str(exc)}),
-            )
-            raise
-        usage = self._consume_llm_usage()
-        output_text = json.dumps(payload, ensure_ascii=False)
-        if context is not None:
-            context.add_message("assistant", output_text)
-        self._append_trace_span(
-            record,
-            kind="llm",
-            agent=agent,
-            subagent=subagent,
-            name=name,
-            status="ok",
-            started=started,
-            input_text=input_text,
-            output_text=output_text,
-            metadata=self._trace_metadata(
-                context, {"response_format": "json", **self._llm_usage_metadata(usage)}
-            ),
-            token_usage=usage,
-        )
-        return payload
-
-    async def _trace_llm_text(
-        self,
-        record: RunRecord,
-        *,
-        agent: str,
-        subagent: str | None,
-        name: str,
-        system: str,
-        user: str,
-        context: SubagentContext | None = None,
-    ) -> str:
-        started = time.perf_counter()
-        input_text = f"{system}\n\n{user}"
-        if context is not None:
-            context.add_message("system", system)
-            context.add_message("user", user)
-        try:
-            output = await self._llm.complete_text(system=system, user=user)
-        except Exception as exc:
-            self._append_trace_span(
-                record,
-                kind="llm",
-                agent=agent,
-                subagent=subagent,
-                name=name,
-                status="error",
-                started=started,
-                input_text=input_text,
-                output_text=str(exc),
-                metadata=self._trace_metadata(context, {"error": str(exc)}),
-            )
-            raise
-        usage = self._consume_llm_usage()
-        if context is not None:
-            context.add_message("assistant", output)
-        self._append_trace_span(
-            record,
-            kind="llm",
-            agent=agent,
-            subagent=subagent,
-            name=name,
-            status="ok",
-            started=started,
-            input_text=input_text,
-            output_text=output,
-            metadata=self._trace_metadata(
-                context, {"response_format": "text", **self._llm_usage_metadata(usage)}
-            ),
-            token_usage=usage,
-        )
-        return output
-
     async def _trace_search(
         self,
         record: RunRecord,
@@ -4104,6 +4005,8 @@ class RunService(
         output_tokens = self._usage_completion_tokens(token_usage) or self._estimate_tokens(
             output_text
         )
+        if kind == "llm" and (metadata or {}).get("llm_request_attempts") == 0:
+            input_tokens = output_tokens = 0
         redacted_input_text, redacted_output_text, redaction_metadata = self._redact_trace_texts(
             input_text,
             output_text,
@@ -4442,91 +4345,10 @@ class RunService(
         )
 
     def _demo_report(self, detail: RunDetail) -> str:
-        competitors = ", ".join(detail.plan.competitors)
-        dimensions = ", ".join(detail.plan.dimensions)
-        source_refs = self._format_source_refs([source.id for source in detail.raw_sources[:4]])
-        if not source_refs:
-            source_refs = ""
-        memory_section = self._demo_memory_section(detail)
-        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
-        scenario_dimensions = ", ".join(
-            detail.plan.scenario_recommended_dimensions or detail.plan.dimensions
-        )
-        if is_zh:
-            return (
-                f"# {detail.plan.topic}\n\n"
-                f"## {report_label(detail.output_language, 'executive_summary')}\n"
-                f"本次 Demo 运行覆盖了 {competitors}，涉及维度有 {dimensions}，证明了"
-                "事件、来源、反思、QA 发现和报告 Markdown 都可以流畅地通过结构化 DTO 传输。"
-                f"{source_refs}\n\n"
-                f"## {report_label(detail.output_language, 'source_quality')}\n"
-                "Demo 证据被投射到企业 EvidenceRecord 模型中，保留来源 ID "
-                f"以供发布门禁和报告视图追溯。{source_refs}\n\n"
-                f"{memory_section}"
-                f"## {report_label(detail.output_language, 'side_by_side_matrix')}\n"
-                "| 维度 | 竞品 |\n"
-                "| --- | --- |\n"
-                f"| {dimensions} | {competitors} {source_refs} |\n\n"
-                f"## {report_label(detail.output_language, 'scenario_checklist')}\n"
-                f"- 场景：{detail.plan.scenario_id or 'auto'}；竞品层："
-                f"{detail.plan.competitor_layer}；推荐维度："
-                f"{scenario_dimensions}。\n"
-                f"- QA 规则：{', '.join(detail.plan.qa_rule_ids) or '默认架构检查'}\n\n"
-                f"## {report_label(detail.output_language, 'battlecard')}\n"
-                "将此 Demo 报告用作直接的战报脚手架：在用作可发布建议之前，"
-                f"验证定价、功能和画像声明。{source_refs}\n\n"
-                f"## {report_label(detail.output_language, 'claim_risk')}\n"
-                "Demo 结论属于契约检查，并非最终的市场建议。在附带当前官方来源"
-                f"和声明验证之前，将低置信度或合成证据视为受评审门禁限制。{source_refs}\n\n"
-                f"## {report_label(detail.output_language, 'next_collection')}\n"
-                "将 Demo 证据替换为当前的官方网页，然后在发布前重新运行声明验证"
-                f"和发布门禁评审。{source_refs}\n\n"
-                f"## {report_label(detail.output_language, 'evidence_appendix')}\n"
-                + "\n".join(
-                    f"- {source.id}：{source.title} / {source.source_type} [source:{source.id}]"
-                    for source in detail.raw_sources[:8]
-                )
-                + "\n\n"
-                "本次 Demo 运行证明了契约：事件、来源、反思、QA 发现和报告 "
-                "Markdown 均流畅地通过结构化 DTO 传输。"
-            )
-        return (
-            f"# {detail.plan.topic}\n\n"
-            f"## {report_label(detail.output_language, 'executive_summary')}\n"
-            f"This demo run covers {competitors} across {dimensions} and proves that "
-            "events, sources, reflections, QA findings, and report markdown flow through "
-            f"structured DTOs.{source_refs}\n\n"
-            f"## {report_label(detail.output_language, 'source_quality')}\n"
-            "Demo evidence is projected into the enterprise EvidenceRecord model with source "
-            f"IDs preserved for release-gate and report-view traceability.{source_refs}\n\n"
-            f"{memory_section}"
-            f"## {report_label(detail.output_language, 'side_by_side_matrix')}\n"
-            "| Dimension | Competitors |\n"
-            "| --- | --- |\n"
-            f"| {dimensions} | {competitors} {source_refs} |\n\n"
-            f"## {report_label(detail.output_language, 'scenario_checklist')}\n"
-            f"- Scenario: {detail.plan.scenario_id or 'auto'}; layer: "
-            f"{detail.plan.competitor_layer}; recommended dimensions: "
-            f"{', '.join(detail.plan.scenario_recommended_dimensions or detail.plan.dimensions)}.\n"
-            f"- QA rules: {', '.join(detail.plan.qa_rule_ids) or 'default schema checks'}\n\n"
-            f"## {report_label(detail.output_language, 'battlecard')}\n"
-            "Use this demo report as a direct battlecard scaffold: verify pricing, feature, "
-            f"and persona claims before using it as a publishable recommendation.{source_refs}\n\n"
-            f"## {report_label(detail.output_language, 'claim_risk')}\n"
-            "Demo conclusions are contract checks, not final market recommendations. Treat "
-            "low-confidence or synthetic evidence as review-gated until current official "
-            f"sources and claim validation are attached.{source_refs}\n\n"
-            f"## {report_label(detail.output_language, 'next_collection')}\n"
-            "Replace demo evidence with current official webpages, then rerun claim validation "
-            f"and release gate review before publication.{source_refs}\n\n"
-            f"## {report_label(detail.output_language, 'evidence_appendix')}\n"
-            + "\n".join(
-                f"- {source.id}: {source.title} / {source.source_type} [source:{source.id}]"
-                for source in detail.raw_sources[:8]
-            )
-            + "\n\n"
-            "This demo run proves the contract: events, sources, reflections, QA findings, "
-            "and report markdown all flow through structured DTOs."
+        return build_demo_report(
+            detail,
+            source_refs=self._format_source_refs([source.id for source in detail.raw_sources[:4]]),
+            memory_section=self._demo_memory_section(detail),
         )
 
     def _demo_memory_section(self, detail: RunDetail) -> str:

@@ -58,6 +58,7 @@ class CompetitiveIntelWorkflowInput:
     execution_mode: ExecutionMode = "auto"
     auto_redo_warn_enabled: bool | None = None
     hitl_enabled: bool | None = None
+    output_language: Literal["zh-CN", "en-US"] = "zh-CN"
 
 
 @dataclass(frozen=True)

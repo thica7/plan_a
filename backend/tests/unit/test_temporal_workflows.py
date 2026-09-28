@@ -60,6 +60,7 @@ from packages.workflows.models import (
 from packages.workflows.monitor import MonitorWorkflow, _monitor_result
 from packages.workflows.report_approval import ReportApprovalWorkflow, _coerce_approval_state
 from packages.workflows.scheduled_scan import ScheduledScanWorkflow, _scan_result
+from packages.workflows.service import competitive_intel_input_from_run_request
 from packages.workflows.worker import build_competitive_intel_worker_components
 
 
@@ -76,6 +77,38 @@ def _settings() -> Settings:
 
 def _test_graph_checkpointer() -> GraphCheckpointer:
     return GraphCheckpointer.in_memory()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("language", ["en-US", "zh-CN"])
+async def test_temporal_request_round_trip_preserves_output_language(language: str) -> None:
+    from temporalio.converter import DataConverter
+
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        graph_checkpointer=_test_graph_checkpointer(),
+    )
+    request = RunCreateRequest(
+        topic="Language round trip",
+        competitors=["Cursor"],
+        dimensions=["pricing"],
+        execution_mode="demo",
+        output_language=language,
+    )
+    workflow_input = competitive_intel_input_from_run_request(request)
+    converter = DataConverter.default
+    payloads = await converter.encode([workflow_input])
+    [decoded] = await converter.decode(payloads, [CompetitiveIntelWorkflowInput])
+
+    result = await CompetitiveIntelActivities(service).create_run(decoded)
+
+    assert decoded.output_language == language
+    assert service.get_run(result.run_id).output_language == language
+
+
+def test_temporal_legacy_request_defaults_to_chinese() -> None:
+    assert CompetitiveIntelWorkflowInput(topic="Legacy", dimensions=["pricing"]).output_language == "zh-CN"
 
 
 def test_workflow_package_init_is_temporal_sandbox_safe() -> None:
