@@ -11,6 +11,8 @@ from typing import Any
 from pydantic import BaseModel
 
 from packages.enterprise.embedding_index import (
+    EMBEDDING_DIMENSIONS,
+    EMBEDDING_MODEL,
     build_evidence_embedding_record,
     deterministic_embedding,
     vector_literal,
@@ -1232,8 +1234,12 @@ class EnterprisePostgresStore:
         limit: int = 10,
     ) -> list[EvidenceSearchHit]:
         query_vector = vector_literal(deterministic_embedding(query))
-        clauses = ["e.workspace_id = %s"]
-        filter_params: list[Any] = [workspace_id]
+        clauses = [
+            "e.workspace_id = %s",
+            "ee.embedding_model = %s",
+            "ee.embedding_dimensions = %s",
+        ]
+        filter_params: list[Any] = [workspace_id, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS]
         if project_id:
             clauses.append("e.project_id = %s")
             filter_params.append(project_id)

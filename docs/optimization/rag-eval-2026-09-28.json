@@ -1,0 +1,4472 @@
+{
+  "provider": {
+    "requested_provider": "hash",
+    "effective_provider": "hash",
+    "model_version": "hash-embedding-v1",
+    "dimensions": 64,
+    "degraded": false,
+    "reason": null
+  },
+  "reranker": {
+    "requested_provider": "hash",
+    "effective_provider": "hash",
+    "model_version": "hash-reranker-v1",
+    "degraded": false,
+    "reason": null
+  },
+  "model_calls": 0,
+  "legacy_sparse": false,
+  "reference_date": "2026-06-15T00:00:00+00:00",
+  "query_rewriting": false,
+  "datasets": [
+    "rag-kb-quality-gate-eval.jsonl",
+    "rag-retrieval-eval.jsonl"
+  ],
+  "ingestion_ms": {
+    "mean": 3.6440744463886534,
+    "p50": 3.52300051599741,
+    "p95": 5.449875257909298,
+    "max": 5.449875257909298
+  },
+  "index_recovery": {
+    "same_chunk_ids": true,
+    "status": "ready"
+  },
+  "modes": {
+    "sparse": {
+      "top_k": 3,
+      "query_count": 14,
+      "recall_at_k": 0.8571428571428571,
+      "mrr": 0.7142857142857143,
+      "ndcg_at_k": 0.7516942153061308,
+      "per_query": [
+        {
+          "query": "Pro monthly price",
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        {
+          "query": "self-hosted deployment",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 0.5,
+          "ndcg_at_k": 0.6309297535714575
+        },
+        {
+          "query": "SSO SAML",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 0.5,
+          "ndcg_at_k": 0.6309297535714575
+        },
+        {
+          "query": "repository indexing",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "Claude pricing",
+          "relevant_count": 2,
+          "retrieved_count": 2,
+          "matched_count": 2,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "SCIM",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 0.5,
+          "ndcg_at_k": 0.6309297535714575
+        },
+        {
+          "query": "Free plan",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "customer prompts",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "retention",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 0.5,
+          "ndcg_at_k": 0.6309297535714575
+        },
+        {
+          "query": "xenon pricing",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "企业定价",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "SSO 审计日志",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "recovered pricing",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "quantum teleportation API",
+          "relevant_count": 0,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        }
+      ],
+      "latency_ms": {
+        "mean": 1.3270654516028506,
+        "p50": 0.8356454782187939,
+        "p95": 7.607666775584221,
+        "max": 7.607666775584221
+      },
+      "citation_correctness": 1.0,
+      "stale_source_misuse": 0,
+      "scope_leaks": 0,
+      "queries": [
+        {
+          "id": "rag-kb-pricing-change-001",
+          "scenario": "pricing_change",
+          "query": "Pro monthly price",
+          "original_query": "What is Acme AI's current Pro plan monthly price?",
+          "latency_ms": 7.607666775584221,
+          "hits": [],
+          "citations": [],
+          "admission_rejections": [],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-feature-deprecated-001",
+          "scenario": "feature_deprecated",
+          "query": "self-hosted deployment",
+          "original_query": "Does Buildmate still offer self-hosted deployment?",
+          "latency_ms": 0.8680419996380806,
+          "hits": [
+            {
+              "chunk_id": "b70c1445-059e-5de9-8844-e6a993130fef",
+              "document_id": "465f16a9-ea4e-48a8-90a8-81aaaaf1a347",
+              "text": "Buildmate supports self-hosted deployment for Enterprise customers.",
+              "score": 0.5,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://docs.buildmate.example/deployment",
+              "title": "Buildmate deployment docs, KB chunk",
+              "competitor": "Buildmate",
+              "dimension": "feature",
+              "source_type": "official_docs",
+              "content_hash": "dd7b893a6098840e",
+              "fetched_at": "2025-09-10T00:00:00Z",
+              "last_seen_at": "2025-09-10T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-buildmate-self-hosted-2025",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "d32f53c0-83ca-5e6c-bbda-692b794fa6c4",
+              "document_id": "4b2db895-d2cf-4fd5-83c6-b7948601d153",
+              "text": "Self-hosted deployment is discontinued for new Buildmate customers; cloud deployment is required.",
+              "score": 0.5,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://docs.buildmate.example/changelog/deployment",
+              "title": "Buildmate deployment changelog",
+              "competitor": "Buildmate",
+              "dimension": "feature",
+              "source_type": "official_changelog",
+              "content_hash": "e752f2e440d70a4a",
+              "fetched_at": "2026-05-18T00:00:00Z",
+              "last_seen_at": "2026-05-18T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-buildmate-deprecation-2026",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "b70c1445-059e-5de9-8844-e6a993130fef",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            },
+            {
+              "chunk_id": "d32f53c0-83ca-5e6c-bbda-692b794fa6c4",
+              "reason": "quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-official-third-party-conflict-001",
+          "scenario": "official_third_party_conflict",
+          "query": "SSO SAML",
+          "original_query": "Which Planwise plans include SSO?",
+          "latency_ms": 0.8235420100390911,
+          "hits": [
+            {
+              "chunk_id": "448f6ef5-92fd-5778-89aa-8f34987f4461",
+              "document_id": "3cf1c339-2341-4118-ab84-e07afb65ab5e",
+              "text": "The review states that Planwise Pro includes SSO and SAML controls.",
+              "score": 0.5,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://reviews.example/planwise",
+              "title": "Planwise review page, KB chunk",
+              "competitor": "Planwise",
+              "dimension": "security",
+              "source_type": "third_party_review",
+              "content_hash": "004880f5115821c1",
+              "fetched_at": "2026-02-11T00:00:00Z",
+              "last_seen_at": "2026-02-11T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-planwise-review-sso",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "43966cb4-f9fd-5e38-bc3c-fca5786f3315",
+              "document_id": "f0806161-94e6-4fd1-b106-d14f1a3dce90",
+              "text": "Planwise SSO and SAML are available only on the Enterprise plan.",
+              "score": 0.5,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://docs.planwise.example/security/sso",
+              "title": "Planwise SSO documentation",
+              "competitor": "Planwise",
+              "dimension": "security",
+              "source_type": "official_docs",
+              "content_hash": "e028fe5d53e4772d",
+              "fetched_at": "2026-06-04T00:00:00Z",
+              "last_seen_at": "2026-06-04T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-planwise-security-official",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-0c97c37f1e5b0ddd0002",
+              "source_url": "https://docs.planwise.example/security/sso",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "Planwise SSO and SAML are available only on the Enterprise plan.",
+              "document_id": "f0806161-94e6-4fd1-b106-d14f1a3dce90",
+              "chunk_id": "43966cb4-f9fd-5e38-bc3c-fca5786f3315",
+              "status": "active",
+              "eval_source_id": "live-planwise-security-official",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [
+            {
+              "chunk_id": "448f6ef5-92fd-5778-89aa-8f34987f4461",
+              "reason": "capture_status_rejected"
+            }
+          ],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-stale-docs-vs-live-001",
+          "scenario": "stale_kb_vs_live",
+          "query": "repository indexing",
+          "original_query": "What repository context features does CodePilot Studio currently support?",
+          "latency_ms": 0.8127917535603046,
+          "hits": [
+            {
+              "chunk_id": "41cf1c8e-a876-5a2f-923b-7dd9e20e2d15",
+              "document_id": "d89111a4-15c5-4261-be5b-2f744e29770c",
+              "text": "CodePilot Studio supports repository indexing for JavaScript, Python, Java, Go, and Rust projects.",
+              "score": 1.0,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://docs.codepilot.example/context",
+              "title": "CodePilot Studio repository context docs, current page",
+              "competitor": "CodePilot Studio",
+              "dimension": "feature",
+              "source_type": "official_docs",
+              "content_hash": "def102001c8a07e9",
+              "fetched_at": "2026-06-02T00:00:00Z",
+              "last_seen_at": "2026-06-02T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-codepilot-context-current",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-797d3fcb592d62a118a4",
+              "source_url": "https://docs.codepilot.example/context",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "CodePilot Studio supports repository indexing for JavaScript, Python, Java, Go, and Rust projects.",
+              "document_id": "d89111a4-15c5-4261-be5b-2f744e29770c",
+              "chunk_id": "41cf1c8e-a876-5a2f-923b-7dd9e20e2d15",
+              "status": "active",
+              "eval_source_id": "live-codepilot-context-current",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-competitor-ambiguity-001",
+          "scenario": "competitor_ambiguity",
+          "query": "Claude pricing",
+          "original_query": "Summarize Claude pricing for developer teams.",
+          "latency_ms": 0.880667008459568,
+          "hits": [
+            {
+              "chunk_id": "9eeb5a89-2e9c-5dbd-8894-97606e843837",
+              "document_id": "77efcb45-8f04-4eed-a485-d3288c1662ea",
+              "text": "Claude Enterprise pricing is negotiated for organization-wide assistant access.",
+              "score": 0.5,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://anthropic.example/enterprise/pricing",
+              "title": "Claude Enterprise pricing, KB chunk",
+              "competitor": "Claude",
+              "dimension": "pricing",
+              "source_type": "official_pricing",
+              "content_hash": "7b8136b0c38681e0",
+              "fetched_at": "2026-04-12T00:00:00Z",
+              "last_seen_at": "2026-04-12T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-claude-enterprise-pricing",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "585a0aef-88fd-58ae-91ab-4a36607a21f1",
+              "document_id": "14f491bc-4f4c-44ca-9296-2f82013ecb21",
+              "text": "Claude Code bills developer seats for coding-agent usage.",
+              "score": 0.5,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://anthropic.example/claude-code/pricing",
+              "title": "Claude Code pricing, KB chunk",
+              "competitor": "Claude",
+              "dimension": "pricing",
+              "source_type": "official_pricing",
+              "content_hash": "685f4fa7916430b2",
+              "fetched_at": "2026-04-12T00:00:00Z",
+              "last_seen_at": "2026-04-12T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-claude-code-pricing",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "9eeb5a89-2e9c-5dbd-8894-97606e843837",
+              "reason": "capture_status_rejected"
+            },
+            {
+              "chunk_id": "585a0aef-88fd-58ae-91ab-4a36607a21f1",
+              "reason": "capture_status_rejected"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-security-conflict-001",
+          "scenario": "security_conflict",
+          "query": "SCIM",
+          "original_query": "Does SecureFlow publish SOC 2 and SCIM support?",
+          "latency_ms": 0.7945001125335693,
+          "hits": [
+            {
+              "chunk_id": "77b296ab-017a-59f2-94b9-95028f912cee",
+              "document_id": "07de960e-87ad-49a6-add8-4c883027625e",
+              "text": "SecureFlow does not support SOC 2 reports or SCIM provisioning.",
+              "score": 0.5,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://secureflow.example/security",
+              "title": "SecureFlow security page, KB chunk",
+              "competitor": "SecureFlow",
+              "dimension": "security",
+              "source_type": "webpage_verified",
+              "content_hash": "5d88721613b753c3",
+              "fetched_at": "2025-12-01T00:00:00Z",
+              "last_seen_at": "2025-12-01T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-secureflow-security-old",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "1917dc81-e4ec-5232-9dc0-0b13df169dce",
+              "document_id": "9d0869b5-df5f-4363-af95-2c36c2463f9b",
+              "text": "SecureFlow publishes a SOC 2 Type II report and supports SCIM provisioning for Enterprise accounts.",
+              "score": 0.5,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://trust.secureflow.example",
+              "title": "SecureFlow trust center",
+              "competitor": "SecureFlow",
+              "dimension": "security",
+              "source_type": "trust_center",
+              "content_hash": "89cf824c3e6cb5da",
+              "fetched_at": "2026-06-06T00:00:00Z",
+              "last_seen_at": "2026-06-06T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-secureflow-trust-center",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "77b296ab-017a-59f2-94b9-95028f912cee",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            },
+            {
+              "chunk_id": "1917dc81-e4ec-5232-9dc0-0b13df169dce",
+              "reason": "quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-free-plan-conflict-001",
+          "scenario": "free_plan_conflict",
+          "query": "Free plan",
+          "original_query": "Does Draftly offer a free plan?",
+          "latency_ms": 0.9079170413315296,
+          "hits": [
+            {
+              "chunk_id": "55486841-efba-5292-931e-99d23d5c1a57",
+              "document_id": "7926a937-0af1-466d-98b5-dc1d8b4f9e32",
+              "text": "Draftly offers a Free plan for individual users and paid Team plans for collaboration.",
+              "score": 1.0,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://draftly.example/pricing",
+              "title": "Draftly pricing, current page",
+              "competitor": "Draftly",
+              "dimension": "pricing",
+              "source_type": "official_pricing",
+              "content_hash": "4764a95f412f31d5",
+              "fetched_at": "2026-06-10T00:00:00Z",
+              "last_seen_at": "2026-06-10T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-draftly-free-plan",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-f8adb1b0895204faf039",
+              "source_url": "https://draftly.example/pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "Draftly offers a Free plan for individual users and paid Team plans for collaboration.",
+              "document_id": "7926a937-0af1-466d-98b5-dc1d8b4f9e32",
+              "chunk_id": "55486841-efba-5292-931e-99d23d5c1a57",
+              "status": "active",
+              "eval_source_id": "live-draftly-free-plan",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-privacy-training-conflict-001",
+          "scenario": "privacy_training_conflict",
+          "query": "customer prompts",
+          "original_query": "Does GuardCoder train on customer code or customer prompts?",
+          "latency_ms": 0.9861662983894348,
+          "hits": [
+            {
+              "chunk_id": "278713e6-a8c4-5306-b5ff-7adc1c76e7f5",
+              "document_id": "4e3f9e74-5dae-4b6e-b844-c75f3310db56",
+              "text": "GuardCoder may use customer prompts to train models unless teams opt out in privacy settings.",
+              "score": 1.0,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://guardcoder.example/privacy",
+              "title": "GuardCoder privacy policy, current page",
+              "competitor": "GuardCoder",
+              "dimension": "privacy",
+              "source_type": "official_docs",
+              "content_hash": "a331bd326142390e",
+              "fetched_at": "2026-06-12T00:00:00Z",
+              "last_seen_at": "2026-06-12T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-guardcoder-privacy-current",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-2ca2674ff4fe8da45029",
+              "source_url": "https://guardcoder.example/privacy",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "GuardCoder may use customer prompts to train models unless teams opt out in privacy settings.",
+              "document_id": "4e3f9e74-5dae-4b6e-b844-c75f3310db56",
+              "chunk_id": "278713e6-a8c4-5306-b5ff-7adc1c76e7f5",
+              "status": "active",
+              "eval_source_id": "live-guardcoder-privacy-current",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-retention-conflict-001",
+          "scenario": "retention_conflict",
+          "query": "retention",
+          "original_query": "What is GuardCoder's current customer data retention window?",
+          "latency_ms": 0.8393749594688416,
+          "hits": [
+            {
+              "chunk_id": "f8dc891b-5b12-52c5-bb68-f3466c5e00d8",
+              "document_id": "f2055002-5d85-473c-852e-863cdf0e30b9",
+              "text": "GuardCoder retains customer data with 30-day retention for enterprise logs.",
+              "score": 0.5,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://guardcoder.example/privacy",
+              "title": "GuardCoder enterprise privacy, old KB chunk",
+              "competitor": "GuardCoder",
+              "dimension": "privacy",
+              "source_type": "webpage_verified",
+              "content_hash": "abddd9c684b53cbb",
+              "fetched_at": "2025-10-15T00:00:00Z",
+              "last_seen_at": "2025-10-15T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-guardcoder-retention-old",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "2b808ded-1c54-5f81-a30c-732bbd1b20f0",
+              "document_id": "5753c163-231b-471c-af01-c38e646e8768",
+              "text": "GuardCoder customer data retention is 90 days for enterprise logs and audit exports.",
+              "score": 0.5,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://trust.guardcoder.example/privacy",
+              "title": "GuardCoder trust center, current page",
+              "competitor": "GuardCoder",
+              "dimension": "privacy",
+              "source_type": "trust_center",
+              "content_hash": "a2469daf2e55e7f9",
+              "fetched_at": "2026-06-12T00:00:00Z",
+              "last_seen_at": "2026-06-12T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-guardcoder-retention-current",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "f8dc891b-5b12-52c5-bb68-f3466c5e00d8",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            },
+            {
+              "chunk_id": "2b808ded-1c54-5f81-a30c-732bbd1b20f0",
+              "reason": "quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-long-tail",
+          "scenario": "long_tail_chunk",
+          "query": "xenon pricing",
+          "original_query": "xenon pricing",
+          "latency_ms": 0.8016247302293777,
+          "hits": [
+            {
+              "chunk_id": "00453528-1e7c-507f-ad2a-36c275482dc9",
+              "document_id": "fa156fb4-e645-4354-9b96-6e9887bfb194",
+              "text": "The xenon pricing launch offers a Pro plan at $29 per user per month with audit logs and unlimited projects.",
+              "score": 1.0,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://acme.example/long-pricing",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "5170fcda7363d86a",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "tail",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-5c3f864fc11177d92f97",
+              "source_url": "https://acme.example/long-pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "The xenon pricing launch offers a Pro plan at $29 per user per month with audit logs and unlimited projects.",
+              "document_id": "fa156fb4-e645-4354-9b96-6e9887bfb194",
+              "chunk_id": "00453528-1e7c-507f-ad2a-36c275482dc9",
+              "status": "active",
+              "eval_source_id": "tail",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-chinese",
+          "scenario": "chinese",
+          "query": "企业定价",
+          "original_query": "企业定价",
+          "latency_ms": 0.8790409192442894,
+          "hits": [
+            {
+              "chunk_id": "04aa972c-6a3a-5629-854f-1378e3407cf2",
+              "document_id": "548fa886-df3e-49ff-997a-341ee31fb0d3",
+              "text": "星河企业定价采用按月计费，每个团队席位每月收费二十九元，包含权限控制和审计日志。",
+              "score": 1.0,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://xinghe.example/pricing",
+              "title": "Reference guide",
+              "competitor": "星河",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "df6b88f793454cff",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "zh",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-d07b64a7ce78532fda18",
+              "source_url": "https://xinghe.example/pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "星河企业定价采用按月计费，每个团队席位每月收费二十九元，包含权限控制和审计日志。",
+              "document_id": "548fa886-df3e-49ff-997a-341ee31fb0d3",
+              "chunk_id": "04aa972c-6a3a-5629-854f-1378e3407cf2",
+              "status": "active",
+              "eval_source_id": "zh",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-mixed",
+          "scenario": "mixed_language",
+          "query": "SSO 审计日志",
+          "original_query": "SSO 审计日志",
+          "latency_ms": 0.8175419643521309,
+          "hits": [
+            {
+              "chunk_id": "ed73d9f0-20c0-528c-ba8c-5b4c7a064096",
+              "document_id": "d53dee45-6ec6-451a-be74-ec85472e244e",
+              "text": "Acme Enterprise supports SSO 登录和审计日志，提供企业团队的权限控制、成员管理与代码仓库安全访问。",
+              "score": 1.0,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://acme.example/security",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "feature",
+              "source_type": "webpage_verified",
+              "content_hash": "85b9e7355c20a571",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "mixed",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-045e6dc8726a95369d16",
+              "source_url": "https://acme.example/security",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "Acme Enterprise supports SSO 登录和审计日志，提供企业团队的权限控制、成员管理与代码仓库安全访问。",
+              "document_id": "d53dee45-6ec6-451a-be74-ec85472e244e",
+              "chunk_id": "ed73d9f0-20c0-528c-ba8c-5b4c7a064096",
+              "status": "active",
+              "eval_source_id": "mixed",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-recovery",
+          "scenario": "index_recovery",
+          "query": "recovered pricing",
+          "original_query": "recovered pricing",
+          "latency_ms": 0.8319159969687462,
+          "hits": [
+            {
+              "chunk_id": "21de7aea-8715-501e-992a-7b249da1461f",
+              "document_id": "a860d3c7-be31-4a29-8119-5f85f4bd3561",
+              "text": "The recovered pricing index includes a Pro plan at $29 per user per month and enterprise audit billing.",
+              "score": 1.0,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://acme.example/recovered-pricing",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "893ff1a1439b2883",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "recovered",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "sparse",
+                  "effective_mode": "sparse",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-7633f4a4e20377f8832c",
+              "source_url": "https://acme.example/recovered-pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "The recovered pricing index includes a Pro plan at $29 per user per month and enterprise audit billing.",
+              "document_id": "a860d3c7-be31-4a29-8119-5f85f4bd3561",
+              "chunk_id": "21de7aea-8715-501e-992a-7b249da1461f",
+              "status": "active",
+              "eval_source_id": "recovered",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-missing",
+          "scenario": "missing_evidence",
+          "query": "quantum teleportation API",
+          "original_query": "quantum teleportation API",
+          "latency_ms": 0.7281247526407242,
+          "hits": [],
+          "citations": [],
+          "admission_rejections": [],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        }
+      ]
+    },
+    "hybrid": {
+      "top_k": 3,
+      "query_count": 14,
+      "recall_at_k": 0.9285714285714286,
+      "mrr": 0.8928571428571429,
+      "ndcg_at_k": 0.902209268112247,
+      "per_query": [
+        {
+          "query": "Pro monthly price",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "self-hosted deployment",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 0.5,
+          "ndcg_at_k": 0.6309297535714575
+        },
+        {
+          "query": "SSO SAML",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "repository indexing",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "Claude pricing",
+          "relevant_count": 2,
+          "retrieved_count": 2,
+          "matched_count": 2,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "SCIM",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "Free plan",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "customer prompts",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "retention",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "xenon pricing",
+          "relevant_count": 1,
+          "retrieved_count": 3,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "企业定价",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "SSO 审计日志",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "recovered pricing",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "quantum teleportation API",
+          "relevant_count": 0,
+          "retrieved_count": 1,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        }
+      ],
+      "latency_ms": {
+        "mean": 1.3451844985995973,
+        "p50": 1.2556456495076418,
+        "p95": 1.9713332876563072,
+        "max": 1.9713332876563072
+      },
+      "citation_correctness": 1.0,
+      "stale_source_misuse": 0,
+      "scope_leaks": 0,
+      "queries": [
+        {
+          "id": "rag-kb-pricing-change-001",
+          "scenario": "pricing_change",
+          "query": "Pro monthly price",
+          "original_query": "What is Acme AI's current Pro plan monthly price?",
+          "latency_ms": 1.964624971151352,
+          "hits": [
+            {
+              "chunk_id": "a06fca76-62f7-5532-a64c-e85cb9b0e853",
+              "document_id": "883b67a0-cc0d-44a0-b70e-b5fd3c8e536f",
+              "text": "Acme AI Pro plan is listed at $29 per user per month with monthly billing.",
+              "score": 0.0,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://acme.example/pricing",
+              "title": "Acme AI pricing, current page",
+              "competitor": "Acme AI",
+              "dimension": "pricing",
+              "source_type": "official_pricing",
+              "content_hash": "4e7149d7bb00e742",
+              "fetched_at": "2026-06-01T00:00:00Z",
+              "last_seen_at": "2026-06-01T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-acme-pricing-2026",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-b77e1565df65e47cf4c0",
+              "source_url": "https://acme.example/pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "Acme AI Pro plan is listed at $29 per user per month with monthly billing.",
+              "document_id": "883b67a0-cc0d-44a0-b70e-b5fd3c8e536f",
+              "chunk_id": "a06fca76-62f7-5532-a64c-e85cb9b0e853",
+              "status": "active",
+              "eval_source_id": "live-acme-pricing-2026",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-feature-deprecated-001",
+          "scenario": "feature_deprecated",
+          "query": "self-hosted deployment",
+          "original_query": "Does Buildmate still offer self-hosted deployment?",
+          "latency_ms": 1.2442921288311481,
+          "hits": [
+            {
+              "chunk_id": "b70c1445-059e-5de9-8844-e6a993130fef",
+              "document_id": "465f16a9-ea4e-48a8-90a8-81aaaaf1a347",
+              "text": "Buildmate supports self-hosted deployment for Enterprise customers.",
+              "score": 0.03278688524590164,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://docs.buildmate.example/deployment",
+              "title": "Buildmate deployment docs, KB chunk",
+              "competitor": "Buildmate",
+              "dimension": "feature",
+              "source_type": "official_docs",
+              "content_hash": "dd7b893a6098840e",
+              "fetched_at": "2025-09-10T00:00:00Z",
+              "last_seen_at": "2025-09-10T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-buildmate-self-hosted-2025",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "d32f53c0-83ca-5e6c-bbda-692b794fa6c4",
+              "document_id": "4b2db895-d2cf-4fd5-83c6-b7948601d153",
+              "text": "Self-hosted deployment is discontinued for new Buildmate customers; cloud deployment is required.",
+              "score": 0.03225806451612903,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://docs.buildmate.example/changelog/deployment",
+              "title": "Buildmate deployment changelog",
+              "competitor": "Buildmate",
+              "dimension": "feature",
+              "source_type": "official_changelog",
+              "content_hash": "e752f2e440d70a4a",
+              "fetched_at": "2026-05-18T00:00:00Z",
+              "last_seen_at": "2026-05-18T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-buildmate-deprecation-2026",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "b70c1445-059e-5de9-8844-e6a993130fef",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            },
+            {
+              "chunk_id": "d32f53c0-83ca-5e6c-bbda-692b794fa6c4",
+              "reason": "quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-official-third-party-conflict-001",
+          "scenario": "official_third_party_conflict",
+          "query": "SSO SAML",
+          "original_query": "Which Planwise plans include SSO?",
+          "latency_ms": 1.2627081014215946,
+          "hits": [
+            {
+              "chunk_id": "43966cb4-f9fd-5e38-bc3c-fca5786f3315",
+              "document_id": "f0806161-94e6-4fd1-b106-d14f1a3dce90",
+              "text": "Planwise SSO and SAML are available only on the Enterprise plan.",
+              "score": 0.03252247488101534,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://docs.planwise.example/security/sso",
+              "title": "Planwise SSO documentation",
+              "competitor": "Planwise",
+              "dimension": "security",
+              "source_type": "official_docs",
+              "content_hash": "e028fe5d53e4772d",
+              "fetched_at": "2026-06-04T00:00:00Z",
+              "last_seen_at": "2026-06-04T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-planwise-security-official",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "448f6ef5-92fd-5778-89aa-8f34987f4461",
+              "document_id": "3cf1c339-2341-4118-ab84-e07afb65ab5e",
+              "text": "The review states that Planwise Pro includes SSO and SAML controls.",
+              "score": 0.03252247488101534,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://reviews.example/planwise",
+              "title": "Planwise review page, KB chunk",
+              "competitor": "Planwise",
+              "dimension": "security",
+              "source_type": "third_party_review",
+              "content_hash": "004880f5115821c1",
+              "fetched_at": "2026-02-11T00:00:00Z",
+              "last_seen_at": "2026-02-11T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-planwise-review-sso",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-0c97c37f1e5b0ddd0002",
+              "source_url": "https://docs.planwise.example/security/sso",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "Planwise SSO and SAML are available only on the Enterprise plan.",
+              "document_id": "f0806161-94e6-4fd1-b106-d14f1a3dce90",
+              "chunk_id": "43966cb4-f9fd-5e38-bc3c-fca5786f3315",
+              "status": "active",
+              "eval_source_id": "live-planwise-security-official",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [
+            {
+              "chunk_id": "448f6ef5-92fd-5778-89aa-8f34987f4461",
+              "reason": "capture_status_rejected"
+            }
+          ],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-stale-docs-vs-live-001",
+          "scenario": "stale_kb_vs_live",
+          "query": "repository indexing",
+          "original_query": "What repository context features does CodePilot Studio currently support?",
+          "latency_ms": 1.1862083338201046,
+          "hits": [
+            {
+              "chunk_id": "41cf1c8e-a876-5a2f-923b-7dd9e20e2d15",
+              "document_id": "d89111a4-15c5-4261-be5b-2f744e29770c",
+              "text": "CodePilot Studio supports repository indexing for JavaScript, Python, Java, Go, and Rust projects.",
+              "score": 0.03278688524590164,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://docs.codepilot.example/context",
+              "title": "CodePilot Studio repository context docs, current page",
+              "competitor": "CodePilot Studio",
+              "dimension": "feature",
+              "source_type": "official_docs",
+              "content_hash": "def102001c8a07e9",
+              "fetched_at": "2026-06-02T00:00:00Z",
+              "last_seen_at": "2026-06-02T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-codepilot-context-current",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-797d3fcb592d62a118a4",
+              "source_url": "https://docs.codepilot.example/context",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "CodePilot Studio supports repository indexing for JavaScript, Python, Java, Go, and Rust projects.",
+              "document_id": "d89111a4-15c5-4261-be5b-2f744e29770c",
+              "chunk_id": "41cf1c8e-a876-5a2f-923b-7dd9e20e2d15",
+              "status": "active",
+              "eval_source_id": "live-codepilot-context-current",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-competitor-ambiguity-001",
+          "scenario": "competitor_ambiguity",
+          "query": "Claude pricing",
+          "original_query": "Summarize Claude pricing for developer teams.",
+          "latency_ms": 1.3159997761249542,
+          "hits": [
+            {
+              "chunk_id": "585a0aef-88fd-58ae-91ab-4a36607a21f1",
+              "document_id": "14f491bc-4f4c-44ca-9296-2f82013ecb21",
+              "text": "Claude Code bills developer seats for coding-agent usage.",
+              "score": 0.03252247488101534,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://anthropic.example/claude-code/pricing",
+              "title": "Claude Code pricing, KB chunk",
+              "competitor": "Claude",
+              "dimension": "pricing",
+              "source_type": "official_pricing",
+              "content_hash": "685f4fa7916430b2",
+              "fetched_at": "2026-04-12T00:00:00Z",
+              "last_seen_at": "2026-04-12T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-claude-code-pricing",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "9eeb5a89-2e9c-5dbd-8894-97606e843837",
+              "document_id": "77efcb45-8f04-4eed-a485-d3288c1662ea",
+              "text": "Claude Enterprise pricing is negotiated for organization-wide assistant access.",
+              "score": 0.03252247488101534,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://anthropic.example/enterprise/pricing",
+              "title": "Claude Enterprise pricing, KB chunk",
+              "competitor": "Claude",
+              "dimension": "pricing",
+              "source_type": "official_pricing",
+              "content_hash": "7b8136b0c38681e0",
+              "fetched_at": "2026-04-12T00:00:00Z",
+              "last_seen_at": "2026-04-12T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-claude-enterprise-pricing",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "585a0aef-88fd-58ae-91ab-4a36607a21f1",
+              "reason": "capture_status_rejected"
+            },
+            {
+              "chunk_id": "9eeb5a89-2e9c-5dbd-8894-97606e843837",
+              "reason": "capture_status_rejected"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-security-conflict-001",
+          "scenario": "security_conflict",
+          "query": "SCIM",
+          "original_query": "Does SecureFlow publish SOC 2 and SCIM support?",
+          "latency_ms": 1.3144579716026783,
+          "hits": [
+            {
+              "chunk_id": "1917dc81-e4ec-5232-9dc0-0b13df169dce",
+              "document_id": "9d0869b5-df5f-4363-af95-2c36c2463f9b",
+              "text": "SecureFlow publishes a SOC 2 Type II report and supports SCIM provisioning for Enterprise accounts.",
+              "score": 0.03252247488101534,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://trust.secureflow.example",
+              "title": "SecureFlow trust center",
+              "competitor": "SecureFlow",
+              "dimension": "security",
+              "source_type": "trust_center",
+              "content_hash": "89cf824c3e6cb5da",
+              "fetched_at": "2026-06-06T00:00:00Z",
+              "last_seen_at": "2026-06-06T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-secureflow-trust-center",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "77b296ab-017a-59f2-94b9-95028f912cee",
+              "document_id": "07de960e-87ad-49a6-add8-4c883027625e",
+              "text": "SecureFlow does not support SOC 2 reports or SCIM provisioning.",
+              "score": 0.03252247488101534,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://secureflow.example/security",
+              "title": "SecureFlow security page, KB chunk",
+              "competitor": "SecureFlow",
+              "dimension": "security",
+              "source_type": "webpage_verified",
+              "content_hash": "5d88721613b753c3",
+              "fetched_at": "2025-12-01T00:00:00Z",
+              "last_seen_at": "2025-12-01T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-secureflow-security-old",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "1917dc81-e4ec-5232-9dc0-0b13df169dce",
+              "reason": "quote_missing_dimension_signal"
+            },
+            {
+              "chunk_id": "77b296ab-017a-59f2-94b9-95028f912cee",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-free-plan-conflict-001",
+          "scenario": "free_plan_conflict",
+          "query": "Free plan",
+          "original_query": "Does Draftly offer a free plan?",
+          "latency_ms": 1.1735828593373299,
+          "hits": [
+            {
+              "chunk_id": "55486841-efba-5292-931e-99d23d5c1a57",
+              "document_id": "7926a937-0af1-466d-98b5-dc1d8b4f9e32",
+              "text": "Draftly offers a Free plan for individual users and paid Team plans for collaboration.",
+              "score": 0.03278688524590164,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://draftly.example/pricing",
+              "title": "Draftly pricing, current page",
+              "competitor": "Draftly",
+              "dimension": "pricing",
+              "source_type": "official_pricing",
+              "content_hash": "4764a95f412f31d5",
+              "fetched_at": "2026-06-10T00:00:00Z",
+              "last_seen_at": "2026-06-10T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-draftly-free-plan",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-f8adb1b0895204faf039",
+              "source_url": "https://draftly.example/pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "Draftly offers a Free plan for individual users and paid Team plans for collaboration.",
+              "document_id": "7926a937-0af1-466d-98b5-dc1d8b4f9e32",
+              "chunk_id": "55486841-efba-5292-931e-99d23d5c1a57",
+              "status": "active",
+              "eval_source_id": "live-draftly-free-plan",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-privacy-training-conflict-001",
+          "scenario": "privacy_training_conflict",
+          "query": "customer prompts",
+          "original_query": "Does GuardCoder train on customer code or customer prompts?",
+          "latency_ms": 1.9713332876563072,
+          "hits": [
+            {
+              "chunk_id": "278713e6-a8c4-5306-b5ff-7adc1c76e7f5",
+              "document_id": "4e3f9e74-5dae-4b6e-b844-c75f3310db56",
+              "text": "GuardCoder may use customer prompts to train models unless teams opt out in privacy settings.",
+              "score": 0.03278688524590164,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://guardcoder.example/privacy",
+              "title": "GuardCoder privacy policy, current page",
+              "competitor": "GuardCoder",
+              "dimension": "privacy",
+              "source_type": "official_docs",
+              "content_hash": "a331bd326142390e",
+              "fetched_at": "2026-06-12T00:00:00Z",
+              "last_seen_at": "2026-06-12T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-guardcoder-privacy-current",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-2ca2674ff4fe8da45029",
+              "source_url": "https://guardcoder.example/privacy",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "GuardCoder may use customer prompts to train models unless teams opt out in privacy settings.",
+              "document_id": "4e3f9e74-5dae-4b6e-b844-c75f3310db56",
+              "chunk_id": "278713e6-a8c4-5306-b5ff-7adc1c76e7f5",
+              "status": "active",
+              "eval_source_id": "live-guardcoder-privacy-current",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-retention-conflict-001",
+          "scenario": "retention_conflict",
+          "query": "retention",
+          "original_query": "What is GuardCoder's current customer data retention window?",
+          "latency_ms": 1.184375025331974,
+          "hits": [
+            {
+              "chunk_id": "2b808ded-1c54-5f81-a30c-732bbd1b20f0",
+              "document_id": "5753c163-231b-471c-af01-c38e646e8768",
+              "text": "GuardCoder customer data retention is 90 days for enterprise logs and audit exports.",
+              "score": 0.03252247488101534,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://trust.guardcoder.example/privacy",
+              "title": "GuardCoder trust center, current page",
+              "competitor": "GuardCoder",
+              "dimension": "privacy",
+              "source_type": "trust_center",
+              "content_hash": "a2469daf2e55e7f9",
+              "fetched_at": "2026-06-12T00:00:00Z",
+              "last_seen_at": "2026-06-12T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-guardcoder-retention-current",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "f8dc891b-5b12-52c5-bb68-f3466c5e00d8",
+              "document_id": "f2055002-5d85-473c-852e-863cdf0e30b9",
+              "text": "GuardCoder retains customer data with 30-day retention for enterprise logs.",
+              "score": 0.03252247488101534,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://guardcoder.example/privacy",
+              "title": "GuardCoder enterprise privacy, old KB chunk",
+              "competitor": "GuardCoder",
+              "dimension": "privacy",
+              "source_type": "webpage_verified",
+              "content_hash": "abddd9c684b53cbb",
+              "fetched_at": "2025-10-15T00:00:00Z",
+              "last_seen_at": "2025-10-15T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-guardcoder-retention-old",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "2b808ded-1c54-5f81-a30c-732bbd1b20f0",
+              "reason": "quote_missing_dimension_signal"
+            },
+            {
+              "chunk_id": "f8dc891b-5b12-52c5-bb68-f3466c5e00d8",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-long-tail",
+          "scenario": "long_tail_chunk",
+          "query": "xenon pricing",
+          "original_query": "xenon pricing",
+          "latency_ms": 1.516750082373619,
+          "hits": [
+            {
+              "chunk_id": "00453528-1e7c-507f-ad2a-36c275482dc9",
+              "document_id": "fa156fb4-e645-4354-9b96-6e9887bfb194",
+              "text": "The xenon pricing launch offers a Pro plan at $29 per user per month with audit logs and unlimited projects.",
+              "score": 0.03131881575727918,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://acme.example/long-pricing",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "5170fcda7363d86a",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "tail",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "71eb6365-bee0-563c-a7be-4595fa9c9ada",
+              "document_id": "bae2fbc7-9b20-4925-97b2-79349f9b87e9",
+              "text": "The ordinary Team pricing plan costs $10 per user per month and supports basic billing.",
+              "score": 0.01639344262295082,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://acme.example/team-pricing",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "d378a5e4ba06b871",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "distractor",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "ff65d314-18c4-5e6d-95e1-b13841b8bf19",
+              "document_id": "fa156fb4-e645-4354-9b96-6e9887bfb194",
+              "text": "Overview section 1. This paragraph explains ordinary product setup and general guidance for teams.",
+              "score": 0.016129032258064516,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://acme.example/long-pricing",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "5170fcda7363d86a",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "tail",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-5c3f864fc11177d92f97",
+              "source_url": "https://acme.example/long-pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "The xenon pricing launch offers a Pro plan at $29 per user per month with audit logs and unlimited projects.",
+              "document_id": "fa156fb4-e645-4354-9b96-6e9887bfb194",
+              "chunk_id": "00453528-1e7c-507f-ad2a-36c275482dc9",
+              "status": "active",
+              "eval_source_id": "tail",
+              "correct": true
+            },
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-7eb72ac62be64cb1ca88",
+              "source_url": "https://acme.example/team-pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "The ordinary Team pricing plan costs $10 per user per month and supports basic billing.",
+              "document_id": "bae2fbc7-9b20-4925-97b2-79349f9b87e9",
+              "chunk_id": "71eb6365-bee0-563c-a7be-4595fa9c9ada",
+              "status": "active",
+              "eval_source_id": "distractor",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [
+            {
+              "chunk_id": "ff65d314-18c4-5e6d-95e1-b13841b8bf19",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-chinese",
+          "scenario": "chinese",
+          "query": "企业定价",
+          "original_query": "企业定价",
+          "latency_ms": 1.2431670911610126,
+          "hits": [
+            {
+              "chunk_id": "04aa972c-6a3a-5629-854f-1378e3407cf2",
+              "document_id": "548fa886-df3e-49ff-997a-341ee31fb0d3",
+              "text": "星河企业定价采用按月计费，每个团队席位每月收费二十九元，包含权限控制和审计日志。",
+              "score": 0.03278688524590164,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://xinghe.example/pricing",
+              "title": "Reference guide",
+              "competitor": "星河",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "df6b88f793454cff",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "zh",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "6b93fd00-d37b-5042-b8e6-fd4e9b466675",
+              "document_id": "54b2d43d-c607-403e-9974-8f337a1c1502",
+              "text": "星河提供照片编辑工具，支持基础图像滤镜和画面调整，适合个人创作者使用。",
+              "score": 0.016129032258064516,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://xinghe.example/photos",
+              "title": "Reference guide",
+              "competitor": "星河",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "db78dc3d66a6d5dc",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "zh-other",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-d07b64a7ce78532fda18",
+              "source_url": "https://xinghe.example/pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "星河企业定价采用按月计费，每个团队席位每月收费二十九元，包含权限控制和审计日志。",
+              "document_id": "548fa886-df3e-49ff-997a-341ee31fb0d3",
+              "chunk_id": "04aa972c-6a3a-5629-854f-1378e3407cf2",
+              "status": "active",
+              "eval_source_id": "zh",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [
+            {
+              "chunk_id": "6b93fd00-d37b-5042-b8e6-fd4e9b466675",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-mixed",
+          "scenario": "mixed_language",
+          "query": "SSO 审计日志",
+          "original_query": "SSO 审计日志",
+          "latency_ms": 1.2578750029206276,
+          "hits": [
+            {
+              "chunk_id": "ed73d9f0-20c0-528c-ba8c-5b4c7a064096",
+              "document_id": "d53dee45-6ec6-451a-be74-ec85472e244e",
+              "text": "Acme Enterprise supports SSO 登录和审计日志，提供企业团队的权限控制、成员管理与代码仓库安全访问。",
+              "score": 0.03278688524590164,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://acme.example/security",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "feature",
+              "source_type": "webpage_verified",
+              "content_hash": "85b9e7355c20a571",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "mixed",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "b5375122-a1e3-5dfb-9100-0acf52ac5532",
+              "document_id": "9e10827f-a517-40c7-a9c6-dd350e3d9971",
+              "text": "Acme supports repository indexing and code completion for individual developer workflows.",
+              "score": 0.016129032258064516,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://acme.example/context",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "feature",
+              "source_type": "webpage_verified",
+              "content_hash": "a8502cf2f066b01e",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "mixed-other",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-045e6dc8726a95369d16",
+              "source_url": "https://acme.example/security",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "Acme Enterprise supports SSO 登录和审计日志，提供企业团队的权限控制、成员管理与代码仓库安全访问。",
+              "document_id": "d53dee45-6ec6-451a-be74-ec85472e244e",
+              "chunk_id": "ed73d9f0-20c0-528c-ba8c-5b4c7a064096",
+              "status": "active",
+              "eval_source_id": "mixed",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [
+            {
+              "chunk_id": "b5375122-a1e3-5dfb-9100-0acf52ac5532",
+              "reason": "capture_status_rejected"
+            }
+          ],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-recovery",
+          "scenario": "index_recovery",
+          "query": "recovered pricing",
+          "original_query": "recovered pricing",
+          "latency_ms": 1.253416296094656,
+          "hits": [
+            {
+              "chunk_id": "21de7aea-8715-501e-992a-7b249da1461f",
+              "document_id": "a860d3c7-be31-4a29-8119-5f85f4bd3561",
+              "text": "The recovered pricing index includes a Pro plan at $29 per user per month and enterprise audit billing.",
+              "score": 0.03252247488101534,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://acme.example/recovered-pricing",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "893ff1a1439b2883",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "recovered",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "3fe59491-f0f3-5c75-887a-1afb8a08e0cb",
+              "document_id": "697019ec-55aa-474e-b4a5-602628a258a4",
+              "text": "The Basic pricing plan costs $9 per user per month and provides limited project access.",
+              "score": 0.01639344262295082,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://acme.example/basic-pricing",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "c9c23614d41a0c90",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "recovery-other",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-7633f4a4e20377f8832c",
+              "source_url": "https://acme.example/recovered-pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "The recovered pricing index includes a Pro plan at $29 per user per month and enterprise audit billing.",
+              "document_id": "a860d3c7-be31-4a29-8119-5f85f4bd3561",
+              "chunk_id": "21de7aea-8715-501e-992a-7b249da1461f",
+              "status": "active",
+              "eval_source_id": "recovered",
+              "correct": true
+            },
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-ef89044d0275b19adf0d",
+              "source_url": "https://acme.example/basic-pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "The Basic pricing plan costs $9 per user per month and provides limited project access.",
+              "document_id": "697019ec-55aa-474e-b4a5-602628a258a4",
+              "chunk_id": "3fe59491-f0f3-5c75-887a-1afb8a08e0cb",
+              "status": "active",
+              "eval_source_id": "recovery-other",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-missing",
+          "scenario": "missing_evidence",
+          "query": "quantum teleportation API",
+          "original_query": "quantum teleportation API",
+          "latency_ms": 0.9437920525670052,
+          "hits": [
+            {
+              "chunk_id": "92f729ad-4a75-593d-a39b-d64d2b629a81",
+              "document_id": "438236d0-1647-4a21-87e8-ec8e5517d541",
+              "text": "The product supports repository indexing and code completion for developer teams.",
+              "score": 0.0,
+              "rerank_score": null,
+              "rerank_model": null,
+              "url": "https://unknown.example/context",
+              "title": "Reference guide",
+              "competitor": "Unknown Product",
+              "dimension": "feature",
+              "source_type": "webpage_verified",
+              "content_hash": "607f1e7b3404a76d",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "missing-other",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": null,
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "92f729ad-4a75-593d-a39b-d64d2b629a81",
+              "reason": "capture_status_rejected"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        }
+      ]
+    },
+    "rerank": {
+      "top_k": 3,
+      "query_count": 14,
+      "recall_at_k": 0.9285714285714286,
+      "mrr": 0.8571428571428571,
+      "ndcg_at_k": 0.8758471076530654,
+      "per_query": [
+        {
+          "query": "Pro monthly price",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "self-hosted deployment",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 0.5,
+          "ndcg_at_k": 0.6309297535714575
+        },
+        {
+          "query": "SSO SAML",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "repository indexing",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "Claude pricing",
+          "relevant_count": 2,
+          "retrieved_count": 2,
+          "matched_count": 2,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "SCIM",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "Free plan",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "customer prompts",
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "retention",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 0.5,
+          "ndcg_at_k": 0.6309297535714575
+        },
+        {
+          "query": "xenon pricing",
+          "relevant_count": 1,
+          "retrieved_count": 3,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "企业定价",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "SSO 审计日志",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "recovered pricing",
+          "relevant_count": 1,
+          "retrieved_count": 2,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        {
+          "query": "quantum teleportation API",
+          "relevant_count": 0,
+          "retrieved_count": 1,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        }
+      ],
+      "latency_ms": {
+        "mean": 1.1871338023671083,
+        "p50": 1.1346868705004454,
+        "p95": 1.5210406854748726,
+        "max": 1.5210406854748726
+      },
+      "citation_correctness": 1.0,
+      "stale_source_misuse": 0,
+      "scope_leaks": 0,
+      "queries": [
+        {
+          "id": "rag-kb-pricing-change-001",
+          "scenario": "pricing_change",
+          "query": "Pro monthly price",
+          "original_query": "What is Acme AI's current Pro plan monthly price?",
+          "latency_ms": 1.3717501424252987,
+          "hits": [
+            {
+              "chunk_id": "a06fca76-62f7-5532-a64c-e85cb9b0e853",
+              "document_id": "883b67a0-cc0d-44a0-b70e-b5fd3c8e536f",
+              "text": "Acme AI Pro plan is listed at $29 per user per month with monthly billing.",
+              "score": 0.0,
+              "rerank_score": 0.6808682919435362,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://acme.example/pricing",
+              "title": "Acme AI pricing, current page",
+              "competitor": "Acme AI",
+              "dimension": "pricing",
+              "source_type": "official_pricing",
+              "content_hash": "4e7149d7bb00e742",
+              "fetched_at": "2026-06-01T00:00:00Z",
+              "last_seen_at": "2026-06-01T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-acme-pricing-2026",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-b77e1565df65e47cf4c0",
+              "source_url": "https://acme.example/pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "Acme AI Pro plan is listed at $29 per user per month with monthly billing.",
+              "document_id": "883b67a0-cc0d-44a0-b70e-b5fd3c8e536f",
+              "chunk_id": "a06fca76-62f7-5532-a64c-e85cb9b0e853",
+              "status": "active",
+              "eval_source_id": "live-acme-pricing-2026",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-feature-deprecated-001",
+          "scenario": "feature_deprecated",
+          "query": "self-hosted deployment",
+          "original_query": "Does Buildmate still offer self-hosted deployment?",
+          "latency_ms": 1.1260421015322208,
+          "hits": [
+            {
+              "chunk_id": "b70c1445-059e-5de9-8844-e6a993130fef",
+              "document_id": "465f16a9-ea4e-48a8-90a8-81aaaaf1a347",
+              "text": "Buildmate supports self-hosted deployment for Enterprise customers.",
+              "score": 0.03278688524590164,
+              "rerank_score": 0.9983504955652986,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://docs.buildmate.example/deployment",
+              "title": "Buildmate deployment docs, KB chunk",
+              "competitor": "Buildmate",
+              "dimension": "feature",
+              "source_type": "official_docs",
+              "content_hash": "dd7b893a6098840e",
+              "fetched_at": "2025-09-10T00:00:00Z",
+              "last_seen_at": "2025-09-10T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-buildmate-self-hosted-2025",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "d32f53c0-83ca-5e6c-bbda-692b794fa6c4",
+              "document_id": "4b2db895-d2cf-4fd5-83c6-b7948601d153",
+              "text": "Self-hosted deployment is discontinued for new Buildmate customers; cloud deployment is required.",
+              "score": 0.03225806451612903,
+              "rerank_score": 0.9944822804756654,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://docs.buildmate.example/changelog/deployment",
+              "title": "Buildmate deployment changelog",
+              "competitor": "Buildmate",
+              "dimension": "feature",
+              "source_type": "official_changelog",
+              "content_hash": "e752f2e440d70a4a",
+              "fetched_at": "2026-05-18T00:00:00Z",
+              "last_seen_at": "2026-05-18T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-buildmate-deprecation-2026",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "b70c1445-059e-5de9-8844-e6a993130fef",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            },
+            {
+              "chunk_id": "d32f53c0-83ca-5e6c-bbda-692b794fa6c4",
+              "reason": "quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-official-third-party-conflict-001",
+          "scenario": "official_third_party_conflict",
+          "query": "SSO SAML",
+          "original_query": "Which Planwise plans include SSO?",
+          "latency_ms": 1.1105411686003208,
+          "hits": [
+            {
+              "chunk_id": "43966cb4-f9fd-5e38-bc3c-fca5786f3315",
+              "document_id": "f0806161-94e6-4fd1-b106-d14f1a3dce90",
+              "text": "Planwise SSO and SAML are available only on the Enterprise plan.",
+              "score": 0.03252247488101534,
+              "rerank_score": 0.9230881643302479,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://docs.planwise.example/security/sso",
+              "title": "Planwise SSO documentation",
+              "competitor": "Planwise",
+              "dimension": "security",
+              "source_type": "official_docs",
+              "content_hash": "e028fe5d53e4772d",
+              "fetched_at": "2026-06-04T00:00:00Z",
+              "last_seen_at": "2026-06-04T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-planwise-security-official",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "448f6ef5-92fd-5778-89aa-8f34987f4461",
+              "document_id": "3cf1c339-2341-4118-ab84-e07afb65ab5e",
+              "text": "The review states that Planwise Pro includes SSO and SAML controls.",
+              "score": 0.03252247488101534,
+              "rerank_score": 0.9015509790046027,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://reviews.example/planwise",
+              "title": "Planwise review page, KB chunk",
+              "competitor": "Planwise",
+              "dimension": "security",
+              "source_type": "third_party_review",
+              "content_hash": "004880f5115821c1",
+              "fetched_at": "2026-02-11T00:00:00Z",
+              "last_seen_at": "2026-02-11T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-planwise-review-sso",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-0c97c37f1e5b0ddd0002",
+              "source_url": "https://docs.planwise.example/security/sso",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "Planwise SSO and SAML are available only on the Enterprise plan.",
+              "document_id": "f0806161-94e6-4fd1-b106-d14f1a3dce90",
+              "chunk_id": "43966cb4-f9fd-5e38-bc3c-fca5786f3315",
+              "status": "active",
+              "eval_source_id": "live-planwise-security-official",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [
+            {
+              "chunk_id": "448f6ef5-92fd-5778-89aa-8f34987f4461",
+              "reason": "capture_status_rejected"
+            }
+          ],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-stale-docs-vs-live-001",
+          "scenario": "stale_kb_vs_live",
+          "query": "repository indexing",
+          "original_query": "What repository context features does CodePilot Studio currently support?",
+          "latency_ms": 1.079333946108818,
+          "hits": [
+            {
+              "chunk_id": "41cf1c8e-a876-5a2f-923b-7dd9e20e2d15",
+              "document_id": "d89111a4-15c5-4261-be5b-2f744e29770c",
+              "text": "CodePilot Studio supports repository indexing for JavaScript, Python, Java, Go, and Rust projects.",
+              "score": 0.03278688524590164,
+              "rerank_score": 0.9043361996310615,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://docs.codepilot.example/context",
+              "title": "CodePilot Studio repository context docs, current page",
+              "competitor": "CodePilot Studio",
+              "dimension": "feature",
+              "source_type": "official_docs",
+              "content_hash": "def102001c8a07e9",
+              "fetched_at": "2026-06-02T00:00:00Z",
+              "last_seen_at": "2026-06-02T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-codepilot-context-current",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-797d3fcb592d62a118a4",
+              "source_url": "https://docs.codepilot.example/context",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "CodePilot Studio supports repository indexing for JavaScript, Python, Java, Go, and Rust projects.",
+              "document_id": "d89111a4-15c5-4261-be5b-2f744e29770c",
+              "chunk_id": "41cf1c8e-a876-5a2f-923b-7dd9e20e2d15",
+              "status": "active",
+              "eval_source_id": "live-codepilot-context-current",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-competitor-ambiguity-001",
+          "scenario": "competitor_ambiguity",
+          "query": "Claude pricing",
+          "original_query": "Summarize Claude pricing for developer teams.",
+          "latency_ms": 1.3702912256121635,
+          "hits": [
+            {
+              "chunk_id": "9eeb5a89-2e9c-5dbd-8894-97606e843837",
+              "document_id": "77efcb45-8f04-4eed-a485-d3288c1662ea",
+              "text": "Claude Enterprise pricing is negotiated for organization-wide assistant access.",
+              "score": 0.03252247488101534,
+              "rerank_score": 0.971773590746283,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://anthropic.example/enterprise/pricing",
+              "title": "Claude Enterprise pricing, KB chunk",
+              "competitor": "Claude",
+              "dimension": "pricing",
+              "source_type": "official_pricing",
+              "content_hash": "7b8136b0c38681e0",
+              "fetched_at": "2026-04-12T00:00:00Z",
+              "last_seen_at": "2026-04-12T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-claude-enterprise-pricing",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "585a0aef-88fd-58ae-91ab-4a36607a21f1",
+              "document_id": "14f491bc-4f4c-44ca-9296-2f82013ecb21",
+              "text": "Claude Code bills developer seats for coding-agent usage.",
+              "score": 0.03252247488101534,
+              "rerank_score": 0.503087199910797,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://anthropic.example/claude-code/pricing",
+              "title": "Claude Code pricing, KB chunk",
+              "competitor": "Claude",
+              "dimension": "pricing",
+              "source_type": "official_pricing",
+              "content_hash": "685f4fa7916430b2",
+              "fetched_at": "2026-04-12T00:00:00Z",
+              "last_seen_at": "2026-04-12T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-claude-code-pricing",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "9eeb5a89-2e9c-5dbd-8894-97606e843837",
+              "reason": "capture_status_rejected"
+            },
+            {
+              "chunk_id": "585a0aef-88fd-58ae-91ab-4a36607a21f1",
+              "reason": "capture_status_rejected"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-security-conflict-001",
+          "scenario": "security_conflict",
+          "query": "SCIM",
+          "original_query": "Does SecureFlow publish SOC 2 and SCIM support?",
+          "latency_ms": 1.1347909457981586,
+          "hits": [
+            {
+              "chunk_id": "1917dc81-e4ec-5232-9dc0-0b13df169dce",
+              "document_id": "9d0869b5-df5f-4363-af95-2c36c2463f9b",
+              "text": "SecureFlow publishes a SOC 2 Type II report and supports SCIM provisioning for Enterprise accounts.",
+              "score": 0.03252247488101534,
+              "rerank_score": 0.9560455363839971,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://trust.secureflow.example",
+              "title": "SecureFlow trust center",
+              "competitor": "SecureFlow",
+              "dimension": "security",
+              "source_type": "trust_center",
+              "content_hash": "89cf824c3e6cb5da",
+              "fetched_at": "2026-06-06T00:00:00Z",
+              "last_seen_at": "2026-06-06T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-secureflow-trust-center",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "77b296ab-017a-59f2-94b9-95028f912cee",
+              "document_id": "07de960e-87ad-49a6-add8-4c883027625e",
+              "text": "SecureFlow does not support SOC 2 reports or SCIM provisioning.",
+              "score": 0.03252247488101534,
+              "rerank_score": 0.9042496082382858,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://secureflow.example/security",
+              "title": "SecureFlow security page, KB chunk",
+              "competitor": "SecureFlow",
+              "dimension": "security",
+              "source_type": "webpage_verified",
+              "content_hash": "5d88721613b753c3",
+              "fetched_at": "2025-12-01T00:00:00Z",
+              "last_seen_at": "2025-12-01T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-secureflow-security-old",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "1917dc81-e4ec-5232-9dc0-0b13df169dce",
+              "reason": "quote_missing_dimension_signal"
+            },
+            {
+              "chunk_id": "77b296ab-017a-59f2-94b9-95028f912cee",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-free-plan-conflict-001",
+          "scenario": "free_plan_conflict",
+          "query": "Free plan",
+          "original_query": "Does Draftly offer a free plan?",
+          "latency_ms": 1.0386249050498009,
+          "hits": [
+            {
+              "chunk_id": "55486841-efba-5292-931e-99d23d5c1a57",
+              "document_id": "7926a937-0af1-466d-98b5-dc1d8b4f9e32",
+              "text": "Draftly offers a Free plan for individual users and paid Team plans for collaboration.",
+              "score": 0.03278688524590164,
+              "rerank_score": 0.9756980850071875,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://draftly.example/pricing",
+              "title": "Draftly pricing, current page",
+              "competitor": "Draftly",
+              "dimension": "pricing",
+              "source_type": "official_pricing",
+              "content_hash": "4764a95f412f31d5",
+              "fetched_at": "2026-06-10T00:00:00Z",
+              "last_seen_at": "2026-06-10T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-draftly-free-plan",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-f8adb1b0895204faf039",
+              "source_url": "https://draftly.example/pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "Draftly offers a Free plan for individual users and paid Team plans for collaboration.",
+              "document_id": "7926a937-0af1-466d-98b5-dc1d8b4f9e32",
+              "chunk_id": "55486841-efba-5292-931e-99d23d5c1a57",
+              "status": "active",
+              "eval_source_id": "live-draftly-free-plan",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-privacy-training-conflict-001",
+          "scenario": "privacy_training_conflict",
+          "query": "customer prompts",
+          "original_query": "Does GuardCoder train on customer code or customer prompts?",
+          "latency_ms": 1.097582746297121,
+          "hits": [
+            {
+              "chunk_id": "278713e6-a8c4-5306-b5ff-7adc1c76e7f5",
+              "document_id": "4e3f9e74-5dae-4b6e-b844-c75f3310db56",
+              "text": "GuardCoder may use customer prompts to train models unless teams opt out in privacy settings.",
+              "score": 0.03278688524590164,
+              "rerank_score": 0.9009231673788566,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://guardcoder.example/privacy",
+              "title": "GuardCoder privacy policy, current page",
+              "competitor": "GuardCoder",
+              "dimension": "privacy",
+              "source_type": "official_docs",
+              "content_hash": "a331bd326142390e",
+              "fetched_at": "2026-06-12T00:00:00Z",
+              "last_seen_at": "2026-06-12T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-guardcoder-privacy-current",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-2ca2674ff4fe8da45029",
+              "source_url": "https://guardcoder.example/privacy",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "GuardCoder may use customer prompts to train models unless teams opt out in privacy settings.",
+              "document_id": "4e3f9e74-5dae-4b6e-b844-c75f3310db56",
+              "chunk_id": "278713e6-a8c4-5306-b5ff-7adc1c76e7f5",
+              "status": "active",
+              "eval_source_id": "live-guardcoder-privacy-current",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "rag-kb-retention-conflict-001",
+          "scenario": "retention_conflict",
+          "query": "retention",
+          "original_query": "What is GuardCoder's current customer data retention window?",
+          "latency_ms": 1.156667247414589,
+          "hits": [
+            {
+              "chunk_id": "f8dc891b-5b12-52c5-bb68-f3466c5e00d8",
+              "document_id": "f2055002-5d85-473c-852e-863cdf0e30b9",
+              "text": "GuardCoder retains customer data with 30-day retention for enterprise logs.",
+              "score": 0.03252247488101534,
+              "rerank_score": 0.9550037371355583,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://guardcoder.example/privacy",
+              "title": "GuardCoder enterprise privacy, old KB chunk",
+              "competitor": "GuardCoder",
+              "dimension": "privacy",
+              "source_type": "webpage_verified",
+              "content_hash": "abddd9c684b53cbb",
+              "fetched_at": "2025-10-15T00:00:00Z",
+              "last_seen_at": "2025-10-15T00:00:00Z",
+              "status": "stale",
+              "metadata": {
+                "eval_source_id": "kb-guardcoder-retention-old",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "2b808ded-1c54-5f81-a30c-732bbd1b20f0",
+              "document_id": "5753c163-231b-471c-af01-c38e646e8768",
+              "text": "GuardCoder customer data retention is 90 days for enterprise logs and audit exports.",
+              "score": 0.03252247488101534,
+              "rerank_score": 0.9026523864834226,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://trust.guardcoder.example/privacy",
+              "title": "GuardCoder trust center, current page",
+              "competitor": "GuardCoder",
+              "dimension": "privacy",
+              "source_type": "trust_center",
+              "content_hash": "a2469daf2e55e7f9",
+              "fetched_at": "2026-06-12T00:00:00Z",
+              "last_seen_at": "2026-06-12T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "live-guardcoder-retention-current",
+                "candidate_origin": "web_fetch",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "f8dc891b-5b12-52c5-bb68-f3466c5e00d8",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            },
+            {
+              "chunk_id": "2b808ded-1c54-5f81-a30c-732bbd1b20f0",
+              "reason": "quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-long-tail",
+          "scenario": "long_tail_chunk",
+          "query": "xenon pricing",
+          "original_query": "xenon pricing",
+          "latency_ms": 1.5210406854748726,
+          "hits": [
+            {
+              "chunk_id": "00453528-1e7c-507f-ad2a-36c275482dc9",
+              "document_id": "fa156fb4-e645-4354-9b96-6e9887bfb194",
+              "text": "The xenon pricing launch offers a Pro plan at $29 per user per month with audit logs and unlimited projects.",
+              "score": 0.03131881575727918,
+              "rerank_score": 0.974806040007343,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://acme.example/long-pricing",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "5170fcda7363d86a",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "tail",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "71eb6365-bee0-563c-a7be-4595fa9c9ada",
+              "document_id": "bae2fbc7-9b20-4925-97b2-79349f9b87e9",
+              "text": "The ordinary Team pricing plan costs $10 per user per month and supports basic billing.",
+              "score": 0.01639344262295082,
+              "rerank_score": 0.47039952059751367,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://acme.example/team-pricing",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "d378a5e4ba06b871",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "distractor",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "cec8979e-5e78-571f-8cbc-79f7a9a5dadb",
+              "document_id": "fa156fb4-e645-4354-9b96-6e9887bfb194",
+              "text": "Overview section 5. This paragraph explains ordinary product setup and general guidance for teams.",
+              "score": 0.015151515151515152,
+              "rerank_score": 0.09402948135836736,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://acme.example/long-pricing",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "5170fcda7363d86a",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "tail",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-5c3f864fc11177d92f97",
+              "source_url": "https://acme.example/long-pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "The xenon pricing launch offers a Pro plan at $29 per user per month with audit logs and unlimited projects.",
+              "document_id": "fa156fb4-e645-4354-9b96-6e9887bfb194",
+              "chunk_id": "00453528-1e7c-507f-ad2a-36c275482dc9",
+              "status": "active",
+              "eval_source_id": "tail",
+              "correct": true
+            },
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-7eb72ac62be64cb1ca88",
+              "source_url": "https://acme.example/team-pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "The ordinary Team pricing plan costs $10 per user per month and supports basic billing.",
+              "document_id": "bae2fbc7-9b20-4925-97b2-79349f9b87e9",
+              "chunk_id": "71eb6365-bee0-563c-a7be-4595fa9c9ada",
+              "status": "active",
+              "eval_source_id": "distractor",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [
+            {
+              "chunk_id": "cec8979e-5e78-571f-8cbc-79f7a9a5dadb",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-chinese",
+          "scenario": "chinese",
+          "query": "企业定价",
+          "original_query": "企业定价",
+          "latency_ms": 1.2318752706050873,
+          "hits": [
+            {
+              "chunk_id": "04aa972c-6a3a-5629-854f-1378e3407cf2",
+              "document_id": "548fa886-df3e-49ff-997a-341ee31fb0d3",
+              "text": "星河企业定价采用按月计费，每个团队席位每月收费二十九元，包含权限控制和审计日志。",
+              "score": 0.03278688524590164,
+              "rerank_score": 0.9947885578486111,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://xinghe.example/pricing",
+              "title": "Reference guide",
+              "competitor": "星河",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "df6b88f793454cff",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "zh",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "6b93fd00-d37b-5042-b8e6-fd4e9b466675",
+              "document_id": "54b2d43d-c607-403e-9974-8f337a1c1502",
+              "text": "星河提供照片编辑工具，支持基础图像滤镜和画面调整，适合个人创作者使用。",
+              "score": 0.016129032258064516,
+              "rerank_score": 0.036004873955623455,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://xinghe.example/photos",
+              "title": "Reference guide",
+              "competitor": "星河",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "db78dc3d66a6d5dc",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "zh-other",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-d07b64a7ce78532fda18",
+              "source_url": "https://xinghe.example/pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "星河企业定价采用按月计费，每个团队席位每月收费二十九元，包含权限控制和审计日志。",
+              "document_id": "548fa886-df3e-49ff-997a-341ee31fb0d3",
+              "chunk_id": "04aa972c-6a3a-5629-854f-1378e3407cf2",
+              "status": "active",
+              "eval_source_id": "zh",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [
+            {
+              "chunk_id": "6b93fd00-d37b-5042-b8e6-fd4e9b466675",
+              "reason": "capture_status_rejected; quote_missing_dimension_signal"
+            }
+          ],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-mixed",
+          "scenario": "mixed_language",
+          "query": "SSO 审计日志",
+          "original_query": "SSO 审计日志",
+          "latency_ms": 1.134582795202732,
+          "hits": [
+            {
+              "chunk_id": "ed73d9f0-20c0-528c-ba8c-5b4c7a064096",
+              "document_id": "d53dee45-6ec6-451a-be74-ec85472e244e",
+              "text": "Acme Enterprise supports SSO 登录和审计日志，提供企业团队的权限控制、成员管理与代码仓库安全访问。",
+              "score": 0.03278688524590164,
+              "rerank_score": 0.9017937816916485,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://acme.example/security",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "feature",
+              "source_type": "webpage_verified",
+              "content_hash": "85b9e7355c20a571",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "mixed",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "b5375122-a1e3-5dfb-9100-0acf52ac5532",
+              "document_id": "9e10827f-a517-40c7-a9c6-dd350e3d9971",
+              "text": "Acme supports repository indexing and code completion for individual developer workflows.",
+              "score": 0.016129032258064516,
+              "rerank_score": 0.08416479632355385,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://acme.example/context",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "feature",
+              "source_type": "webpage_verified",
+              "content_hash": "a8502cf2f066b01e",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "mixed-other",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-045e6dc8726a95369d16",
+              "source_url": "https://acme.example/security",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "Acme Enterprise supports SSO 登录和审计日志，提供企业团队的权限控制、成员管理与代码仓库安全访问。",
+              "document_id": "d53dee45-6ec6-451a-be74-ec85472e244e",
+              "chunk_id": "ed73d9f0-20c0-528c-ba8c-5b4c7a064096",
+              "status": "active",
+              "eval_source_id": "mixed",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [
+            {
+              "chunk_id": "b5375122-a1e3-5dfb-9100-0acf52ac5532",
+              "reason": "capture_status_rejected"
+            }
+          ],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-recovery",
+          "scenario": "index_recovery",
+          "query": "recovered pricing",
+          "original_query": "recovered pricing",
+          "latency_ms": 1.3015419244766235,
+          "hits": [
+            {
+              "chunk_id": "21de7aea-8715-501e-992a-7b249da1461f",
+              "document_id": "a860d3c7-be31-4a29-8119-5f85f4bd3561",
+              "text": "The recovered pricing index includes a Pro plan at $29 per user per month and enterprise audit billing.",
+              "score": 0.03252247488101534,
+              "rerank_score": 0.9423483760660394,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://acme.example/recovered-pricing",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "893ff1a1439b2883",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "recovered",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            },
+            {
+              "chunk_id": "3fe59491-f0f3-5c75-887a-1afb8a08e0cb",
+              "document_id": "697019ec-55aa-474e-b4a5-602628a258a4",
+              "text": "The Basic pricing plan costs $9 per user per month and provides limited project access.",
+              "score": 0.01639344262295082,
+              "rerank_score": 0.46939106688820553,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://acme.example/basic-pricing",
+              "title": "Reference guide",
+              "competitor": "Acme",
+              "dimension": "pricing",
+              "source_type": "webpage_verified",
+              "content_hash": "c9c23614d41a0c90",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "recovery-other",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-7633f4a4e20377f8832c",
+              "source_url": "https://acme.example/recovered-pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "The recovered pricing index includes a Pro plan at $29 per user per month and enterprise audit billing.",
+              "document_id": "a860d3c7-be31-4a29-8119-5f85f4bd3561",
+              "chunk_id": "21de7aea-8715-501e-992a-7b249da1461f",
+              "status": "active",
+              "eval_source_id": "recovered",
+              "correct": true
+            },
+            {
+              "ref": "S1",
+              "evidence_item_id": "evidence-item-ef89044d0275b19adf0d",
+              "source_url": "https://acme.example/basic-pricing",
+              "field": "retrieved_fact",
+              "confidence": 0.9,
+              "quote": "The Basic pricing plan costs $9 per user per month and provides limited project access.",
+              "document_id": "697019ec-55aa-474e-b4a5-602628a258a4",
+              "chunk_id": "3fe59491-f0f3-5c75-887a-1afb8a08e0cb",
+              "status": "active",
+              "eval_source_id": "recovery-other",
+              "correct": true
+            }
+          ],
+          "admission_rejections": [],
+          "insufficient_evidence": false,
+          "scope_leaks": 0
+        },
+        {
+          "id": "retrieval-missing",
+          "scenario": "missing_evidence",
+          "query": "quantum teleportation API",
+          "original_query": "quantum teleportation API",
+          "latency_ms": 0.945208128541708,
+          "hits": [
+            {
+              "chunk_id": "92f729ad-4a75-593d-a39b-d64d2b629a81",
+              "document_id": "438236d0-1647-4a21-87e8-ec8e5517d541",
+              "text": "The product supports repository indexing and code completion for developer teams.",
+              "score": 0.0,
+              "rerank_score": 0.03148412358283161,
+              "rerank_model": "hash-reranker-v1",
+              "url": "https://unknown.example/context",
+              "title": "Reference guide",
+              "competitor": "Unknown Product",
+              "dimension": "feature",
+              "source_type": "webpage_verified",
+              "content_hash": "607f1e7b3404a76d",
+              "fetched_at": "2026-06-15T00:00:00Z",
+              "last_seen_at": "2026-06-15T00:00:00Z",
+              "status": "active",
+              "metadata": {
+                "eval_source_id": "missing-other",
+                "candidate_origin": "rag_kb",
+                "retrieval": {
+                  "requested_mode": "hybrid",
+                  "effective_mode": "hybrid",
+                  "embedding": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64,
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "reranker": {
+                    "requested_provider": "hash",
+                    "effective_provider": "hash",
+                    "model_version": "hash-reranker-v1",
+                    "degraded": false,
+                    "reason": null
+                  },
+                  "index": {
+                    "collection": "knowledge_chunks__44e4681110d3d56c",
+                    "index_version": "v1",
+                    "model_version": "hash-embedding-v1",
+                    "dimensions": 64
+                  },
+                  "degraded": false,
+                  "reason": null
+                }
+              }
+            }
+          ],
+          "citations": [],
+          "admission_rejections": [
+            {
+              "chunk_id": "92f729ad-4a75-593d-a39b-d64d2b629a81",
+              "reason": "capture_status_rejected"
+            }
+          ],
+          "insufficient_evidence": true,
+          "scope_leaks": 0
+        }
+      ]
+    }
+  }
+}

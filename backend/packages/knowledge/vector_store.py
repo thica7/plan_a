@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import math
 import os
 from collections.abc import Callable
 from typing import Any, TypeVar
@@ -32,21 +34,64 @@ class VectorStore:
     """Async-friendly Qdrant adapter. Uses sync client under the hood with
     async wrappers so it integrates cleanly with the FastAPI event loop."""
 
-    def __init__(self, url: str | None = None) -> None:
+    def __init__(self, url: str | None = None, *, client: QdrantClient | None = None) -> None:
         url = url or os.getenv("QDRANT_URL", "http://localhost:6333")
-        self._client = QdrantClient(url=url)
+        self._client = client
+        self._url = url
         self._initialised = False
+        self._collection_base = os.getenv("KB_VECTOR_COLLECTION", COLLECTION_NAME)
+        self._model_version = os.getenv("KB_EMBEDDING_MODEL_VERSION", "hash-embedding-v1")
+        self._dimensions = int(os.getenv("KB_EMBEDDING_DIM", str(EMBEDDING_DIM)))
+        self._index_version = os.getenv("KB_INDEX_VERSION", "v1")
+
+    @property
+    def collection_name(self) -> str:
+        identity = f"{self._index_version}:{self._model_version}:{self._dimensions}"
+        fingerprint = hashlib.sha256(identity.encode()).hexdigest()[:16]
+        return f"{self._collection_base}__{fingerprint}"
+
+    def configure_index(
+        self, model_version: str, dimensions: int, *, index_version: str | None = None
+    ) -> None:
+        if dimensions <= 0 or not model_version:
+            raise ValueError("Index model and dimension must be specified")
+        version = index_version or os.getenv("KB_INDEX_VERSION", "v1")
+        identity = (model_version, dimensions, version)
+        if self._initialised and identity != (
+            self._model_version,
+            self._dimensions,
+            self._index_version,
+        ):
+            raise ValueError("Index model changed; create a separate vector store or reindex")
+        self._model_version, self._dimensions, self._index_version = identity
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "collection": self.collection_name,
+            "index_version": self._index_version,
+            "model_version": self._model_version,
+            "dimensions": self._dimensions,
+        }
 
     async def initialise(self) -> None:
         if self._initialised:
             return
+        if self._client is None:
+            self._client = QdrantClient(url=self._url)
         collections = self._client.get_collections().collections
         names = {c.name for c in collections}
-        if COLLECTION_NAME not in names:
+        if self.collection_name not in names:
             self._client.create_collection(
-                collection_name=COLLECTION_NAME,
-                vectors_config=VectorParams(size=EMBEDDING_DIM, distance=Distance.COSINE),
+                collection_name=self.collection_name,
+                vectors_config=VectorParams(size=self._dimensions, distance=Distance.COSINE),
             )
+        else:
+            info = self._client.get_collection(self.collection_name)
+            vectors = info.config.params.vectors
+            if not isinstance(vectors, VectorParams) or vectors.size != self._dimensions:
+                raise ValueError(
+                    "Collection dimension does not match the configured index; reindex required"
+                )
         self._initialised = True
 
     async def _with_retry(self, operation: Callable[[], T]) -> T:
@@ -56,7 +101,7 @@ class VectorStore:
             except Exception:
                 if attempt >= _MAX_RETRIES - 1:
                     raise
-                await asyncio.sleep(_RETRY_BASE_SECONDS * (2 ** attempt))
+                await asyncio.sleep(_RETRY_BASE_SECONDS * (2**attempt))
         raise RuntimeError("Retry loop exhausted")
 
     async def upsert(
@@ -65,10 +110,19 @@ class VectorStore:
         vectors: list[list[float]],
         payloads: list[dict[str, Any]],
     ) -> None:
+        if not (len(chunk_ids) == len(vectors) == len(payloads)):
+            raise ValueError("Vector batch lengths must match")
+        for vector, payload in zip(vectors, payloads, strict=True):
+            if len(vector) != self._dimensions or not all(math.isfinite(value) for value in vector):
+                raise ValueError("Vector dimension must match index and values must be finite")
+            if payload.get("embedding_model") != self._model_version:
+                raise ValueError("Payload model must match the configured index")
+            if payload.get("index_version", self._index_version) != self._index_version:
+                raise ValueError("Payload index version must match the configured index")
         await self.initialise()
         points = [
             PointStruct(id=cid, vector=vec, payload=pl)
-            for cid, vec, pl in zip(chunk_ids, vectors, payloads, strict=False)
+            for cid, vec, pl in zip(chunk_ids, vectors, payloads, strict=True)
         ]
         # Batch upsert (Qdrant handles large batches natively)
         batch_size = 100
@@ -76,7 +130,7 @@ class VectorStore:
             batch = points[i : i + batch_size]
             await self._with_retry(
                 lambda batch=batch: self._client.upsert(
-                    collection_name=COLLECTION_NAME,
+                    collection_name=self.collection_name,
                     points=batch,
                 )
             )
@@ -89,16 +143,19 @@ class VectorStore:
         competitors: list[str] | None = None,
         dimensions: list[str] | None = None,
     ) -> list[RetrievalHit]:
+        if len(query_vector) != self._dimensions:
+            raise ValueError("Query vector dimension does not match index")
         await self.initialise()
-        must_conditions: list[FieldCondition] = []
+        must_conditions: list[FieldCondition] = [
+            FieldCondition(key="embedding_model", match=MatchValue(value=self._model_version)),
+            FieldCondition(key="index_version", match=MatchValue(value=self._index_version)),
+        ]
         if competitors:
             must_conditions.append(
                 FieldCondition(key="competitor", match=MatchAny(any=competitors))
             )
         if dimensions:
-            must_conditions.append(
-                FieldCondition(key="dimension", match=MatchAny(any=dimensions))
-            )
+            must_conditions.append(FieldCondition(key="dimension", match=MatchAny(any=dimensions)))
 
         search_filter = Filter(must=must_conditions) if must_conditions else None
 
@@ -107,19 +164,21 @@ class VectorStore:
         hits: list[RetrievalHit] = []
         for r in results:
             pl = r.payload or {}
-            hits.append(RetrievalHit(
-                chunk_id=pl.get("chunk_id", str(r.id)),
-                document_id=pl.get("document_id", ""),
-                text=pl.get("text", ""),
-                score=r.score,
-                url=pl.get("url"),
-                title=pl.get("title", ""),
-                competitor=pl.get("competitor"),
-                dimension=pl.get("dimension"),
-                source_type=pl.get("source_type", ""),
-                content_hash=pl.get("content_hash", ""),
-                metadata=pl.get("metadata", {}) if isinstance(pl.get("metadata"), dict) else {},
-            ))
+            hits.append(
+                RetrievalHit(
+                    chunk_id=pl.get("chunk_id", str(r.id)),
+                    document_id=pl.get("document_id", ""),
+                    text=pl.get("text", ""),
+                    score=r.score,
+                    url=pl.get("url"),
+                    title=pl.get("title", ""),
+                    competitor=pl.get("competitor"),
+                    dimension=pl.get("dimension"),
+                    source_type=pl.get("source_type", ""),
+                    content_hash=pl.get("content_hash", ""),
+                    metadata=pl.get("metadata", {}) if isinstance(pl.get("metadata"), dict) else {},
+                )
+            )
         return hits
 
     async def _search_points(
@@ -132,7 +191,7 @@ class VectorStore:
         if hasattr(self._client, "search"):
             return await self._with_retry(
                 lambda: self._client.search(
-                    collection_name=COLLECTION_NAME,
+                    collection_name=self.collection_name,
                     query_vector=query_vector,
                     limit=top_k,
                     query_filter=search_filter,
@@ -141,7 +200,7 @@ class VectorStore:
             )
         response = await self._with_retry(
             lambda: self._client.query_points(
-                collection_name=COLLECTION_NAME,
+                collection_name=self.collection_name,
                 query=query_vector,
                 limit=top_k,
                 query_filter=search_filter,
@@ -162,22 +221,27 @@ class VectorStore:
             if len(document_ids) == 1
             else MatchAny(any=document_ids)
         )
-        await self._with_retry(
-            lambda: self._client.delete(
-                collection_name=COLLECTION_NAME,
-                points_selector=Filter(
-                    must=[FieldCondition(key="document_id", match=match)]
+        collections = self._client.get_collections().collections
+        for collection in collections:
+            if collection.name != self._collection_base and not collection.name.startswith(
+                self._collection_base + "__"
+            ):
+                continue
+            await self._with_retry(
+                lambda name=collection.name: self._client.delete(
+                    collection_name=name,
+                    points_selector=Filter(must=[FieldCondition(key="document_id", match=match)]),
                 ),
-            ),
-        )
+            )
 
     async def collection_info(self) -> dict[str, Any]:
         await self.initialise()
         info = await self._with_retry(
-            lambda: self._client.get_collection(collection_name=COLLECTION_NAME)
+            lambda: self._client.get_collection(collection_name=self.collection_name)
         )
         return {
-            "name": COLLECTION_NAME,
+            "name": self.collection_name,
+            **self.status(),
             "status": getattr(info, "status", None),
             "vectors_count": getattr(info, "vectors_count", None),
             "points_count": getattr(info, "points_count", None),

@@ -10,6 +10,8 @@ from typing import Any
 
 import httpx
 
+from .tokenization import lexical_tokens
+
 DEFAULT_RERANK_MODEL = "hash-reranker-v1"
 
 
@@ -17,6 +19,15 @@ class RerankerProvider(ABC):
     """Synchronous reranker provider interface."""
 
     model_version: str
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "requested_provider": getattr(self, "requested_provider", "custom"),
+            "effective_provider": getattr(self, "requested_provider", "custom"),
+            "model_version": self.model_version,
+            "degraded": False,
+            "reason": None,
+        }
 
     @abstractmethod
     def rerank(self, query: str, texts: list[str]) -> list[float]:
@@ -28,14 +39,15 @@ class HashRerankerProvider(RerankerProvider):
 
     def __init__(self, *, model_version: str = DEFAULT_RERANK_MODEL) -> None:
         self.model_version = model_version
+        self.requested_provider = "hash"
 
     def rerank(self, query: str, texts: list[str]) -> list[float]:
         return [self._score(query, text) for text in texts]
 
     @staticmethod
     def _score(query: str, text: str) -> float:
-        query_terms = {term.lower() for term in query.split() if term.strip()}
-        text_terms = {term.lower() for term in text.split() if term.strip()}
+        query_terms = set(lexical_tokens(query))
+        text_terms = set(lexical_tokens(text))
         lexical = len(query_terms & text_terms) / max(1, len(query_terms))
         digest = hashlib.sha256(f"{query}\0{text}".encode("utf-8", errors="replace")).digest()
         jitter = int.from_bytes(digest[:4], "big") / 0xFFFFFFFF
@@ -56,13 +68,15 @@ class BgeRerankerV2M3Provider(RerankerProvider):
         self.batch_size = batch_size
         self.timeout_seconds = timeout_seconds
         self.model_version = model_name
-        self._fallback = HashRerankerProvider(model_version=f"{model_name}:hash-fallback")
+        self.requested_provider = "bge-reranker-v2-m3"
+        self._fallback = HashRerankerProvider()
         self._model: Any | None = None
         self._load_error: Exception | None = None
 
     def rerank(self, query: str, texts: list[str]) -> list[float]:
         model = self._load_model()
         if model is None:
+            self.model_version = self._fallback.model_version
             return self._fallback.rerank(query, texts)
 
         scores: list[float] = []
@@ -74,6 +88,19 @@ class BgeRerankerV2M3Provider(RerankerProvider):
             else:
                 scores.extend(float(score) for score in encoded)
         return scores
+
+    def status(self) -> dict[str, Any]:
+        status = super().status()
+        if self._load_error is not None:
+            status.update(
+                effective_provider="hash",
+                model_version=self._fallback.model_version,
+                degraded=True,
+                reason=str(self._load_error),
+            )
+        elif self._model is None:
+            status["effective_provider"] = "uninitialized"
+        return status
 
     def _load_model(self) -> Any | None:
         if self._model is not None:
@@ -102,6 +129,7 @@ class HttpRerankerProvider(RerankerProvider):
         timeout_seconds: float = 30.0,
     ) -> None:
         self.url = url
+        self.requested_provider = "http"
         self.model_version = model_version
         self.batch_size = batch_size
         self.timeout_seconds = timeout_seconds

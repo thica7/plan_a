@@ -50,7 +50,7 @@ def evaluate_query(
 
     for rank, hit in enumerate(top_hits, 1):
         hit_units = _hit_units(hit)
-        hit_matches = relevant & hit_units
+        hit_matches = (relevant & hit_units) - matched
         if hit_matches:
             matched.update(hit_matches)
             relevance_by_rank.append(1)

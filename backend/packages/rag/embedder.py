@@ -25,6 +25,16 @@ class HashingRagEmbedder:
     embedding_model = EMBEDDING_MODEL
     embedding_dimensions = EMBEDDING_DIMENSIONS
 
+    def status(self) -> dict[str, object]:
+        return {
+            "requested_provider": "hash",
+            "effective_provider": "hash",
+            "model_version": self.embedding_model,
+            "dimensions": self.embedding_dimensions,
+            "degraded": False,
+            "reason": None,
+        }
+
     def embed_text(self, text: str) -> RagEmbedding:
         normalized = " ".join(text.split())
         return RagEmbedding(

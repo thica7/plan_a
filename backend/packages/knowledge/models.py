@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 # Document
 # ---------------------------------------------------------------------------
 
+
 class KnowledgeDocument(BaseModel):
     """A crawled or ingested document stored in the knowledge base."""
 
@@ -32,6 +33,11 @@ class KnowledgeDocument(BaseModel):
     is_active: bool = True
     version: int = 1
     parent_document_id: str | None = None
+    indexing_status: Literal["pending", "ready", "failed"] = "pending"
+    indexing_error: str | None = None
+    embedding_model: str | None = None
+    embedding_dimensions: int | None = None
+    index_version: str | None = None
 
 
 class KnowledgeRollbackResult(BaseModel):
@@ -64,6 +70,7 @@ class DocumentCreate(BaseModel):
 # Chunk
 # ---------------------------------------------------------------------------
 
+
 class KnowledgeChunk(BaseModel):
     """A text chunk vectorised and stored in Qdrant."""
 
@@ -81,6 +88,7 @@ class KnowledgeChunk(BaseModel):
 # ---------------------------------------------------------------------------
 # Retrieval
 # ---------------------------------------------------------------------------
+
 
 class RetrievalHit(BaseModel):
     """A single result from hybrid retrieval."""
@@ -102,6 +110,7 @@ class RetrievalHit(BaseModel):
     status: str = "active"
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+
 class RetrievalRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2_000)
     preset: str | None = None
@@ -122,11 +131,13 @@ class RetrievalResponse(BaseModel):
     hits: list[RetrievalHit]
     query: str
     total: int
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
 # Citation (for analyst sub-agents)
 # ---------------------------------------------------------------------------
+
 
 class Citation(BaseModel):
     """A citation attached to an analyst output."""

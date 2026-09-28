@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import math
-import re
 from collections import Counter
 from dataclasses import dataclass
 
+from packages.knowledge.tokenization import lexical_tokens
 from packages.schema.rag import RetrievalChunk
-
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 @dataclass(frozen=True)
@@ -65,4 +63,4 @@ class BM25Index:
 
 
 def tokenize(text: str) -> list[str]:
-    return _TOKEN_RE.findall(text.casefold())
+    return lexical_tokens(text)

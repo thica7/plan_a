@@ -37,4 +37,5 @@ def test_bge_provider_falls_back_without_model_download() -> None:
 
     assert len(vectors) == 2
     assert all(len(vector) == 1024 for vector in vectors)
-    assert provider.model_version == "BAAI/bge-m3"
+    assert provider.model_version == "hash-embedding-v1"
+    assert provider.status()["degraded"] is True

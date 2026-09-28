@@ -8,7 +8,6 @@ from langchain_core.tools import tool
 
 from ..knowledge.embeddings import (
     EmbeddingProvider,
-    HashEmbeddingProvider,
     get_embedding_provider_from_env,
 )
 from ..knowledge.models import RetrievalRequest
@@ -17,12 +16,12 @@ from ..knowledge.retrieval import RetrievalService
 
 
 @lru_cache(maxsize=1)
-def _get_embedding_provider() -> EmbeddingProvider:
-    return get_embedding_provider_from_env() or HashEmbeddingProvider()
+def _get_embedding_provider() -> EmbeddingProvider | None:
+    return get_embedding_provider_from_env()
 
 
 def _empty_embeddings(texts: list[str]) -> list[list[float]]:
-    return []
+    raise RuntimeError("Embedding provider is disabled")
 
 
 @tool
@@ -38,6 +37,7 @@ async def rag_retrieve_tool(
     repo = KnowledgeRepository()
     await repo.initialise()
     try:
+        embedding_provider = None
         retrieval_mode = mode if mode in {"dense", "hybrid", "sparse"} else "hybrid"
         if retrieval_mode == "sparse":
             vector_store = object()
@@ -47,11 +47,12 @@ async def rag_retrieve_tool(
 
             embedding_provider = _get_embedding_provider()
             vector_store = VectorStore()
-            embed_fn = embedding_provider.embed_documents
+            embed_fn = embedding_provider.embed_documents if embedding_provider else _empty_embeddings
         service = RetrievalService(
             repo=repo,
             vector_store=vector_store,
             embed_fn=embed_fn,
+            embedding_provider=embedding_provider,
         )
         response = await service.retrieve(
             RetrievalRequest(

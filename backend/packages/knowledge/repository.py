@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -25,7 +24,9 @@ from .models import (
     KnowledgeChunk,
     KnowledgeDocument,
     KnowledgeRollbackResult,
+    RetrievalHit,
 )
+from .tokenization import fts_tokens, lexical_tokens
 
 # ---------------------------------------------------------------------------
 # Schema
@@ -187,45 +188,39 @@ ON chunks(crawl_run_id, document_id);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
     title,
-    text,
-    content='documents',
-    content_rowid='rowid'
+    text
 );
 
 CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN
-    INSERT INTO documents_fts(rowid, title, text) VALUES (new.rowid, new.title, new.text);
+    INSERT INTO documents_fts(rowid, title, text)
+    VALUES (new.rowid, kb_tokens(new.title), kb_tokens(new.text));
 END;
 
 CREATE TRIGGER IF NOT EXISTS documents_ad AFTER DELETE ON documents BEGIN
-    INSERT INTO documents_fts(documents_fts, rowid, title, text)
-    VALUES ('delete', old.rowid, old.title, old.text);
+    DELETE FROM documents_fts WHERE rowid = old.rowid;
 END;
 
 CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents BEGIN
-    INSERT INTO documents_fts(documents_fts, rowid, title, text)
-    VALUES ('delete', old.rowid, old.title, old.text);
-    INSERT INTO documents_fts(rowid, title, text) VALUES (new.rowid, new.title, new.text);
+    DELETE FROM documents_fts WHERE rowid = old.rowid;
+    INSERT INTO documents_fts(rowid, title, text)
+    VALUES (new.rowid, kb_tokens(new.title), kb_tokens(new.text));
 END;
 
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
-    text,
-    content='chunks',
-    content_rowid='rowid'
+    text
 );
 
 CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
-    INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, new.text);
+    INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, kb_tokens(new.text));
 END;
 
 CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
-    INSERT INTO chunks_fts(chunks_fts, rowid, text)
-    VALUES ('delete', old.rowid, old.text);
+    DELETE FROM chunks_fts WHERE rowid = old.rowid;
 END;
 
 CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
-    INSERT INTO chunks_fts(chunks_fts, rowid, text)
-    VALUES ('delete', old.rowid, old.text);
-    INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, new.text);
+    DELETE FROM chunks_fts WHERE rowid = old.rowid;
+    INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, kb_tokens(new.text));
 END;
 """
 
@@ -257,6 +252,7 @@ class KnowledgeRepository:
             uri=self._db_path.startswith("file:"),
         )
         self._db.row_factory = aiosqlite.Row
+        await self._db.create_function("kb_tokens", 1, fts_tokens, deterministic=True)
         try:
             async with write_lock_for(self._db_path):
                 await self._apply_pragmas()
@@ -356,7 +352,7 @@ class KnowledgeRepository:
                     version,
                     parent_document_id,
                     now,
-                    now,
+                    None,
                     now,
                     json.dumps(doc.metadata),
                 ),
@@ -379,7 +375,7 @@ class KnowledgeRepository:
             parent_document_id=parent_document_id,
             metadata=doc.metadata,
             fetched_at=datetime.fromisoformat(now),
-            indexed_at=datetime.fromisoformat(now),
+            indexed_at=None,
             last_seen_at=datetime.fromisoformat(now),
         )
 
@@ -392,6 +388,27 @@ class KnowledgeRepository:
             if not row:
                 return None
             return self._row_to_document(row)
+
+    async def set_indexing_state(
+        self, document_id: str, status: str, *, error: str | None = None,
+        embedding_model: str | None = None, dimensions: int | None = None,
+        index_version: str | None = None,
+    ) -> None:
+        if status not in {"pending", "ready", "failed"}:
+            raise ValueError(f"Invalid indexing state: {status}")
+        async with self._write_transaction() as db:
+            await db.execute(
+                """UPDATE documents SET indexing_status = ?, indexing_error = ?,
+                    embedding_model = ?, embedding_dimensions = ?, index_version = ?,
+                    indexed_at = ? WHERE id = ?""",
+                (status, error, embedding_model, dimensions, index_version,
+                 datetime.now(UTC).isoformat() if status == "ready" else None, document_id),
+            )
+            if status == "ready":
+                await db.execute(
+                    "UPDATE chunks SET embedding_model = ? WHERE document_id = ?",
+                    (embedding_model or "", document_id),
+                )
 
     async def list_documents(
         self,
@@ -771,6 +788,54 @@ class KnowledgeRepository:
         ) as cur:
             rows = await cur.fetchall()
             return [self._row_to_document(r) for r in rows]
+
+    async def search_chunks(
+        self, query: str, limit: int = 20, *,
+        competitors: list[str] | None = None,
+        dimensions: list[str] | None = None,
+    ) -> list[RetrievalHit]:
+        """Recall matching chunks; title-only matches contribute the first chunk."""
+        match_query = self._to_fts_query(query)
+        if not match_query:
+            return []
+        filters = ["d.is_active = 1", "d.status IN ('active', 'stale')"]
+        scope: list[Any] = []
+        for column, values in (("competitor", competitors), ("dimension", dimensions)):
+            if values:
+                filters.append(f"d.{column} IN ({', '.join('?' for _ in values)})")
+                scope.extend(values)
+        where = " AND ".join(filters)
+        hits: dict[str, RetrievalHit] = {}
+        for table, match, join, extra in (
+            ("chunks_fts", match_query, "c.rowid = chunks_fts.rowid", ""),
+            ("documents_fts", f"title : ({match_query})", "d.rowid = documents_fts.rowid",
+             "AND c.chunk_index = (SELECT MIN(c2.chunk_index) "
+             "FROM chunks c2 WHERE c2.document_id = d.id)"),
+        ):
+            async with self._connection.execute(
+                f"""SELECT d.*, c.id AS hit_chunk_id, c.text AS hit_text,
+                           bm25({table}) AS fts_rank
+                    FROM {table}
+                    JOIN chunks c
+                    JOIN documents d ON d.id = c.document_id
+                    WHERE {join} AND {table} MATCH ? AND {where} {extra}
+                    ORDER BY fts_rank, d.id, c.chunk_index LIMIT ?""",
+                [match, *scope, limit],
+            ) as cur:
+                rows = await cur.fetchall()
+            for rank, row in enumerate(rows, 1):
+                doc = self._row_to_document(row)
+                hit = RetrievalHit(
+                    chunk_id=row["hit_chunk_id"], document_id=doc.id, text=row["hit_text"],
+                    score=self.get_document_weight(doc) / rank,
+                    url=doc.url, title=doc.title, competitor=doc.competitor,
+                    dimension=doc.dimension, source_type=doc.source_type,
+                    content_hash=doc.content_hash, fetched_at=doc.fetched_at,
+                    last_seen_at=doc.last_seen_at, status=doc.status, metadata=doc.metadata,
+                )
+                if hit.chunk_id not in hits:
+                    hits[hit.chunk_id] = hit
+        return sorted(hits.values(), key=lambda hit: hit.score, reverse=True)[:limit]
 
     async def get_document_by_content_hash(self, content_hash: str) -> KnowledgeDocument | None:
         db = self._connection
@@ -1500,6 +1565,8 @@ class KnowledgeRepository:
             (7, "add chunk crawl run id", self._migration_007_chunks_crawl_run_id),
             (8, "add retrieval traces table", self._migration_008_retrieval_traces),
             (9, "add evidence sync tracking", self._migration_009_evidence_sync_tracking),
+            (10, "rebuild FTS with CJK bigrams", self._migration_010_cjk_fts),
+            (11, "add recoverable vector indexing state", self._migration_011_indexing_state),
         ]
         db = self._connection
         async with db.execute("SELECT id FROM _schema_version") as cur:
@@ -1522,6 +1589,37 @@ class KnowledgeRepository:
             "chunks",
             "embedding_model",
             "TEXT NOT NULL DEFAULT ''",
+        )
+
+    async def _migration_010_cjk_fts(self) -> None:
+        db = self._connection
+        for name in (
+            "documents_ai", "documents_ad", "documents_au", "chunks_ai", "chunks_ad", "chunks_au"
+        ):
+            await db.execute(f"DROP TRIGGER IF EXISTS {name}")
+        await db.execute("DROP TABLE IF EXISTS documents_fts")
+        await db.execute("DROP TABLE IF EXISTS chunks_fts")
+        # FTS stores tokenised copies. External-content 'rebuild' would bypass segmentation.
+        fts_schema = _POST_MIGRATION_SCHEMA[_POST_MIGRATION_SCHEMA.index("CREATE VIRTUAL TABLE"):]
+        await db.executescript(fts_schema)
+        await db.execute(
+            "INSERT INTO documents_fts(rowid, title, text) "
+            "SELECT rowid, kb_tokens(title), kb_tokens(text) FROM documents"
+        )
+        await db.execute(
+            "INSERT INTO chunks_fts(rowid, text) SELECT rowid, kb_tokens(text) FROM chunks"
+        )
+
+    async def _migration_011_indexing_state(self) -> None:
+        for column, declaration in (
+            ("indexing_status", "TEXT NOT NULL DEFAULT 'pending'"),
+            ("indexing_error", "TEXT"), ("embedding_model", "TEXT"),
+            ("embedding_dimensions", "INTEGER"), ("index_version", "TEXT"),
+        ):
+            await self._add_column_if_missing("documents", column, declaration)
+        # Old indexed_at predates vector writes and cannot establish readiness.
+        await self._connection.execute(
+            "UPDATE documents SET indexed_at = NULL WHERE indexing_status != 'ready'"
         )
 
     async def _migration_002_documents_versioning(self) -> None:
@@ -1768,6 +1866,10 @@ class KnowledgeRepository:
                 datetime.fromisoformat(row["last_seen_at"]) if row["last_seen_at"] else None
             ),
             metadata=json.loads(row["metadata_json"]),
+            indexing_status=row["indexing_status"], indexing_error=row["indexing_error"],
+            embedding_model=row["embedding_model"],
+            embedding_dimensions=row["embedding_dimensions"],
+            index_version=row["index_version"],
         )
 
     @staticmethod
@@ -1786,5 +1888,5 @@ class KnowledgeRepository:
 
     @staticmethod
     def _to_fts_query(query: str) -> str:
-        terms = re.findall(r"[\w-]+", query)
+        terms = lexical_tokens(query)
         return " ".join(f'"{term}"' for term in terms)

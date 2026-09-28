@@ -1,3 +1,4 @@
+import type { components } from "./openapi";
 export type { components, operations, paths } from "./openapi";
 
 export type RunStatus =
@@ -57,26 +58,11 @@ export interface QCIssue {
   metadata?: Record<string, unknown>;
 }
 
-export interface RawSource {
-  id: string;
-  competitor: string;
+/** Backend DTO with guaranteed defaults supplied by backend validation. */
+export type RawSource = components["schemas"]["RawSource"] & {
   covered_competitors: string[];
-  dimension: string;
-  source_type: string;
-  title: string;
-  url?: string | null;
-  snippet: string;
-  content_hash: string;
-  confidence: number;
-  candidate_origin: string;
-  candidate_rank?: number | null;
-  candidate_confidence?: number | null;
-  fetch_method: string;
-  quality_score: number;
-  failure_reason?: string | null;
   metadata: Record<string, unknown>;
-  extracted_at: string;
-}
+};
 
 export type ArtifactLayerName = "core" | "support" | "audit";
 export type EvidenceStrength = "strong" | "moderate" | "weak" | "insufficient";

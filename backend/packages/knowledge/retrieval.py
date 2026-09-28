@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import math
+import os
 import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
@@ -16,8 +17,10 @@ from pydantic import BaseModel, Field
 from packages.config import get_settings
 from packages.llm import DoubaoClient
 
+from .embeddings import EmbeddingProvider
 from .models import RetrievalHit, RetrievalRequest, RetrievalResponse
 from .repository import KnowledgeRepository
+from .reranker import RerankerProvider
 
 _DEFAULT_CACHE_TTL_SECONDS = 300.0
 _DEFAULT_CACHE_MAXSIZE = 256
@@ -240,8 +243,10 @@ class RetrievalService:
         vector_store: Any,
         *,
         embed_fn: Callable[[list[str]], Any],
+        embedding_provider: EmbeddingProvider | None = None,
         rerank_fn: Callable[[str, list[str]], Any] | None = None,
         rerank_model: str | None = None,
+        reranker_provider: RerankerProvider | None = None,
         query_rewriter: QueryRewriter | None = None,
         dense_weight: float = 1.0,
         sparse_weight: float = 1.0,
@@ -252,8 +257,10 @@ class RetrievalService:
         self._repo = repo
         self._vs = vector_store
         self._embed_fn = embed_fn
+        self._embedding_provider = embedding_provider or getattr(embed_fn, "__self__", None)
         self._rerank_fn = rerank_fn
         self._rerank_model = rerank_model
+        self._reranker_provider = reranker_provider or getattr(rerank_fn, "__self__", None)
         self._query_rewriter = query_rewriter or DefaultQueryRewriter()
         self._dense_weight = dense_weight
         self._sparse_weight = sparse_weight
@@ -278,6 +285,7 @@ class RetrievalService:
                 response = cached.model_copy(deep=True)
             else:
                 response = await self._retrieve_without_rewrites(request)
+                response.diagnostics = self._diagnostics(request)
                 self._retrieval_cache.set(cache_key, response.model_copy(deep=True))
 
         await self._record_observability(
@@ -285,7 +293,26 @@ class RetrievalService:
             latency_ms=(time.monotonic() - started_at) * 1000,
             cache_hit=cache_hit,
         )
+        if not cache_hit:
+            response.diagnostics = self._diagnostics(request)
+        for hit in response.hits:
+            hit.metadata = {**hit.metadata, "retrieval": response.diagnostics}
         return response
+
+    def _diagnostics(self, request: RetrievalRequest) -> dict[str, Any]:
+        embedding = self._embedding_provider.status() if self._embedding_provider is not None else {
+            "requested_provider": "custom", "effective_provider": "custom", "model_version": None,
+            "dimensions": None, "degraded": False, "reason": None,
+        }
+        reranker = self._reranker_provider.status() if self._reranker_provider is not None else None
+        reasons = [reason for reason in (self._dense_error, embedding.get("reason"),
+                   reranker.get("reason") if reranker else None) if reason]
+        index_status = getattr(self._vs, "status", None)
+        return {"requested_mode": request.mode,
+                "effective_mode": "sparse" if self._dense_error else request.mode,
+                "embedding": embedding, "reranker": reranker,
+                "index": index_status() if callable(index_status) else None,
+                "degraded": bool(reasons), "reason": "; ".join(reasons) or None}
 
     async def _retrieve_with_rewrites(self, request: RetrievalRequest) -> RetrievalResponse:
         rewrites = await self._query_rewriter.rewrite(
@@ -319,13 +346,20 @@ class RetrievalService:
         sparse_hits: list[RetrievalHit] = []
 
         if request.mode in {"dense", "hybrid"}:
-            qvec = await self._embed_query(query)
-            dense_hits = await self._vs.search(
-                qvec,
-                top_k=request.top_k,
-                competitors=request.competitors or None,
-                dimensions=request.dimensions or None,
-            )
+            try:
+                qvec = await self._embed_query(query)
+                configure = getattr(self._vs, "configure_index", None)
+                if callable(configure) and self._embedding_provider is not None:
+                    configure(self._embedding_provider.model_version, len(qvec),
+                              index_version=os.getenv("KB_INDEX_VERSION", "v1"))
+                dense_hits = await self._vs.search(
+                    qvec, top_k=request.top_k, competitors=request.competitors or None,
+                    dimensions=request.dimensions or None,
+                )
+            except Exception as exc:
+                if request.mode == "dense":
+                    raise RuntimeError(f"Dense retrieval failed: {exc}") from exc
+                self._dense_error = f"Dense retrieval unavailable: {exc}"
             dense_hits = await self._filter_dense_hits_by_document_status(dense_hits)
             dense_hits = _normalise_scores(dense_hits)
             self._dense_hits += len(dense_hits)
@@ -372,6 +406,16 @@ class RetrievalService:
             status = getattr(document, "status", "active")
             if status not in {"active", "stale"} or not getattr(document, "is_active", True):
                 continue
+            if getattr(document, "indexing_status", "ready") != "ready":
+                continue
+            if self._embedding_provider is not None:
+                expected_model = self._embedding_provider.model_version
+                expected_version = os.getenv("KB_INDEX_VERSION", "v1")
+                if (
+                    getattr(document, "embedding_model", expected_model) != expected_model
+                    or getattr(document, "index_version", expected_version) != expected_version
+                ):
+                    continue
             filtered.append(
                 hit.model_copy(
                     update={
@@ -398,6 +442,11 @@ class RetrievalService:
         competitors: list[str] | None = None,
         dimensions: list[str] | None = None,
     ) -> list[RetrievalHit]:
+        search_chunks = getattr(self._repo, "search_chunks", None)
+        if callable(search_chunks):
+            return await search_chunks(
+                query, limit=top_k, competitors=competitors, dimensions=dimensions
+            )
         keyword_docs = await self._repo.search_documents(
             query,
             limit=top_k,
@@ -447,11 +496,14 @@ class RetrievalService:
             scores = await _maybe_await(self._rerank_fn(query, [hit.text for hit in rerank_hits]))
             for hit, score in zip(rerank_hits, scores, strict=False):
                 hit.rerank_score = float(score)
-                hit.rerank_model = self._rerank_model
+                hit.rerank_model = (
+                    self._reranker_provider.model_version
+                    if self._reranker_provider else self._rerank_model
+                )
             rerank_hits.sort(key=lambda h: h.rerank_score or 0.0, reverse=True)
             hits = [*rerank_hits, *hits[rerank_count:]]
 
-        if request.mmr_lambda > 0:
+        if request.mmr_lambda > 0 and not self._dense_error:
             hits = await self._mmr_rerank(query, hits, request)
 
         return _prefer_document_diversity(hits, final_top_k=request.final_top_k)
@@ -530,6 +582,7 @@ class RetrievalService:
         return request.model_dump_json()
 
     def _reset_observability_counts(self) -> None:
+        self._dense_error: str | None = None
         self._dense_hits = 0
         self._sparse_hits = 0
         self._reranked_hits = 0

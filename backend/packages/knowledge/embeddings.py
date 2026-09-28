@@ -20,6 +20,16 @@ class EmbeddingProvider(ABC):
 
     model_version: str
 
+    def status(self) -> dict[str, Any]:
+        return {
+            "requested_provider": getattr(self, "requested_provider", "custom"),
+            "effective_provider": getattr(self, "requested_provider", "custom"),
+            "model_version": self.model_version,
+            "dimensions": getattr(self, "dimensions", None),
+            "degraded": False,
+            "reason": None,
+        }
+
     @abstractmethod
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Embed a batch of documents."""
@@ -40,6 +50,7 @@ class HashEmbeddingProvider(EmbeddingProvider):
     ) -> None:
         self.dimensions = dimensions
         self.model_version = model_version
+        self.requested_provider = "hash"
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [self._embed(text) for text in texts]
@@ -79,13 +90,16 @@ class BgeM3Provider(EmbeddingProvider):
         self.batch_size = batch_size
         self.timeout_seconds = timeout_seconds
         self.model_version = model_name
-        self._fallback = HashEmbeddingProvider(model_version=f"{model_name}:hash-fallback")
+        self.requested_provider = "bge-m3"
+        self.dimensions = DEFAULT_EMBEDDING_DIM
+        self._fallback = HashEmbeddingProvider()
         self._model: Any | None = None
         self._load_error: Exception | None = None
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         model = self._load_model()
         if model is None:
+            self.model_version = self._fallback.model_version
             return self._fallback.embed_documents(texts)
 
         vectors: list[list[float]] = []
@@ -96,7 +110,23 @@ class BgeM3Provider(EmbeddingProvider):
                 show_progress_bar=False,
             )
             vectors.extend(_to_vectors(encoded))
+        if vectors:
+            self.dimensions = len(vectors[0])
         return vectors
+
+    def status(self) -> dict[str, Any]:
+        status = super().status()
+        if self._load_error is not None:
+            status.update(
+                effective_provider="hash",
+                model_version=self._fallback.model_version,
+                dimensions=self._fallback.dimensions,
+                degraded=True,
+                reason=str(self._load_error),
+            )
+        elif self._model is None:
+            status["effective_provider"] = "uninitialized"
+        return status
 
     def embed_query(self, text: str) -> list[float]:
         return self.embed_documents([text])[0]
@@ -128,6 +158,8 @@ class HttpEmbeddingProvider(EmbeddingProvider):
         timeout_seconds: float = 30.0,
     ) -> None:
         self.url = url
+        self.requested_provider = "http"
+        self.dimensions: int | None = None
         self.model_version = model_version
         self.batch_size = batch_size
         self.timeout_seconds = timeout_seconds
@@ -140,6 +172,8 @@ class HttpEmbeddingProvider(EmbeddingProvider):
                 response.raise_for_status()
                 payload = response.json()
                 vectors.extend(payload.get("embeddings", payload.get("vectors", [])))
+        if vectors:
+            self.dimensions = len(vectors[0])
         return vectors
 
     def embed_query(self, text: str) -> list[float]:
@@ -162,17 +196,34 @@ def get_embedding_provider_from_env() -> EmbeddingProvider | None:
     if provider == "http":
         url = os.getenv("KB_EMBEDDING_HTTP_URL")
         if not url:
-            return HashEmbeddingProvider(model_version="http-embedding:hash-fallback")
+            return DegradedHashEmbeddingProvider("http", "KB_EMBEDDING_HTTP_URL is missing")
         return HttpEmbeddingProvider(
             url=url,
             model_version=os.getenv("KB_EMBEDDING_MODEL_VERSION", "http-embedding"),
             batch_size=batch_size,
             timeout_seconds=timeout,
         )
+    if provider != "hash":
+        raise ValueError(f"Unknown KB embedding provider: {provider}")
     return HashEmbeddingProvider(
         dimensions=_env_int("KB_EMBEDDING_DIM", DEFAULT_EMBEDDING_DIM),
         model_version=os.getenv("KB_EMBEDDING_MODEL_VERSION", DEFAULT_EMBEDDING_MODEL),
     )
+
+
+class DegradedHashEmbeddingProvider(HashEmbeddingProvider):
+    def __init__(self, requested: str, reason: str) -> None:
+        super().__init__()
+        self.requested_provider = requested
+        self.reason = reason
+
+    def status(self) -> dict[str, Any]:
+        return {
+            **super().status(),
+            "effective_provider": "hash",
+            "degraded": True,
+            "reason": self.reason,
+        }
 
 
 def _batched(items: list[str], batch_size: int) -> Iterable[list[str]]:

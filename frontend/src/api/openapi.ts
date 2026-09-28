@@ -448,6 +448,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/documents/{document_id}/reindex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reindex Knowledge Document */
+        post: operations["reindex_knowledge_document_api_knowledge_documents__document_id__reindex_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Knowledge Provider Status */
+        get: operations["get_knowledge_provider_status_api_knowledge_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/knowledge/documents/{document_id}/versions": {
         parameters: {
             query?: never;
@@ -5070,6 +5104,20 @@ export interface components {
             version: number;
             /** Parent Document Id */
             parent_document_id?: string | null;
+            /**
+             * Indexing Status
+             * @default pending
+             * @enum {string}
+             */
+            indexing_status: "pending" | "ready" | "failed";
+            /** Indexing Error */
+            indexing_error?: string | null;
+            /** Embedding Model */
+            embedding_model?: string | null;
+            /** Embedding Dimensions */
+            embedding_dimensions?: number | null;
+            /** Index Version */
+            index_version?: string | null;
         };
         /** KnowledgeEvidenceSyncJobRecord */
         KnowledgeEvidenceSyncJobRecord: {
@@ -7116,6 +7164,10 @@ export interface components {
             query: string;
             /** Total */
             total: number;
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            };
         };
         /** ReviewThemeItem */
         ReviewThemeItem: {
@@ -10102,6 +10154,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeChunk"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reindex_knowledge_document_api_knowledge_documents__document_id__reindex_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocument"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_knowledge_provider_status_api_knowledge_providers_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

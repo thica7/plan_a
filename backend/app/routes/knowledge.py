@@ -22,7 +22,6 @@ from packages.crawler.models import CrawlRequest, CrawlResult
 from packages.enterprise.store import DEFAULT_WORKSPACE_ID
 from packages.knowledge.embeddings import (
     EmbeddingProvider,
-    HashEmbeddingProvider,
     get_embedding_provider_from_env,
 )
 from packages.knowledge.eval import RetrievalLabel, evaluate_retrieval
@@ -197,8 +196,8 @@ async def get_repository() -> KnowledgeRepository:
 
 
 @lru_cache(maxsize=1)
-def get_embedding_provider() -> EmbeddingProvider:
-    return get_embedding_provider_from_env() or HashEmbeddingProvider()
+def get_embedding_provider() -> EmbeddingProvider | None:
+    return get_embedding_provider_from_env()
 
 
 @lru_cache(maxsize=1)
@@ -207,7 +206,7 @@ def get_reranker_provider() -> RerankerProvider | None:
 
 
 RepositoryDep = Annotated[KnowledgeRepository, Depends(get_repository)]
-EmbeddingProviderDep = Annotated[EmbeddingProvider, Depends(get_embedding_provider)]
+EmbeddingProviderDep = Annotated[EmbeddingProvider | None, Depends(get_embedding_provider)]
 RerankerProviderDep = Annotated[RerankerProvider | None, Depends(get_reranker_provider)]
 EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
 
@@ -278,6 +277,44 @@ async def get_knowledge_document_chunks(
         raise
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/knowledge/documents/{document_id}/reindex", response_model=KnowledgeDocument)
+async def reindex_knowledge_document(
+    document_id: str, repo: RepositoryDep, embedding_provider: EmbeddingProviderDep,
+    user: EnterpriseUserDep,
+) -> KnowledgeDocument:
+    _require_kb_access(user, "memory:write")
+    if embedding_provider is None:
+        raise HTTPException(status_code=400, detail="Embedding provider is disabled")
+    if await repo.get_document(document_id) is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    pipeline = IngestionPipeline(repo, _vector_store_for_ingest(embedding_provider))
+    try:
+        await pipeline.reindex_document(document_id, embedding_provider=embedding_provider)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Reindex failed: {exc}") from exc
+    return await get_knowledge_document(document_id, repo, user)
+
+
+@router.get("/knowledge/providers")
+async def get_knowledge_provider_status(
+    embedding_provider: EmbeddingProviderDep, reranker_provider: RerankerProviderDep,
+    user: EnterpriseUserDep,
+) -> dict[str, Any]:
+    _require_kb_access(user, "memory:read")
+    return {"embedding": embedding_provider.status() if embedding_provider else {
+                "requested_provider": "disabled", "effective_provider": "disabled",
+                "model_version": None, "dimensions": None, "degraded": False, "reason": None},
+            "reranker": reranker_provider.status() if reranker_provider else None,
+            "collection_base": os.getenv("KB_VECTOR_COLLECTION", "knowledge_chunks"),
+            "index_version": os.getenv("KB_INDEX_VERSION", "v1")}
+
+
+def _disabled_embeddings(_texts: list[str]) -> list[list[float]]:
+    raise RuntimeError("Embedding provider is disabled")
 
 
 @router.delete("/knowledge/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -393,9 +430,13 @@ async def search_knowledge(
         service = RetrievalService(
             repo=repo,
             vector_store=_vector_store_for_search(),
-            embed_fn=embedding_provider.embed_documents,
+            embed_fn=(
+                embedding_provider.embed_documents if embedding_provider else _disabled_embeddings
+            ),
+            embedding_provider=embedding_provider,
             rerank_fn=reranker_provider.rerank if reranker_provider else None,
             rerank_model=reranker_provider.model_version if reranker_provider else None,
+            reranker_provider=reranker_provider,
         )
         return await service.retrieve(request)
     except ValueError as exc:
@@ -430,9 +471,11 @@ async def evaluate_knowledge(
     service = RetrievalService(
         repo=repo,
         vector_store=_vector_store_for_search(),
-        embed_fn=embedding_provider.embed_documents,
+        embed_fn=embedding_provider.embed_documents if embedding_provider else _disabled_embeddings,
+        embedding_provider=embedding_provider,
         rerank_fn=reranker_provider.rerank if reranker_provider else None,
         rerank_model=reranker_provider.model_version if reranker_provider else None,
+        reranker_provider=reranker_provider,
     )
     try:
         responses = [

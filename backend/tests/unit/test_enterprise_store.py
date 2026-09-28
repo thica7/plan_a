@@ -22,8 +22,8 @@ from app.routers.enterprise import (
     _with_pydantic_ai_execution_metadata,
 )
 from packages.agents.executor import AgentExecutionResult
-from packages.auth import EnterpriseUserContext
 from packages.artifacts import LocalArtifactStorage
+from packages.auth import EnterpriseUserContext
 from packages.config import Settings
 from packages.enterprise import (
     EnterpriseMemoryStore,
@@ -42,9 +42,9 @@ from packages.runtime.service import RuntimeCommandService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
     ArtifactRecord,
-    EvidenceRecord,
     EvidenceGapFillResult,
     EvidenceGapReport,
+    EvidenceRecord,
     ManualReportRevisionRequest,
     NotificationRecord,
     ReportVersionRecord,
@@ -52,12 +52,6 @@ from packages.schema.enterprise import (
     UserFeedbackRecord,
     WorkspaceMemberRecord,
     WorkspaceQuotaUpdateRequest,
-)
-from packages.schema.report_artifact import (
-    ReportArtifactLegacyInfo,
-    ReportArtifactRenderCache,
-    ReportArtifactV2,
-    ReportLayer,
 )
 from packages.schema.models import (
     AnalysisPlan,
@@ -70,6 +64,12 @@ from packages.schema.models import (
     SkillSpec,
 )
 from packages.schema.quality import QualityFinding
+from packages.schema.report_artifact import (
+    ReportArtifactLegacyInfo,
+    ReportArtifactRenderCache,
+    ReportArtifactV2,
+    ReportLayer,
+)
 from packages.skills.registry import SkillRegistry
 from packages.workflows.activities import ReportApprovalActivities
 from packages.workflows.models import (
@@ -181,8 +181,8 @@ def test_report_export_payload_selects_layered_scope_and_metadata() -> None:
     with pytest.raises(HTTPException) as exc_info:
         _report_export_payload(version, "markdown", scope="unknown")
 
-    assert getattr(exc_info.value, "status_code") == 400
-    assert "Unsupported report export scope" in str(getattr(exc_info.value, "detail"))
+    assert exc_info.value.status_code == 400
+    assert "Unsupported report export scope" in str(exc_info.value.detail)
 
 
 def test_postgres_report_version_row_validates_layered_artifact_json() -> None:
@@ -1293,7 +1293,7 @@ def test_enterprise_store_indexes_and_searches_evidence_embeddings() -> None:
     assert embeddings[0].evidence_id == projection.evidence_records[0].id
     assert reindexed.indexed_count == 1
     assert [hit.evidence.id for hit in hits] == [projection.evidence_records[0].id]
-    assert hits[0].embedding_model == "hashing-384"
+    assert hits[0].embedding_model == "hashing-384-cjk-v2"
 
 
 def test_enterprise_store_deduplicates_embedding_index_by_content_hash() -> None:

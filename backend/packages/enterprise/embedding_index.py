@@ -2,20 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import math
-import re
 
 from packages.identity import stable_prefixed_id
+from packages.knowledge.tokenization import lexical_tokens
 from packages.schema.enterprise import EvidenceEmbeddingRecord, EvidenceRecord
 
 EMBEDDING_DIMENSIONS = 384
-EMBEDDING_MODEL = "hashing-384"
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
+EMBEDDING_MODEL = "hashing-384-cjk-v2"
 
 
 def build_evidence_embedding_record(evidence: EvidenceRecord) -> EvidenceEmbeddingRecord:
     text = evidence_embedding_text(evidence)
     return EvidenceEmbeddingRecord(
-        id=stable_prefixed_id("embedding", evidence.id, length=24),
+        id=stable_prefixed_id("embedding", evidence.id, EMBEDDING_MODEL, length=24),
         workspace_id=evidence.workspace_id,
         project_id=evidence.project_id,
         evidence_id=evidence.id,
@@ -65,7 +64,7 @@ def vector_literal(vector: list[float]) -> str:
 
 
 def _tokens(text: str) -> list[str]:
-    return _TOKEN_RE.findall(_normalize_text(text))
+    return lexical_tokens(text)
 
 
 def _normalize_text(text: str) -> str:

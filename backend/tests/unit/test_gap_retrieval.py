@@ -126,7 +126,7 @@ def test_rag_embedder_and_vector_store_boundary_recall_evidence() -> None:
         recall_limit=5,
     )
 
-    assert embedding.embedding_model == "hashing-384"
+    assert embedding.embedding_model == "hashing-384-cjk-v2"
     assert embedding.embedding_dimensions == 384
     assert embedding.embedding_hash
     assert [item.id for item in recalled] == ["evidence-pricing-1"]
