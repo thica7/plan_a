@@ -98,6 +98,21 @@ The frontend now opens as a pixel desktop with application windows, a taskbar,
 project files, analysis tasks, knowledge, evidence, reports, and settings.
 Closing a window leaves the backend run active; the task manager can reopen it.
 
+To preview the desktop without Docker, use two terminals from the repository root:
+
+```bash
+# Terminal 1: deterministic demo API and in-memory enterprise store
+COMPETISCOPE_LOAD_ENV_FILES=0 DEMO_MODE=true ENTERPRISE_STORE_BACKEND=memory \
+RUN_ORCHESTRATION_BACKEND=langgraph TEMPORAL_TRAFFIC_PERCENT=0 \
+.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+
+# Terminal 2: frontend (open http://127.0.0.1:5173)
+pnpm --dir frontend dev --host 127.0.0.1
+```
+
+This preview uses synthetic demo data and does not start Temporal, Postgres, or
+Qdrant. Stop each foreground process with Ctrl+C.
+
 Useful commands:
 
 ```powershell
