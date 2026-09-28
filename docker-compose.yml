@@ -3,9 +3,22 @@ services:
     image: qdrant/qdrant:latest
     restart: unless-stopped
     ports:
-      - "6333:6333"
+      - "${QDRANT_BIND:-127.0.0.1:6333}:6333"
     volumes:
       - qdrant_data:/qdrant/storage
+    healthcheck:
+      # Official Qdrant image is Debian-based; use Bash TCP without curl/wget.
+      test:
+        - CMD-SHELL
+        - >-
+          bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333;
+          printf "GET /readyz HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3;
+          read -r status <&3;
+          [[ "$$status" == *" 200 "* ]]'
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
   postgres:
     image: pgvector/pgvector:pg17
@@ -67,7 +80,7 @@ services:
         APT_SECURITY_MIRROR: ${APT_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
         INSTALL_PLAYWRIGHT_BROWSERS: ${INSTALL_PLAYWRIGHT_BROWSERS:-1}
     env_file: .env
-    environment:
+    environment: &app-runtime
       QDRANT_URL: http://qdrant:6333
       KB_DB_PATH: /app/runs/knowledge_docker.db
       ENTERPRISE_STORE_BACKEND: postgres
@@ -95,7 +108,7 @@ services:
       retries: 8
     depends_on:
       qdrant:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_healthy
       temporal:
@@ -115,19 +128,13 @@ services:
         INSTALL_PLAYWRIGHT_BROWSERS: ${INSTALL_PLAYWRIGHT_BROWSERS:-1}
     env_file: .env
     command: ["python", "-m", "packages.workflows.worker"]
-    environment:
-      ENTERPRISE_STORE_BACKEND: postgres
-      ENTERPRISE_DATABASE_URL: postgresql://${POSTGRES_USER:-competiscope}:${POSTGRES_PASSWORD:-competiscope}@postgres:5432/${POSTGRES_DB:-competiscope}?connect_timeout=5
-      RUN_ORCHESTRATION_BACKEND: temporal
-      TEMPORAL_ADDRESS: temporal:7233
-      TEMPORAL_NAMESPACE: default
-      TEMPORAL_TASK_QUEUE: competitive-intel
-      WEBFETCH_V2_ROOT: /app/third_party/webfetch_v2
-      ARTIFACT_STORAGE_ROOT: /app/data/artifacts
+    environment: *app-runtime
     volumes:
       - run-data:/app/runs
       - artifact-data:/app/data
     depends_on:
+      qdrant:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       temporal:

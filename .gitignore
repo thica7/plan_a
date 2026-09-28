@@ -35,6 +35,7 @@ __pycache__/
 node_modules/
 .pnpm-store/
 dist/
+.vite/
 *.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts
