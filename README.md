@@ -13,10 +13,16 @@ Docker-first deployment scaffolding.
 - Run competitive intelligence workflows from a topic, competitor set, and
   analysis dimensions such as pricing, features, security, persona, market,
   integrations, and reviews.
+- Start from a named target product in any category, discover direct rivals and
+  substitutes, and research the target alongside those products. Product facts
+  and comparison cells retain source references; legacy topic-only runs remain
+  available through the API.
 - Orchestrate planner, collector, analyst, comparator, writer, QA, reflector,
   and scoped redo stages through a graph-based pipeline.
 - Collect evidence from trusted registries, web search, fetched web pages,
   crawler sources, community signals, manual inputs, and the knowledge base.
+- Reject login shells and unrelated prices, distinguish publication dates from
+  fetch dates, and use a bounded browser fetch when ordinary HTML is insufficient.
 - Build source-grounded reports with evidence packs, structured source tokens,
   quality gates, release checks, and report versioning.
 - Manage enterprise workspaces, projects, competitors, evidence, claims,
@@ -112,6 +118,13 @@ pnpm --dir frontend dev --host 127.0.0.1
 
 This preview uses synthetic demo data and does not start Temporal, Postgres, or
 Qdrant. Stop each foreground process with Ctrl+C.
+
+For a real product study, enter the target name in New Run and optionally add
+its official URL, category, audience, use cases, and market. Automatic rival
+discovery requires configured web search; you can also provide rival names
+manually. The target appears separately in the comparison matrix. The browser
+fetch path needs optional Playwright/Chromium dependencies for dynamic pages;
+scanned PDFs need OCR before their text can support claims.
 
 Useful commands:
 

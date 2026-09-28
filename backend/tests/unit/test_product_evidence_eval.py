@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
+
+from pypdf import PdfWriter
 
 from packages.agents.qa.logic import QualityAgentMixin
 from packages.research.evidence.admission import admit_evidence_items
@@ -10,14 +13,16 @@ from packages.research.extraction.common import extract_page
 from packages.research.models import CapturedPage, ResearchBrief, SourceCandidate
 from packages.schema.models import RawSource
 from packages.tools.evidence_fetch import _basic_content_problem
-from packages.tools.fetch_page import FetchPageResult
+from packages.tools.fetch_page import FetchPageResult, _extract_pdf_text
 
 CASES = Path(__file__).resolve().parents[3] / "eval" / "product-evidence-eval.jsonl"
 
 
 def test_product_evidence_quality_gate_examples() -> None:
     cases = [json.loads(line) for line in CASES.read_text().splitlines() if line.strip()]
-    assert {item["kind"] for item in cases} == {"fetch_shell", "freshness", "extraction"}
+    assert {item["kind"] for item in cases} == {
+        "fetch_shell", "freshness", "extraction", "pdf", "price_conflict",
+    }
     assert len(cases) >= 7
     for item in cases:
         if item["kind"] == "fetch_shell":
@@ -37,6 +42,12 @@ def test_product_evidence_quality_gate_examples() -> None:
                 content_hash="eval", confidence=.7, metadata=metadata,
             )
             assert (QualityAgentMixin()._source_freshness_problem(source) is not None) == item["expected_stale"]
+        elif item["kind"] == "pdf":
+            output = BytesIO()
+            writer = PdfWriter()
+            writer.add_blank_page(width=300, height=300)
+            writer.write(output)
+            assert _extract_pdf_text(output.getvalue()) == item["expected_text"]
         else:
             brief = ResearchBrief(
                 run_id="eval", topic="通用产品调研", competitor=item["competitor"],
@@ -54,6 +65,9 @@ def test_product_evidence_quality_gate_examples() -> None:
                 text=item["text"], content_hash="eval", quality_score=.9,
             )
             extraction = extract_page(brief, page)
+            if item["kind"] == "price_conflict":
+                assert len(extraction.fields["price_points"]) == item["expected_price_count"]
+                continue
             evidence = admit_evidence_items([extraction], captured_pages=[page], candidates=[candidate])
             assert any(
                 entry.field == item["expected_field"] and entry.status == "accepted"

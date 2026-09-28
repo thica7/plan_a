@@ -133,6 +133,27 @@ def _admission_rejection_reasons(
         quote_problem = quote_quality_problem(quote.text, dimension=extraction.dimension)
         if quote_problem:
             reasons.append(quote_problem)
+    if extraction.extractor_name == "generic_product_pricing" and field in {"price_rows", "price_points"}:
+        rows = extraction.fields.get("price_rows")
+        if not isinstance(rows, list) or not rows:
+            reasons.append("price_row_evidence_missing")
+        elif page is not None:
+            for row in rows:
+                if not isinstance(row, dict):
+                    reasons.append("price_row_evidence_invalid")
+                    break
+                price = str(row.get("price") or "")
+                row_quote = str(row.get("source_quote") or "")
+                if (
+                    not price or price not in row_quote or row_quote not in page.text
+                    or extraction.competitor.casefold() not in row_quote.casefold()
+                    or quote_quality_problem(row_quote, dimension="pricing")
+                ):
+                    reasons.append("price_row_evidence_invalid")
+                    break
+            if field == "price_points" and isinstance(value, list):
+                if set(str(point) for point in value) != {str(row.get("price") or "") for row in rows if isinstance(row, dict)}:
+                    reasons.append("price_points_rows_mismatch")
     return reasons
 
 
@@ -429,7 +450,7 @@ def has_concrete_source_signal(dimension: str, normalized_text: str) -> bool:
     if "persona" in dimension_key or "user" in dimension_key:
         return any(
             term in normalized_text
-            for term in ("developer", "customer", "enterprise", "team", "user")
+            for term in ("developer", "customer", "enterprise", "team", "user", "家庭", "适合", "面向")
         )
     return any(
         term in normalized_text for term in (
@@ -667,6 +688,9 @@ def dimension_terms_present(dimension: str, normalized_text: str) -> bool:
             "use case",
             "case study",
             "organization",
+            "家庭",
+            "适合",
+            "面向",
         )
     elif "review" in dimension_key or "feedback" in dimension_key:
         terms = (

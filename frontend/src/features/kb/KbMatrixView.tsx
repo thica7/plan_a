@@ -29,7 +29,9 @@ export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
                 <tr>
                   <th>Dimension</th>
                   {competitors.map((competitor) => (
-                    <th key={competitor}>{competitor}</th>
+                    <th key={competitor}>
+                      {competitor}{matrix?.target_product === competitor ? ` · ${t('kb.targetProduct')}` : ""}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -66,7 +68,7 @@ export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
           <div className="kb-list">
             {Object.values(kbs).map((kb) => (
               <article key={kb.competitor}>
-                <strong>{kb.competitor}</strong>
+                <strong>{kb.competitor}{matrix?.target_product === kb.competitor ? ` · ${t('kb.targetProduct')}` : ""}</strong>
                 <span>{Math.round(kb.confidence * 100)}% avg confidence · {kb.sources.length} sources</span>
                 {Object.entries(kb.slices).map(([dimension, findings]) => (
                   <div key={dimension}>

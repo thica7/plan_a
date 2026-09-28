@@ -9,6 +9,10 @@ interface RunDetailHeaderProps {
 
 export function RunDetailHeader({ detail, recommendedDimensions }: RunDetailHeaderProps) {
   const { t } = useTranslation();
+  const targetName = detail.plan.target_product?.name;
+  const verifiedHomepage = targetName && detail.plan.homepage_verified?.[targetName]
+    ? detail.plan.homepage_hints?.[targetName]
+    : null;
   return (
     <header className="page-header page-header-split">
       <div>
@@ -18,8 +22,12 @@ export function RunDetailHeader({ detail, recommendedDimensions }: RunDetailHead
             <strong>{detail.plan.target_product.name}</strong>
             {detail.plan.target_product.category ? <span>{detail.plan.target_product.category}</span> : null}
             {detail.plan.target_product_evidence ? (
-              <a href={detail.plan.target_product_evidence.source_url} rel="noreferrer" target="_blank">
-                {detail.plan.target_product_evidence.status === "verified" ? "官网已核验" : "官网待核验"}
+              <a href={verifiedHomepage || detail.plan.target_product_evidence.source_url} rel="noreferrer" target="_blank">
+                {verifiedHomepage
+                  ? "官网已核验"
+                  : detail.plan.target_product_evidence.status === "verified"
+                    ? "页面提及目标产品，官网待核验"
+                    : "官网待核验"}
               </a>
             ) : <span>官网资料待核验</span>}
           </div>

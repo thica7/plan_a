@@ -43,6 +43,7 @@ export interface AnalysisPlan {
   scenario_recommended_dimensions: string[];
   qa_rule_ids: string[];
   homepage_hints: Record<string, string>;
+  homepage_verified?: Record<string, boolean>;
   task_decomposition: AnalysisPlanTask[];
   created_at: string;
 }
@@ -321,6 +322,7 @@ export interface CompetitorKnowledge {
 
 export interface ComparisonCell {
   competitor: string;
+  role?: "target" | "competitor";
   dimension: string;
   value: string;
   source_ids: string[];
@@ -329,6 +331,7 @@ export interface ComparisonCell {
 
 export interface ComparisonMatrix {
   competitors: string[];
+  target_product?: string | null;
   dimensions: string[];
   cells: ComparisonCell[];
   winner_by_dimension: Record<string, string>;

@@ -413,6 +413,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
     // ─── KB Matrix ───
     'kb.title': '知识库 & 矩阵',
+    'kb.targetProduct': '目标产品',
     'kb.noStructuredKb': '暂无结构化知识库。',
     'kb.dimension': '维度',
     'kb.noFinding': '无发现',
@@ -1221,6 +1222,7 @@ const translations: Record<Locale, Record<string, string>> = {
 
     // ─── KB Matrix ───
     'kb.title': 'KB & Matrix',
+    'kb.targetProduct': 'Target product',
     'kb.noStructuredKb': 'No structured KB yet.',
     'kb.dimension': 'Dimension',
     'kb.noFinding': 'No finding',

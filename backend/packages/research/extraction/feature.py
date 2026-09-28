@@ -28,7 +28,8 @@ _GENERIC_CAPABILITY_VERBS = re.compile(
     flags=re.IGNORECASE,
 )
 _GENERIC_NEGATION = re.compile(
-    r"不支持|无法|不提供|does not support|doesn't support|without|not available",
+    r"不支持|无法|不提供|不具备|不能|没有|does not support|doesn't support|"
+    r"does not have|doesn't have|has no|without|not available",
     flags=re.IGNORECASE,
 )
 
@@ -40,7 +41,14 @@ def extract_generic_capabilities(brief: ResearchBrief, page: CapturedPage) -> Ex
     quotes: list[EvidenceQuote] = []
     for clause_match in re.finditer(r"[^。！？.!?;\n]+", text):
         clause = clause_match.group().strip()
-        if not clause or not _GENERIC_CAPABILITY_VERBS.search(clause):
+        verb = _GENERIC_CAPABILITY_VERBS.search(clause)
+        if not clause or verb is None:
+            continue
+        if brief.competitor.casefold() not in clause[:verb.start()].casefold():
+            continue
+        if brief.product_name and brief.product_name != brief.competitor and brief.product_name.casefold() in clause.casefold():
+            continue
+        if re.search(r"[和与及、]|\band\b", clause[:verb.start()], re.I):
             continue
         if _GENERIC_NEGATION.search(clause):
             continue

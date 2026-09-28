@@ -37,7 +37,57 @@ def extract_generic_pricing(brief: ResearchBrief, page: CapturedPage) -> Extract
             text.find("。", match.end()), text.find("\n", match.end())
         ) if position >= 0]
         end = min(end_markers) + 1 if end_markers else len(text)
-        clause = text[start:end].strip()
+        raw_clause = text[start:end]
+        leading_space = len(raw_clause) - len(raw_clause.lstrip())
+        clause = raw_clause.strip()
+        local_start = match.start() - start - leading_space
+        local_match = _GENERIC_PRICE_RE.search(clause, local_start)
+        if local_match is None:
+            continue
+        clause_prices = list(_GENERIC_PRICE_RE.finditer(clause))
+        name = brief.competitor.casefold()
+        if len(clause_prices) > 1:
+            prefix = clause[:clause_prices[0].start()].strip().casefold()
+            tier_pattern = (
+                r"(?:标准版|高级版|基础版|旗舰版|入门版|专业版|"
+                r"Free|Pro|Plus|Team|Business|Enterprise)"
+            )
+            tier_segments = [
+                clause[prior.end():current.start()].lstrip(" ，,、:：\t")
+                for prior, current in zip(clause_prices, clause_prices[1:], strict=False)
+            ]
+            if (
+                not prefix.startswith(name)
+                or re.search(r"分别|respectively|两款|两个|两种|[和与及、]|\band\b", prefix, re.I)
+                or not all(re.match(tier_pattern, segment, re.I) for segment in tier_segments)
+            ):
+                continue
+        prior_price_end = max(
+            (prior.end() for prior in _GENERIC_PRICE_RE.finditer(clause)
+             if prior.end() <= local_start),
+            default=0,
+        )
+        if not name:
+            continue
+        identity_at = clause[:local_start].casefold().rfind(name)
+        source_quote = clause
+        if identity_at < prior_price_end:
+            tier_prefix = clause[prior_price_end:local_start].lstrip(" ，,、:：\t")
+            named_tier = re.match(
+                r"(?:标准版|高级版|基础版|旗舰版|入门版|专业版|"
+                r"Free|Pro|Plus|Team|Business|Enterprise)",
+                tier_prefix, re.I,
+            )
+            if named_tier is None:
+                continue
+            if identity_at < 0:
+                header_at = text[:start].casefold().rfind(name)
+                dedicated_page = name in page.title.casefold() and not re.search(
+                    r"对比|比较|竞品|\bvs\b|compare|comparison", page.title, re.I,
+                )
+                if not dedicated_page or header_at < 0 or start - header_at > 320:
+                    continue
+                source_quote = text[header_at:end].strip()
         if not re.search(r"售价|价格|标价|购买|price|cost|purchase|元|[¥￥]", clause, re.I):
             continue
         if re.search(r"优惠券|抵用券|赠送|credit balance|coupon", clause, re.I):
@@ -46,24 +96,37 @@ def extract_generic_pricing(brief: ResearchBrief, page: CapturedPage) -> Extract
         if price in prices:
             continue
         prices.append(price)
+        cycle = (
+            "one_time" if re.search(r"一次性|买断|one.time", clause, re.I)
+            else _billing_cycle_for_clause(clause) or "unknown"
+        )
+        chinese_tiers = re.findall(
+            r"标准版|高级版|基础版|旗舰版|入门版|专业版", clause[:local_start]
+        )
         rows.append({
-            "tier_name": "", "price": price,
-            "billing_cycle": "one_time" if re.search(r"一次性|买断|one.time", clause, re.I) else "unknown",
-            "usage_limit": "",
+            "tier_name": _tier_name_near_price(clause, local_match)
+            or (chinese_tiers[-1] if chinese_tiers else ""), "price": price,
+            "billing_cycle": cycle, "usage_limit": "",
+            "source_quote": source_quote,
         })
         if first_quote is None:
             first_quote = EvidenceQuote(
-                text=clause, source_url=page.final_url, field="price_points",
+                text=source_quote, source_url=page.final_url, field="price_points",
                 start_offset=match.start(), end_offset=match.end(),
             )
         if len(prices) >= 8:
             break
-    model_type = "one_time_purchase" if any(row["billing_cycle"] == "one_time" for row in rows) else "price_listed"
+    cycles = {row["billing_cycle"] for row in rows}
+    model_type = (
+        "one_time_purchase" if "one_time" in cycles else
+        "subscription_saas" if cycles & {"monthly", "annual"} else
+        "price_listed"
+    )
     fields: dict[str, object] = {
         "pricing_model_type": model_type if prices else "",
         "price_rows": rows,
         "price_points": prices,
-        "billing_cycle": "one_time" if model_type == "one_time_purchase" else "",
+        "billing_cycle": next((cycle for cycle in ("one_time", "monthly", "annual", "usage") if cycle in cycles), ""),
     }
     quotes = [
         first_quote.model_copy(update={"field": field})

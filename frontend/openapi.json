@@ -14649,6 +14649,15 @@
             "type": "string",
             "title": "Competitor"
           },
+          "role": {
+            "type": "string",
+            "enum": [
+              "target",
+              "competitor"
+            ],
+            "title": "Role",
+            "default": "competitor"
+          },
           "dimension": {
             "type": "string",
             "title": "Dimension"
@@ -14689,6 +14698,17 @@
             },
             "type": "array",
             "title": "Competitors"
+          },
+          "target_product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Product"
           },
           "dimensions": {
             "items": {

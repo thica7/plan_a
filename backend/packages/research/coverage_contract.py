@@ -24,7 +24,9 @@ def evaluate_coverage_contract(
         page_by_id = {page.id: page for page in pages}
         supported = any(
             item.status == "accepted" and item.field in {"price_rows", "price_points"}
+            and item.competitor == brief.competitor and item.dimension == brief.dimension
             and (page := page_by_id.get(item.captured_page_id)) is not None
+            and page.status == "ok"
             and brief.competitor.casefold() in f"{page.title} {page.text}".casefold()
             for item in evidence_items
         )

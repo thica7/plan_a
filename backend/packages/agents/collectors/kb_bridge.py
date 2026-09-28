@@ -255,6 +255,12 @@ class CollectorKBBridgeMixin:
             "kb_collector_candidate_origin": "kb_collector_candidate_origin",
             "collector_fetch_method": "kb_collector_fetch_method",
             "kb_collector_fetch_method": "kb_collector_fetch_method",
+            "source_published_at": "source_published_at",
+            "published_at": "source_published_at",
+            "source_updated_at": "source_updated_at",
+            "updated_at": "source_updated_at",
+            "last_verified_at": "last_verified_at",
+            "fetched_at": "source_fetched_at",
         }
         for source_key, target_key in key_map.items():
             value = hit_metadata.get(source_key)

@@ -6,6 +6,7 @@ import {
   lockedDimensionsForScenario,
   mergeDimensions,
   scenarioCompetitorPreset,
+  scenarioPacksForProduct,
 } from "./dimensions";
 
 describe("New Run dimension helpers", () => {
@@ -56,6 +57,12 @@ describe("New Run dimension helpers", () => {
 
     expect(scenarioCompetitorPreset(pack)).toBe("Cursor, GitHub Copilot, Windsurf");
     expect(scenarioCompetitorPreset(null)).toBe("");
+  });
+
+  it("offers legacy AI packs only for an AI product category", () => {
+    const packs = [scenarioPack({ id: "ai_coding" })];
+    expect(scenarioPacksForProduct(packs, "家用清洁电器")).toEqual([]);
+    expect(scenarioPacksForProduct(packs, "AI coding assistant")).toEqual(packs);
   });
 
 });

@@ -3284,6 +3284,12 @@ export interface components {
         ComparisonCell: {
             /** Competitor */
             competitor: string;
+            /**
+             * Role
+             * @default competitor
+             * @enum {string}
+             */
+            role: "target" | "competitor";
             /** Dimension */
             dimension: string;
             /** Value */
@@ -3300,6 +3306,8 @@ export interface components {
         ComparisonMatrix: {
             /** Competitors */
             competitors: string[];
+            /** Target Product */
+            target_product?: string | null;
             /** Dimensions */
             dimensions: string[];
             /** Cells */

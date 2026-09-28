@@ -38,7 +38,7 @@ export function RunSummaryStrip({
           <Database size={17} aria-hidden />
           <div>
             <strong>Evidence scope</strong>
-            <span>{detail.raw_sources.length} raw sources / {detail.plan.competitors.length} competitors</span>
+            <span>{detail.raw_sources.length} raw sources / {detail.plan.competitors.filter((name) => name !== detail.plan.target_product?.name).length} competitors</span>
           </div>
         </div>
         <div className="inspector-row">

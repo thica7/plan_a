@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from packages.research.extraction.quality import quote_window_from_match
+from packages.research.extraction.quality import quote_quality_problem, quote_window_from_match
 from packages.research.models import (
     CapturedPage,
     EvidenceQuote,
@@ -19,6 +19,62 @@ PERSONA_FIELDS = (
     "company_size",
     "confidence_reason",
 )
+
+
+def extract_generic_persona(brief: ResearchBrief, page: CapturedPage) -> ExtractionResult:
+    """Extract only audience and tasks confirmed in the captured page."""
+    text = _text(page)
+    fields: dict[str, object] = {}
+    quotes: list[EvidenceQuote] = []
+    for sentence in re.finditer(r"[^。！？.!?;\n]+[。！？.!?;]?", text):
+        clause = sentence.group()
+        names = [brief.competitor]
+        if brief.product_name and brief.product_name.casefold() != brief.competitor.casefold():
+            names.append(brief.product_name)
+        mentions = sorted(
+            (match.start(), name)
+            for name in names
+            for match in re.finditer(re.escape(name), clause, flags=re.IGNORECASE)
+        )
+        for index, (start, name) in enumerate(mentions):
+            if name != brief.competitor:
+                continue
+            end = mentions[index + 1][0] if index + 1 < len(mentions) else len(clause)
+            segment = clause[start:end].strip()
+            separator = re.search(r"[，,]", segment)
+            first_part = segment[:separator.start()] if separator else segment
+            if re.search(r"[和与及、]|\band\b", first_part, re.I):
+                continue
+            supported_segment = first_part
+            if separator:
+                next_part = re.split(r"[，,]", segment[separator.end():], maxsplit=1)[0]
+                if next_part.strip().startswith(("适合", "用于")):
+                    supported_segment = segment[:separator.end() + len(next_part)]
+            if quote_quality_problem(supported_segment, dimension="persona"):
+                continue
+            for field, pattern in (
+                ("target_segment", r"面向([^，。；;]{2,30})"),
+                ("primary_use_case", r"(?:适合|用于)([^，。；;]{2,40})"),
+            ):
+                match = re.search(pattern, supported_segment)
+                if match is None or field in fields:
+                    continue
+                fields[field] = match.group(1).strip()
+                quotes.append(EvidenceQuote(
+                    text=supported_segment, source_url=page.final_url, field=field,
+                    start_offset=sentence.start() + start + match.start(),
+                    end_offset=sentence.start() + start + match.end(),
+                ))
+    return ExtractionResult(
+        competitor=brief.competitor, dimension=brief.dimension,
+        source_candidate_id=page.candidate_id, captured_page_id=page.id,
+        fields=fields, quotes=quotes,
+        confidence=min(.85, page.quality_score * .8) if fields else .2,
+        extractor_name="generic_product_persona",
+        status="extracted" if fields else "partial",
+        missing_fields=[] if fields else ["target_segment", "primary_use_case"],
+        metadata={"category": brief.product_category},
+    )
 
 _FIELD_TERMS: dict[str, tuple[str, ...]] = {
     "target_segment": ("customer", "customers", "teams", "developers", "enterprise", "startup"),

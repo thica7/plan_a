@@ -4,11 +4,13 @@ import json
 import re
 from datetime import datetime
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 from packages.business_intel.entity_resolver import normalize_competitor_key
-from packages.business_intel.homepage import verify_homepages
+from packages.business_intel.homepage import verify_homepage, verify_homepages
 from packages.research.discovery.planner import build_competitor_queries
 from packages.schema.models import (
+    AnalysisPlan,
     CompetitorCandidate,
     CompetitorDiscovery,
     TargetProductEvidence,
@@ -68,6 +70,7 @@ class PlannerAgentMixin:
             ),
             user=(
                 f"Topic: {detail.topic}\n"
+                f"Target product: {detail.plan.target_product.name if detail.plan.target_product else 'none'}\n"
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
                 f"Requested dimensions: {', '.join(detail.plan.dimensions)}\n\n"
                 "Return homepage hints if you know official domains. Do not invent certainty."
@@ -78,7 +81,6 @@ class PlannerAgentMixin:
         complexity = payload.get("complexity")
         if complexity in {"low", "medium", "high"}:
             detail.plan.complexity = complexity
-        self._refresh_task_decomposition(detail.plan)
         hints = payload.get("homepage_hints")
         if isinstance(hints, dict):
             selected_by_key = {name.casefold(): name for name in detail.plan.competitors}
@@ -96,6 +98,8 @@ class PlannerAgentMixin:
                     detail.plan.homepage_hints[name] = str(verification.homepage_url)
                 else:
                     detail.plan.homepage_hints.pop(name, None)
+        self._include_target_product_in_plan(detail.plan)
+        self._refresh_task_decomposition(detail.plan)
         self._append_agent_message(
             record,
             from_agent="planner",
@@ -251,6 +255,24 @@ class PlannerAgentMixin:
             str(getattr(result, "error", "") or "product identity not confirmed by page"),
         )
 
+    @staticmethod
+    def _include_target_product_in_plan(plan: AnalysisPlan) -> None:
+        product = plan.target_product
+        if product is None:
+            return
+        target_key = normalize_competitor_key(product.name)
+        plan.competitors = [
+            product.name,
+            *(name for name in plan.competitors if normalize_competitor_key(name) != target_key),
+        ]
+        plan.homepage_verified[product.name] = False
+        plan.homepage_hints.pop(product.name, None)
+        if product.official_url is not None:
+            verification = verify_homepage(product.name, str(product.official_url))
+            if verification.verified and verification.homepage_url is not None:
+                plan.homepage_hints[product.name] = str(verification.homepage_url)
+                plan.homepage_verified[product.name] = True
+
     def _verify_discovered_competitors(
         self,
         discovery: CompetitorDiscovery,
@@ -312,7 +334,9 @@ class PlannerAgentMixin:
         matched = [
             result
             for result in results
-            if pattern.search(f"{result.title} {result.snippet} {result.url}".casefold())
+            if pattern.search(
+                f"{result.title} {result.snippet} {urlsplit(result.url).hostname or ''}".casefold()
+            )
         ]
         return matched[:2]
 

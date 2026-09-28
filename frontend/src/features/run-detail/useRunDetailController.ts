@@ -74,7 +74,10 @@ export function useRunDetailController() {
     ? canApplyPlanDimensions(planDimensions, detail.plan.dimensions)
     : false;
   const canApplyPlanReviewChanges = detail
-    ? canSavePlanReview(competitorRows, detail.plan.competitors, canApplyPlanDimensionChanges)
+    ? canSavePlanReview(
+        competitorRows, detail.plan.competitors, canApplyPlanDimensionChanges,
+        detail.plan.target_product?.name,
+      )
     : false;
   const visibleInterrupt = useMemo(
     () => visibleHitlInterruptForRun(detail?.status, detail?.current_node, events),
@@ -265,9 +268,11 @@ export function useRunDetailController() {
   useEffect(() => {
     if (detail) {
       setPlanDimensions(detail.plan.dimensions.join(", "));
-      setCompetitorRows(buildCompetitorReviewRows(detail.competitor_discovery, detail.plan.competitors));
+      setCompetitorRows(buildCompetitorReviewRows(
+        detail.competitor_discovery, detail.plan.competitors, detail.plan.target_product?.name,
+      ));
     }
-  }, [detail?.id, detail?.plan.competitors, detail?.plan.dimensions, detail?.competitor_discovery]);
+  }, [detail?.id, detail?.plan.competitors, detail?.plan.target_product?.name, detail?.plan.dimensions, detail?.competitor_discovery]);
 
   const latestReflection = detail?.reflections.length ? detail.reflections[detail.reflections.length - 1] : null;
   const reflectionItems = latestReflection ? flattenReflection(latestReflection) : [];

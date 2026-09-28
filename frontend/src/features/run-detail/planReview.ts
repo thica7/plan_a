@@ -151,10 +151,13 @@ function addUniqueCompetitor(competitors: string[], seen: Set<string>, name: str
 export function buildCompetitorReviewRows(
   discovery: CompetitorDiscovery | null | undefined,
   planCompetitors: string[],
+  targetProductName = "",
 ): CompetitorReviewRow[] {
+  const isTarget = (name: string) => Boolean(targetProductName) &&
+    normalizeCompetitorName(name) === normalizeCompetitorName(targetProductName);
   if (discovery?.candidates.length) {
     const selected = new Set(discovery.selected_competitors.map(normalizeCompetitorName));
-    return discovery.candidates.map((candidate, index) => {
+    return discovery.candidates.filter((candidate) => !isTarget(candidate.name)).map((candidate, index) => {
       const isSelected = selected.has(normalizeCompetitorName(candidate.name)) || candidate.selected;
       const decision = isSelected ? "keep" : "remove";
       return {
@@ -173,7 +176,7 @@ export function buildCompetitorReviewRows(
     });
   }
 
-  return planCompetitors.map((name, index) => ({
+  return planCompetitors.filter((name) => !isTarget(name)).map((name, index) => ({
     id: reviewRowId("plan", index, name),
     originalName: name,
     name,
@@ -262,13 +265,16 @@ export function canSavePlanReview(
   rows: CompetitorReviewRow[],
   currentCompetitors: string[],
   dimensionsChanged: boolean,
+  targetProductName = "",
 ): boolean {
   const { competitors, competitor_edits } = serializeCompetitorReview(rows);
   if (competitors.length === 0) return false;
   if (dimensionsChanged) return true;
   if (competitor_edits.length > 0) return true;
 
-  const current = currentCompetitors.map(normalizeCompetitorName).filter(Boolean);
+  const current = currentCompetitors
+    .filter((name) => normalizeCompetitorName(name) !== normalizeCompetitorName(targetProductName))
+    .map(normalizeCompetitorName).filter(Boolean);
   const next = competitors.map(normalizeCompetitorName);
   if (current.length !== next.length) return true;
   return next.some((competitor, index) => competitor !== current[index]);

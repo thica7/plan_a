@@ -39,6 +39,8 @@ async def test_sync_knowledge_to_evidence_uses_watermark_and_safe_metadata(tmp_p
                     "collector_confidence": 0.92,
                     "collector_candidate_origin": "web_fetch",
                     "collector_fetch_method": "browser_fetch",
+                    "source_published_at": "2020-01-01",
+                    "source_updated_at": "2020-02-01",
                 },
             ),
             "hash-pricing",
@@ -111,12 +113,15 @@ async def test_sync_knowledge_to_evidence_uses_watermark_and_safe_metadata(tmp_p
         assert evidence.metadata["kb_fetched_at"]
         assert evidence.metadata["kb_last_seen_at"]
         assert evidence.metadata["kb_freshness_basis_at"]
-        assert evidence.metadata["kb_freshness_score"] > 0
+        assert evidence.metadata["kb_freshness_score"] <= 0.4
+        assert evidence.freshness_score <= 0.4
         assert evidence.metadata["kb_raw_source_id"] == "raw-source-pricing-1"
         assert evidence.metadata["kb_collector_run_id"] == "collector-run-1"
         assert evidence.metadata["kb_collector_candidate_origin"] == "web_fetch"
         assert evidence.metadata["kb_collector_fetch_method"] == "browser_fetch"
         assert evidence.metadata["kb_collector_confidence"] == 0.92
+        assert evidence.metadata["source_published_at"] == "2020-01-01"
+        assert evidence.metadata["source_updated_at"] == "2020-02-01"
         states = await repo.get_evidence_sync_states(
             workspace_id="workspace-kb",
             project_id="project-kb",
@@ -131,7 +136,7 @@ async def test_sync_knowledge_to_evidence_uses_watermark_and_safe_metadata(tmp_p
         assert len(evidence.metadata["full_text"]) <= 20
         assert evidence.metadata["source_text_truncated"] is True
         assert evidence.metadata["kb_source_metadata"] == {
-            "omitted_key_count": 6,
+            "omitted_key_count": 8,
             "robots_status": "allowed",
         }
         assert hits

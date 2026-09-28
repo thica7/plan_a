@@ -18,6 +18,11 @@ This project provides:
 
 `webfetch_v2` is designed to improve compatibility for authorized and public web access. It does **not** bypass CAPTCHA, paywalls, login walls, bot challenges, IP bans, or explicit access controls. When those are detected, it returns a structured failure reason so the agent can use an official API, ask for user authorization, or choose another source.
 
+Static and browser requests use a local egress proxy. The proxy validates each
+destination and dials its approved public IP directly, including for HTTPS
+CONNECT tunnels. Chromium's implicit loopback proxy bypass is disabled. Deploy
+the worker with network egress restrictions as an additional boundary.
+
 ## Quick start
 
 ```powershell

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from packages.agents.qa.logic import QualityAgentMixin
 from packages.config import Settings
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
@@ -32,3 +33,32 @@ async def test_low_ranked_kb_candidate_does_not_become_high_confidence_fact() ->
     assert source.candidate_confidence == 0.02
     assert source.confidence <= 0.75
     assert source.quality_score <= 0.75
+
+
+@pytest.mark.asyncio
+async def test_kb_reuse_keeps_original_page_dates_for_price_freshness() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(demo_mode=True),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    detail = await service.create_run(RunCreateRequest(
+        topic="Compare team note tools", dimensions=["pricing"], competitors=["Notion"],
+        target_product={"name": "NoteHarbor", "category": "team notes"},
+    ))
+    source = service._raw_source_from_kb_hit(
+        detail, "Notion", "pricing", {
+            "text": "Notion old Team plan costs $9 per seat.",
+            "title": "Old price", "url": "https://notion.so/old-pricing",
+            "source_type": "webpage_verified", "document_id": "doc-old", "chunk_id": "chunk-old",
+            "last_seen_at": "2026-09-28T00:00:00Z",
+            "metadata": {
+                "source_published_at": "2020-01-01",
+                "source_updated_at": "2020-02-01",
+            },
+        }, rank=1, query="Notion pricing",
+    )
+    assert source is not None
+    assert source.metadata["source_published_at"] == "2020-01-01"
+    assert source.metadata["source_updated_at"] == "2020-02-01"
+    assert QualityAgentMixin()._source_freshness_problem(source) is not None

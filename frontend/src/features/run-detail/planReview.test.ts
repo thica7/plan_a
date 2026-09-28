@@ -97,6 +97,12 @@ describe("plan review dimension helpers", () => {
 });
 
 describe("competitor review helpers", () => {
+  it("keeps the target out of rival review rows and change detection", () => {
+    const rows = buildCompetitorReviewRows(null, ["洁净家", "飞跃牌"], "洁净家");
+    expect(rows.map((row) => row.name)).toEqual(["飞跃牌"]);
+    expect(canSavePlanReview(rows, ["洁净家", "飞跃牌"], false, "洁净家")).toBe(false);
+  });
+
   it("builds review rows from discovery candidates", () => {
     expect(buildCompetitorReviewRows(discovery, ["Cursor"])).toEqual([
       {

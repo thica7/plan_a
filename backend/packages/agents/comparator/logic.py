@@ -142,6 +142,7 @@ class ComparatorAgentMixin:
                         ),
                         user=(
                             f"Topic: {detail.topic}\n"
+                            f"Target product: {detail.plan.target_product.name if detail.plan.target_product else 'none'}\n"
                             f"Competitors: {', '.join(detail.plan.competitors)}\n"
                             f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
                             f"Competitor KB JSON: {self._competitor_kb_json(detail)}\n"
@@ -235,6 +236,8 @@ class ComparatorAgentMixin:
                 cells.append(
                     ComparisonCell(
                         competitor=competitor,
+                        role=("target" if detail.plan.target_product is not None
+                              and competitor == detail.plan.target_product.name else "competitor"),
                         dimension=dimension,
                         value=value or "No structured finding available.",
                         source_ids=[source.id for source in related_sources],
@@ -264,6 +267,7 @@ class ComparatorAgentMixin:
             vote_summary = [*vote_summary, *fallback_summary]
         return ComparisonMatrix(
             competitors=detail.plan.competitors,
+            target_product=(detail.plan.target_product.name if detail.plan.target_product else None),
             dimensions=detail.plan.dimensions,
             cells=cells,
             winner_by_dimension=voted_winners,

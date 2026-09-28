@@ -491,6 +491,9 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         enable_search: bool = True,
         enable_repair: bool = True,
     ) -> list[RawSource]:
+        target_candidate = self._target_product_user_candidate(detail, competitor, dimension)
+        if target_candidate is not None:
+            seed_candidates = [*(seed_candidates or []), target_candidate]
         max_repair_rounds = (
             1 if enable_repair and self._requires_verified_web_evidence(detail, dimension) else 0
         )
@@ -1073,6 +1076,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             product_use_cases=list(detail.plan.target_product.use_cases)
             if detail.plan.target_product else [],
             product_market=detail.plan.target_product.market if detail.plan.target_product else "",
+            product_audience=detail.plan.target_product.audience if detail.plan.target_product else "",
             execution_mode=detail.execution_mode,
             homepage_hint=detail.plan.homepage_hints.get(competitor),
             target_source_count=self._collector_target_source_count(detail, dimension),
@@ -1080,6 +1084,32 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             max_candidates=max(6, self._collector_search_max_results()),
             max_fetches=max(3, self._collector_target_source_count(detail, dimension)),
             max_advanced_fetches=getattr(self._settings, "web_fetch_advanced_max", 3),
+        )
+
+    @staticmethod
+    def _target_product_user_candidate(
+        detail: RunDetail, competitor: str, dimension: str,
+    ) -> SourceCandidate | None:
+        product = detail.plan.target_product
+        evidence = detail.plan.target_product_evidence
+        if (
+            product is None or product.official_url is None or competitor != product.name
+        ):
+            return None
+        url = (
+            evidence.source_url if evidence is not None and evidence.status == "verified"
+            else str(product.official_url)
+        )
+        if not url.startswith(("http://", "https://")):
+            return None
+        return SourceCandidate(
+            title=(evidence.title if evidence is not None and evidence.status == "verified" else "")
+            or product.name,
+            url=url, origin="web_search", competitor=competitor, dimension=dimension,
+            confidence=0.55 if evidence is not None and evidence.status == "verified" else 0.4,
+            reason="user_url_authority_unverified",
+            metadata={"authority": "unverified", "user_supplied_url": True,
+                      "identity_status": evidence.status if evidence is not None else "unknown"},
         )
 
     def _dimension_evidence_snippet(self, text: str, dimension: str, fallback: str) -> str:

@@ -114,7 +114,7 @@ def _pricing_rows(items: list[EvidenceItem]) -> list[dict[str, Any]]:
                     "price": price,
                     "billing_cycle": billing_cycle,
                     "usage_limit": usage_limit,
-                    "source_quote": item.quote.strip(),
+                    "source_quote": _clean_text(raw_row.get("source_quote")) or item.quote.strip(),
                     "evidence_item_ids": [item.id],
                 }
             )

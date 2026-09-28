@@ -290,6 +290,7 @@ class ComparisonCell(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     competitor: str
+    role: Literal["target", "competitor"] = "competitor"
     dimension: str
     value: str
     source_ids: list[str] = Field(default_factory=list)
@@ -300,6 +301,7 @@ class ComparisonMatrix(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     competitors: list[str]
+    target_product: str | None = None
     dimensions: list[str]
     cells: list[ComparisonCell] = Field(default_factory=list)
     winner_by_dimension: dict[str, str] = Field(default_factory=dict)

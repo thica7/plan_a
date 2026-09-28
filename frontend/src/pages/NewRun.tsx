@@ -2,6 +2,7 @@ import type { FormEvent } from "react";
 import { CompetitorsSection } from "../features/new-run/CompetitorsSection";
 import { DepthSection } from "../features/new-run/DepthSection";
 import { DimensionsSection } from "../features/new-run/DimensionsSection";
+import { scenarioPacksForProduct } from "../features/new-run/dimensions";
 import { ExecutionModePanel } from "../features/new-run/ExecutionModePanel";
 import { LensSection } from "../features/new-run/LensSection";
 import { OutputLanguageSection } from "../features/new-run/OutputLanguageSection";
@@ -50,7 +51,7 @@ export function NewRun() {
             applyScenario={builder.applyScenario}
             dynamicScenarioSelected={builder.dynamicScenarioSelected}
             scenarioId={builder.scenarioId}
-            scenarioPacks={[]}
+            scenarioPacks={scenarioPacksForProduct(builder.scenarioPacks, builder.productCategory)}
             selected={builder.selected}
             selectedLayer={builder.selectedLayer}
             selectedScenario={builder.selectedScenario}

@@ -252,7 +252,7 @@ def knowledge_document_to_evidence_record(
         snippet=snippet,
         content_hash=content_hash,
         reliability_score=_reliability_score(document.source_type),
-        freshness_score=_freshness_score(document.last_seen_at or document.fetched_at),
+        freshness_score=_freshness_score(_document_fact_observed_at(document)),
         quality_label="unreviewed",
         first_seen_run_id=_first(crawl_run_ids) or resolved_run_id,
         last_seen_run_id=_last(crawl_run_ids) or resolved_run_id,
@@ -274,7 +274,7 @@ def _sync_metadata(
     metadata_keys: list[str],
 ) -> dict[str, object]:
     # 只保存精选 chunk 和白名单 metadata，避免长网页和爬虫内部字段放大存储与索引成本。
-    freshness_basis = document.last_seen_at or document.fetched_at
+    freshness_basis = _document_fact_observed_at(document)
     metadata: dict[str, object] = {
         "kb_sync": True,
         "kb_document_id": document.id,
@@ -312,6 +312,10 @@ def _sync_metadata(
             "run_id": "kb_collector_run_id",
             "collector_candidate_origin": "kb_collector_candidate_origin",
             "collector_fetch_method": "kb_collector_fetch_method",
+            "source_published_at": "source_published_at",
+            "source_updated_at": "source_updated_at",
+            "last_verified_at": "last_verified_at",
+            "fetched_at": "source_fetched_at",
         },
     )
     collector_confidence = _safe_metadata_value(document.metadata.get("collector_confidence"))
@@ -480,6 +484,22 @@ def _freshness_score(value: datetime | None) -> float:
     if age_days <= 180:
         return 0.55
     return 0.4
+
+
+def _document_fact_observed_at(document: KnowledgeDocument) -> datetime | None:
+    for key in (
+        "last_verified_at", "source_updated_at", "updated_at",
+        "source_published_at", "published_at", "source_fetched_at", "fetched_at",
+    ):
+        value = document.metadata.get(key)
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str) and value.strip():
+            try:
+                return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+            except ValueError:
+                continue
+    return document.fetched_at or document.last_seen_at
 
 
 def _http_url_or_none(value: str | None) -> str | None:

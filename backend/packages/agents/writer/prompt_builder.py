@@ -57,6 +57,7 @@ class WriterPromptBuilder:
             ),
             user=(
                 f"Topic: {detail.topic}\n"
+                f"Target product: {detail.plan.target_product.name if detail.plan.target_product else 'none'}\n"
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
                 f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
                 f"Competitive Layer: {detail.plan.competitor_layer}\n"
@@ -130,6 +131,7 @@ class WriterPromptBuilder:
             ),
             user=(
                 f"Topic: {detail.topic}\n"
+                f"Target product: {detail.plan.target_product.name if detail.plan.target_product else 'none'}\n"
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
                 f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
                 f"segment_name={segment['segment_name']}\n"
@@ -186,6 +188,7 @@ class WriterPromptBuilder:
             ),
             user=(
                 f"Topic: {detail.topic}\n"
+                f"Target product: {detail.plan.target_product.name if detail.plan.target_product else 'none'}\n"
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
                 f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
                 f"Repair only these sections: {', '.join(sections)}\n"

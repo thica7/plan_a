@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urljoin
+
+import httpx
 
 from webfetch_v2.extract import (
     extract_best_content,
@@ -15,6 +17,7 @@ from webfetch_v2.extract import (
 )
 from webfetch_v2.models import Artifacts, Diagnostics, FetchMode, FetchResult, NetworkEntry, Quality
 from webfetch_v2.paths import profile_dir
+from webfetch_v2.security import PublicURLBlocked, public_egress_proxy, validate_public_url
 
 USER_AGENT = "Mozilla/5.0 (compatible; WebFetchV2/0.1; +https://example.local/webfetch-v2)"
 NETWORK_BODY_SAMPLE_LIMIT = 4096
@@ -34,57 +37,49 @@ async def fetch_url(
     capture_network: bool = False,
 ) -> FetchResult:
     selected_mode = FetchMode(mode)
-    if selected_mode == FetchMode.STATIC:
-        return await _fetch_static(url, timeout_seconds=timeout_seconds)
-    if selected_mode == FetchMode.BROWSER:
-        return await _fetch_browser(
-            url,
-            timeout_seconds=timeout_seconds,
-            profile=profile,
-            artifact_dir=artifact_dir,
-            screenshot=screenshot,
-            capture_network=capture_network,
-        )
+    async with public_egress_proxy() as proxy_url:
+        if selected_mode == FetchMode.STATIC:
+            return await _fetch_static(url, timeout_seconds=timeout_seconds, proxy_url=proxy_url)
+        if selected_mode == FetchMode.BROWSER:
+            return await _fetch_browser(
+                url,
+                timeout_seconds=timeout_seconds,
+                profile=profile,
+                artifact_dir=artifact_dir,
+                screenshot=screenshot,
+                capture_network=capture_network,
+                proxy_url=proxy_url,
+            )
 
-    static_result = await _fetch_static(url, timeout_seconds=timeout_seconds)
-    if static_result.ok and static_result.quality.score >= quality_threshold:
+        static_result = await _fetch_static(url, timeout_seconds=timeout_seconds, proxy_url=proxy_url)
+        if static_result.ok and static_result.quality.score >= quality_threshold:
+            return static_result
+        if _should_try_browser(static_result.quality):
+            browser_result = await _fetch_browser(
+                url,
+                timeout_seconds=timeout_seconds,
+                profile=profile,
+                artifact_dir=artifact_dir,
+                screenshot=screenshot,
+                capture_network=capture_network,
+                proxy_url=proxy_url,
+                fallback_warning=f"static_fetch_low_quality:{static_result.diagnostics.failure_reason}",
+            )
+            if browser_result.ok or browser_result.quality.score > static_result.quality.score:
+                return browser_result
         return static_result
-    if _should_try_browser(static_result.quality):
-        browser_result = await _fetch_browser(
-            url,
-            timeout_seconds=timeout_seconds,
-            profile=profile,
-            artifact_dir=artifact_dir,
-            screenshot=screenshot,
-            capture_network=capture_network,
-            fallback_warning=f"static_fetch_low_quality:{static_result.diagnostics.failure_reason}",
-        )
-        if browser_result.ok or browser_result.quality.score > static_result.quality.score:
-            return browser_result
-    return static_result
 
 
-async def _fetch_static(url: str, *, timeout_seconds: float) -> FetchResult:
+async def _fetch_static(url: str, *, timeout_seconds: float, proxy_url: str | None = None) -> FetchResult:
     started = time.perf_counter()
-    request = Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        with urlopen(request, timeout=timeout_seconds) as response:  # noqa: S310 - user-directed fetch tool.
-            body_bytes = response.read()
-            final_url = response.geturl()
-            status_code = response.status
-            headers = response.headers
-    except HTTPError as exc:
-        elapsed_ms = _elapsed_ms(started)
-        return _failed_result(
-            url=url,
-            final_url=exc.url or url,
-            method="static",
-            elapsed_ms=elapsed_ms,
-            reason="http_error",
-            error=str(exc),
-            status_code=exc.code,
+        validate_public_url(url)
+        if proxy_url is None:
+            raise PublicURLBlocked("A public egress proxy is required")
+        body_bytes, final_url, status_code, headers = await asyncio.to_thread(
+            _fetch_static_http, url, proxy_url, timeout_seconds,
         )
-    except (URLError, TimeoutError, OSError) as exc:
+    except (httpx.HTTPError, TimeoutError, OSError, PublicURLBlocked) as exc:
         elapsed_ms = _elapsed_ms(started)
         return _failed_result(
             url=url,
@@ -125,6 +120,21 @@ async def _fetch_static(url: str, *, timeout_seconds: float) -> FetchResult:
     )
 
 
+def _fetch_static_http(url: str, proxy_url: str, timeout_seconds: float):
+    current_url = url
+    with httpx.Client(
+        proxy=proxy_url, trust_env=False, follow_redirects=False,
+        timeout=timeout_seconds, headers={"User-Agent": USER_AGENT},
+    ) as client:
+        for _ in range(9):
+            validate_public_url(current_url)
+            response = client.get(current_url)
+            if not response.is_redirect or not response.headers.get("location"):
+                return response.content, str(response.url), response.status_code, response.headers
+            current_url = urljoin(str(response.url), response.headers["location"])
+    raise PublicURLBlocked("Too many redirects")
+
+
 async def _fetch_browser(
     url: str,
     *,
@@ -133,9 +143,19 @@ async def _fetch_browser(
     artifact_dir: str | Path | None,
     screenshot: bool,
     capture_network: bool,
+    proxy_url: str | None = None,
     fallback_warning: str | None = None,
 ) -> FetchResult:
     started = time.perf_counter()
+    try:
+        await asyncio.to_thread(validate_public_url, url)
+        if proxy_url is None:
+            raise PublicURLBlocked("A public egress proxy is required")
+    except PublicURLBlocked as exc:
+        return _failed_result(
+            url=url, final_url=url, method="browser", elapsed_ms=_elapsed_ms(started),
+            reason="policy_blocked", error=str(exc),
+        )
     try:
         from playwright.async_api import async_playwright
     except Exception as exc:  # noqa: BLE001 - optional dependency may be absent.
@@ -170,13 +190,21 @@ async def _fetch_browser(
                     user_data_dir=str(profile_dir(profile)),
                     headless=True,
                     user_agent=USER_AGENT,
+                    service_workers="block",
+                    proxy={"server": proxy_url},
+                    args=["--proxy-bypass-list=<-loopback>"],
                 )
                 page = context.pages[0] if context.pages else await context.new_page()
                 browser = None
             else:
-                browser = await browser_type.launch(headless=True)
-                context = await browser.new_context(user_agent=USER_AGENT)
+                browser = await browser_type.launch(
+                    headless=True, proxy={"server": proxy_url},
+                    args=["--proxy-bypass-list=<-loopback>"],
+                )
+                context = await browser.new_context(user_agent=USER_AGENT, service_workers="block")
                 page = await context.new_page()
+
+            await context.route("**/*", _route_public_request)
 
             if capture_network:
                 page.on("response", lambda response: _schedule_network_capture(response, network_entries, network_tasks))
@@ -189,8 +217,7 @@ async def _fetch_browser(
                     warnings.append("networkidle_timeout")
 
                 if network_tasks:
-                    import asyncio
-                    done, pending = await asyncio.wait(network_tasks, timeout=2.0)
+                    _done, pending = await asyncio.wait(network_tasks, timeout=2.0)
                     for task in pending:
                         task.cancel()
 
@@ -198,6 +225,7 @@ async def _fetch_browser(
                 title = await page.title()
                 visible_text = await page.locator("body").inner_text(timeout=3000)
                 final_url = page.url
+                await asyncio.to_thread(validate_public_url, final_url)
                 status_code = response.status if response else None
                 browser_extracted = extract_best_content(rendered_html, title, status_code=status_code)
                 if browser_extracted.text and len(browser_extracted.text) >= len(visible_text) * 0.6:
@@ -260,6 +288,15 @@ async def _fetch_browser(
             warnings=warnings,
             network=network_entries[:NETWORK_ENTRY_LIMIT],
         )
+
+
+async def _route_public_request(route) -> None:
+    try:
+        await asyncio.to_thread(validate_public_url, route.request.url)
+    except PublicURLBlocked:
+        await route.abort()
+    else:
+        await route.continue_()
 
 
 def _schedule_network_capture(response, network_entries: list[NetworkEntry], network_tasks: list) -> None:

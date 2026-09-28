@@ -859,7 +859,10 @@ class QualityAgentMixin:
         metadata = source.metadata
         is_kb_reuse = bool(metadata.get("kb_retrieved") or source.candidate_origin == "rag_kb")
         keys = (
-            ("kb_last_seen_at", "kb_fetched_at")
+            (
+                "last_verified_at", "source_updated_at", "source_published_at",
+                "source_fetched_at", "kb_fetched_at", "kb_last_seen_at",
+            )
             if is_kb_reuse
             else (
                 "last_verified_at", "source_updated_at", "source_published_at",

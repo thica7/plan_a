@@ -1518,6 +1518,8 @@ class RunService(
                     for index, competitor in enumerate(detail.plan.competitors)
                 ],
             )
+        self._include_target_product_in_plan(detail.plan)
+        self._refresh_task_decomposition(detail.plan)
         self._append_agent_message(
             record,
             from_agent="planner",
@@ -4478,6 +4480,7 @@ class RunService(
             competitors,
             request.competitor_edits,
         )
+        self._include_target_product_in_plan(detail.plan)
         self._refresh_task_decomposition(detail.plan)
 
     def _migrate_plan_homepage_map(

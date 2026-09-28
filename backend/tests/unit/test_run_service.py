@@ -15,11 +15,11 @@ from packages.agents.writer.repair import build_writer_repair_plan
 from packages.agents.writer.segment_contract import heading_key_for
 from packages.agents.writer.structured_report import StructuredReport
 from packages.business_intel.homepage import HomepageVerification
+from packages.business_intel.report_quality import compare_run_quality
 from packages.business_intel.report_sections import (
     build_report_section_index,
     report_section_marker,
 )
-from packages.business_intel.report_quality import compare_run_quality
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
 from packages.i18n.language import report_label
@@ -29,6 +29,7 @@ from packages.observability import build_decision_replay
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import PendingGraphRedo, RunRecord, RunService
 from packages.report_artifact.legacy_adapter import legacy_report_artifact
+from packages.research.models import SourceCandidate
 from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
     BusinessQAEvaluation,
@@ -67,7 +68,6 @@ from packages.schema.models import (
 )
 from packages.schema.report_artifact import DecisionCardBundle
 from packages.search import SearchResult
-from packages.research.models import SourceCandidate
 from packages.skills.registry import SkillRegistry
 from packages.tools.evidence_fetch import EvidenceFetchResult
 from packages.tools.fetch_page import FetchPageResult
@@ -13522,6 +13522,29 @@ def test_candidate_evidence_prefers_matching_search_results() -> None:
     evidence = service._candidate_evidence("Alpha", results)
 
     assert [item.url for item in evidence] == ["https://example.com/alpha"]
+
+
+def test_candidate_evidence_ignores_brand_in_url_query_or_path_only() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(demo_mode=True),
+    )
+    results = [
+        SearchResult(
+            title="Wireless vacuum advice", snippet="How to clean a floor.",
+            url="https://example.com/article?utm_campaign=notion",
+        ),
+        SearchResult(
+            title="Market map", snippet="Unrelated products.",
+            url="https://example.com/notion-comparison",
+        ),
+        SearchResult(
+            title="Pricing", snippet="Choose a plan.", url="https://notion.so/pricing",
+        ),
+    ]
+    assert [item.url for item in service._candidate_evidence("Notion", results)] == [
+        "https://notion.so/pricing",
+    ]
 
 
 @pytest.mark.asyncio

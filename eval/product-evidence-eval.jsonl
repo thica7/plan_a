@@ -1,8 +1,11 @@
 {"id":"long-login","kind":"fetch_shell","title":"Sign in","text":"Please sign in to continue. Please sign in to continue. Please sign in to continue. Please sign in to continue. Please sign in to continue.","expected_reason":"login_page"}
 {"id":"captcha-page","kind":"fetch_shell","title":"Human verification","text":"Complete the CAPTCHA to continue before viewing the product information.","expected_reason":"captcha_page"}
 {"id":"soft-404","kind":"fetch_shell","title":"404 Not Found","text":"This page could not be found. Product details are unavailable.","expected_reason":"soft_404"}
+{"id":"dynamic-js-shell","kind":"fetch_shell","title":"Product","text":"Enable JavaScript to view this product.","expected_reason":"content_too_short"}
 {"id":"historic-price","kind":"freshness","published_at":"2020-01-01T00:00:00Z","verified_now":false,"expected_stale":true}
 {"id":"recently-verified-price","kind":"freshness","published_at":"2020-01-01T00:00:00Z","verified_now":true,"expected_stale":false}
 {"id":"hardware-feature","kind":"extraction","dimension":"feature","category":"家用清洁电器","competitor":"洁净家","text":"洁净家无线吸尘器具备可更换电池，并支持吸拖一体清洁，适合家庭地面整理。","expected_field":"capability_1","expected_quote":"可更换电池"}
 {"id":"hardware-price","kind":"extraction","dimension":"pricing","category":"家用清洁电器","competitor":"洁净家","text":"洁净家无线吸尘器官网售价 ¥1,299，一次性购买，含两年保修。","expected_field":"price_points","expected_quote":"¥1,299"}
 {"id":"consumer-app-feature","kind":"extraction","dimension":"feature","category":"photo organizer app","competitor":"AlbumCloud","text":"AlbumCloud offers automatic family photo albums and provides shared access to invited relatives.","expected_field":"capability_1","expected_quote":"automatic family photo albums"}
+{"id":"scanned-pdf","kind":"pdf","expected_text":""}
+{"id":"ambiguous-comparison-price","kind":"price_conflict","dimension":"pricing","category":"家用清洁电器","competitor":"洁净家","text":"飞跃牌和洁净家两款无线吸尘器的官方售价分别为 ¥999 和 ¥1,299。","expected_price_count":0}

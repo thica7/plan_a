@@ -71,7 +71,7 @@ def quality_gaps_from_admitted_evidence(
                     "Extraction produced fields, but no field-level evidence passed "
                     "admission."
                 ),
-                suggested_action=_repair_strategy_for_dimension(brief.dimension),
+                suggested_action=_repair_strategy_for_dimension(brief),
                 acceptance_rule=(
                     "At least one extracted field must have accepted evidence from "
                     "an ok captured page and a field-level quote."
@@ -100,7 +100,7 @@ def quality_gaps_from_admitted_evidence(
                 "Field-level evidence admission rejected or could not bind accepted "
                 f"support for: {', '.join(missing_accepted_fields)}."
             ),
-            suggested_action=_repair_strategy_for_dimension(brief.dimension),
+            suggested_action=_repair_strategy_for_dimension(brief),
             acceptance_rule=(
                 "Every extracted required field must either have accepted evidence "
                 "or be explicitly marked not applicable."
@@ -121,6 +121,16 @@ def _pricing_gaps(
     missing_fields: set[str],
     extractions: list[ExtractionResult],
 ) -> list[QualityGap]:
+    if brief.product_name or brief.product_category:
+        if fields.get("price_rows") or fields.get("price_points"):
+            return []
+        return [QualityGap(
+            severity="blocker", dimension=brief.dimension, competitor=brief.competitor,
+            field="price_points", reason="No product price has source-backed support.",
+            suggested_action="targeted_discovery",
+            acceptance_rule="Capture a current source that states this product's price or pricing terms.",
+            source_ids=[extraction.captured_page_id for extraction in extractions],
+        )]
     model_type = str(fields.get("pricing_model_type") or "")
     if model_type in {"open_weight_self_hosted", "license_based", "not_applicable"}:
         missing_fields -= _OPTIONAL_PRICING_FIELDS_FOR_OPEN_WEIGHT
@@ -172,6 +182,27 @@ def _feature_gaps(
     fields: dict[str, object],
     extractions: list[ExtractionResult],
 ) -> list[QualityGap]:
+    if brief.product_name or brief.product_category:
+        supported = any(
+            field.startswith("capability_")
+            and isinstance(value, dict)
+            and value.get("status") == "supported"
+            for field, value in fields.items()
+        )
+        if supported:
+            return []
+        return [
+            QualityGap(
+                severity="blocker",
+                dimension=brief.dimension,
+                competitor=brief.competitor,
+                field="product_capabilities",
+                reason="No product capability has a source-backed description.",
+                suggested_action="targeted_discovery",
+                acceptance_rule="Capture a page that directly describes a capability of this product.",
+                source_ids=[extraction.captured_page_id for extraction in extractions],
+            )
+        ]
     missing_slots = [
         slot
         for slot in FEATURE_SLOTS
@@ -207,6 +238,17 @@ def _persona_gaps(
     missing_fields: set[str],
     extractions: list[ExtractionResult],
 ) -> list[QualityGap]:
+    if brief.product_name or brief.product_category:
+        if fields.get("target_segment") or fields.get("primary_use_case"):
+            return []
+        return [QualityGap(
+            severity="warn", dimension=brief.dimension, competitor=brief.competitor,
+            field="target_segment,primary_use_case",
+            reason="No user segment or use case is supported by a captured source.",
+            suggested_action="targeted_discovery",
+            acceptance_rule="Capture a source that names this product's users or use cases.",
+            source_ids=[extraction.captured_page_id for extraction in extractions],
+        )]
     actionable = [field for field in PERSONA_FIELDS if field in missing_fields]
     if not actionable:
         return []
@@ -289,8 +331,10 @@ def _evidence_expected_fields(
     return expected
 
 
-def _repair_strategy_for_dimension(dimension: str) -> str:
-    key = dimension.casefold()
+def _repair_strategy_for_dimension(brief: ResearchBrief) -> str:
+    if brief.product_name or brief.product_category:
+        return "targeted_discovery"
+    key = brief.dimension.casefold()
     if "pricing" in key:
         return "pricing_model_repair"
     if "persona" in key or "user" in key or "buyer" in key:

@@ -76,6 +76,9 @@ _DIMENSION_SIGNALS: dict[str, tuple[str, ...]] = {
         "使用场景",
         "工作流",
         "组织",
+        "家庭",
+        "适合",
+        "面向",
     ),
     "feature": (
         "feature",
