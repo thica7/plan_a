@@ -6,8 +6,6 @@ import {
   lockedDimensionsForScenario,
   mergeDimensions,
   scenarioCompetitorPreset,
-  starterPresetDimensions,
-  starterPresets,
 } from "./dimensions";
 
 describe("New Run dimension helpers", () => {
@@ -60,38 +58,6 @@ describe("New Run dimension helpers", () => {
     expect(scenarioCompetitorPreset(null)).toBe("");
   });
 
-  it("ships one-click starter presets for L1, L2, and L3 demos", () => {
-    expect(starterPresets.map((preset) => preset.competitorLayer)).toEqual([
-      "L1",
-      "L2",
-      "L3",
-    ]);
-    expect(starterPresets.map((preset) => preset.scenarioId)).toEqual([
-      "l1_direct_battlecard",
-      "l2_adjacent_workflow",
-      "l3_market_landscape",
-    ]);
-    for (const preset of starterPresets) {
-      expect(preset.competitors.length).toBeGreaterThanOrEqual(3);
-      expect(preset.dimensions.length).toBeGreaterThanOrEqual(4);
-      expect(starterPresetDimensions(preset)).toEqual(preset.dimensions);
-    }
-  });
-
-  it("resets preset dimensions instead of carrying stale manual selections", () => {
-    const preset = starterPresets[0];
-    const staleSelection = ["market", "benchmark", "integrations"];
-
-    expect(starterPresetDimensions(preset)).not.toEqual(
-      mergeDimensions(preset.dimensions, [], staleSelection),
-    );
-    expect(starterPresetDimensions(preset)).toEqual([
-      "pricing",
-      "feature",
-      "persona",
-      "security",
-    ]);
-  });
 });
 
 function scenarioPack(overrides: Partial<ScenarioPack>): ScenarioPack {

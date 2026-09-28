@@ -509,7 +509,7 @@ _IDENTITIES: tuple[CompetitorIdentity, ...] = (
 
 
 def normalize_competitor_key(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", value.casefold())
+    return re.sub(r"[\W_]+", "", value.casefold(), flags=re.UNICODE)
 
 
 _IDENTITY_BY_KEY: dict[str, CompetitorIdentity] = {}

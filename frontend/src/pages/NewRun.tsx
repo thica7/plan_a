@@ -31,16 +31,26 @@ export function NewRun() {
       <form className="run-builder" onSubmit={handleSubmit}>
         <div className="run-builder-main" aria-label={t('newRun.builder')}>
           <ScopeSection
-            onPreset={builder.applyStarterPreset}
-            scenarioId={builder.scenarioId}
             setTopic={builder.setTopic}
             topic={builder.topic}
+            targetName={builder.targetName}
+            setTargetName={builder.setTargetName}
+            targetUrl={builder.targetUrl}
+            setTargetUrl={builder.setTargetUrl}
+            productCategory={builder.productCategory}
+            setProductCategory={builder.setProductCategory}
+            productAudience={builder.productAudience}
+            setProductAudience={builder.setProductAudience}
+            productUseCases={builder.productUseCases}
+            setProductUseCases={builder.setProductUseCases}
+            productMarket={builder.productMarket}
+            setProductMarket={builder.setProductMarket}
           />
           <LensSection
             applyScenario={builder.applyScenario}
             dynamicScenarioSelected={builder.dynamicScenarioSelected}
             scenarioId={builder.scenarioId}
-            scenarioPacks={builder.scenarioPacks}
+            scenarioPacks={[]}
             selected={builder.selected}
             selectedLayer={builder.selectedLayer}
             selectedScenario={builder.selectedScenario}
@@ -90,6 +100,7 @@ export function NewRun() {
           quotaDecision={builder.quotaDecision}
           runBlockedByQuota={builder.runBlockedByQuota}
           runtime={builder.runtime}
+          targetName={builder.targetName}
           selected={builder.selected}
           selectedLayer={builder.selectedLayer}
           selectedScenario={builder.selectedScenario}

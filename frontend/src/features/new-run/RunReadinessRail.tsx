@@ -21,6 +21,7 @@ import { RuntimeLine } from "./RuntimeLine";
 import type { CompetitorMode, ExecutionMode, LayerSelection } from "./types";
 
 interface RunReadinessRailProps {
+  targetName: string;
   autoRedoWarn: boolean;
   competitorList: string[];
   competitorMode: CompetitorMode;
@@ -40,6 +41,7 @@ interface RunReadinessRailProps {
 }
 
 export function RunReadinessRail({
+  targetName,
   autoRedoWarn,
   competitorList,
   competitorMode,
@@ -230,10 +232,14 @@ export function RunReadinessRail({
             kind: 'submit',
             description: 'submits the new run builder form'
           }}
-          disabled={selected.length === 0 || runBlockedByQuota}
+          disabled={targetName.trim().length < 2 || selected.length === 0 || runBlockedByQuota || (competitorMode === "auto" && !searchReady)}
           disabledReason={
             runBlockedByQuota
               ? quotaDecision?.reason || t('run.disabled.quota')
+              : targetName.trim().length < 2
+                ? t('run.disabled.targetProduct')
+              : competitorMode === "auto" && !searchReady
+                ? t('run.disabled.discoverySearch')
               : selected.length === 0
                 ? t('run.disabled.dimensions')
                 : undefined

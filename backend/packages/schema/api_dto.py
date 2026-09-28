@@ -17,6 +17,7 @@ from packages.schema.models import (
     ReflectionRecord,
     RevisionRecord,
     RunMetrics,
+    TargetProduct,
     ToolCallMessage,
     TraceSpan,
 )
@@ -44,6 +45,7 @@ class RunCreateRequest(BaseModel):
     project_id: str | None = Field(default=None, min_length=1, max_length=160)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=200)
     topic: str = Field(min_length=2, max_length=200)
+    target_product: TargetProduct | None = None
     competitors: list[str] = Field(default_factory=list, max_length=8)
     dimensions: list[str] = Field(min_length=1, max_length=8)
     competitor_layer: Literal["L1", "L2", "L3"] | None = None

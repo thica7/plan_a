@@ -83,6 +83,10 @@ class ResearchBrief(ResearchBaseModel):
     topic: str
     competitor: str
     dimension: str
+    product_name: str = ""
+    product_category: str = ""
+    product_use_cases: list[str] = Field(default_factory=list)
+    product_market: str = ""
     execution_mode: Literal["demo", "real"] = "real"
     homepage_hint: str | None = None
     target_source_count: int = Field(default=3, ge=1, le=10)

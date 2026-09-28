@@ -23,6 +23,47 @@ FEATURE_SLOTS = (
     "customization",
 )
 
+_GENERIC_CAPABILITY_VERBS = re.compile(
+    r"具备|支持|提供|可以|可更换|包含|采用|includes?|supports?|offers?|features?|provides?|has\b",
+    flags=re.IGNORECASE,
+)
+_GENERIC_NEGATION = re.compile(
+    r"不支持|无法|不提供|does not support|doesn't support|without|not available",
+    flags=re.IGNORECASE,
+)
+
+
+def extract_generic_capabilities(brief: ResearchBrief, page: CapturedPage) -> ExtractionResult:
+    """Keep product capabilities as source-backed phrases across categories."""
+    text = _text(page)
+    fields: dict[str, object] = {}
+    quotes: list[EvidenceQuote] = []
+    for clause_match in re.finditer(r"[^。！？.!?;\n]+", text):
+        clause = clause_match.group().strip()
+        if not clause or not _GENERIC_CAPABILITY_VERBS.search(clause):
+            continue
+        if _GENERIC_NEGATION.search(clause):
+            continue
+        index = len(fields) + 1
+        key = f"capability_{index}"
+        fields[key] = {"status": "supported", "evidence_terms": [clause[:180]]}
+        quotes.append(EvidenceQuote(
+            text=clause, source_url=page.final_url, field=key,
+            start_offset=clause_match.start(), end_offset=clause_match.end(),
+        ))
+        if index >= 6:
+            break
+    return ExtractionResult(
+        competitor=brief.competitor, dimension=brief.dimension,
+        source_candidate_id=page.candidate_id, captured_page_id=page.id,
+        fields=fields, quotes=quotes,
+        confidence=min(0.85, page.quality_score * 0.8) if quotes else 0.2,
+        extractor_name="generic_product_capabilities",
+        status="extracted" if quotes else "partial",
+        missing_fields=[] if quotes else ["product_capabilities"],
+        metadata={"category": brief.product_category, "capability_count": len(quotes)},
+    )
+
 _SLOT_TERMS: dict[str, tuple[str, ...]] = {
     "core_capability": (
         "model",

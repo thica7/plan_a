@@ -30,6 +30,10 @@ _ENCODING_MARKERS = ("\ufffd", "Ã", "Â", "â€", "â€™", "â€œ", "â�
 _DIMENSION_SIGNALS: dict[str, tuple[str, ...]] = {
     "pricing": (
         "$",
+        "¥",
+        "￥",
+        "元",
+        "售价",
         "usd",
         "pricing",
         "price",
@@ -75,6 +79,14 @@ _DIMENSION_SIGNALS: dict[str, tuple[str, ...]] = {
     ),
     "feature": (
         "feature",
+        "具备",
+        "支持",
+        "提供",
+        "可更换",
+        "包含",
+        "supports",
+        "provides",
+        "offers",
         "model",
         "api",
         "agent",
@@ -140,7 +152,9 @@ def clean_evidence_quote(
 
 def quote_quality_problem(text: str, *, dimension: str = "") -> str | None:
     quote = _normalize_whitespace(text)
-    if len(quote) < 32:
+    cjk_chars = sum("\u3400" <= char <= "\u9fff" for char in quote)
+    minimum_chars = 18 if cjk_chars >= 8 else 32
+    if len(quote) < minimum_chars:
         return "quote_too_short"
     if noise_problem := text_noise_problem(quote):
         return noise_problem.replace("text_", "quote_", 1)

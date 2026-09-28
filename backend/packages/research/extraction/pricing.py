@@ -19,6 +19,68 @@ PRICING_FIELDS = (
     "enterprise_condition",
 )
 
+_GENERIC_PRICE_RE = re.compile(
+    r"(?:[¥￥$€£]\s*[\d,]+(?:\.\d+)?|(?:CNY|RMB|USD)\s*[\d,]+(?:\.\d+)?|"
+    r"[\d,]+(?:\.\d+)?\s*元)",
+    flags=re.IGNORECASE,
+)
+
+
+def extract_generic_pricing(brief: ResearchBrief, page: CapturedPage) -> ExtractionResult:
+    text = _text(page)
+    rows: list[dict[str, str]] = []
+    prices: list[str] = []
+    first_quote: EvidenceQuote | None = None
+    for match in _GENERIC_PRICE_RE.finditer(text):
+        start = max(text.rfind("。", 0, match.start()), text.rfind("\n", 0, match.start())) + 1
+        end_markers = [position for position in (
+            text.find("。", match.end()), text.find("\n", match.end())
+        ) if position >= 0]
+        end = min(end_markers) + 1 if end_markers else len(text)
+        clause = text[start:end].strip()
+        if not re.search(r"售价|价格|标价|购买|price|cost|purchase|元|[¥￥]", clause, re.I):
+            continue
+        if re.search(r"优惠券|抵用券|赠送|credit balance|coupon", clause, re.I):
+            continue
+        price = " ".join(match.group().split())
+        if price in prices:
+            continue
+        prices.append(price)
+        rows.append({
+            "tier_name": "", "price": price,
+            "billing_cycle": "one_time" if re.search(r"一次性|买断|one.time", clause, re.I) else "unknown",
+            "usage_limit": "",
+        })
+        if first_quote is None:
+            first_quote = EvidenceQuote(
+                text=clause, source_url=page.final_url, field="price_points",
+                start_offset=match.start(), end_offset=match.end(),
+            )
+        if len(prices) >= 8:
+            break
+    model_type = "one_time_purchase" if any(row["billing_cycle"] == "one_time" for row in rows) else "price_listed"
+    fields: dict[str, object] = {
+        "pricing_model_type": model_type if prices else "",
+        "price_rows": rows,
+        "price_points": prices,
+        "billing_cycle": "one_time" if model_type == "one_time_purchase" else "",
+    }
+    quotes = [
+        first_quote.model_copy(update={"field": field})
+        for field in ("pricing_model_type", "price_rows", "price_points", "billing_cycle")
+        if first_quote is not None and fields.get(field)
+    ]
+    return ExtractionResult(
+        competitor=brief.competitor, dimension=brief.dimension,
+        source_candidate_id=page.candidate_id, captured_page_id=page.id,
+        fields=fields, quotes=quotes,
+        confidence=min(0.85, page.quality_score * 0.8) if prices else 0.2,
+        extractor_name="generic_product_pricing",
+        status="extracted" if prices else "partial",
+        missing_fields=[] if prices else ["price_points"],
+        metadata={"category": brief.product_category, "price_count": len(prices)},
+    )
+
 
 def extract_pricing_model(brief: ResearchBrief, page: CapturedPage) -> ExtractionResult:
     text = _text(page)

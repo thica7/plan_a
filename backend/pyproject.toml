@@ -11,6 +11,7 @@ dependencies = [
     "langgraph>=0.2.0",
     "langgraph-checkpoint-sqlite>=2.0.0",
     "pydantic>=2.7.0",
+    "pypdf>=6.0.0,<7.0.0",
     "pydantic-ai-slim[openai]==1.106.0",
     "psycopg[binary]>=3.2.0",
     "pyyaml>=6.0.1",

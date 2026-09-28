@@ -11,8 +11,30 @@ export type RunStatus =
 
 export type OutputLanguage = "zh-CN" | "en-US";
 
+export interface TargetProduct {
+  name: string;
+  official_url?: string | null;
+  category?: string;
+  audience?: string;
+  use_cases?: string[];
+  market?: string;
+}
+
+export interface TargetProductEvidence {
+  status: "verified" | "unverified" | "unavailable";
+  source_url: string;
+  title: string;
+  snippet: string;
+  content_hash: string;
+  fetch_method: string;
+  captured_at: string;
+  reason: string;
+}
+
 export interface AnalysisPlan {
   topic: string;
+  target_product?: TargetProduct | null;
+  target_product_evidence?: TargetProductEvidence | null;
   competitors: string[];
   dimensions: string[];
   complexity: "low" | "medium" | "high";
@@ -321,10 +343,12 @@ export interface CompetitorCandidate {
   evidence_titles: string[];
   evidence_urls: string[];
   confidence: number;
+  relationship?: "direct" | "adjacent" | "substitute" | "unverified";
 }
 
 export interface CompetitorDiscovery {
   query: string;
+  search_queries?: string[];
   candidates: CompetitorCandidate[];
   selected_competitors: string[];
   rationale: string;
@@ -870,6 +894,7 @@ export interface RunCreateRequest {
   project_id?: string | null;
   idempotency_key?: string | null;
   topic: string;
+  target_product?: TargetProduct | null;
   competitors: string[];
   dimensions: string[];
   competitor_layer?: "L1" | "L2" | "L3" | null;

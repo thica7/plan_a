@@ -31,7 +31,7 @@ export function CompetitorDiscoveryView({ discovery }: CompetitorDiscoveryViewPr
           <article className={candidate.selected ? "candidate-card selected" : "candidate-card"} key={candidate.name}>
             <div>
               <strong>{candidate.rank}. {candidate.name}</strong>
-              <span>{candidate.selected ? "Selected" : "Candidate"} · {Math.round(candidate.confidence * 100)}%</span>
+              <span>{t(`discovery.relationship.${candidate.relationship ?? (candidate.selected ? 'direct' : 'unverified')}`)}</span>
             </div>
             {candidate.rationale ? <p>{candidate.rationale}</p> : null}
             {candidate.evidence_urls.length > 0 ? (

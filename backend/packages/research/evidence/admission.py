@@ -187,7 +187,13 @@ def raw_source_from_capture(
         "requested_url": capture.requested_url,
         "final_url": capture.final_url,
         "redirected": capture.requested_url.rstrip("/") != capture.final_url.rstrip("/"),
+        "fetched_at": capture.captured_at.isoformat(),
     }
+    source_metadata.update(capture.metadata)
+    if candidate.date:
+        source_metadata["source_published_at"] = candidate.date
+    if candidate.last_updated:
+        source_metadata["source_updated_at"] = candidate.last_updated
     source_metadata.update(metadata or {})
     return RawSource(
         id=compute_raw_source_id(
@@ -415,7 +421,8 @@ def has_concrete_source_signal(dimension: str, normalized_text: str) -> bool:
     if "pricing" in dimension_key:
         return bool(
             re.search(
-                r"(?:\$|usd|rmb|cny|eur|\d+\s*(?:/|per)\s*(?:token|seat|month|year))",
+                r"(?:[$¥￥€£]|\d+(?:\.\d+)?\s*元|usd|rmb|cny|eur|"
+                r"\d+\s*(?:/|per)\s*(?:token|seat|month|year))",
                 normalized_text,
             )
         )
@@ -425,7 +432,10 @@ def has_concrete_source_signal(dimension: str, normalized_text: str) -> bool:
             for term in ("developer", "customer", "enterprise", "team", "user")
         )
     return any(
-        term in normalized_text for term in ("model", "api", "feature", "coding", "reasoning")
+        term in normalized_text for term in (
+            "model", "api", "feature", "coding", "reasoning",
+            "具备", "支持", "提供", "可更换", "包含", "supports", "provides", "offers",
+        )
     )
 
 
@@ -640,6 +650,10 @@ def dimension_terms_present(dimension: str, normalized_text: str) -> bool:
             "enterprise",
             "plan",
             "$",
+            "¥",
+            "￥",
+            "元",
+            "售价",
         )
     elif "persona" in dimension_key or "user" in dimension_key:
         terms = (
@@ -679,6 +693,14 @@ def dimension_terms_present(dimension: str, normalized_text: str) -> bool:
             "benchmark",
             "api",
             "tool",
+            "具备",
+            "支持",
+            "提供",
+            "可更换",
+            "包含",
+            "supports",
+            "provides",
+            "offers",
         )
     return any(term in normalized_text for term in terms)
 

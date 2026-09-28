@@ -14,11 +14,8 @@ import {
   lockedDimensionsForScenario,
   mergeDimensions,
   scenarioCompetitorPreset,
-  starterPresetDimensions,
-  type StarterPreset,
 } from "./dimensions";
 import {
-  defaultCompetitors,
   defaultWorkspaceId,
   dynamicScenarioId,
   type CompetitorMode,
@@ -29,7 +26,13 @@ import {
 
 export function useNewRunBuilder() {
   const navigate = useNavigate();
-  const [topic, setTopic] = useState("AI research assistant competitive analysis");
+  const [topic, setTopic] = useState("");
+  const [targetName, setTargetName] = useState("");
+  const [targetUrl, setTargetUrl] = useState("");
+  const [productCategory, setProductCategory] = useState("");
+  const [productAudience, setProductAudience] = useState("");
+  const [productUseCases, setProductUseCases] = useState("");
+  const [productMarket, setProductMarket] = useState("");
   const [competitorMode, setCompetitorMode] = useState<CompetitorMode>("auto");
   const [competitors, setCompetitors] = useState("");
   const [skills, setSkills] = useState<SkillSpec[]>([]);
@@ -117,15 +120,6 @@ export function useNewRunBuilder() {
     }
   }
 
-  function applyStarterPreset(preset: StarterPreset) {
-    setTopic(preset.topic);
-    setSelectedLayer(preset.competitorLayer);
-    setScenarioId(preset.scenarioId);
-    setCompetitorMode("manual");
-    setCompetitors(preset.competitors.join(", "));
-    setSelected(starterPresetDimensions(preset));
-  }
-
   function updateSelectedLayer(layer: LayerSelection) {
     setSelectedLayer(layer);
     if (
@@ -139,7 +133,6 @@ export function useNewRunBuilder() {
 
   function updateManualMode() {
     setCompetitorMode("manual");
-    setCompetitors((current) => current || defaultCompetitors);
   }
 
   function toggleDimension(skillName: string) {
@@ -167,13 +160,39 @@ export function useNewRunBuilder() {
       setError(quotaDecision?.reason ?? "Workspace quota blocks new runs.");
       return;
     }
+    const productName = targetName.trim();
+    if (productName.length < 2) {
+      setError("请填写目标产品名称（至少两个字符）。");
+      return;
+    }
+    if (competitorMode === "auto" && !runtime?.has_web_search_key) {
+      setError("自动发现竞品需要搜索服务；也可以改为手动填写竞品。");
+      return;
+    }
+    const officialUrl = targetUrl.trim();
+    if (officialUrl) {
+      try {
+        if (!["http:", "https:"].includes(new URL(officialUrl).protocol)) throw new Error();
+      } catch {
+        setError("产品官网需要完整的 http 或 https 地址。");
+        return;
+      }
+    }
     submitInFlightRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
       const payload: RunCreateRequest = {
         idempotency_key: newRunIdempotencyKey(),
-        topic,
+        topic: topic.trim() || `研究${productName}的同类竞品和替代方案`,
+        target_product: {
+          name: productName,
+          official_url: officialUrl || null,
+          category: productCategory.trim(),
+          audience: productAudience.trim(),
+          use_cases: [...new Set(productUseCases.split(/[,，\n]/).map(item => item.trim()).filter(Boolean))].slice(0, 8),
+          market: productMarket.trim(),
+        },
         competitors: competitorList,
         dimensions: selected,
         competitor_layer: selectedLayer === "auto" ? null : selectedLayer,
@@ -195,7 +214,6 @@ export function useNewRunBuilder() {
 
   return {
     applyScenario,
-    applyStarterPreset,
     autoRedoWarn,
     competitorList,
     competitorMode,
@@ -224,6 +242,18 @@ export function useNewRunBuilder() {
     setScenarioId,
     setSelected,
     setTopic,
+    targetName,
+    setTargetName,
+    targetUrl,
+    setTargetUrl,
+    productCategory,
+    setProductCategory,
+    productAudience,
+    setProductAudience,
+    productUseCases,
+    setProductUseCases,
+    productMarket,
+    setProductMarket,
     skills,
     submitRun,
     toggleDimension,

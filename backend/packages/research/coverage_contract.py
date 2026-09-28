@@ -20,6 +20,23 @@ def evaluate_coverage_contract(
     evidence_items: list[EvidenceItem],
     ledger: list[CandidateLedgerEntry],
 ) -> CoverageContractResult:
+    if (brief.product_name or brief.product_category) and "pricing" in brief.dimension.casefold():
+        page_by_id = {page.id: page for page in pages}
+        supported = any(
+            item.status == "accepted" and item.field in {"price_rows", "price_points"}
+            and (page := page_by_id.get(item.captured_page_id)) is not None
+            and brief.competitor.casefold() in f"{page.title} {page.text}".casefold()
+            for item in evidence_items
+        )
+        return CoverageContractResult(
+            dimension=brief.dimension, competitor=brief.competitor,
+            required_intents=["current_plan_price_support"],
+            satisfied_intents=["current_plan_price_support"] if supported else [],
+            missing_intents=[] if supported else ["current_plan_price_support"],
+            blocking_reasons=[] if supported else ["No source-backed product price was found."],
+            passed=supported,
+            metadata={"contract": "product_pricing_v1", "authority": "source_requires_review"},
+        )
     if "pricing" not in brief.dimension.casefold():
         blocking_reasons = [
             gap

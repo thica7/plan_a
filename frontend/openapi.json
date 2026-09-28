@@ -12653,6 +12653,26 @@
             "type": "string",
             "title": "Topic"
           },
+          "target_product": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TargetProduct"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_product_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TargetProductEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "competitors": {
             "items": {
               "type": "string"
@@ -14747,6 +14767,17 @@
             "minimum": 0.0,
             "title": "Confidence",
             "default": 0.5
+          },
+          "relationship": {
+            "type": "string",
+            "enum": [
+              "direct",
+              "adjacent",
+              "substitute",
+              "unverified"
+            ],
+            "title": "Relationship",
+            "default": "unverified"
           }
         },
         "additionalProperties": false,
@@ -14807,6 +14838,13 @@
           "query": {
             "type": "string",
             "title": "Query"
+          },
+          "search_queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Search Queries"
           },
           "candidates": {
             "items": {
@@ -23925,6 +23963,16 @@
             "minLength": 2,
             "title": "Topic"
           },
+          "target_product": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TargetProduct"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "competitors": {
             "items": {
               "type": "string"
@@ -26698,6 +26746,116 @@
           "role"
         ],
         "title": "SurveyResponse"
+      },
+      "TargetProduct": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 2,
+            "title": "Name"
+          },
+          "official_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Official Url"
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Category",
+            "default": ""
+          },
+          "audience": {
+            "type": "string",
+            "maxLength": 240,
+            "title": "Audience",
+            "default": ""
+          },
+          "use_cases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Use Cases"
+          },
+          "market": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Market",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "TargetProduct"
+      },
+      "TargetProductEvidence": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "unverified",
+              "unavailable"
+            ],
+            "title": "Status"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet",
+            "default": ""
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash",
+            "default": ""
+          },
+          "fetch_method": {
+            "type": "string",
+            "title": "Fetch Method",
+            "default": ""
+          },
+          "captured_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Captured At"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "source_url"
+        ],
+        "title": "TargetProductEvidence"
       },
       "TelemetryChannelStatus": {
         "properties": {

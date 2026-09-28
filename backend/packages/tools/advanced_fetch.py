@@ -52,6 +52,7 @@ async def advanced_fetch_page(
     profile: str | None = None,
     artifact_dir: str | None = None,
     screenshot: bool = False,
+    capture_network: bool = False,
     webfetch_root: Path | None = None,
 ) -> AdvancedFetchResult:
     """Fetch a page through the vendored webfetch_v2 CLI.
@@ -80,7 +81,10 @@ async def advanced_fetch_page(
         command.extend(["--artifact-dir", artifact_dir])
     if screenshot:
         command.append("--screenshot")
+    if capture_network:
+        command.append("--capture-network")
 
+    process: asyncio.subprocess.Process | None = None
     try:
         process = await asyncio.create_subprocess_exec(
             *command,
@@ -88,7 +92,19 @@ async def advanced_fetch_page(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await process.communicate()
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(), timeout=max(0.1, timeout_seconds * 1.5)
+        )
+    except TimeoutError:
+        await _stop_fetch_subprocess(process)
+        return AdvancedFetchResult(
+            url=url, final_url=url, ok=False, fetch_method="failed",
+            title="", text="", markdown="", failure_reason="advanced_fetch_timeout",
+            error=f"WebFetch exceeded its {timeout_seconds:g}s page budget",
+        )
+    except asyncio.CancelledError:
+        await _stop_fetch_subprocess(process)
+        raise
     except Exception as exc:  # noqa: BLE001 - tool failure is surfaced as fetch data.
         return AdvancedFetchResult(
             url=url,
@@ -158,3 +174,17 @@ async def advanced_fetch_page(
         error=diagnostics.get("error") or stderr_text or None,
         raw=payload,
     )
+
+
+async def _stop_fetch_subprocess(process: asyncio.subprocess.Process | None) -> None:
+    if process is None:
+        return
+    if process.returncode is None:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+    try:
+        await asyncio.wait_for(process.communicate(), timeout=2.0)
+    except (TimeoutError, OSError):
+        await process.wait()

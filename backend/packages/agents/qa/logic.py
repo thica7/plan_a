@@ -861,7 +861,10 @@ class QualityAgentMixin:
         keys = (
             ("kb_last_seen_at", "kb_fetched_at")
             if is_kb_reuse
-            else ("last_verified_at", "fetched_at", "crawl_fetched_at", "captured_at")
+            else (
+                "last_verified_at", "source_updated_at", "source_published_at",
+                "fetched_at", "crawl_fetched_at", "captured_at",
+            )
         )
         for key in keys:
             parsed = self._parse_source_datetime(metadata.get(key))

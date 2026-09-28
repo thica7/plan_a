@@ -258,6 +258,8 @@ def competitive_intel_input_from_run_request(
         project_id=request.project_id,
         idempotency_key=idempotency_key,
         topic=request.topic,
+        target_product=request.target_product.model_dump(mode="json")
+        if request.target_product is not None else None,
         competitors=request.competitors,
         dimensions=request.dimensions,
         competitor_layer=request.competitor_layer,

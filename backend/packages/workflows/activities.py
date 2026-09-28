@@ -74,6 +74,7 @@ class CompetitiveIntelActivities:
                 project_id=request.project_id,
                 idempotency_key=request.idempotency_key or None,
                 topic=request.topic,
+                target_product=request.target_product,
                 competitors=request.competitors,
                 dimensions=request.dimensions,
                 competitor_layer=request.competitor_layer,

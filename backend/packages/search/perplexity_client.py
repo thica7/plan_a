@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import httpx
 
@@ -20,6 +21,26 @@ class SearchResult:
     last_updated: str | None = None
 
 
+@dataclass(frozen=True)
+class SearchFilters:
+    country: str | None = None
+    search_language_filter: list[str] | None = None
+    search_domain_filter: list[str] | None = None
+    search_recency_filter: Literal["hour", "day", "week", "month", "year"] | None = None
+    last_updated_after_filter: str | None = None
+
+    def payload(self) -> dict[str, object]:
+        return {
+            key: value for key, value in (
+                ("country", self.country),
+                ("search_language_filter", self.search_language_filter),
+                ("search_domain_filter", self.search_domain_filter),
+                ("search_recency_filter", self.search_recency_filter),
+                ("last_updated_after_filter", self.last_updated_after_filter),
+            ) if value
+        }
+
+
 class PerplexitySearchClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -28,11 +49,15 @@ class PerplexitySearchClient:
     def is_enabled(self) -> bool:
         return self._settings.has_web_search_credentials
 
-    async def search(self, query: str, max_results: int = 3) -> list[SearchResult]:
+    async def search(
+        self, query: str, max_results: int = 3, *, filters: SearchFilters | None = None
+    ) -> list[SearchResult]:
         if not self._settings.pplx_api_key:
             return []
 
         payload = {"query": query, "max_results": max(1, min(max_results, 20))}
+        if filters is not None:
+            payload.update(filters.payload())
         headers = {"Authorization": f"Bearer {self._settings.pplx_api_key}"}
         url = f"{self._settings.pplx_base_url}/search"
 

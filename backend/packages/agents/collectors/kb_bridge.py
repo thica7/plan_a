@@ -318,11 +318,11 @@ class CollectorKBBridgeMixin:
         hit_metadata = hit.get("metadata")
         if not isinstance(hit_metadata, dict):
             hit_metadata = {}
-        confidence = max(
-            0.89,
-            min(0.96, 0.86 + score * 0.10),
-            self._verified_source_confidence(detail, competitor, dimension, url, snippet),
+        stored_confidence = _metadata_number(
+            hit_metadata.get("collector_confidence")
+            or hit_metadata.get("kb_collector_confidence")
         )
+        confidence = min(0.75, max(0.3, stored_confidence if stored_confidence is not None else 0.6))
         metadata = {
             "kb_retrieved": True,
             "kb_retrieval_query": query,
@@ -337,6 +337,7 @@ class CollectorKBBridgeMixin:
             "kb_fetched_at": str(hit.get("fetched_at") or ""),
             "kb_last_seen_at": str(hit.get("last_seen_at") or ""),
             "source_material_level": "kb_retrieval_chunk",
+            "kb_confidence_policy": "reuse_requires_current_verification",
         }
         self._copy_kb_source_metadata(metadata, hit_metadata)
         try:

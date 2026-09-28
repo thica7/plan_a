@@ -4,6 +4,7 @@ from packages.business_intel.layers import assess_competitor_layer
 from packages.business_intel.qa_rules import list_business_qa_rules
 from packages.business_intel.scenarios import recommend_scenario_pack, recommended_dimensions
 from packages.schema.enterprise import BusinessIntelPlan
+from packages.schema.models import TargetProduct
 
 
 def build_business_intel_plan(
@@ -13,6 +14,7 @@ def build_business_intel_plan(
     dimensions: list[str],
     requested_layer: str | None = None,
     requested_scenario_id: str | None = None,
+    target_product: TargetProduct | None = None,
 ) -> BusinessIntelPlan:
     layer = assess_competitor_layer(
         topic=topic,
@@ -26,6 +28,7 @@ def build_business_intel_plan(
         dimensions=dimensions,
         requested_layer=layer.layer,
         requested_scenario_id=requested_scenario_id,
+        target_product=target_product,
     )
     if requested_layer is None and scenario_pack.competitor_layer != layer.layer:
         layer = layer.model_copy(

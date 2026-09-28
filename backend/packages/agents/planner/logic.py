@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from packages.business_intel.entity_resolver import normalize_competitor_key
 from packages.business_intel.homepage import verify_homepages
+from packages.research.discovery.planner import build_competitor_queries
 from packages.schema.models import (
     CompetitorCandidate,
     CompetitorDiscovery,
+    TargetProductEvidence,
 )
 from packages.search import SearchResult
 
@@ -23,6 +27,7 @@ class PlannerAgentMixin:
         detail.current_node = "planner"
         await self.emit(detail.id, "node_started", "planner", None, "Calling LLM planner.")
         discovery_payload: dict[str, object] = {}
+        await self._research_target_product(record)
         if not detail.plan.competitors:
             discovery = await self._discover_competitors(record)
             discovered = discovery.selected_competitors
@@ -132,16 +137,29 @@ class PlannerAgentMixin:
 
     async def _discover_competitors(self, record: RunRecord) -> CompetitorDiscovery:
         detail = record.detail
-        query = f"{detail.topic} competitors alternatives market leaders official"
+        product = detail.plan.target_product
+        queries = (
+            build_competitor_queries(product, topic=detail.topic)
+            if product is not None
+            else [f"{detail.topic} competitors alternatives market leaders official"]
+        )
+        query = queries[0]
         search_results: list[SearchResult] = []
         if self._search.is_enabled:
-            search_results = await self._trace_search(
-                record,
-                agent="planner",
-                subagent="discovery",
-                query=query,
-                max_results=6,
-            )
+            seen_urls: set[str] = set()
+            for discovery_query in queries:
+                results = await self._trace_search(
+                    record,
+                    agent="planner",
+                    subagent="discovery",
+                    query=discovery_query,
+                    max_results=6,
+                )
+                for result in results:
+                    key = result.url.rstrip("/").casefold()
+                    if key not in seen_urls:
+                        seen_urls.add(key)
+                        search_results.append(result)
         search_context = [result.__dict__ for result in search_results]
         payload = await self._trace_llm_json(
             record,
@@ -154,13 +172,18 @@ class PlannerAgentMixin:
             ),
             user=(
                 f"Topic: {detail.topic}\n"
+                f"Target product: {product.model_dump_json() if product else 'not specified'}\n"
+                f"Target page evidence: {detail.plan.target_product_evidence.model_dump_json() if detail.plan.target_product_evidence else 'not available'}\n"
                 f"Search results JSON: {json.dumps(search_context, ensure_ascii=False)}\n\n"
-                "Return 3 to 5 direct competitors. "
+                "Return 3 to 5 candidates, separating direct products, adjacent products, "
+                "and substitutes for the same user task. "
                 "Prefer product or company names, not article titles. "
-                "If search results are provided, use them as evidence. Keep names short."
+                "Use matched search results as evidence and name the shared user task. "
+                "Keep names short; do not invent a source for an unmatched candidate."
             ),
             schema_hint=(
-                '{"candidates":[{"name":"name","rationale":"why direct","confidence":0.0}],'
+                '{"candidates":[{"name":"name","rationale":"shared task and difference",'
+                '"relationship":"direct|adjacent|substitute","confidence":0.0}],'
                 '"selected_competitors":["name"],"rationale":"short reason"}'
             ),
         )
@@ -168,6 +191,13 @@ class PlannerAgentMixin:
             payload.get("selected_competitors") or payload.get("competitors")
         )[:5]
         candidate_names = self._candidate_names(payload, selected)
+        if product is not None:
+            target_key = normalize_competitor_key(product.name)
+            selected = [
+                name for name in selected
+                if normalize_competitor_key(name) != target_key
+                and self._candidate_evidence(name, search_results)
+            ]
         selected_set = {name.casefold() for name in selected}
         candidates = [
             CompetitorCandidate(
@@ -182,14 +212,43 @@ class PlannerAgentMixin:
                     result.url for result in self._candidate_evidence(name, search_results)
                 ],
                 confidence=self._candidate_confidence(payload, name),
+                relationship=self._candidate_relationship(payload, name)
+                if name.casefold() in selected_set else "unverified",
             )
             for index, name in enumerate(candidate_names)
         ]
         return CompetitorDiscovery(
             query=query,
+            search_queries=queries,
             candidates=candidates,
             selected_competitors=selected,
             rationale=str(payload.get("rationale") or ""),
+        )
+
+    async def _research_target_product(self, record: RunRecord) -> None:
+        product = record.detail.plan.target_product
+        if product is None or product.official_url is None:
+            return
+        url = str(product.official_url)
+        result = await self._trace_fetch(
+            record, agent="planner", subagent="target_product", url=url,
+        )
+        text = str(getattr(result, "text", "") or "")
+        title = str(getattr(result, "title", "") or "")
+        identity_text = f"{title} {text}".casefold()
+        status = (
+            "unavailable" if not result.ok else
+            "verified" if product.name.casefold() in identity_text else "unverified"
+        )
+        record.detail.plan.target_product_evidence = TargetProductEvidence(
+            status=status,
+            source_url=str(getattr(result, "url", "") or url),
+            title=title,
+            snippet=text[:700],
+            content_hash=str(getattr(result, "content_hash", "") or ""),
+            fetch_method=str(getattr(result, "fetch_method", "") or ""),
+            reason="" if status == "verified" else
+            str(getattr(result, "error", "") or "product identity not confirmed by page"),
         )
 
     def _verify_discovered_competitors(
@@ -197,18 +256,17 @@ class PlannerAgentMixin:
         discovery: CompetitorDiscovery,
     ) -> CompetitorDiscovery:
         verifications = verify_homepages(discovery.selected_competitors)
-        verified_names = [
-            name for name in discovery.selected_competitors if verifications[name].verified
+        eligible = [
+            name for name in discovery.selected_competitors
+            if verifications[name].reason != "phantom_name"
         ]
-        if not verified_names:
-            return discovery
-        verified_set = {name.casefold() for name in verified_names}
+        selected_set = {name.casefold() for name in eligible}
         return discovery.model_copy(
             update={
-                "selected_competitors": verified_names,
+                "selected_competitors": eligible,
                 "candidates": [
                     candidate.model_copy(
-                        update={"selected": candidate.name.casefold() in verified_set}
+                        update={"selected": candidate.name.casefold() in selected_set}
                     )
                     for candidate in discovery.candidates
                 ],
@@ -250,10 +308,20 @@ class PlannerAgentMixin:
         return 0.65
 
     def _candidate_evidence(self, name: str, results: list[SearchResult]) -> list[SearchResult]:
-        key = name.casefold()
+        pattern = re.compile(rf"(?<![a-z0-9]){re.escape(name.casefold())}(?![a-z0-9])")
         matched = [
             result
             for result in results
-            if key in f"{result.title} {result.snippet} {result.url}".casefold()
+            if pattern.search(f"{result.title} {result.snippet} {result.url}".casefold())
         ]
-        return (matched or results)[:2]
+        return matched[:2]
+
+    def _candidate_relationship(self, payload: dict, name: str) -> str:
+        candidates = payload.get("candidates")
+        if isinstance(candidates, list):
+            for item in candidates:
+                if isinstance(item, dict) and str(item.get("name") or "").casefold() == name.casefold():
+                    relation = str(item.get("relationship") or "").casefold()
+                    if relation in {"direct", "adjacent", "substitute"}:
+                        return relation
+        return "unverified"

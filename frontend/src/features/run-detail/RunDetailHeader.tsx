@@ -13,6 +13,17 @@ export function RunDetailHeader({ detail, recommendedDimensions }: RunDetailHead
     <header className="page-header page-header-split">
       <div>
         <h1>{detail.topic}</h1>
+        {detail.plan.target_product ? (
+          <div className="target-product-context">
+            <strong>{detail.plan.target_product.name}</strong>
+            {detail.plan.target_product.category ? <span>{detail.plan.target_product.category}</span> : null}
+            {detail.plan.target_product_evidence ? (
+              <a href={detail.plan.target_product_evidence.source_url} rel="noreferrer" target="_blank">
+                {detail.plan.target_product_evidence.status === "verified" ? "官网已核验" : "官网待核验"}
+              </a>
+            ) : <span>官网资料待核验</span>}
+          </div>
+        ) : null}
         <p>
           {detail.plan.competitors.join(" vs ")} / {detail.plan.dimensions.join(", ")} /{" "}
           {detail.execution_mode}

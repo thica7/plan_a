@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
-from packages.business_intel.entity_resolver import is_trusted_url_for_competitor
 from packages.research.models import (
     CandidateIntent,
     CapturedPage,
@@ -139,6 +138,8 @@ def _official_url(brief: ResearchBrief, candidate: SourceCandidate, page: Captur
 
 
 def _official_candidate(brief: ResearchBrief, candidate: SourceCandidate) -> bool:
+    from packages.business_intel.entity_resolver import is_trusted_url_for_competitor
+
     if candidate.origin in {"trusted_registry", "homepage_derived", "manual"}:
         return True
     if is_trusted_url_for_competitor(brief.competitor, candidate.url):
@@ -165,5 +166,9 @@ def _contains_any(value: str, terms: tuple[str, ...]) -> bool:
 
 def _contains_price_signal(value: str) -> bool:
     return bool(
-        re.search(r"\$\s*\d+|\b\d+\s*(?:usd|/mo|per month|monthly|credits?|seats?)\b", value)
+        re.search(
+            r"[$¥￥€£]\s*[\d,]+(?:\.\d+)?|[\d,]+(?:\.\d+)?\s*元|"
+            r"\b\d+\s*(?:usd|/mo|per month|monthly|credits?|seats?)\b",
+            value,
+        )
     )

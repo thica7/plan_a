@@ -41,7 +41,7 @@ from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     RawSource,
 )
-from packages.search import SearchResult
+from packages.search import SearchFilters, SearchResult
 from packages.tools import (
     fetch_evidence_page,
     search_review_site_queries,
@@ -448,6 +448,34 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             return False
         return coverage.get("passed") is False
 
+    async def _search_research_candidates(
+        self,
+        record: RunRecord,
+        detail: RunDetail,
+        dimension: str,
+        context: SubagentContext | None,
+        query: str,
+        max_results: int,
+    ) -> list[SearchResult]:
+        product = detail.plan.target_product
+        market = (product.market if product else "").strip()
+        country = market.upper() if len(market) == 2 and market.isascii() and market.isalpha() else None
+        recent_pricing = product is not None and "pricing" in dimension.casefold()
+        filters = SearchFilters(
+            country=country,
+            search_recency_filter="year" if recent_pricing else None,
+        ) if country or recent_pricing else None
+        kwargs = {
+            "agent": "collector", "subagent": context.subagent if context else dimension,
+            "query": query, "max_results": max_results, "context": context,
+        }
+        if filters is None:
+            return await self._trace_search(record, **kwargs)
+        results = await self._trace_search(record, filters=filters, **kwargs)
+        if results:
+            return results
+        return await self._trace_search(record, **kwargs)
+
     async def _collect_competitor_with_research_pipeline(
         self,
         record: RunRecord,
@@ -485,13 +513,8 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         async def search(query: str, max_results: int) -> list[SearchResult]:
             if not self._search.is_enabled:
                 return []
-            return await self._trace_search(
-                record,
-                agent="collector",
-                subagent=context.subagent,
-                query=query,
-                max_results=max_results,
-                context=context,
+            return await self._search_research_candidates(
+                record, detail, dimension, context, query, max_results,
             )
 
         async def fetch(url: str):
@@ -1045,6 +1068,11 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             topic=detail.topic,
             competitor=competitor,
             dimension=dimension,
+            product_name=detail.plan.target_product.name if detail.plan.target_product else "",
+            product_category=detail.plan.target_product.category if detail.plan.target_product else "",
+            product_use_cases=list(detail.plan.target_product.use_cases)
+            if detail.plan.target_product else [],
+            product_market=detail.plan.target_product.market if detail.plan.target_product else "",
             execution_mode=detail.execution_mode,
             homepage_hint=detail.plan.homepage_hints.get(competitor),
             target_source_count=self._collector_target_source_count(detail, dimension),

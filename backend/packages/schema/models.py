@@ -75,10 +75,36 @@ class AnalysisPlanTask(BaseModel):
     depends_on: list[str] = Field(default_factory=list)
 
 
+class TargetProduct(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=200)
+    official_url: HttpUrl | None = None
+    category: str = Field(default="", max_length=160)
+    audience: str = Field(default="", max_length=240)
+    use_cases: list[str] = Field(default_factory=list, max_length=8)
+    market: str = Field(default="", max_length=120)
+
+
+class TargetProductEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["verified", "unverified", "unavailable"]
+    source_url: str
+    title: str = ""
+    snippet: str = ""
+    content_hash: str = ""
+    fetch_method: str = ""
+    captured_at: datetime = Field(default_factory=datetime.utcnow)
+    reason: str = ""
+
+
 class AnalysisPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     topic: str
+    target_product: TargetProduct | None = None
+    target_product_evidence: TargetProductEvidence | None = None
     competitors: list[str]
     dimensions: list[str]
     complexity: Literal["low", "medium", "high"] = "medium"
@@ -290,12 +316,14 @@ class CompetitorCandidate(BaseModel):
     evidence_titles: list[str] = Field(default_factory=list)
     evidence_urls: list[str] = Field(default_factory=list)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    relationship: Literal["direct", "adjacent", "substitute", "unverified"] = "unverified"
 
 
 class CompetitorDiscovery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str
+    search_queries: list[str] = Field(default_factory=list)
     candidates: list[CompetitorCandidate] = Field(default_factory=list)
     selected_competitors: list[str] = Field(default_factory=list)
     rationale: str = ""

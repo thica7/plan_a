@@ -41,6 +41,7 @@ function renderRail(props: Partial<ComponentProps<typeof RunReadinessRail>> = {}
         quotaDecision={quotaDecision}
         runBlockedByQuota={false}
         runtime={runtime}
+        targetName="示例产品"
         selected={["pricing"]}
         selectedLayer="L1"
         selectedScenario={null}
@@ -53,6 +54,16 @@ function renderRail(props: Partial<ComponentProps<typeof RunReadinessRail>> = {}
 }
 
 describe("RunReadinessRail", () => {
+  it("requires web search for automatic competitor discovery", () => {
+    renderRail({ competitorMode: "auto", runtime: { ...runtime, has_web_search_key: false } });
+    expect(screen.getByRole("button", { name: /开始运行/i })).toBeDisabled();
+    expect(screen.getByText(/搜索服务/)).toBeInTheDocument();
+  });
+  it("disables launch until the target product is named", () => {
+    renderRail({ targetName: "" });
+    expect(screen.getByRole("button", { name: /开始运行/i })).toBeDisabled();
+    expect(screen.getByText(/目标产品/)).toBeInTheDocument();
+  });
   it("does not display fabricated dollar estimates", () => {
     renderRail();
     expect(screen.queryByText("~$48.60")).not.toBeInTheDocument();

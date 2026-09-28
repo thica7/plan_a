@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+
 from packages.business_intel.layers import assess_competitor_layer
 from packages.schema.enterprise import ScenarioPack
+from packages.schema.models import TargetProduct
 
 SCENARIO_PACKS: tuple[ScenarioPack, ...] = (
     ScenarioPack(
@@ -149,6 +152,7 @@ def recommend_scenario_pack(
     dimensions: list[str],
     requested_layer: str | None = None,
     requested_scenario_id: str | None = None,
+    target_product: TargetProduct | None = None,
 ) -> ScenarioPack:
     if requested_scenario_id:
         pack = get_scenario_pack(requested_scenario_id)
@@ -161,6 +165,15 @@ def recommend_scenario_pack(
                 dimensions=dimensions,
                 requested_layer=requested_layer,
             )
+
+    if target_product is not None and not requested_scenario_id:
+        return generate_product_scenario_pack(
+            target_product=target_product,
+            topic=topic,
+            competitors=competitors,
+            dimensions=dimensions,
+            requested_layer=requested_layer,
+        )
 
     layer = assess_competitor_layer(
         topic=topic,
@@ -178,6 +191,48 @@ def recommend_scenario_pack(
     if layer == "L1" and _pricing_pack_signal(text, competitors):
         return _pack("l1_pricing_pack")
     return _pack("l1_direct_battlecard")
+
+
+def generate_product_scenario_pack(
+    *,
+    target_product: TargetProduct,
+    topic: str,
+    competitors: list[str],
+    dimensions: list[str],
+    requested_layer: str | None = None,
+) -> ScenarioPack:
+    layer = assess_competitor_layer(
+        topic=topic, competitors=competitors, dimensions=dimensions,
+        requested_layer=requested_layer,
+    ).layer
+    identity = f"{target_product.name}|{target_product.category}|{target_product.market}"
+    short_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
+    required = list(dict.fromkeys(dimensions))
+    return ScenarioPack(
+        id=f"product_{short_id}",
+        name=f"Product research: {target_product.name}",
+        description=f"Evidence-led competitor research for {target_product.name}.",
+        competitor_layer=layer,
+        seed_competitors=competitors[:5],
+        required_dimensions=required,
+        optional_dimensions=[
+            item for item in ("pricing", "feature", "persona", "review", "market")
+            if item not in required
+        ][:3],
+        analyst_questions=[
+            f"Which products can replace {target_product.name} for the same user task?",
+            "Which similarities and differences are directly supported by sources?",
+            "What information remains unverified or out of date?",
+        ],
+        evidence_requirements=[
+            "Cite a captured source for each product fact.",
+            "Mark unknown homepages for verification without discarding candidates.",
+        ],
+        qa_rule_ids=[
+            "coverage_min_verified", "claim_has_evidence", "source_reliability_min",
+        ],
+        is_dynamic=True,
+    )
 
 def generate_dynamic_scenario_pack(
     *,

@@ -48,6 +48,7 @@ async def fetch_candidate_page(
         quality_score=quality_score,
         text_length=int(getattr(result, "text_length", 0) or len(text)),
         failure_reason=rejection_reason or None if ok else capture_failure_reason(result),
+        metadata=dict(getattr(result, "capture_metadata", {}) or {}),
     )
 
 

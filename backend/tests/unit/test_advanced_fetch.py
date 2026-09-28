@@ -16,6 +16,9 @@ from packages.tools import (
     fetch_page,
 )
 from packages.tools.webfetch_runtime import DEFAULT_WEBFETCH_V2_ROOT, resolve_webfetch_v2_root
+from packages.research.capture.webfetch_adapter import fetch_candidate_page
+from packages.research.evidence.admission import raw_source_from_capture
+from packages.research.models import ResearchBrief, SourceCandidate
 
 
 class _FakeProcess:
@@ -26,6 +29,59 @@ class _FakeProcess:
 
     async def communicate(self) -> tuple[bytes, bytes]:
         return self._stdout, self._stderr
+
+
+class _HangingProcess:
+    def __init__(self) -> None:
+        self.finished = asyncio.Event()
+        self.killed = False
+        self.returncode = None
+
+    async def communicate(self) -> tuple[bytes, bytes]:
+        await self.finished.wait()
+        return b"", b""
+
+    def kill(self) -> None:
+        self.killed = True
+        self.returncode = -9
+        self.finished.set()
+
+    async def wait(self) -> int:
+        await self.finished.wait()
+        return self.returncode or 0
+
+
+@pytest.mark.asyncio
+async def test_advanced_fetch_has_total_timeout_and_cleans_up_subprocess(monkeypatch, tmp_path):
+    process = _HangingProcess()
+
+    async def fake_subprocess(*_args, **_kwargs):
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_subprocess)
+    result = await asyncio.wait_for(
+        advanced_fetch_page("https://example.com", timeout_seconds=0.02, webfetch_root=tmp_path),
+        timeout=0.5,
+    )
+    assert result.ok is False
+    assert result.failure_reason == "advanced_fetch_timeout"
+    assert process.killed is True
+
+
+@pytest.mark.asyncio
+async def test_advanced_fetch_cancellation_kills_subprocess(monkeypatch, tmp_path):
+    process = _HangingProcess()
+
+    async def fake_subprocess(*_args, **_kwargs):
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_subprocess)
+    task = asyncio.create_task(advanced_fetch_page("https://example.com", webfetch_root=tmp_path))
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert process.killed is True
 
 
 def _resolver_for(*addresses: str):
@@ -85,6 +141,48 @@ async def test_advanced_fetch_page_parses_webfetch_v2_payload(monkeypatch, tmp_p
     assert calls
     assert "--screenshot" in calls[0][0]
     assert calls[0][1]["cwd"] == str(tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_browser_diagnostics_can_reach_a_cited_source(monkeypatch, tmp_path) -> None:
+    url = "https://example.com/dynamic-product"
+    payload = {
+        "url": url, "final_url": url, "ok": True, "fetch_method": "browser",
+        "title": "Dynamic product", "text": "This product provides a rechargeable battery.",
+        "markdown": "", "quality": {"score": .9, "text_length": 47},
+        "diagnostics": {"warnings": ["rendered_after_navigation"]},
+        "artifacts": {"rendered_html_path": "/tmp/example-rendered.html"},
+        "network": [{"url": "https://example.com/api/product", "status": 200}],
+    }
+    calls = []
+
+    async def fake_subprocess(*args, **_kwargs):
+        calls.extend(args)
+        return _FakeProcess(json.dumps(payload).encode())
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_subprocess)
+    advanced = await advanced_fetch_page(
+        url, capture_network=True, webfetch_root=tmp_path,
+    )
+    assert "--capture-network" in calls
+
+    async def return_advanced(_url, **_kwargs):
+        return advanced
+
+    async def basic(_url, **_kwargs):
+        return FetchPageResult(url=url, ok=True, title="Loading", text="Loading...", content_hash="short")
+
+    monkeypatch.setattr("packages.tools.evidence_fetch.fetch_page", basic)
+    monkeypatch.setattr("packages.tools.evidence_fetch.advanced_fetch_page", return_advanced)
+    result = await fetch_evidence_page(url)
+    candidate = SourceCandidate(title="Product", url=url, origin="web_search")
+    page = await fetch_candidate_page(candidate, lambda _url: asyncio.sleep(0, result=result))
+    source = raw_source_from_capture(
+        ResearchBrief(run_id="run", topic="product", competitor="Product", dimension="feature"),
+        candidate, page, confidence=.7,
+    )
+    assert source.metadata["webfetch_artifacts"]["rendered_html_path"] == "/tmp/example-rendered.html"
+    assert source.metadata["webfetch_network"][0]["url"] == "https://example.com/api/product"
 
 
 def test_default_webfetch_v2_root_is_vendored_with_plan_a() -> None:
@@ -260,26 +358,8 @@ async def test_fetch_evidence_page_preserves_structured_failure_reason(monkeypat
             error="403 Forbidden",
         )
 
-    async def fake_advanced_fetch(
-        url: str,
-        *,
-        mode: str = "auto",
-        timeout_seconds: float = 15.0,
-        quality_threshold: float = 0.55,
-        **_: object,
-    ) -> AdvancedFetchResult:
-        return AdvancedFetchResult(
-            url=url,
-            final_url=url,
-            ok=False,
-            fetch_method="playwright",
-            title="",
-            text="",
-            markdown="",
-            status_code=403,
-            failure_reason="blocked_or_login_required",
-            error="blocked",
-        )
+    async def fake_advanced_fetch(*_args, **_kwargs):
+        raise AssertionError("Access-denied pages must not open the browser fallback")
 
     monkeypatch.setattr("packages.tools.evidence_fetch.fetch_page", fake_basic_fetch)
     monkeypatch.setattr("packages.tools.evidence_fetch.advanced_fetch_page", fake_advanced_fetch)
@@ -288,5 +368,5 @@ async def test_fetch_evidence_page_preserves_structured_failure_reason(monkeypat
 
     assert result.ok is False
     assert result.status_code == 403
-    assert result.fetch_method == "webfetch_v2:playwright"
-    assert result.failure_reason == "blocked_or_login_required"
+    assert result.fetch_method == "basic_httpx_access_blocked"
+    assert result.failure_reason == "access_denied"

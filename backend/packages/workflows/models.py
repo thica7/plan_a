@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 CREATE_RUN_ACTIVITY = "create_competitive_intel_run"
 RUN_LANGGRAPH_ACTIVITY = "run_competitive_intel_langgraph"
@@ -49,6 +49,7 @@ ReportVersionWorkflowStatus = Literal[
 class CompetitiveIntelWorkflowInput:
     topic: str
     dimensions: list[str]
+    target_product: dict[str, Any] | None = None
     competitors: list[str] = field(default_factory=list)
     workspace_id: str = "default-workspace"
     project_id: str | None = None

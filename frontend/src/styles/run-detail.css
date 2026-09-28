@@ -1539,3 +1539,13 @@
 .activity-timeline.compact article {
   gap: 8px;
 }
+.target-product-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 8px 0;
+  color: var(--text-soft);
+}
+.target-product-context strong { color: var(--text); }
+.target-product-context a { color: var(--accent); }

@@ -2410,6 +2410,8 @@ export interface components {
         AnalysisPlan: {
             /** Topic */
             topic: string;
+            target_product?: components["schemas"]["TargetProduct"] | null;
+            target_product_evidence?: components["schemas"]["TargetProductEvidence"] | null;
             /** Competitors */
             competitors: string[];
             /** Dimensions */
@@ -3334,6 +3336,12 @@ export interface components {
              * @default 0.5
              */
             confidence: number;
+            /**
+             * Relationship
+             * @default unverified
+             * @enum {string}
+             */
+            relationship: "direct" | "adjacent" | "substitute" | "unverified";
         };
         /** CompetitorDimensionScore */
         CompetitorDimensionScore: {
@@ -3357,6 +3365,8 @@ export interface components {
         CompetitorDiscovery: {
             /** Query */
             query: string;
+            /** Search Queries */
+            search_queries?: string[];
             /** Candidates */
             candidates?: components["schemas"]["CompetitorCandidate"][];
             /** Selected Competitors */
@@ -7328,6 +7338,7 @@ export interface components {
             idempotency_key?: string | null;
             /** Topic */
             topic: string;
+            target_product?: components["schemas"]["TargetProduct"] | null;
             /** Competitors */
             competitors?: string[];
             /** Dimensions */
@@ -8493,6 +8504,70 @@ export interface components {
              * @enum {string}
              */
             source_type: "survey_simulated" | "survey_response" | "interview_record" | "manual_transcript" | "manual_note" | "manual";
+        };
+        /** TargetProduct */
+        TargetProduct: {
+            /** Name */
+            name: string;
+            /** Official Url */
+            official_url?: string | null;
+            /**
+             * Category
+             * @default
+             */
+            category: string;
+            /**
+             * Audience
+             * @default
+             */
+            audience: string;
+            /** Use Cases */
+            use_cases?: string[];
+            /**
+             * Market
+             * @default
+             */
+            market: string;
+        };
+        /** TargetProductEvidence */
+        TargetProductEvidence: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "verified" | "unverified" | "unavailable";
+            /** Source Url */
+            source_url: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /**
+             * Snippet
+             * @default
+             */
+            snippet: string;
+            /**
+             * Content Hash
+             * @default
+             */
+            content_hash: string;
+            /**
+             * Fetch Method
+             * @default
+             */
+            fetch_method: string;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at?: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
         };
         /** TelemetryChannelStatus */
         TelemetryChannelStatus: {

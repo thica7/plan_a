@@ -111,11 +111,12 @@ from packages.schema.models import (
     ReflectionRecord,
     RevisionRecord,
     RunMetrics,
+    TargetProduct,
     ToolCallMessage,
     TraceSpan,
 )
 from packages.schema.survey import UserResearchImportRequest, UserResearchImportResult
-from packages.search import PerplexitySearchClient, SearchResult
+from packages.search import PerplexitySearchClient, SearchFilters, SearchResult
 from packages.skills.registry import SkillRegistry
 from packages.tools import WebSearchRequest, fetch_evidence_page, robots_check, web_search
 
@@ -171,11 +172,14 @@ def _active_run_fingerprint(
     output_language: str,
     auto_redo_warn_enabled: bool,
     hitl_enabled: bool,
+    target_product: TargetProduct | None = None,
 ) -> str:
     payload = {
         "workspace_id": workspace_id.strip().casefold(),
         "project_id": (project_id or "").strip().casefold(),
         "topic": compute_topic_normalized(topic),
+        "target_product": target_product.model_dump(mode="json")
+        if target_product is not None else None,
         "competitors": sorted({" ".join(item.split()).casefold() for item in competitors if item}),
         "dimensions": sorted({item.strip().casefold() for item in dimensions if item}),
         "competitor_layer": competitor_layer or "auto",
@@ -318,7 +322,7 @@ class RunService(
             competitors = self._scenario_seed_competitors(request.scenario_id)
         valid_dimensions = self._normalize_requested_dimensions(
             request.dimensions,
-            require_core_schema=not competitors,
+            require_core_schema=not competitors and request.target_product is None,
         )
         now = datetime.utcnow()
         run_id = _run_id_for_idempotency_key(request.idempotency_key) or new_run_id()
@@ -350,6 +354,7 @@ class RunService(
             output_language=request.output_language,
             auto_redo_warn_enabled=auto_redo_warn_enabled,
             hitl_enabled=hitl_enabled,
+            target_product=request.target_product,
         )
         duplicate = None
         if not skip_active_duplicate_check:
@@ -359,11 +364,10 @@ class RunService(
             return duplicate.detail
 
         homepage_verifications = verify_homepages(competitors)
-        verified_competitors = [
-            competitor for competitor in competitors if homepage_verifications[competitor].verified
+        competitors = [
+            competitor for competitor in competitors
+            if homepage_verifications[competitor].reason != "phantom_name"
         ]
-        if verified_competitors:
-            competitors = verified_competitors
         memory_context = None
         if self._preference_memory is not None and request.project_id:
             memory_context = self._preference_memory.recall(
@@ -384,6 +388,7 @@ class RunService(
             dimensions=valid_dimensions,
             requested_layer=request.competitor_layer,
             requested_scenario_id=request.scenario_id,
+            target_product=request.target_product,
         )
         if self._should_enforce_requested_scenario(
             request.scenario_id,
@@ -395,6 +400,7 @@ class RunService(
             )
         plan = AnalysisPlan(
             topic=request.topic,
+            target_product=request.target_product,
             competitors=competitors,
             dimensions=valid_dimensions,
             complexity="medium",
@@ -503,7 +509,7 @@ class RunService(
             competitors = self._scenario_seed_competitors(request.scenario_id)
         valid_dimensions = self._normalize_requested_dimensions(
             request.dimensions,
-            require_core_schema=not competitors,
+            require_core_schema=not competitors and request.target_product is None,
         )
         auto_redo_warn_enabled = (
             self._settings.auto_redo_warn_enabled
@@ -527,6 +533,7 @@ class RunService(
             output_language=request.output_language,
             auto_redo_warn_enabled=auto_redo_warn_enabled,
             hitl_enabled=hitl_enabled,
+            target_product=request.target_product,
         )
         async with self._lock:
             duplicate = self._find_active_duplicate_run(fingerprint, datetime.utcnow())
@@ -3660,6 +3667,7 @@ class RunService(
         query: str,
         max_results: int,
         context: SubagentContext | None = None,
+        filters: SearchFilters | None = None,
     ) -> list[SearchResult]:
         started = time.perf_counter()
         if context is not None:
@@ -3667,7 +3675,7 @@ class RunService(
         try:
             results = await web_search(
                 self._search,
-                WebSearchRequest(query=query, max_results=max_results),
+                WebSearchRequest(query=query, max_results=max_results, filters=filters),
             )
         except Exception as exc:
             self._append_trace_span(
@@ -3682,7 +3690,8 @@ class RunService(
                 output_text=str(exc),
                 metadata=self._trace_metadata(
                     context,
-                    {"provider": self._settings.web_search_provider, "error": str(exc)},
+                    {"provider": self._settings.web_search_provider, "error": str(exc),
+                     "filters": json.dumps(filters.payload(), ensure_ascii=False) if filters else ""},
                 ),
             )
             raise
@@ -3703,6 +3712,7 @@ class RunService(
                     "provider": self._settings.web_search_provider,
                     "result_count": len(results),
                     "max_results": max_results,
+                    "filters": json.dumps(filters.payload(), ensure_ascii=False) if filters else "",
                 },
             ),
         )
@@ -3716,6 +3726,7 @@ class RunService(
                 "tool": "web_search",
                 "query": query,
                 "result_count": len(results),
+                "filters": filters.payload() if filters else {},
                 "related_span_ids": [span_id],
                 "input": query,
                 "output": f"{len(results)} result(s)",
