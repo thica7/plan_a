@@ -1,3 +1,4 @@
+import { apiFetch } from "../api/http";
 import { create } from 'zustand';
 
 // ---------------------------------------------------------------------------
@@ -78,7 +79,7 @@ export const useSearchStore = create<SearchState>((set, get) => ({
 
     set({ loading: true, error: null });
     try {
-      const res = await fetch('/api/knowledge/search', {
+      const res = await apiFetch('/api/knowledge/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

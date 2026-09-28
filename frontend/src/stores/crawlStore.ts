@@ -1,3 +1,4 @@
+import { apiFetch } from "../api/http";
 import { create } from 'zustand';
 
 // ---------------------------------------------------------------------------
@@ -44,7 +45,7 @@ export const useCrawlStore = create<CrawlState>((set, get) => ({
   fetchJobs: async () => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch('/api/crawl/jobs');
+      const res = await apiFetch('/api/crawl/jobs');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       set({ jobs: data, loading: false });
@@ -63,7 +64,7 @@ export const useCrawlStore = create<CrawlState>((set, get) => ({
 
   createJob: async (url, opts = {}) => {
     try {
-      const res = await fetch('/api/crawl/jobs', {
+      const res = await apiFetch('/api/crawl/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, ...opts }),
@@ -78,7 +79,7 @@ export const useCrawlStore = create<CrawlState>((set, get) => ({
 
   deleteJob: async (id) => {
     try {
-      const res = await fetch(`/api/crawl/jobs/${id}`, {
+      const res = await apiFetch(`/api/crawl/jobs/${id}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

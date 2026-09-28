@@ -26,7 +26,7 @@ import type {
   TraceSpan,
 } from "../../api/types";
 import { buildReportSourceBundle } from "../report/sourceBundle";
-import { useRunStore } from "../../stores/run";
+import { getRunStore } from "../../stores/run";
 import type { RunDetailView } from "./types";
 import { flattenReflection } from "./utils";
 import {
@@ -47,7 +47,8 @@ export type HitlDecision = "accept" | "modify_plan" | "force_pass" | "redo";
 export function useRunDetailController() {
   const { runId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { detail, events, setDetail, addEvent, reset } = useRunStore();
+  const runStore = getRunStore(runId ?? "pending");
+  const { detail, events, setDetail, addEvent, reset } = runStore();
   const processedRefreshEventIdsRef = useRef<Set<number>>(new Set());
   const [activeView, setActiveViewState] = useState<RunDetailView>(
     () => parseRunDetailView(searchParams.get("view")) ?? "overview",
@@ -121,7 +122,7 @@ export function useRunDetailController() {
     let cancelled = false;
     let retryTimer: number | undefined;
     let unsubscribe: (() => void) | undefined;
-    reset();
+    if (!runStore.getState().detail) reset();
     processedRefreshEventIdsRef.current.clear();
     setQualityComparison(null);
     setQualityBaselineRunId("");
@@ -220,11 +221,11 @@ export function useRunDetailController() {
       const refreshEvent = refreshEvents[refreshEvents.length - 1];
       getRun(runId)
         .then((loaded) => {
-          if (isStaleReportRefresh(refreshEvent.id)) return;
+          if (isStaleReportRefresh(runId, refreshEvent.id)) return;
           setDetail(loaded);
         })
         .catch((err: Error) => {
-          if (!useRunStore.getState().detail) {
+          if (!runStore.getState().detail) {
             setError(err.message);
           }
         });
@@ -435,8 +436,8 @@ function parseRunDetailView(value: string | null): RunDetailView | null {
   return null;
 }
 
-function isStaleReportRefresh(refreshEventId: number) {
-  return useRunStore
+function isStaleReportRefresh(runId: string, refreshEventId: number) {
+  return getRunStore(runId)
     .getState()
     .events.some(
       (event) =>

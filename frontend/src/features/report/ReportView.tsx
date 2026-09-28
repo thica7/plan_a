@@ -125,6 +125,8 @@ export function ReportView({
             ["audit", t("report.layers.audit")],
           ] as const).map(([key, label]) => (
             <button
+              data-action-id="report.layer.select"
+              data-action-audit="local"
               className={activeLayer === key ? "active" : undefined}
               key={key}
               aria-pressed={activeLayer === key}

@@ -11,6 +11,10 @@ vi.mock("../../api/client", () => ({
 
 const coreSource: RawSource = {
   id: "core-source",
+  candidate_origin: "unknown",
+  fetch_method: "unknown",
+  quality_score: 0.9,
+  metadata: {},
   competitor: "OpenAI",
   covered_competitors: ["OpenAI"],
   dimension: "pricing",

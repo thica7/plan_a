@@ -150,9 +150,9 @@ describe("KnowledgePage deep links", () => {
     expect(await screen.findByText(/Focused chunk: Acme supports SSO/)).toBeInTheDocument();
     expect(await screen.findByText(/Source snapshot: Acme security page/)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Raw source ID")).toHaveValue("kb-security-sso"));
-    expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents?page=1&page_size=10");
-    expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents/kb-doc-security-v2");
-    expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents/kb-doc-security-v2/chunks");
+    expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents?page=1&page_size=10", expect.objectContaining({ headers: expect.any(Headers) }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents/kb-doc-security-v2", expect.objectContaining({ headers: expect.any(Headers) }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents/kb-doc-security-v2/chunks", expect.objectContaining({ headers: expect.any(Headers) }));
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/enterprise/artifacts?raw_source_id=kb-security-sso",
       expect.any(Object),

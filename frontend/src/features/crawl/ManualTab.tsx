@@ -1,3 +1,4 @@
+import { apiFetch } from "../../api/http";
 import { useMemo, useState } from 'react';
 import { useTranslation } from '../../stores/i18n';
 
@@ -9,7 +10,7 @@ interface ManualTabProps {
 }
 
 async function createManualSource(urls: string[], config: Record<string, unknown>) {
-  const res = await fetch('/api/crawl/sources', {
+  const res = await apiFetch('/api/crawl/sources', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

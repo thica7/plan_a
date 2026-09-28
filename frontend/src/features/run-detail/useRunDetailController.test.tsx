@@ -2,7 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useRunStore } from "../../stores/run";
+import { getRunStore } from "../../stores/run";
 import type { RunDetail } from "../../api/types";
 import { useRunDetailController } from "./useRunDetailController";
 
@@ -136,6 +136,8 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+const useRunStore = getRunStore("run-1");
 
 describe("useRunDetailController background refresh", () => {
   beforeEach(() => {

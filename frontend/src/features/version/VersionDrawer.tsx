@@ -1,3 +1,4 @@
+import { apiFetch } from "../../api/http";
 import { useEffect, useMemo, useState } from 'react';
 import { GitMerge, RefreshCw } from 'lucide-react';
 import { useTranslation } from '../../stores/i18n';
@@ -27,20 +28,20 @@ interface VersionDrawerProps {
 }
 
 async function getVersions(documentId: string): Promise<VersionDocument[]> {
-  const res = await fetch(`/api/knowledge/documents/${documentId}/versions`);
+  const res = await apiFetch(`/api/knowledge/documents/${documentId}/versions`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<VersionDocument[]>;
 }
 
 async function getDiff(documentId: string, against: string): Promise<DocumentDiffResponse> {
   const params = new URLSearchParams({ against });
-  const res = await fetch(`/api/knowledge/documents/${documentId}/diff?${params}`);
+  const res = await apiFetch(`/api/knowledge/documents/${documentId}/diff?${params}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<DocumentDiffResponse>;
 }
 
 async function mergeVersion(documentId: string, targetDocumentId: string): Promise<VersionDocument> {
-  const res = await fetch(`/api/knowledge/documents/${documentId}/merge`, {
+  const res = await apiFetch(`/api/knowledge/documents/${documentId}/merge`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ target_document_id: targetDocumentId }),

@@ -1,6 +1,7 @@
 import { GitBranch, ListChecks, RotateCcw } from "lucide-react";
 import type { ReportReleaseGate, ReportVersionRecord } from "../../api/types";
 import { EmptyState, LoadingState, Panel, StatusPill } from "../../components/ui";
+import { ActionButton } from "../../components/interaction/ActionButton";
 import type { KnowledgeRollbackRequest, KnowledgeRollbackResult } from "../../stores/knowledgeStore";
 import type { ReleaseIssueRedoResult, ReleaseIssueRollbackResult } from "./ReportReviewDesk";
 import {
@@ -122,28 +123,32 @@ function ReleaseGateReviewTaskCard({
       {task.rollbackTarget || canRedo ? (
         <div className="release-issue-actions">
           {task.rollbackTarget && onRollbackKbIssue ? (
-            <button
+            <ActionButton
+              authenticity={{ actionId: "release-gate.kb.rollback", kind: "mutation", description: "rolls back KB documents linked to this issue" }}
               className="table-action-button"
               disabled={Boolean(kbRollbackIssueId)}
+              disabledReason={kbRollbackIssueId ? "Another KB rollback is in progress" : undefined}
               onClick={() => void onRollbackKbIssue(task.rollbackTarget!.issueId, task.rollbackTarget!.request)}
               title={`Rollback ${task.rollbackTarget.selectorSummary}`}
               type="button"
             >
               <RotateCcw size={14} aria-hidden />
               {isRollingBack ? "Rolling back" : "Rollback KB"}
-            </button>
+            </ActionButton>
           ) : null}
           {canRedo && onRedoGateIssue ? (
-            <button
+            <ActionButton
+              authenticity={{ actionId: "release-gate.issue.redo", kind: "mutation", description: "starts scoped redo for this report issue" }}
               className="table-action-button"
               disabled={Boolean(gateRedoIssueId)}
+              disabledReason={gateRedoIssueId ? "Another scoped redo is in progress" : undefined}
               onClick={() => void onRedoGateIssue(task.id)}
               title="Run scoped redo for this review task"
               type="button"
             >
               <GitBranch size={14} aria-hidden />
               {isRedoing ? "Redoing" : "Scoped redo"}
-            </button>
+            </ActionButton>
           ) : null}
           {task.rollbackTarget ? <span>{task.rollbackTarget.selectorSummary}</span> : null}
         </div>

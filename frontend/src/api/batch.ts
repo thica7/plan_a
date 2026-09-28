@@ -1,3 +1,4 @@
+import { apiFetch } from "./http";
 export type UploadItemStatus = 'queued' | 'uploading' | 'parsed' | 'embedded' | 'ingested' | 'failed';
 
 export interface BatchIngestItem {
@@ -30,7 +31,7 @@ export interface IngestJob {
 }
 
 export async function createBatch(items: BatchIngestItem[], maxConcurrent = 4): Promise<BatchIngestResponse> {
-  const res = await fetch('/api/knowledge/batch', {
+  const res = await apiFetch('/api/knowledge/batch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -48,7 +49,7 @@ export async function createBatch(items: BatchIngestItem[], maxConcurrent = 4): 
 }
 
 export async function getIngestJob(jobId: string, signal?: AbortSignal): Promise<IngestJob> {
-  const res = await fetch(`/api/knowledge/ingest-jobs/${jobId}`, { signal });
+  const res = await apiFetch(`/api/knowledge/ingest-jobs/${jobId}`, { signal });
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
   }

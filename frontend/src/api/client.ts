@@ -1,3 +1,5 @@
+import { apiFetch, apiIdentityHeaders } from "./http";
+import { openAuthorizedRunStream } from "./runStream";
 import type {
   AgentMessage,
   ArtifactCreateRequest,
@@ -81,17 +83,11 @@ export interface RunRedoRequest {
   issue_ids?: string[];
 }
 
-const AUTH_TOKEN_STORAGE_KEY = "competiscope.authToken";
-const USER_ID_STORAGE_KEY = "competiscope.userId";
-const USER_ROLE_STORAGE_KEY = "competiscope.userRole";
-const WORKSPACE_ID_STORAGE_KEY = "competiscope.workspaceId";
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
+  const response = await apiFetch(`/api${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      ...apiIdentityHeaders(),
       ...init?.headers,
     },
   });
@@ -111,32 +107,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(text || `Request failed: ${response.status}`);
   }
 
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
-}
-
-function apiIdentityHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {};
-  const token = envValue("VITE_API_BEARER_TOKEN") || storageValue(AUTH_TOKEN_STORAGE_KEY);
-  const userId = envValue("VITE_API_USER_ID") || storageValue(USER_ID_STORAGE_KEY);
-  const userRole = envValue("VITE_API_USER_ROLE") || storageValue(USER_ROLE_STORAGE_KEY);
-  const workspaceId =
-    envValue("VITE_API_WORKSPACE_ID") || storageValue(WORKSPACE_ID_STORAGE_KEY);
-
-  if (token) headers.Authorization = `Bearer ${token}`;
-  if (userId) headers["X-User-Id"] = userId;
-  if (userRole) headers["X-User-Role"] = userRole;
-  if (workspaceId) headers["X-Workspace-Id"] = workspaceId;
-  return headers;
-}
-
-function envValue(name: string): string {
-  const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-  return env?.[name]?.trim() ?? "";
-}
-
-function storageValue(key: string): string {
-  if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(key)?.trim() ?? "";
 }
 
 export function listSkills() {
@@ -629,7 +601,8 @@ export function exportReportVersion(versionId: string, format: "markdown" | "htm
   );
 }
 
-export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) {
+function openRunStream(runId: string, onEvent: (event: RunEvent) => void) {
+  if (apiIdentityHeaders().Authorization) return openAuthorizedRunStream(runId, onEvent);
   const source = new EventSource(`/api/runs/${runId}/stream`);
   source.onmessage = (message) => {
     onEvent(JSON.parse(message.data) as RunEvent);
@@ -686,4 +659,23 @@ export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) 
     });
   }
   return () => source.close();
+}
+
+const runStreams = new Map<string, { listeners: Map<(event: RunEvent) => void, number>; close: () => void }>();
+export function subscribeRun(runId: string, onEvent: (event: RunEvent) => void) {
+  let stream = runStreams.get(runId);
+  if (!stream) {
+    const listeners = new Map<(event: RunEvent) => void, number>();
+    stream = { listeners, close: openRunStream(runId, event => listeners.forEach((_count, callback) => callback(event))) };
+    runStreams.set(runId, stream);
+  }
+  stream.listeners.set(onEvent, (stream.listeners.get(onEvent) ?? 0) + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const count = stream!.listeners.get(onEvent) ?? 0;
+    if (count > 1) stream!.listeners.set(onEvent, count - 1); else stream!.listeners.delete(onEvent);
+    if (!stream!.listeners.size) { stream!.close(); runStreams.delete(runId); }
+  };
 }

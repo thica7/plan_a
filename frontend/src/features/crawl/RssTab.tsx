@@ -1,3 +1,4 @@
+import { apiFetch } from "../../api/http";
 import { useState } from 'react';
 import { Search } from 'lucide-react';
 import { useTranslation } from '../../stores/i18n';
@@ -21,7 +22,7 @@ function parseFeedUrls(xml: string) {
 }
 
 async function createRssSource(url: string, config: Record<string, unknown>) {
-  const res = await fetch('/api/crawl/sources', {
+  const res = await apiFetch('/api/crawl/sources', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

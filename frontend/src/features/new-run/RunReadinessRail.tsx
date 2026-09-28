@@ -139,25 +139,7 @@ export function RunReadinessRail({
               {t('run.details')}
             </ActionButton>
           </header>
-          <strong className="cost-estimate">~$48.60</strong>
-          <dl className="readiness-cost-list">
-            <div>
-              <dt>{t('run.llmCalls')}</dt>
-              <dd>~$28.20</dd>
-            </div>
-            <div>
-              <dt>{t('run.webSearch')}</dt>
-              <dd>~$12.40</dd>
-            </div>
-            <div>
-              <dt>{t('run.embeddingVector')}</dt>
-              <dd>~$5.80</dd>
-            </div>
-            <div>
-              <dt>{t('run.storageTrace')}</dt>
-              <dd>~$2.20</dd>
-            </div>
-          </dl>
+          <p>{t('run.costUnavailable')}</p>
         </div>
 
         <div className="readiness-section">

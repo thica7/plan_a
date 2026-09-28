@@ -53,6 +53,10 @@ function renderRail(props: Partial<ComponentProps<typeof RunReadinessRail>> = {}
 }
 
 describe("RunReadinessRail", () => {
+  it("does not display fabricated dollar estimates", () => {
+    renderRail();
+    expect(screen.queryByText("~$48.60")).not.toBeInTheDocument();
+  });
   it("submits only when required dimensions are selected", () => {
     renderRail({ selected: [] });
 

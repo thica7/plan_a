@@ -1,5 +1,16 @@
 # Frontend Interaction Authenticity Inventory
 
+## 2026-09-28 更新
+
+像素桌面已经替代旧 AppShell、Sidebar、Topbar 和导航配置；这些无生产调用的组件与旧 Topbar 测试已移除。
+桌面图标、窗口控制、任务栏、文件管理器和设置按钮均标注真实本地操作。
+`pnpm verify:interactions` 当前扫描 98 个 TSX 文件：0 错误、87 条旧业务页面过渡警告，测试与构建通过。
+旧 allowlist 原期限 2026-07-15 已过；现有条目因仍连接真实操作而延长到 2026-12-31。
+这些是尚未迁移到统一 ActionButton/ActionLink 的界面债务，不等于已完成逐控件改造。
+新增桌面控件不在 allowlist 内。旧版 shell 的样式和历史 i18n 文案还留在代码中，需在视觉回归环境可用时按引用清理。
+
+下面的 2026-06-10 清单保留作历史记录，不能代表本轮验收。
+
 Date: 2026-06-10
 Gate: Interaction Authenticity Gate v2
 

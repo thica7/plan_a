@@ -68,7 +68,8 @@ describe("useKnowledgeStore rollbackDocuments", () => {
     expect(result).toEqual(rollbackResult);
     expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/knowledge/documents/rollback", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: expect.any(Headers),
+      credentials: "same-origin",
       body: JSON.stringify({
         document_ids: [],
         run_id: "run-1",
@@ -77,7 +78,7 @@ describe("useKnowledgeStore rollbackDocuments", () => {
         restore_previous: false,
       }),
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/knowledge/documents?page=1&page_size=10");
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/knowledge/documents?page=1&page_size=10", expect.objectContaining({ headers: expect.any(Headers) }));
     expect(useKnowledgeStore.getState().rollbackResult).toEqual(rollbackResult);
     expect(useKnowledgeStore.getState().documents).toEqual(refreshedDocuments);
     expect(useKnowledgeStore.getState().totalCount).toBe(1);

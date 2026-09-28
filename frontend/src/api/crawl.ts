@@ -1,3 +1,4 @@
+import { apiFetch } from "./http";
 export interface CrawlJob {
   id: string;
   run_id: string | null;
@@ -23,7 +24,7 @@ export interface CreateCrawlJobRequest {
  * @returns 爬虫任务数组，可能附带 totalCount 属性
  */
 export async function listCrawlJobs(signal?: AbortSignal): Promise<CrawlJob[] & { totalCount?: number }> {
-  const res = await fetch('/api/crawl/jobs', { signal });
+  const res = await apiFetch('/api/crawl/jobs', { signal });
   if (!res.ok) {
     throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
   }
@@ -43,7 +44,7 @@ export async function listCrawlJobs(signal?: AbortSignal): Promise<CrawlJob[] & 
  * @returns 新建的爬虫任务详情
  */
 export async function createCrawlJob(req: CreateCrawlJobRequest, signal?: AbortSignal): Promise<CrawlJob> {
-  const res = await fetch('/api/crawl/jobs', {
+  const res = await apiFetch('/api/crawl/jobs', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -63,7 +64,7 @@ export async function createCrawlJob(req: CreateCrawlJobRequest, signal?: AbortS
  * @returns 任务详情
  */
 export async function getCrawlJob(id: string): Promise<CrawlJob> {
-  const res = await fetch(`/api/crawl/jobs/${id}`);
+  const res = await apiFetch(`/api/crawl/jobs/${id}`);
   if (!res.ok) {
     throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
   }
@@ -76,7 +77,7 @@ export async function getCrawlJob(id: string): Promise<CrawlJob> {
  * @param signal 可选的取消信号
  */
 export async function deleteCrawlJob(id: string, signal?: AbortSignal): Promise<void> {
-  const res = await fetch(`/api/crawl/jobs/${id}`, {
+  const res = await apiFetch(`/api/crawl/jobs/${id}`, {
     method: 'DELETE',
     signal,
   });
@@ -92,7 +93,7 @@ export async function deleteCrawlJob(id: string, signal?: AbortSignal): Promise<
  * @returns 重试后的爬虫任务详情
  */
 export async function retryCrawlJob(id: string, signal?: AbortSignal): Promise<CrawlJob> {
-  const res = await fetch(`/api/crawl/jobs/${id}/retry`, {
+  const res = await apiFetch(`/api/crawl/jobs/${id}/retry`, {
     method: 'POST',
     signal,
   });

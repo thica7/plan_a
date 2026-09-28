@@ -1,5 +1,16 @@
 # Project State Board
 
+## 2026-09-28 优化分支状态
+
+当前实施分支为 `codex/optimization-desktop`，基线 `main/a58ce5d`。本段为当前实现记录；下方
+2026-06-17 的状态板保留作历史背景，不代表本次验收结果。
+
+- 工程：统一本地安全启停、端口和 Compose backend/worker 的 KB/Qdrant 配置。
+- RAG：修复长文后部 chunk 漏检和中文检索；保存向量索引状态，支持失败重建；查询按模型和索引版本隔离。
+- Agent：Temporal 保留输出语言；图、LLM 和 writer 分段限制并发与调用预算；移除确认无生产调用的旧整维度 collector/analyst 入口。
+- 前端：像素桌面替代旧侧边栏外壳，新增任务栏、窗口和项目文件管理器；runId 隔离状态与流订阅。
+- 仍需真实 Docker/Windows 与在线模型验收；hash provider 仍为离线默认值。完整测试与限制见 `docs/optimization/2026-09-28-implementation-report.md`。
+
 更新时间：2026-06-17
 更新粒度：按“一个功能/一组相关能力”更新一次，不按每个 commit 逐条更新。
 范围：当前分支 `codex/github-ready-20260610`；`f63dc594` 之前做整体基线，之后按功能主题汇总。

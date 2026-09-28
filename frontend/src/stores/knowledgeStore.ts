@@ -1,3 +1,4 @@
+import { apiFetch } from "../api/http";
 import { create } from 'zustand';
 
 export interface KnowledgeDocument {
@@ -113,7 +114,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       params.set('page', String(page));
       params.set('page_size', String(pageSize));
 
-      const res = await fetch(`/api/knowledge/documents?${params}`);
+      const res = await apiFetch(`/api/knowledge/documents?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const totalCountHeader = res.headers.get('X-Total-Count');
@@ -128,7 +129,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
 
   deleteDocument: async (id: string) => {
     try {
-      const res = await fetch(`/api/knowledge/documents/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/knowledge/documents/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       set((s) => ({ documents: s.documents.filter((d) => d.id !== id) }));
     } catch (err) {
@@ -150,7 +151,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
 
     set({ rollbackLoading: true, rollbackResult: null, error: null });
     try {
-      const res = await fetch('/api/knowledge/documents/rollback', {
+      const res = await apiFetch('/api/knowledge/documents/rollback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

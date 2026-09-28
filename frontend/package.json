@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "node scripts/test-wrapper.js",
     "audit:interactions": "tsx scripts/interaction-authenticity-audit.ts",
-    "verify:interactions": "node scripts/test-wrapper.js src/components/interaction/ActionButton.test.tsx src/components/interaction/ActionLink.test.tsx scripts/interaction-authenticity-audit.test.ts src/components/app-shell/Topbar.test.tsx src/features/workbench/ViewSwitcher.test.tsx src/features/new-run/RunReadinessRail.test.tsx src/features/workbench/ReportReleasePanel.test.tsx && tsx scripts/interaction-authenticity-audit.ts && tsc -b && vite build",
+    "verify:interactions": "node scripts/test-wrapper.js src/components/interaction/ActionButton.test.tsx src/components/interaction/ActionLink.test.tsx scripts/interaction-authenticity-audit.test.ts src/features/desktop/Desktop.test.tsx src/features/desktop/FilesApp.test.tsx src/features/workbench/ViewSwitcher.test.tsx src/features/new-run/RunReadinessRail.test.tsx src/features/workbench/ReportReleasePanel.test.tsx && tsx scripts/interaction-authenticity-audit.ts && tsc -b && vite build",
     "openapi-typescript": "openapi-typescript"
   },
   "dependencies": {

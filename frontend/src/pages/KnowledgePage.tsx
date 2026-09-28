@@ -1,3 +1,4 @@
+import { apiFetch } from "../api/http";
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useKnowledgeStore, type KnowledgeChunk, type KnowledgeRollbackResult } from '../stores/knowledgeStore';
@@ -99,7 +100,7 @@ export default function KnowledgePage() {
       return;
     }
     let active = true;
-    fetch(`/api/knowledge/documents/${encodeURIComponent(focusDocumentId)}`)
+    apiFetch(`/api/knowledge/documents/${encodeURIComponent(focusDocumentId)}`)
       .then((response) => (response.ok ? response.json() : null))
       .then((document) => {
         if (active) setLinkedDocument(document);
@@ -151,7 +152,7 @@ export default function KnowledgePage() {
     }
     let active = true;
     setChunksLoading(true);
-    fetch(`/api/knowledge/documents/${encodeURIComponent(selectedDocId)}/chunks`)
+    apiFetch(`/api/knowledge/documents/${encodeURIComponent(selectedDocId)}/chunks`)
       .then((response) => (response.ok ? response.json() : []))
       .then((chunks) => {
         if (active) setDocumentChunks(Array.isArray(chunks) ? chunks : []);

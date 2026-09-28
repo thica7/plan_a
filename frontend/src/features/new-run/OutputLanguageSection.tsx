@@ -23,6 +23,8 @@ export function OutputLanguageSection({
       />
       <div className="execution-mode-grid" role="radiogroup" aria-label={t("newRun.outputLanguage")}>
         <button
+          data-action-id="new-run.language.chinese"
+          data-action-audit="local"
           className={outputLanguage === "zh-CN" ? "execution-mode-card active" : "execution-mode-card"}
           onClick={() => setOutputLanguage("zh-CN")}
           type="button"
@@ -35,6 +37,8 @@ export function OutputLanguageSection({
           <i aria-hidden />
         </button>
         <button
+          data-action-id="new-run.language.english"
+          data-action-audit="local"
           className={outputLanguage === "en-US" ? "execution-mode-card active" : "execution-mode-card"}
           onClick={() => setOutputLanguage("en-US")}
           type="button"

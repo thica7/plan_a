@@ -1,3 +1,4 @@
+import { apiFetch } from "../api/http";
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { useCrawlStore } from '../stores/crawlStore';
@@ -16,19 +17,19 @@ interface CrawlSourceDetail {
 }
 
 async function listSources(): Promise<CrawlSource[]> {
-  const res = await fetch('/api/crawl/sources');
+  const res = await apiFetch('/api/crawl/sources');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<CrawlSource[]>;
 }
 
 async function getSourceDetail(sourceId: string): Promise<CrawlSourceDetail> {
-  const res = await fetch(`/api/crawl/sources/${sourceId}`);
+  const res = await apiFetch(`/api/crawl/sources/${sourceId}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<CrawlSourceDetail>;
 }
 
 async function retrySource(sourceId: string): Promise<void> {
-  const res = await fetch(`/api/crawl/sources/${sourceId}/retry`, { method: 'POST' });
+  const res = await apiFetch(`/api/crawl/sources/${sourceId}/retry`, { method: 'POST' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 

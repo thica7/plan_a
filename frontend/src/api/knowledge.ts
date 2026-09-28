@@ -1,3 +1,4 @@
+import { apiFetch } from "./http";
 export interface KnowledgeDocument {
   id: string;
   url: string | null;
@@ -64,7 +65,7 @@ export async function listDocuments(
     if (filters.page) params.set('page', String(filters.page));
     if (filters.page_size) params.set('page_size', String(filters.page_size));
   }
-  const res = await fetch(`/api/knowledge/documents?${params}`, { signal });
+  const res = await apiFetch(`/api/knowledge/documents?${params}`, { signal });
   if (!res.ok) {
     throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
   }
@@ -80,7 +81,7 @@ export async function listDocuments(
  * @returns 知识库文档详情
  */
 export async function getDocument(id: string): Promise<KnowledgeDocument> {
-  const res = await fetch(`/api/knowledge/documents/${id}`);
+  const res = await apiFetch(`/api/knowledge/documents/${id}`);
   if (!res.ok) {
     throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
   }
@@ -92,7 +93,7 @@ export async function getDocument(id: string): Promise<KnowledgeDocument> {
  * @param id 文档唯一标识
  */
 export async function deleteDocument(id: string): Promise<void> {
-  const res = await fetch(`/api/knowledge/documents/${id}`, {
+  const res = await apiFetch(`/api/knowledge/documents/${id}`, {
     method: 'DELETE',
   });
   if (!res.ok) {
@@ -110,7 +111,7 @@ export async function searchKnowledge(
   req: RetrievalRequest,
   signal?: AbortSignal
 ): Promise<RetrievalResponse> {
-  const res = await fetch('/api/knowledge/search', {
+  const res = await apiFetch('/api/knowledge/search', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

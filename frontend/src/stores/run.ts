@@ -10,7 +10,8 @@ interface RunState {
   reset: () => void;
 }
 
-export const useRunStore = create<RunState>((set) => ({
+function createRunStore() {
+  return create<RunState>((set) => ({
   events: [],
   setDetail: (detail) => set({ detail }),
   addEvent: (event) =>
@@ -35,3 +36,14 @@ export const useRunStore = create<RunState>((set) => ({
     })),
   reset: () => set({ detail: undefined, events: [] }),
 }));
+}
+
+const sessions = new Map<string, ReturnType<typeof createRunStore>>();
+export function getRunStore(runId: string) {
+  let store = sessions.get(runId);
+  if (!store) {
+    store = createRunStore();
+    sessions.set(runId, store);
+  }
+  return store;
+}

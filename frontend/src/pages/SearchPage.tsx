@@ -1,3 +1,4 @@
+import { apiFetch } from "../api/http";
 import { ChangeEvent, FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, SlidersHorizontal, Upload } from 'lucide-react';
 import { useSearchStore, type RetrievalHit } from '../stores/searchStore';
@@ -144,7 +145,7 @@ export default function SearchPage() {
     setError(null);
 
     try {
-      const res = await fetch('/api/knowledge/search', {
+      const res = await apiFetch('/api/knowledge/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -190,7 +191,7 @@ export default function SearchPage() {
   }, [params]);
 
   useEffect(() => {
-    void fetch('/api/knowledge/eval/runs')
+    void apiFetch('/api/knowledge/eval/runs')
       .then((res) => res.ok ? res.json() : [])
       .then((data) => setEvalRuns(Array.isArray(data) ? data : []))
       .catch(() => setEvalRuns([]));
@@ -233,7 +234,7 @@ export default function SearchPage() {
     setEvalLoading(true);
     setEvalError(null);
     try {
-      const res = await fetch('/api/knowledge/eval', {
+      const res = await apiFetch('/api/knowledge/eval', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ labels: evalLabels, top_k: params.final_top_k }),

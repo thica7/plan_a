@@ -71,14 +71,32 @@ See `docs/docker_deployment.md` for deployment details.
 
 ## Local Development
 
-Windows one-command startup:
+Install backend dependencies into a project `.venv` and frontend dependencies with
+`pnpm install --frozen-lockfile`. Copy `.env.example` to `.env`, then start local
+services:
+
+```bash
+# macOS / Linux
+bash scripts/dev_start.sh
+bash scripts/dev_status.sh
+bash scripts/dev_stop.sh
+```
+
+Windows:
 
 ```powershell
 .\scripts\dev_start.ps1
 ```
 
 This starts local Postgres, Temporal, Temporal UI, the FastAPI backend, the
-Temporal worker, and the Vite frontend.
+Temporal worker, Qdrant, and the Vite frontend. The local scripts track their
+own process IDs and report port conflicts without stopping unrelated programs.
+Use `--backend-port` and `--frontend-port` on macOS/Linux, or `-BackendPort`
+and `-FrontendPort` on Windows, to change the development ports.
+
+The frontend now opens as a pixel desktop with application windows, a taskbar,
+project files, analysis tasks, knowledge, evidence, reports, and settings.
+Closing a window leaves the backend run active; the task manager can reopen it.
 
 Useful commands:
 
@@ -126,6 +144,16 @@ Supported capabilities include:
 - retrieval presets
 - retrieval trace recording
 - KB-backed evidence reuse during runs
+- chunk-level sparse retrieval with Chinese tokenization
+- durable indexing status and reindex endpoints for failed vector writes
+- provider and index diagnostics on knowledge search responses
+
+Hash embeddings and the hash reranker are deterministic offline defaults. For
+semantic production retrieval, configure a model provider and evaluate it on
+your corpus. Inspect `GET /api/knowledge/providers`; changing an embedding
+model requires reindexing into the new collection. See
+`docs/docker_deployment.md` for shared backend/worker configuration and
+`docs/optimization/2026-09-28-implementation-report.md` for verification.
 
 For the Docker KB path, Qdrant is included in `docker-compose.yml`, and the
 backend uses:
@@ -164,4 +192,3 @@ make smoke-enterprise-postgres
 make smoke-temporal-thin-shell
 make smoke-temporal-server
 ```
-
