@@ -205,6 +205,45 @@ def test_structured_report_accepts_valid_core_and_support() -> None:
     assert summary["support_section_count"] == 7
     assert summary["competitors"] == ["Cursor", "Windsurf"]
 
+    report.core.product_opportunities = [_claim("Validate one product opportunity in a pilot.")]
+    assert report.compact_summary()["core_section_count"] == 10
+
+
+def test_report_core_accepts_optional_cited_product_opportunities() -> None:
+    core = ReportCore.model_validate({
+        **_core().model_dump(),
+        "product_opportunities": [
+            _claim("Pilot a pricing comparison workflow before committing to a product direction.").model_dump()
+        ],
+    })
+
+    assert len(core.product_opportunities) == 1
+    assert core.product_opportunities[0].source_ids == ["raw-source-cursor-pricing"]
+
+
+def test_report_core_rejects_uncited_product_opportunity_fact() -> None:
+    with pytest.raises(ValidationError, match="source_ids are required"):
+        ReportCore.model_validate({
+            **_core().model_dump(),
+            "product_opportunities": [{
+                "text": "Cursor has better onboarding.",
+                "source_ids": [],
+                "confidence": "high",
+                "evidence_role": "official_fact",
+            }],
+        })
+
+
+def test_report_core_limits_product_opportunities_to_three() -> None:
+    with pytest.raises(ValidationError, match="at most 3 items"):
+        ReportCore.model_validate({
+            **_core().model_dump(),
+            "product_opportunities": [
+                _claim(f"Test opportunity {number} with a pilot.").model_dump()
+                for number in range(4)
+            ],
+        })
+
 
 def test_cited_text_rejects_markdown_source_tokens() -> None:
     with pytest.raises(ValidationError, match="must not contain Markdown source tokens"):

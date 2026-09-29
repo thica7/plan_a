@@ -222,6 +222,34 @@ def test_renderer_localizes_zh_structural_headings_and_keeps_support_after_core(
     assert "Segment Evidence Pack JSON" not in rendered
 
 
+@pytest.mark.parametrize(
+    ("language", "heading"),
+    [("zh-CN", "产品机会与验证"), ("en-US", "Product Opportunities and Validation")],
+)
+def test_renderer_emits_optional_product_opportunities_near_decision_summary(language: str, heading: str) -> None:
+    report = _report(language)
+    report.core = report.core.model_copy(update={
+        "product_opportunities": [_claim("Test a product opportunity with a pilot.")],
+    })
+
+    rendered = render_structured_report(report)
+
+    assert f"## {heading}" in rendered
+    assert rendered.index(f"## {heading}") > rendered.index(
+        "## 决策摘要" if language == "zh-CN" else "## Decision Summary"
+    )
+    assert rendered.index(f"## {heading}") < rendered.index(
+        "## 竞争发现" if language == "zh-CN" else "## Competitive Findings"
+    )
+    assert "Test a product opportunity with a pilot. [source:raw-source-a]" in rendered
+
+
+def test_renderer_omits_product_opportunities_when_empty() -> None:
+    rendered = render_structured_report(_report("en-US"))
+
+    assert "## Product Opportunities and Validation" not in rendered
+
+
 def test_renderer_emits_structured_section_markers_for_layer_indexing() -> None:
     rendered = render_structured_report(_report())
 

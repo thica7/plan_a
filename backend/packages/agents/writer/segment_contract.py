@@ -24,6 +24,7 @@ CORE_HEADING_KEYS: tuple[str, ...] = (
     "executive_summary",
     "executive_takeaway",
     "decision_summary",
+    "product_opportunities",
     "competitive_findings",
     "review_theme_summary",
     "community_evidence_triangulation",
@@ -57,6 +58,7 @@ SECTION_ALLOWED_KEYS: dict[str, tuple[str, ...]] = {
         "decision_summary",
         "competitive_findings",
     ),
+    "product_opportunities": ("product_opportunities",),
     "competitive_findings": ("competitive_findings",),
     "review_theme_summary": (
         "review_theme_summary",
@@ -83,6 +85,7 @@ SECTION_ALLOWED_KEYS: dict[str, tuple[str, ...]] = {
 }
 SECTION_REQUIRED_KEYS: dict[str, tuple[str, ...]] = {
     "decision_summary": ("decision_summary", "competitive_findings"),
+    "product_opportunities": ("product_opportunities",),
     "review_theme_summary": ("review_theme_summary",),
     "competitor_deep_dives": ("competitor_deep_dives",),
     "side_by_side_matrix": ("side_by_side_matrix",),
@@ -338,6 +341,23 @@ def validate_segment_contract(
             missing_required_heading_keys=[],
         )
 
+    if contract.section_id == "product_opportunities":
+        opportunity_errors = _product_opportunity_errors(
+            markdown,
+            output_language=contract.output_language,
+            h2_headings=h2_headings,
+        )
+        if opportunity_errors:
+            return SegmentValidationResult(
+                status="retry",
+                errors=opportunity_errors,
+                h2_headings=h2_headings,
+                forbidden_headings=[],
+                forbidden_heading_keys=[],
+                invalid_heading_keys=[],
+                missing_required_heading_keys=[],
+            )
+
     if (
         contract.segment_kind == "section_fragment"
         and contract.section_id == "competitor_deep_dives"
@@ -427,6 +447,41 @@ def _h2_headings(markdown: str) -> list[str]:
 
 def _h3_headings(markdown: str) -> list[str]:
     return [match.group(1).strip() for match in _H3_RE.finditer(markdown)]
+
+
+def _product_opportunity_errors(
+    markdown: str,
+    *,
+    output_language: str,
+    h2_headings: list[str],
+) -> list[str]:
+    if len(h2_headings) != 1 or _H3_H4_RE.search(markdown):
+        return ["product_opportunities requires exactly one H2 and no H3/H4 headings"]
+    bullets = re.findall(r"(?m)^\s*[-*+]\s+(.+)$", markdown)
+    if not 1 <= len(bullets) <= 3:
+        return ["product_opportunities requires 1-3 single-line opportunity bullets"]
+    field_patterns = (
+        (r"用户任务\s*[:：]\s*\S", r"验证动作\s*[:：]\s*\S", r"成功信号\s*[:：]\s*\S")
+        if output_language == "zh-CN" else
+        (r"User task\s*:\s*\S", r"Validation action\s*:\s*\S", r"Success signal\s*—\s*\S")
+    )
+    errors: list[str] = []
+    for index, bullet in enumerate(bullets, start=1):
+        if any(
+            re.search(pattern, bullet, flags=re.IGNORECASE) is None
+            for pattern in field_patterns
+        ):
+            errors.append(
+                f"product_opportunities bullet {index} needs user task, validation action, and success signal"
+            )
+        if not SOURCE_TOKEN_RE.search(bullet) and not any(
+            marker in bullet.casefold()
+            for marker in ("待验证", "假设", "hypothesis", "to validate", "unverified")
+        ):
+            errors.append(
+                f"product_opportunities bullet {index} needs a source citation or explicit validation-hypothesis label"
+            )
+    return errors
 
 
 def _english_structural_h3_h4_headings(

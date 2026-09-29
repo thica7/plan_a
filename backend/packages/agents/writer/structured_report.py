@@ -218,6 +218,7 @@ class ReportCore(BaseModel):
 
     executive_summary: ExecutiveSummarySection
     decision_summary: list[CitedText] = Field(min_length=1)
+    product_opportunities: list[CitedText] = Field(default_factory=list, max_length=3)
     competitive_findings: list[CitedText] = Field(min_length=1)
     user_review_themes: UserReviewThemesSection
     competitor_deep_dives: list[CompetitorDeepDiveSection] = Field(min_length=1)
@@ -282,7 +283,7 @@ class StructuredReport(BaseModel):
             "structured_report_version": self.metadata.structured_report_version,
             "competitors": list(self.competitors),
             "dimensions": list(self.dimensions),
-            "core_section_count": 9,
+            "core_section_count": 9 + bool(self.core.product_opportunities),
             "support_section_count": 7,
             "source_count": self.metadata.source_count,
             "segment_count": self.metadata.segment_count,

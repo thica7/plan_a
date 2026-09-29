@@ -9,6 +9,7 @@ from packages.agents.writer.segment_contract import (
     heading_key_for,
 )
 from packages.schema.api_dto import RunDetail
+from packages.schema.decision_brief import decision_brief_fields
 
 REQUIRED_CORE_KEYS: tuple[str, ...] = (
     "executive_summary",
@@ -99,9 +100,12 @@ def run_writer_quality_preflight(
         after_support_keys = h2_keys[first_support_index + 1 :]
 
     duplicate_section_count = _duplicate_identity_count(h2_identities)
+    required_core_keys = [*REQUIRED_CORE_KEYS]
+    if decision_brief_fields(detail.plan.decision_brief):
+        required_core_keys.append("product_opportunities")
     missing_core_sections = [
         key
-        for key in REQUIRED_CORE_KEYS
+        for key in required_core_keys
         if not _required_core_key_present(key, before_support_keys)
     ]
     core_sections_after_support = [

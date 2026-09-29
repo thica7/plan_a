@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from packages.i18n.language import normalize_output_language, report_label
 from packages.schema.api_dto import RunDetail
+from packages.schema.decision_brief import decision_brief_fields, safe_decision_brief_text
 
 
 def build_demo_report(detail: RunDetail, *, source_refs: str, memory_section: str) -> str:
@@ -110,6 +111,42 @@ def build_demo_report(detail: RunDetail, *, source_refs: str, memory_section: st
             ),
         ],
     )
+    user_brief = decision_brief_fields(detail.plan.decision_brief)
+    if user_brief:
+        labels = (
+            {"decision_question": "决策问题", "primary_job": "主要任务", "success_metric": "成功指标"}
+            if zh else
+            {"decision_question": "decision question", "primary_job": "primary job", "success_metric": "success metric"}
+        )
+        user_input = "; ".join(
+            f"{labels[key]}: {safe_decision_brief_text(value)}"
+            for key, value in user_brief.items()
+        )
+        job = user_brief.get("primary_job") or user_brief.get("decision_question") or detail.topic
+        safe_job = safe_decision_brief_text(job)
+        metric = user_brief.get("success_metric")
+        safe_metric = (
+            safe_decision_brief_text(metric)
+            if metric else
+            ("试点前约定可衡量的任务完成标准" if zh else "a measurable task completion threshold agreed before the pilot")
+        )
+        section(
+            "product_opportunities",
+            [
+                (f"用户输入（非竞品证据）：{user_input}。" if zh else f"User-provided context (not competitor evidence): {user_input}."),
+                (
+                    f"待验证机会假设 1：围绕“{safe_job}”探索产品改进；竞品差异与真实需求仍待验证。"
+                    if zh else
+                    f"Opportunity hypothesis 1 to validate: explore a product improvement around “{safe_job}”; competitor differences and real demand remain unverified."
+                ),
+                (
+                    f"对应任务：{safe_job}；验证动作：让目标用户用相同任务试用候选方案并记录完成情况与阻碍；成功信号：{safe_metric}。"
+                    if zh else
+                    f"User task: {safe_job}; validation action: have target users try candidate approaches on the same task and record completion and blockers; success signal — {safe_metric}."
+                ),
+            ],
+            cite=False,
+        )
     section(
         "competitive_findings",
         [

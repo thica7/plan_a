@@ -5,6 +5,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal
 
 from packages.schema.api_dto import RunDetail
+from packages.schema.decision_brief import decision_brief_fields
 from packages.schema.models import RawSource
 from packages.schema.report_artifact import ClaimCard, DecisionCard, SectionBrief
 
@@ -12,6 +13,7 @@ SCHEMA_VERSION = "writer_section_brief.v1"
 
 CoreSectionKey = Literal[
     "decision_summary",
+    "product_opportunities",
     "review_theme_summary",
     "competitor_deep_dives",
     "side_by_side_matrix",
@@ -35,6 +37,11 @@ _SECTION_DECISION_TYPES: dict[str, tuple[str, ...]] = {
         "risk_adjusted_recommendation",
         "dimension_winner",
         "why_not",
+    ),
+    "product_opportunities": (
+        "overall_recommendation",
+        "risk_adjusted_recommendation",
+        "dimension_winner",
     ),
     "review_theme_summary": (),
     "competitor_deep_dives": ("dimension_winner",),
@@ -135,6 +142,10 @@ def build_section_briefs(detail: RunDetail) -> list[SectionBrief]:
                 must_not_claim=[
                     "Do not cite or rely on claim, decision, or source IDs outside this brief.",
                     "Do not convert evidence gaps into factual claims.",
+                    *(
+                        ["The user-provided decision brief is context, not a competitor source or verified fact."]
+                        if decision_brief_fields(detail.plan.decision_brief) else []
+                    ),
                 ],
                 tone="executive" if section_key == "decision_summary" else "analytical",
                 minimum_depth=_minimum_depth(section_key),
@@ -288,6 +299,9 @@ def _section_payload_from_brief(
         ],
         "groups": [],
     }
+    user_brief = decision_brief_fields(detail.plan.decision_brief)
+    if user_brief:
+        payload["user_provided_decision_brief"] = user_brief
     if segment_competitor:
         payload["segment_competitor"] = segment_competitor
     if brief.section_key == "decision_summary":
@@ -375,6 +389,7 @@ def _core_section_keys(detail: RunDetail) -> list[CoreSectionKey]:
     return _unique(
         [
             "decision_summary",
+            *(["product_opportunities"] if decision_brief_fields(detail.plan.decision_brief) else []),
             "review_theme_summary",
             "competitor_deep_dives",
             "side_by_side_matrix",
@@ -651,6 +666,10 @@ def _required_questions(section_key: str) -> list[str]:
             "What should the buyer or strategy owner do, and how confident is that recommendation?",
             "Which competitors, risks, and evidence boundaries most affect the decision?",
         ],
+        "product_opportunities": [
+            "Which product opportunities or explicitly unverified hypotheses follow from the user's decision brief and scoped evidence?",
+            "For each, what user task, validation action, and success signal would test it?",
+        ],
         "review_theme_summary": [
             "What user, community, survey, interview, or persona themes materially "
             "affect adoption?",
@@ -700,6 +719,10 @@ def _must_include(section_key: str) -> list[str]:
         "decision_summary": [
             "Executive summary heading plus decision summary and competitive findings headings.",
             "Recommendation posture, confidence, and risk boundary.",
+        ],
+        "product_opportunities": [
+            "At most three evidence-grounded opportunities or hypotheses to validate; each has a user task, validation action, and success signal.",
+            "Cite competitor facts only from the allowed claim cards and source IDs; label unsupported ideas as hypotheses to validate.",
         ],
         "review_theme_summary": [
             "User/community themes and evidence gaps separated from unsupported claims.",

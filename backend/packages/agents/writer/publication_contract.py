@@ -23,7 +23,6 @@ from packages.agents.writer.structured_renderer import (
 from packages.agents.writer.structured_report import StructuredReport
 from packages.business_intel.report_sections import parse_report_section_marker
 
-
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 _SECTION_MARKER_RE = re.compile(r"^<!--\s*report-section:[^>]*-->\s*$")
 _SECTION_MARKER_PREFIX_RE = re.compile(r"^<!--\s*report-section:[^>]*-->")
@@ -46,6 +45,7 @@ _STRUCTURED_TO_MARKDOWN_SECTION_KEYS = {
 _CORE_SECTION_KEYS = (
     "executive_summary",
     "decision_summary",
+    "product_opportunities",
     "competitive_findings",
     "user_review_themes",
     "competitor_deep_dives",

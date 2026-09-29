@@ -10,6 +10,7 @@ from packages.business_intel.entity_resolver import normalize_competitor_key
 from packages.business_intel.homepage import verify_homepage, verify_homepages
 from packages.research.budget import research_depth_budget
 from packages.research.discovery.planner import build_competitor_queries
+from packages.schema.decision_brief import decision_brief_prompt_context
 from packages.schema.models import (
     AnalysisPlan,
     CompetitorCandidate,
@@ -72,6 +73,7 @@ class PlannerAgentMixin:
             user=(
                 f"Topic: {detail.topic}\n"
                 f"Target product: {detail.plan.target_product.name if detail.plan.target_product else 'none'}\n"
+                f"{decision_brief_prompt_context(detail.plan.decision_brief)}"
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
                 f"Requested dimensions: {', '.join(detail.plan.dimensions)}\n\n"
                 "Return homepage hints if you know official domains. Do not invent certainty."
@@ -202,6 +204,7 @@ class PlannerAgentMixin:
             user=(
                 f"Topic: {detail.topic}\n"
                 f"Target product: {product.model_dump_json() if product else 'not specified'}\n"
+                f"{decision_brief_prompt_context(detail.plan.decision_brief)}"
                 f"Target page evidence: {detail.plan.target_product_evidence.model_dump_json() if detail.plan.target_product_evidence else 'not available'}\n"
                 f"Search results JSON: {json.dumps(search_context, ensure_ascii=False)}\n\n"
                 f"{candidate_instruction}"

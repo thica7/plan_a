@@ -15,7 +15,6 @@ from packages.agents.writer.structured_report import (
 )
 from packages.business_intel.report_sections import SectionLayer, report_section_marker
 
-
 _WHITESPACE_RE = re.compile(r"\s+")
 
 STRUCTURED_REPORT_ZH_LABELS = {
@@ -32,6 +31,7 @@ STRUCTURED_REPORT_ZH_LABELS = {
     "confidence_notes": "置信度说明",
     "decision_matrix": "决策矩阵",
     "decision_summary": "决策摘要",
+    "product_opportunities": "产品机会与验证",
     "defense_points": "防守点",
     "direct_user_signals": "直接用户与社区信号",
     "evidence_appendix": "证据附录",
@@ -82,6 +82,7 @@ STRUCTURED_REPORT_EN_LABELS = {
     "confidence_notes": "Confidence Notes",
     "decision_matrix": "Decision Matrix",
     "decision_summary": "Decision Summary",
+    "product_opportunities": "Product Opportunities and Validation",
     "defense_points": "Defense Points",
     "direct_user_signals": "Direct User and Community Signals",
     "evidence_appendix": "Evidence Appendix",
@@ -127,6 +128,9 @@ def render_structured_report(report: StructuredReport) -> str:
     _render_executive_summary(lines, report, labels)
     _section_heading(lines, "decision_summary", "core", labels["decision_summary"])
     _bullet_list(lines, report.core.decision_summary)
+    if report.core.product_opportunities:
+        _section_heading(lines, "product_opportunities", "core", labels["product_opportunities"])
+        _bullet_list(lines, report.core.product_opportunities)
     _section_heading(lines, "competitive_findings", "core", labels["competitive_findings"])
     _bullet_list(lines, report.core.competitive_findings)
     _render_user_review_themes(lines, report, labels)

@@ -101,6 +101,11 @@ from packages.research.budget import research_depth_budget
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
 from packages.schema.api_dto import RunDetail
+from packages.schema.decision_brief import (
+    decision_brief_fields,
+    decision_brief_prompt_context,
+    safe_decision_brief_text,
+)
 from packages.schema.models import (
     ComparisonCell,
     FeatureNode,
@@ -2206,6 +2211,7 @@ class WriterAgentMixin:
                     f"Topic: {detail.topic}\n"
                     f"Competitors: {', '.join(detail.plan.competitors)}\n"
                     f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                    f"{decision_brief_prompt_context(detail.plan.decision_brief)}"
                     f"Competitive Layer: {detail.plan.competitor_layer}\n"
                     f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
                     "Scenario Recommended Dimensions: "
@@ -3569,6 +3575,22 @@ class WriterAgentMixin:
                     source_warning,
                 ]
             )
+        if section_id == "product_opportunities":
+            return "\n".join(
+                [
+                    "Required segment outline:",
+                    h2("product_opportunities"),
+                    "Write 1-3 single-line opportunity bullets, with no other bullets or H3 headings in this segment.",
+                    (
+                        "Each bullet must state 待验证 or include an allowed [source:ID], followed by 用户任务：...；验证动作：...；成功信号：...。"
+                        if is_zh else
+                        "Each bullet must state Hypothesis to validate or include an allowed [source:ID], followed by User task: ...; Validation action: ...; Success signal — ... ."
+                    ),
+                    "- Treat the decision brief as user-provided context, not competitor evidence.",
+                    "- Cite competitor facts only from this segment's allowed source and claim cards; label unsupported ideas as hypotheses.",
+                    source_warning,
+                ]
+            )
         if section_id == "review_theme_summary":
             return "\n".join(
                 [
@@ -3924,6 +3946,7 @@ class WriterAgentMixin:
                     f"Topic: {detail.topic}\n"
                     f"Competitors: {', '.join(detail.plan.competitors)}\n"
                     f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                    f"{decision_brief_prompt_context(detail.plan.decision_brief)}"
                     f"segment_name={segment['segment_name']}\n"
                     f"segment_kind={segment.get('segment_kind', 'section_fragment')}\n"
                     f"section_id={segment.get('section_id', segment['segment_name'])}\n"
@@ -5058,6 +5081,10 @@ class WriterAgentMixin:
                 self._backfill_decision_summary_section(detail, source_ids),
             ),
             (
+                self._report_label_aliases("product_opportunities"),
+                self._backfill_product_opportunities_section(detail),
+            ),
+            (
                 self._report_label_aliases("competitive_findings"),
                 self._backfill_competitive_findings_section(detail),
             ),
@@ -5179,6 +5206,33 @@ class WriterAgentMixin:
                         f"{hardened[insert_at:].lstrip()}"
                     )
         return self._normalize_report_section_order(detail, hardened)
+
+    def _backfill_product_opportunities_section(self, detail: RunDetail) -> list[str]:
+        brief = decision_brief_fields(detail.plan.decision_brief)
+        if not brief:
+            return []
+        is_zh = normalize_output_language(detail.output_language) == "zh-CN"
+        task = safe_decision_brief_text(
+            brief.get("primary_job") or brief.get("decision_question") or detail.topic
+        )
+        metric = safe_decision_brief_text(brief.get("success_metric") or (
+            "试点前约定可衡量的任务完成标准"
+            if is_zh else "a measurable task completion threshold agreed before the pilot"
+        ))
+        heading = report_label(detail.output_language, "product_opportunities")
+        if is_zh:
+            return [
+                "",
+                f"## {heading}",
+                "用户简报仅作为输入上下文，竞品差异与用户需求仍待验证。",
+                f"- 待验证机会假设：围绕“{task}”探索产品改进；用户任务：{task}；验证动作：让目标用户完成同一任务并记录阻碍；成功信号：{metric}。",
+            ]
+        return [
+            "",
+            f"## {heading}",
+            "The user-provided brief is context; competitor differences and user demand remain unverified.",
+            f"- Hypothesis to validate: explore a product improvement around “{task}”; User task: {task}; Validation action: have target users complete the same task and record blockers; Success signal — {metric}.",
+        ]
 
     def _layer_section_heading(self, detail: RunDetail) -> str:
         return report_label(detail.output_language, self._layer_section_label_key(detail))
@@ -5428,6 +5482,10 @@ class WriterAgentMixin:
                 "executive_overview",
             ),
             self._report_label_aliases("decision_summary"),
+            *(
+                [self._report_label_aliases("product_opportunities")]
+                if decision_brief_fields(detail.plan.decision_brief) else []
+            ),
             self._report_label_aliases("competitive_findings"),
             self._report_label_aliases("review_theme_summary"),
             self._report_label_aliases("dimension_winners"),
@@ -5513,6 +5571,14 @@ class WriterAgentMixin:
                 "competitor and dimension with cited cells."
             ),
         ]
+        if decision_brief_fields(detail.plan.decision_brief):
+            analysis_sections.insert(
+                2,
+                f"{report_label(output_language, 'product_opportunities')}: include at most "
+                "three evidence-grounded product opportunities or hypotheses, each with "
+                "a user task, validation action, and success signal. Treat the user-provided "
+                "decision brief as context, not a cited competitor source.",
+            )
         if any(source.metadata.get("community_evidence") for source in detail.raw_sources):
             analysis_sections.append(
                 f"{report_label(output_language, 'community_evidence_triangulation')}: "
