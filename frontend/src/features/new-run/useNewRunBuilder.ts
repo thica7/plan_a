@@ -28,6 +28,16 @@ import {
 } from "./types";
 import { useTranslation } from "../../stores/i18n";
 
+const commonCasefoldExpansions: Record<string, string> = {
+  "ß": "ss", "ς": "σ", "ſ": "s",
+  "ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st",
+};
+
+// Approximate Python casefold for common names; the backend validates final scope.
+function approximateCasefold(value: string): string {
+  return value.toLowerCase().replace(/[ßςſﬀﬁﬂﬃﬄﬅﬆ]/g, (character) => commonCasefoldExpansions[character]);
+}
+
 export function useNewRunBuilder() {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -98,7 +108,7 @@ export function useNewRunBuilder() {
       .split(",")
       .map((item) => item.trim())
       .filter((item) => {
-        const key = item.toLocaleLowerCase();
+        const key = approximateCasefold(item);
         if (!key || seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -122,7 +132,7 @@ export function useNewRunBuilder() {
         .replace("{requested}", String(competitorList.length))
         .replace("{limit}", String(budget.competitors));
     }
-    const scopeKey = (name: string) => name.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+    const scopeKey = (name: string) => approximateCasefold(name).replace(/[^\p{L}\p{N}]+/gu, "");
     const includesTarget = competitorList.some((name) => scopeKey(name) === scopeKey(targetName));
     const slices = Math.max(1, competitorList.length + (includesTarget ? 0 : 1)) * selected.length;
     if (slices > budget.slices) {

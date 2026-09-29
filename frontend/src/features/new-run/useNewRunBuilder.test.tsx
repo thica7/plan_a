@@ -218,4 +218,61 @@ describe("useNewRunBuilder output language", () => {
     await act(async () => { await result.current.submitRun(); });
     expect(mocks.createRun).toHaveBeenCalledTimes(1);
   });
+
+  it("does not falsely block Straße and STRASSE in quick research", async () => {
+    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime?.has_web_search_key).toBe(true));
+    act(() => {
+      result.current.setTargetName("My App");
+      result.current.setCompetitorMode("manual");
+      result.current.setCompetitors("Straße,STRASSE");
+      result.current.setSelected(["pricing", "feature", "market"]);
+      result.current.setResearchDepth("quick");
+    });
+    await act(async () => { await result.current.submitRun(); });
+    expect(result.current.manualScopeError).toBeNull();
+    expect(mocks.createRun).toHaveBeenCalledWith(expect.objectContaining({ competitors: ["Straße"] }));
+  });
+
+  it("folds Greek final sigma and common ligatures for manual scope counting", async () => {
+    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime?.has_web_search_key).toBe(true));
+    act(() => {
+      result.current.setTargetName("My App");
+      result.current.setCompetitorMode("manual");
+      result.current.setCompetitors("ΟΣ,οσ,ﬃ,ffi");
+      result.current.setSelected(["pricing", "feature"]);
+      result.current.setResearchDepth("quick");
+    });
+    await act(async () => { await result.current.submitRun(); });
+    expect(mocks.createRun).toHaveBeenCalledWith(expect.objectContaining({ competitors: ["ΟΣ", "ﬃ"] }));
+  });
+
+  it("keeps distinct Chinese competitor names separate", async () => {
+    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime?.has_web_search_key).toBe(true));
+    act(() => {
+      result.current.setTargetName("目标产品");
+      result.current.setCompetitorMode("manual");
+      result.current.setCompetitors("竞品甲,竞品乙");
+      result.current.setSelected(["pricing", "feature"]);
+      result.current.setResearchDepth("quick");
+    });
+    await act(async () => { await result.current.submitRun(); });
+    expect(mocks.createRun).toHaveBeenCalledWith(expect.objectContaining({ competitors: ["竞品甲", "竞品乙"] }));
+  });
+
+  it("matches the target with casefolded competitor spelling", async () => {
+    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime?.has_web_search_key).toBe(true));
+    act(() => {
+      result.current.setTargetName("STRASSE");
+      result.current.setCompetitorMode("manual");
+      result.current.setCompetitors("Straße");
+      result.current.setSelected(["pricing", "feature", "market", "persona"]);
+      result.current.setResearchDepth("quick");
+    });
+    await act(async () => { await result.current.submitRun(); });
+    expect(mocks.createRun).toHaveBeenCalledTimes(1);
+  });
 });
