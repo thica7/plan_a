@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
@@ -492,6 +492,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         enable_search: bool = True,
         enable_repair: bool = True,
     ) -> list[RawSource]:
+        refresh_candidates: list[SourceCandidate] = []
         if detail.evidence_refresh_active:
             refresh_candidates = [
                 SourceCandidate(
@@ -515,6 +516,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                 and self._source_matches_competitor(source, competitor)
             ]
             seed_candidates = [*refresh_candidates, *(seed_candidates or [])]
+        allow_official_discovery = include_official and not refresh_candidates
         target_candidate = self._target_product_user_candidate(detail, competitor, dimension)
         if target_candidate is not None:
             seed_candidates = [*(seed_candidates or []), target_candidate]
@@ -533,11 +535,11 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             update={
                 "target_source_count": target_source_count,
                 "max_repair_rounds": max_repair_rounds,
-                "include_trusted_sources": include_official,
-                "include_homepage_candidates": include_official,
+                "include_trusted_sources": allow_official_discovery,
+                "include_homepage_candidates": allow_official_discovery,
                 "metadata": {
                     "collector_adapter": "clean_research_pipeline",
-                    "include_official": include_official,
+                    "include_official": allow_official_discovery,
                     "seed_candidate_count": len(seed_candidates or []),
                     "search_enabled": enable_search and self._search.is_enabled,
                     "repair_enabled": enable_repair,
@@ -2063,7 +2065,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
     ) -> list[RawSource]:
         scoped_dimensions = set(dimensions)
         normalized: list[RawSource] = []
-        seen: set[tuple[str, str, str, str, str]] = set()
+        seen: dict[tuple[str, str, str, str, str], int] = {}
         for source in detail.raw_sources:
             if scoped_dimensions and source.dimension not in scoped_dimensions:
                 normalized.append(source)
@@ -2080,12 +2082,59 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                 "|".join(covered_competitors),
             )
             if key in seen:
+                if detail.evidence_refresh_active:
+                    index = seen[key]
+                    normalized[index] = self._merge_duplicate_refresh_source(
+                        normalized[index], source
+                    )
                 continue
-            seen.add(key)
+            seen[key] = len(normalized)
             normalized.append(
                 source.model_copy(update={"covered_competitors": covered_competitors})
             )
         return normalized
+
+    def _merge_duplicate_refresh_source(
+        self, existing: RawSource, refreshed: RawSource
+    ) -> RawSource:
+        old_fetched = existing.metadata.get("fetched_at")
+        new_fetched = refreshed.metadata.get("fetched_at")
+        old_time = self._parse_refresh_fetch_time(old_fetched)
+        new_time = self._parse_refresh_fetch_time(new_fetched)
+        if new_time is None or (old_time is not None and new_time <= old_time):
+            return existing
+
+        metadata = dict(existing.metadata)
+        metadata["fetched_at"] = new_fetched
+        page_date_keys = ("source_published_at", "source_updated_at")
+        if not any(metadata.get(key) for key in page_date_keys):
+            for key in page_date_keys:
+                if refreshed.metadata.get(key):
+                    metadata[key] = refreshed.metadata[key]
+        history = [
+            item for item in metadata.get("refresh_observations", [])
+            if isinstance(item, dict)
+        ]
+        if not history:
+            history.append({"source_id": existing.id, "fetched_at": old_fetched})
+        history.append({"source_id": refreshed.id, "fetched_at": new_fetched})
+        metadata["refresh_observations"] = history[-8:]
+        return existing.model_copy(update={"metadata": metadata})
+
+    @staticmethod
+    def _parse_refresh_fetch_time(value: object) -> datetime | None:
+        if isinstance(value, datetime):
+            parsed = value
+        elif isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        else:
+            return None
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+        return parsed
 
     def _annotate_community_claim_clusters(
         self,

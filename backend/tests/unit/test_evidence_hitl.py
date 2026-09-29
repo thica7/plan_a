@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -473,11 +473,20 @@ async def test_evidence_refresh_refetches_existing_url_without_removing_old_sour
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("competitor", "old_url", "include_official"),
+    [
+        ("A", "https://example.com/a/pricing", False),
+        ("OpenAI", "https://example.com/openai/custom-pricing", True),
+    ],
+)
 async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exhausted(
     monkeypatch: pytest.MonkeyPatch,
+    competitor: str,
+    old_url: str,
+    include_official: bool,
 ) -> None:
     service = _service(real=True, search_enabled=True)
-    old_url = "https://example.com/a/pricing"
     network_calls: list[str] = []
     seed_candidates = []
     original_pipeline = collector_logic.run_research_pipeline
@@ -491,7 +500,7 @@ async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exh
 
     async def fetch_page(url: str, **_kwargs) -> EvidenceFetchResult:  # noqa: ANN003
         network_calls.append(url)
-        text = "A pricing offers a Free plan and a Pro plan at $20 per month. " * 8
+        text = f"{competitor} pricing offers a Free plan and a Pro plan at $20 per month. " * 8
         return EvidenceFetchResult(
             url=url,
             ok=True,
@@ -509,8 +518,8 @@ async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exh
     try:
         detail = await service.create_run(
             RunCreateRequest(
-                topic="Unknown brand refresh",
-                competitors=["A"],
+                topic=f"{competitor} brand refresh",
+                competitors=[competitor],
                 dimensions=["pricing"],
                 execution_mode="real",
                 collaboration_mode="assisted",
@@ -519,11 +528,11 @@ async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exh
         )
         old = RawSource(
             id="old-pricing-source",
-            competitor="A",
-            covered_competitors=["A"],
+            competitor=competitor,
+            covered_competitors=[competitor],
             dimension="pricing",
             source_type="webpage_verified",
-            title="Old A pricing",
+            title=f"Old {competitor} pricing",
             url=old_url,
             content_hash="old-pricing-hash",
             confidence=0.8,
@@ -537,15 +546,15 @@ async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exh
         detail.plan.homepage_hints = {}
         budget = research_depth_budget("standard")
         assert budget is not None
-        context = SubagentContext(detail.id, "collector", "pricing::A")
+        context = SubagentContext(detail.id, "collector", f"pricing::{competitor}")
         detail.collector_research_usage[context.subagent] = CollectorResearchUsage(
             search_calls=budget.max_search_queries,
             fetch_calls=budget.max_fetches - 1,
         )
 
         await service._collect_competitor_with_web_search(
-            service._runs[detail.id], "pricing", "A", context,
-            seed_sources=[], include_official=False,
+            service._runs[detail.id], "pricing", competitor, context,
+            seed_sources=[], include_official=include_official,
         )
 
         assert network_calls == [old_url]
@@ -556,6 +565,127 @@ async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exh
         assert seed_candidates[0].confidence <= 0.5
         assert seed_candidates[0].date == "2026-09-01"
         assert seed_candidates[0].last_updated == "2026-09-15"
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_refresh_without_old_url_keeps_trusted_registry_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _service(real=True, search_enabled=True)
+    network_calls: list[str] = []
+
+    async def allow_robots(*_args, **_kwargs):  # noqa: ANN002, ANN003, ANN202
+        return SimpleNamespace(allowed=True)
+
+    async def fetch_page(url: str, **_kwargs) -> EvidenceFetchResult:  # noqa: ANN003
+        network_calls.append(url)
+        text = "OpenAI API pricing documents current model rates and usage tiers. " * 8
+        return EvidenceFetchResult(
+            url=url, ok=True, title="OpenAI API pricing", text=text,
+            content_hash="registry-pricing-hash", status_code=200,
+            quality_score=0.9, text_length=len(text),
+        )
+
+    monkeypatch.setattr(service, "_trace_robots", allow_robots)
+    monkeypatch.setattr("packages.orchestrator.service.fetch_evidence_page", fetch_page)
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="OpenAI registry fallback",
+                competitors=["OpenAI"],
+                dimensions=["pricing"],
+                execution_mode="real",
+                collaboration_mode="assisted",
+                research_depth="standard",
+            )
+        )
+        detail.raw_sources = []
+        detail.evidence_refresh_active = True
+        detail.plan.homepage_hints = {}
+        budget = research_depth_budget("standard")
+        assert budget is not None
+        context = SubagentContext(detail.id, "collector", "pricing::OpenAI")
+        detail.collector_research_usage[context.subagent] = CollectorResearchUsage(
+            search_calls=budget.max_search_queries,
+            fetch_calls=budget.max_fetches - 1,
+        )
+
+        await service._collect_competitor_with_web_search(
+            service._runs[detail.id], "pricing", "OpenAI", context,
+            seed_sources=[], include_official=True,
+        )
+
+        assert network_calls == ["https://developers.openai.com/api/docs/pricing"]
+        assert detail.collector_research_usage[context.subagent].fetch_calls == budget.max_fetches
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_refresh_keeps_new_fetch_time_and_original_page_date() -> None:
+    service = _service(real=True)
+    old_time = (datetime.utcnow() - timedelta(days=90)).replace(microsecond=0).isoformat()
+    new_time = (datetime.utcnow() - timedelta(days=1)).replace(microsecond=0).isoformat()
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Same content evidence refresh",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="real",
+                collaboration_mode="assisted",
+            )
+        )
+        detail.evidence_refresh_active = True
+        old = RawSource(
+            id="same-pricing-source",
+            competitor="A",
+            covered_competitors=["A"],
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://example.com/a/pricing",
+            content_hash="same-content-hash",
+            confidence=0.8,
+            metadata={"fetched_at": old_time},
+        )
+        new = old.model_copy(update={"metadata": {"fetched_at": new_time}})
+        detail.raw_sources = [old, new]
+
+        refreshed = service._normalize_collected_sources(detail, ["pricing"])
+
+        assert len(refreshed) == 1
+        assert refreshed[0].metadata["fetched_at"] == new_time
+        assert service._source_freshness_problem(refreshed[0]) is None
+        assert [item["fetched_at"] for item in refreshed[0].metadata["refresh_observations"]] == [
+            old_time, new_time,
+        ]
+
+        old_page = old.model_copy(
+            update={"metadata": {"fetched_at": old_time, "source_published_at": old_time}}
+        )
+        new_page = old.model_copy(
+            update={"metadata": {"fetched_at": new_time, "source_published_at": new_time}}
+        )
+        detail.raw_sources = [old_page, new_page]
+
+        published = service._normalize_collected_sources(detail, ["pricing"])
+
+        assert len(published) == 1
+        assert published[0].metadata["fetched_at"] == new_time
+        assert published[0].metadata["source_published_at"] == old_time
+        assert service._source_observed_at(published[0]) == datetime.fromisoformat(old_time)
+        assert service._source_freshness_problem(published[0]) is not None
+
+        new_page_update = old.model_copy(
+            update={"metadata": {"fetched_at": new_time, "source_updated_at": new_time}}
+        )
+        detail.raw_sources = [old_page, new_page_update]
+        mixed_dates = service._normalize_collected_sources(detail, ["pricing"])
+        assert mixed_dates[0].metadata.get("source_updated_at") is None
+        assert service._source_observed_at(mixed_dates[0]) == datetime.fromisoformat(old_time)
     finally:
         await service._graph_checkpointer.aclose()
 
