@@ -1,6 +1,7 @@
 import type { RunEvent } from "../../api/sse_types";
 import type { RunStatus, TraceSpan } from "../../api/types";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel, runtimeDiagnostic } from "../../i18n/display";
 
 interface Props {
   events: RunEvent[];
@@ -12,7 +13,7 @@ interface Props {
 const lanes = ["planner", "collector", "analyst", "comparator", "reflector", "writer", "qa"];
 
 export function SwimlaneView({ events, currentNode, spans = [], status }: Props) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const useLiveEvents = isLiveStatus(status) || events.length > 0;
   const latestActive =
     [...events].reverse().find((event) => event.type === "node_started" && event.agent)?.agent || currentNode;
@@ -20,7 +21,7 @@ export function SwimlaneView({ events, currentNode, spans = [], status }: Props)
     <section className="panel swimlane-panel">
       <div className="panel-heading-row">
         <h2>{t('swimlane.title')}</h2>
-        <span className="panel-kicker">{useLiveEvents ? `${events.length} events` : `${spans.length} trace spans`}</span>
+        <span className="panel-kicker">{useLiveEvents ? `${events.length} ${t('graph.events')}` : `${spans.length} ${t('trace.spans')}`}</span>
       </div>
       <div className="swimlane-grid">
         {lanes.map((lane) => {
@@ -30,18 +31,18 @@ export function SwimlaneView({ events, currentNode, spans = [], status }: Props)
             ? laneEvents.map((event) => ({
                 id: `event-${event.id}`,
                 className: event.type,
-                label: event.message,
+                label: runtimeDiagnostic(event.message, locale),
               }))
             : laneSpans.map((span) => ({
                 id: `span-${span.id}`,
                 className: `span-${span.kind} ${span.status}`,
-                label: `${span.name} / ${span.status}`,
+                label: `${displayLabel(span.name, locale)} / ${displayLabel(span.status, locale)}`,
               }));
           const visibleItems = items.slice(0, 36);
           const hiddenCount = Math.max(items.length - visibleItems.length, 0);
           return (
             <div className={latestActive === lane ? "lane active" : "lane"} key={lane}>
-              <span className="lane-title">{lane}</span>
+              <span className="lane-title">{displayLabel(lane, locale)}</span>
               <div className="bubble-row">
                 {visibleItems.map((item) => (
                   <span className={`event-bubble ${item.className}`} key={item.id} title={item.label} />

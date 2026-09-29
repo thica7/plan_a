@@ -2,6 +2,8 @@ import { RotateCcw } from "lucide-react";
 import type { RunDetail as RunDetailRecord } from "../../api/types";
 import type { ReflectionItem } from "./types";
 import { useTranslation } from '../../stores/i18n';
+import { displayLabel } from "../../i18n/display";
+import { SystemMessage } from "../../i18n/SystemMessage";
 
 interface RunQaPanelProps {
   detail: RunDetailRecord;
@@ -18,7 +20,7 @@ export function RunQaPanel({
   redoLimitReached,
   reflectionItems,
 }: RunQaPanelProps) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   return (
     <aside className="qa-panel">
       <div className="panel-heading-row">
@@ -28,7 +30,7 @@ export function RunQaPanel({
             className="icon-text-button"
             disabled={isRedoing || redoLimitReached}
             onClick={onRedo}
-            title={redoLimitReached ? "Maximum redo iterations reached" : "Redo scoped issue"}
+            title={redoLimitReached ? t('runQa.maxRedoReached') : t('runQa.redoScoped')}
             type="button"
           >
             <RotateCcw size={15} aria-hidden />
@@ -38,7 +40,7 @@ export function RunQaPanel({
       </div>
       {detail.qa_findings.length > 0 ? (
         <p className="muted-text">
-          Redo rounds {detail.revisions.length}/{detail.max_iterations}
+          {t('runQa.redoRounds')} {detail.revisions.length}/{detail.max_iterations}
         </p>
       ) : null}
       {detail.qa_findings.length === 0 ? (
@@ -46,26 +48,26 @@ export function RunQaPanel({
       ) : (
         detail.qa_findings.map((issue) => (
           <article key={issue.id} className="issue-row">
-            <strong>{issue.severity}</strong>
-            <span>{issue.problem}</span>
+            <strong>{displayLabel(issue.severity, locale)}</strong>
+            <SystemMessage message={issue.problem} />
             <code>
-              {issue.redo_scope.kind}:
+              {displayLabel(issue.redo_scope.kind, locale)}:
               {issue.redo_scope.target_competitors?.length
                 ? `${issue.redo_scope.target_competitors.join(", ")}/`
                 : issue.redo_scope.target_competitor
                   ? `${issue.redo_scope.target_competitor}/`
                   : ""}
-              {issue.redo_scope.target_subagent || "all"}
+              {issue.redo_scope.target_subagent ? displayLabel(issue.redo_scope.target_subagent, locale) : t('common.all')}
             </code>
           </article>
         ))
       )}
       {reflectionItems.length > 0 ? (
         <div className="reflection-review">
-          <h3>Reflector review</h3>
+          <h3>{t('runQa.reflectorReview')}</h3>
           {reflectionItems.map((item) => (
             <article key={`${item.kind}-${item.index}`} className="issue-row reflection-row">
-              <strong>{item.kind}</strong>
+              <strong>{displayLabel(item.kind, locale)}</strong>
               <span>{item.text}</span>
             </article>
           ))}

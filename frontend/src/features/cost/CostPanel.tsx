@@ -1,5 +1,6 @@
 import type { RunMetrics, TraceSpan } from "../../api/types";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel, displayScope } from "../../i18n/display";
 
 interface Props {
   metrics: RunMetrics;
@@ -7,7 +8,7 @@ interface Props {
 }
 
 export function CostPanel({ metrics, spans }: Props) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const rows = buildCostRows(spans);
   const maxCost = Math.max(...rows.map((row) => row.cost), 0.000001);
 
@@ -38,12 +39,12 @@ export function CostPanel({ metrics, spans }: Props) {
           rows.map((row) => (
             <article key={row.agent}>
               <div>
-                <strong>{row.agent}</strong>
+                <strong>{displayLabel(row.agent.split('/')[0], locale)}{row.agent.includes('/') ? ` / ${displayScope(row.agent.slice(row.agent.indexOf('/') + 1), locale)}` : ''}</strong>
                 <span>
                   ${row.cost.toFixed(6)} / {row.tokens} {t('cost.tokens')}
                 </span>
               </div>
-              <meter max={maxCost} min={0} value={row.cost} />
+              <meter aria-label={`${displayLabel(row.agent.split('/')[0], locale)} ${t('cost.title')}`} max={maxCost} min={0} value={row.cost} />
             </article>
           ))
         )}

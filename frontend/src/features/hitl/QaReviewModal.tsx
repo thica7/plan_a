@@ -1,5 +1,6 @@
 import { CheckCircle2, ShieldCheck, Loader2, RotateCcw } from "lucide-react";
 import { useTranslation } from '../../stores/i18n';
+import { SystemMessage } from "../../i18n/SystemMessage";
 
 type QaDecision = "accept" | "force_pass" | "redo";
 
@@ -32,7 +33,7 @@ export function QaReviewModal({
     <section className="hitl-panel">
       <div>
         <h2>{t('hitl.qaReview')}</h2>
-        <p>{message}</p>
+        <p><SystemMessage message={message} /></p>
       </div>
       <div className="hitl-actions">
         <button

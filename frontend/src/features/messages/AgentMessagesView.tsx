@@ -1,5 +1,6 @@
 import type { AgentMessage, ToolCallMessage } from "../../api/types";
 import { useTranslation } from '../../stores/i18n';
+import { displayLabel, displayScope } from "../../i18n/display";
 import { formatModuleExecutionStatus } from "../trace/traceModel";
 
 interface Props {
@@ -8,7 +9,7 @@ interface Props {
 }
 
 export function AgentMessagesView({ messages, toolCalls }: Props) {
-  const {t}=useTranslation();
+  const { locale, t } = useTranslation();
   const consumed = messages.filter((message) => message.status === "consumed").length;
   const queued = messages.length - consumed;
 
@@ -17,7 +18,7 @@ export function AgentMessagesView({ messages, toolCalls }: Props) {
       <div className="panel-heading-row">
         <h2>{t('messages.title')}</h2>
         <span className="muted-text">
-          {messages.length} messages / {consumed} consumed / {queued} queued / {toolCalls.length} tool calls
+          {messages.length} {t('messages.count')} / {consumed} {t('messages.consumed')} / {queued} {t('messages.queued')} / {toolCalls.length} {t('messages.toolCallCount')}
         </span>
       </div>
       {messages.length === 0 ? (
@@ -25,19 +26,19 @@ export function AgentMessagesView({ messages, toolCalls }: Props) {
       ) : (
         <div className="agent-message-list">
           {messages.slice(-18).map((message) => {
-            const moduleStatus = formatModuleExecutionStatus(message.payload);
+            const moduleStatus = formatModuleExecutionStatus(message.payload, locale);
             return (
               <article key={message.id}>
                 <div className="message-route">
-                  <strong>{message.from_agent} -&gt; {message.to_agent}</strong>
-                  <code className={`message-status ${message.status}`}>{message.status}</code>
+                  <strong>{displayLabel(message.from_agent, locale)} -&gt; {displayLabel(message.to_agent, locale)}</strong>
+                  <code className={`message-status ${message.status}`}>{displayLabel(message.status, locale)}</code>
                 </div>
-                <span>{message.message_type}</span>
+                <span>{displayLabel(message.message_type, locale)}</span>
                 <code>{message.payload_schema}</code>
                 {moduleStatus ? <small>{moduleStatus}</small> : null}
-                {message.consumed_by ? <em>consumed by {message.consumed_by}</em> : null}
+                {message.consumed_by ? <em>{t('messages.consumedBy')} {displayLabel(message.consumed_by, locale)}</em> : null}
                 {message.source_message_ids.length > 0 ? (
-                  <small>from {message.source_message_ids.join(", ")}</small>
+                  <small>{t('messages.from')} {message.source_message_ids.join(", ")}</small>
                 ) : null}
               </article>
             );
@@ -49,10 +50,10 @@ export function AgentMessagesView({ messages, toolCalls }: Props) {
           <h3>{t('messages.toolCalls')}</h3>
           {toolCalls.slice(-10).map((call) => (
             <article key={call.id}>
-              <strong>{call.agent}{call.subagent ? `:${call.subagent}` : ""}</strong>
-              <span>{call.tool_name}</span>
-              <code>{call.status}</code>
-              {call.source_message_id ? <small>message {call.source_message_id}</small> : null}
+              <strong>{displayLabel(call.agent, locale)}{call.subagent ? `:${displayScope(call.subagent, locale)}` : ""}</strong>
+              <span>{displayLabel(call.tool_name, locale)}</span>
+              <code>{displayLabel(call.status, locale)}</code>
+              {call.source_message_id ? <small>{t('messages.message')} {call.source_message_id}</small> : null}
             </article>
           ))}
         </div>

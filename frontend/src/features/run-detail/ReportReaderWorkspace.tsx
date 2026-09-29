@@ -34,7 +34,7 @@ export function ReportReaderWorkspace({
   return (
     <div className="report-reader-workspace">
       <div className="report-review-toolbar">
-        <div className="report-mode-toggle" aria-label="Report reader mode">
+        <div className="report-mode-toggle" aria-label={t('reportDetail.readerMode')}>
           <button className="active" type="button">
             <PanelRight size={14} aria-hidden />
             {t('reportDetail.threePane')}

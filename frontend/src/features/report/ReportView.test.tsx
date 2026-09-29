@@ -32,6 +32,17 @@ const reportArtifact = {
 } as const;
 
 describe("ReportView artifact layers", () => {
+  it("localizes missing citation labels without changing the source identifier", () => {
+    render(<ReportView markdown="Claim [source:missing-id]." sources={[]} />);
+    expect(screen.getByRole('link', { name: '缺失 1' })).toHaveAttribute('href', '#missing-source-missing-id');
+  });
+  it("localizes generated footnote labels while preserving footnote prose and links", () => {
+    render(<ReportView markdown={"Original claim.[^1]\n\n[^1]: Source quotation. [Original source](https://example.com/evidence)"} sources={[]} />);
+    expect(screen.getByRole("heading", { name: "脚注" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回引用 1" })).toHaveAttribute("href", "#user-content-fnref-1");
+    expect(screen.getByRole("link", { name: "Original source" })).toHaveAttribute("href", "https://example.com/evidence");
+    expect(screen.getByText(/Source quotation./)).toBeInTheDocument();
+  });
   it("defaults to core report and can switch to evidence", async () => {
     render(<ReportView markdown="## Legacy" reportArtifact={reportArtifact} sources={[]} />);
 

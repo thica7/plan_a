@@ -16,7 +16,7 @@ export function ReportOutline({ markdown }: { markdown: string }) {
     <aside className="report-outline-panel">
       <div className="report-outline-heading">
         <strong>{t('reportDetail.outline')}</strong>
-        <span>{items.length} sections</span>
+        <span>{items.length} {t('reportDetail.sections')}</span>
       </div>
       {items.length > 0 ? (
         <nav aria-label={t('reportDetail.outline')}>

@@ -17,7 +17,6 @@ import {
   buildPhaseReturns,
   buildScopedRedoLoops,
   dispatchState,
-  formatRunStatus,
   joinAttemptCount,
   joinState,
   phaseQaState,
@@ -28,6 +27,8 @@ import {
   stageWaveCount,
 } from "./graphModel";
 import { useTranslation } from '../../stores/i18n';
+import { displayLabel } from "../../i18n/display";
+import { SystemMessage } from "../../i18n/SystemMessage";
 
 interface Props {
   activeNode?: string | null;
@@ -39,7 +40,7 @@ interface Props {
 }
 
 export function StaticGraphView({ activeNode, competitors, dimensions, events, revisionCount, status }: Props) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const active = resolveActiveNode(events, activeNode, status);
   const latestRedo = [...events].reverse().find((event) => event.message.startsWith("Scoped redo started"));
   const branchDimensions = dimensions.length > 0 ? dimensions : ["pricing", "feature"];
@@ -47,16 +48,16 @@ export function StaticGraphView({ activeNode, competitors, dimensions, events, r
   const analystBranches = buildAnalystBranches(branchDimensions, competitors, events);
   const visible = resolveVisibleStages(events, active, status);
   const phaseReturns = buildPhaseReturns(events);
-  const scopedRedoLoops = buildScopedRedoLoops(events);
+  const scopedRedoLoops = buildScopedRedoLoops(events, locale);
 
   return (
     <section className="panel graph-panel">
       <div className="panel-heading-row">
         <h2>{t('graph.flowGraph')}</h2>
-        <span className={`flow-status ${status}`}>{formatRunStatus(status)}</span>
+        <span className={`flow-status ${status}`}>{displayLabel(status, locale)}</span>
       </div>
 
-      <div className="topology-graph" aria-label="Live LangGraph topology with parallel branches">
+      <div className="topology-graph" aria-label={t('graph.topology')}>
         <SingleNode node={singleNodes[0]} state={resolveNodeState("planner", active, events, status)} />
         {visible.plannerHitl ? (
           <SingleNode node={plannerHitlNode} state={resolveNodeState("planner_hitl", active, events, status)} />
@@ -64,16 +65,16 @@ export function StaticGraphView({ activeNode, competitors, dimensions, events, r
 
         {visible.collector ? (
           <>
-            <Connector label="collector gate" />
+            <Connector label={t('graph.collectorGate')} />
             <DispatchNode
-              label="Collector dispatch"
-              caption={`Send(competitor x dim) · attempt ${stageWaveCount(events, "collector", collectorBranches)}`}
+              label={t('graph.collectorDispatch')}
+              caption={`${t('graph.collectorDispatchCaption')} · ${t('graph.attempt')} ${stageWaveCount(events, "collector", collectorBranches)}`}
               state={dispatchState("collector_dispatch", active, events, status)}
             />
             <ParallelGroup
               agent="collector"
               branches={collectorBranches}
-              caption="RawSource[] + message"
+              caption={t('graph.sourceOutput')}
               events={events}
               status={status}
               active={active}
@@ -82,15 +83,15 @@ export function StaticGraphView({ activeNode, competitors, dimensions, events, r
         ) : null}
         {visible.collectJoin ? (
           <JoinNode
-            label="Collect join"
-            caption={`normalize + dedupe sources · ${joinAttemptCount(events, "collector")} run(s)`}
+            label={t('graph.collectJoin')}
+            caption={`${t('graph.collectJoinCaption')} · ${joinAttemptCount(events, "collector")} ${t('graph.runCount')}`}
             state={joinState("collector", "collect_join", collectorBranches, events, status)}
           />
         ) : null}
         {visible.collectQa ? (
           <QaNode
-            label="Collect QA"
-            caption={qaCaption(events, "collect", "source coverage gate")}
+            label={t('graph.collectQa')}
+            caption={qaCaption(events, "collect", t('graph.sourceGate'), locale)}
             state={phaseQaState("collect", active, events, status)}
           />
         ) : null}
@@ -98,16 +99,16 @@ export function StaticGraphView({ activeNode, competitors, dimensions, events, r
 
         {visible.analyst ? (
           <>
-            <Connector label="analyst gate" />
+            <Connector label={t('graph.analystGate')} />
             <DispatchNode
-              label="Analyst dispatch"
-              caption={`Send(competitor x slice) · attempt ${stageWaveCount(events, "analyst", analystBranches)}`}
+              label={t('graph.analystDispatch')}
+              caption={`${t('graph.analystDispatchCaption')} · ${t('graph.attempt')} ${stageWaveCount(events, "analyst", analystBranches)}`}
               state={dispatchState("analyst_dispatch", active, events, status)}
             />
             <ParallelGroup
               agent="analyst"
               branches={analystBranches}
-              caption="CompetitorKnowledge"
+              caption={t('graph.knowledgeOutput')}
               events={events}
               status={status}
               active={active}
@@ -116,15 +117,15 @@ export function StaticGraphView({ activeNode, competitors, dimensions, events, r
         ) : null}
         {visible.analystJoin ? (
           <JoinNode
-            label="Analyst join"
-            caption={`reducer: merge_kbs · ${stageWaveCount(events, "analyst", analystBranches)} run(s)`}
+            label={t('graph.analystJoin')}
+            caption={`${t('graph.analystJoinCaption')} · ${stageWaveCount(events, "analyst", analystBranches)} ${t('graph.runCount')}`}
             state={joinState("analyst", "analyst_join", analystBranches, events, status)}
           />
         ) : null}
         {visible.analystQa ? (
           <QaNode
-            label="Analyst QA"
-            caption={qaCaption(events, "analyst", "KB citation gate")}
+            label={t('graph.analystQa')}
+            caption={qaCaption(events, "analyst", t('graph.citationGate'), locale)}
             state={phaseQaState("analyst", active, events, status)}
           />
         ) : null}
@@ -150,7 +151,7 @@ export function StaticGraphView({ activeNode, competitors, dimensions, events, r
         <span>{t('graph.events')} {events.length}</span>
         <span>{t('graph.revisions')} {revisionCount}</span>
         <span>{t('graph.parallelBranches')} {collectorBranches.length + analystBranches.length}</span>
-        {latestRedo ? <span>{latestRedo.message}</span> : null}
+        {latestRedo ? <SystemMessage message={latestRedo.message} /> : null}
       </div>
     </section>
   );

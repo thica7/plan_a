@@ -7,7 +7,9 @@ import type { ReportSourceBundle } from "../report/sourceBundle";
 import { SwimlaneView } from "../swimlane/SwimlaneView";
 import { AgentHandoffSummary } from "./AgentHandoffSummary";
 import type { ReflectionItem, RunDetailView } from "./types";
-import { useTranslation } from "../../stores/i18n";
+import { useTranslation, type Locale } from "../../stores/i18n";
+import { displayLabel, runtimeDiagnostic } from "../../i18n/display";
+import { SystemMessage } from "../../i18n/SystemMessage";
 import { parseUTC } from "../workbench/format";
 
 interface RunReviewOverviewProps {
@@ -35,12 +37,12 @@ export function RunReviewOverview({
   reflectionItems,
   reportSources,
 }: RunReviewOverviewProps) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const verifiedRate = Math.round(detail.metrics.verified_source_rate * 100);
   const sourceCoverage = Math.round(detail.metrics.source_coverage_rate * 100);
   const citedClaimRate = Math.round(detail.metrics.claim_citation_rate * 100);
   const qualityScore = qualityComparison?.target_score ?? deriveRunScore(detail);
-  const timelineRows = buildTimelineRows(detail, decisionReplay, events);
+  const timelineRows = buildTimelineRows(detail, decisionReplay, events, locale);
 
   return (
     <div className="run-review-overview">
@@ -49,17 +51,17 @@ export function RunReviewOverview({
           <Panel className="run-review-card" title={t('runQuality.title')} icon={<ShieldCheck size={16} aria-hidden />}>
             <strong className="run-review-score">{qualityScore}</strong>
             <StatusPill tone={qualityTone(qualityComparison?.verdict, qualityScore)}>
-              {qualityComparison?.verdict ?? detail.status}
+              {displayLabel(qualityComparison?.verdict ?? detail.status, locale)}
             </StatusPill>
             <div className="compact-stat-list">
               <span>
-                Schema pass <strong>{Math.round(detail.metrics.schema_pass_rate * 100)}%</strong>
+                {t('reviewOverview.schemaPass')} <strong>{Math.round(detail.metrics.schema_pass_rate * 100)}%</strong>
               </span>
               <span>
-                Citation <strong>{citedClaimRate}%</strong>
+                {t('reviewOverview.citation')} <strong>{citedClaimRate}%</strong>
               </span>
               <span>
-                QA issues <strong>{detail.qa_findings.length}</strong>
+                {t('reviewOverview.qaIssues')} <strong>{detail.qa_findings.length}</strong>
               </span>
             </div>
           </Panel>
@@ -69,19 +71,19 @@ export function RunReviewOverview({
               {reportSources.sources.length}
               <span>/{detail.raw_sources.length}</span>
             </strong>
-            <p className="muted-line">{verifiedRate}% verified / {sourceCoverage}% coverage</p>
+            <p className="muted-line">{verifiedRate}% {t('summary.verified')} / {sourceCoverage}% {t('summary.coverage')}</p>
             <div className="metric-grid compact">
-              <MetricCard label="sources" value={detail.raw_sources.length} />
-              <MetricCard label="verified" value={`${verifiedRate}%`} tone={verifiedRate >= 70 ? "good" : "warn"} />
+              <MetricCard label={t('reportStatus.sources')} value={detail.raw_sources.length} />
+              <MetricCard label={t('summary.verified')} value={`${verifiedRate}%`} tone={verifiedRate >= 70 ? "good" : "warn"} />
             </div>
           </Panel>
 
           <Panel className="run-review-card" title={t('runTabs.report')} icon={<FileText size={16} aria-hidden />}>
             <strong className="large-metric">
               {detail.report_md.length.toLocaleString()}
-              <span> chars</span>
+              <span> {t('summary.characters')}</span>
             </strong>
-            <p className="muted-line">{detail.enterprise_projection?.report_version.status ?? "run report"} / {detail.enterprise_projection?.report_version.claim_ids.length ?? 0} claims</p>
+            <p className="muted-line">{detail.enterprise_projection ? displayLabel(detail.enterprise_projection.report_version.status, locale) : t('reviewOverview.runReport')} / {detail.enterprise_projection?.report_version.claim_ids.length ?? 0} {t('reportStatus.claims')}</p>
             <button className="icon-text-button" type="button" onClick={() => onViewChange("report")}>
               {t('reviewOverview.openReport')}
               <ArrowRight size={15} aria-hidden />
@@ -103,23 +105,23 @@ export function RunReviewOverview({
         <div className="run-review-lower-grid">
           <Panel
             className="run-review-card"
-            title="QA focus"
+            title={t('reviewOverview.qaFocus')}
             icon={<AlertTriangle size={16} aria-hidden />}
             actions={
               <button className="icon-text-button" disabled={isRedoing || redoLimitReached} type="button" onClick={onRedo}>
                 <RefreshCw size={15} aria-hidden />
-                {isRedoing ? "Redoing" : "Redo"}
+                {isRedoing ? t('reviewOverview.redoing') : t('runQa.redo')}
               </button>
             }
           >
             <div className="recommendation-list compact">
               {detail.qa_findings.slice(0, 4).map((issue) => (
                 <article className={`recommendation-card ${issue.severity}`} key={issue.id}>
-                  <strong>{issue.detected_by} / {issue.field_path}</strong>
-                  <p>{issue.problem}</p>
+                  <strong>{displayLabel(issue.detected_by, locale)} / {issue.field_path}</strong>
+                  <p><SystemMessage message={issue.problem} /></p>
                 </article>
               ))}
-              {detail.qa_findings.length === 0 ? <p className="muted-line">No active QA findings.</p> : null}
+              {detail.qa_findings.length === 0 ? <p className="muted-line">{t('reviewOverview.noActiveQa')}</p> : null}
             </div>
             {reflectionItems.length > 0 ? (
               <div className="auto-redo-strip">
@@ -130,7 +132,7 @@ export function RunReviewOverview({
             ) : null}
           </Panel>
 
-          <Panel className="run-review-card" title="Decision timeline" icon={<GitBranch size={16} aria-hidden />}>
+          <Panel className="run-review-card" title={t('reviewOverview.decisionTimeline')} icon={<GitBranch size={16} aria-hidden />}>
             <div className="activity-timeline compact">
               {timelineRows.map((row) => (
                 <article key={row.id}>
@@ -139,7 +141,7 @@ export function RunReviewOverview({
                     <strong>{row.title}</strong>
                     <span>{row.meta}</span>
                   </div>
-                  <time dateTime={row.time}>{formatTime(row.time)}</time>
+                  <time dateTime={row.time}>{formatTime(row.time, locale)}</time>
                 </article>
               ))}
             </div>
@@ -152,7 +154,7 @@ export function RunReviewOverview({
       </main>
 
       <aside className="run-review-side-rail">
-        <Panel title="Review shortcuts">
+        <Panel title={t('reviewOverview.reviewShortcuts')}>
           <div className="action-grid">
             <button className="icon-text-button" type="button" onClick={() => onViewChange("report")}>
               <FileText size={15} aria-hidden />
@@ -160,21 +162,21 @@ export function RunReviewOverview({
             </button>
             <button className="icon-text-button" type="button" onClick={() => onViewChange("agents")}>
               <GitBranch size={15} aria-hidden />
-              Trace
+              {t('trace.title')}
             </button>
             <button className="icon-text-button" type="button" onClick={() => onViewChange("quality")}>
               <ShieldCheck size={15} aria-hidden />
-              Quality
+              {t('runTabs.quality')}
             </button>
           </div>
         </Panel>
 
-        <Panel title="Cited sources" icon={<Database size={16} aria-hidden />}>
+        <Panel title={t('reviewOverview.citedSources')} icon={<Database size={16} aria-hidden />}>
           <div className="run-source-list">
             {reportSources.sources.slice(0, 8).map((source) => (
               <a href={`#source-${source.id}`} key={source.id}>
                 <strong>{source.title}</strong>
-                <span>{source.dimension} / {Math.round(source.confidence * 100)}%</span>
+                <span>{displayLabel(source.dimension, locale)} / {Math.round(source.confidence * 100)}%</span>
               </a>
             ))}
           </div>
@@ -198,12 +200,12 @@ function qualityTone(verdict: RunQualityComparison["verdict"] | undefined, score
   return "good";
 }
 
-function buildTimelineRows(detail: RunDetailRecord, replay: DecisionReplayReport | null, events: RunEvent[]) {
+function buildTimelineRows(detail: RunDetailRecord, replay: DecisionReplayReport | null, events: RunEvent[], locale: Locale) {
   if (replay?.events.length) {
     return replay.events.slice(-6).reverse().map((event) => ({
       id: event.id,
-      title: event.event_type,
-      meta: `${event.agent ?? "system"}${event.subagent ? `/${event.subagent}` : ""} / ${event.message}`,
+      title: displayLabel(event.event_type, locale),
+      meta: `${displayLabel(event.agent ?? "system", locale)}${event.subagent ? `/${displayLabel(event.subagent, locale)}` : ""} / ${runtimeDiagnostic(event.message, locale)}`,
       time: event.created_at,
     }));
   }
@@ -211,21 +213,21 @@ function buildTimelineRows(detail: RunDetailRecord, replay: DecisionReplayReport
   if (detail.trace_spans.length) {
     return detail.trace_spans.slice(-6).reverse().map((span) => ({
       id: span.id,
-      title: `${span.kind} / ${span.name}`,
-      meta: `${span.agent}${span.subagent ? `/${span.subagent}` : ""} / ${span.status} / ${span.duration_ms}ms`,
+      title: `${displayLabel(span.kind, locale)} / ${displayLabel(span.name, locale)}`,
+      meta: `${displayLabel(span.agent, locale)}${span.subagent ? `/${displayLabel(span.subagent, locale)}` : ""} / ${displayLabel(span.status, locale)} / ${span.duration_ms}${locale === 'zh-CN' ? '毫秒' : 'ms'}`,
       time: span.created_at,
     }));
   }
 
   return events.slice(-6).reverse().map((event) => ({
     id: String(event.id),
-    title: event.type,
-    meta: event.message,
+    title: displayLabel(event.type, locale),
+    meta: runtimeDiagnostic(event.message, locale),
     time: event.created_at,
   }));
 }
 
-function formatTime(value: string) {
+function formatTime(value: string, locale: Locale) {
   const date = parseUTC(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale, { hour12: false });
 }

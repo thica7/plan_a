@@ -1,4 +1,6 @@
 import { isValidElement, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { displayLabel } from "../../i18n/display";
+import type { Locale } from "../../stores/i18n";
 import { useTranslation } from '../../stores/i18n';
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -51,13 +53,13 @@ export function ReportView({
   markdown,
   onActiveLayerChange,
   onActiveSourceChange,
-  readerTitle = "Report",
+  readerTitle,
   reportArtifact = null,
   showSourceTrace = true,
   sources,
   sourceAliases = EMPTY_SOURCE_ALIASES,
 }: Props) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const [internalActiveSourceId, setInternalActiveSourceId] = useState<string | null>(null);
   const [internalActiveLayer, setInternalActiveLayer] = useState<ReportViewLayer>("report");
   const activeSourceId =
@@ -79,7 +81,7 @@ export function ReportView({
     () => new Set(citedSourceGroups.map((group) => group.sourceId)),
     [citedSourceGroups],
   );
-  const citationLabels = useMemo(() => buildCitationLabels(sourceGroups), [sourceGroups]);
+  const citationLabels = useMemo(() => buildCitationLabels(sourceGroups, t('report.missing')), [sourceGroups, locale, t]);
   const linkedMarkdown = useMemo(
     () => linkSourceTokens(layerMarkdown, sourceMap, sourceAliases, citationLabels),
     [citationLabels, layerMarkdown, sourceAliases, sourceMap],
@@ -113,8 +115,8 @@ export function ReportView({
   const reportBody = (
     <section className={`panel report-panel${layout === "reader" ? " report-reader-panel" : ""}`}>
       <div className="panel-heading-row">
-        <h2>{readerTitle}</h2>
-        {totalCitationCount ? <span className="report-citation-count">{totalCitationCount} citations</span> : null}
+        <h2>{readerTitle ?? t('runTabs.report')}</h2>
+        {totalCitationCount ? <span className="report-citation-count">{totalCitationCount} {t('report.citations')}</span> : null}
       </div>
       {reportArtifact ? (
         <div role="group" aria-label={t("report.layers.label")} className="report-mode-toggle report-layer-tabs">
@@ -160,7 +162,7 @@ export function ReportView({
                     data-source-id={sourceId}
                     href={href}
                     onClick={(event) => handleSourceJump(event, href)}
-                    title={buildSourceTitle(missingSourceLink, source, citationLabel)}
+                    title={missingSourceLink ? t('report.missingSourceToken') : buildSourceTitle(source, citationLabel, locale)}
                     {...props}
                   >
                     {children}
@@ -181,6 +183,10 @@ export function ReportView({
               },
             }}
             remarkPlugins={[remarkGfm]}
+            remarkRehypeOptions={{
+              footnoteLabel: t('report.footnotes'),
+              footnoteBackLabel: (referenceIndex) => t('report.backToReference').replace('{index}', String(referenceIndex + 1)),
+            }}
           >
             {linkedMarkdown}
           </ReactMarkdown>
@@ -196,7 +202,7 @@ export function ReportView({
       <div className="panel-heading-row">
         <h2>{t('report.sourceTrace')}</h2>
         <span className={missingSourceGroups.length > 0 ? "report-source-warning" : "report-source-ok"}>
-          {missingSourceGroups.length > 0 ? `${missingSourceGroups.length} missing` : "linked"}
+          {missingSourceGroups.length > 0 ? `${missingSourceGroups.length} ${t('report.missing')}` : t('report.linked')}
         </span>
       </div>
       <ReportSourceTrace
@@ -268,10 +274,9 @@ function reactNodeToText(node: ReactNode): string {
   return "";
 }
 
-function buildSourceTitle(missingSourceLink: boolean, source: RawSource | undefined, citationLabel: string | undefined) {
-  if (missingSourceLink) return "Missing source token";
+function buildSourceTitle(source: RawSource | undefined, citationLabel: string | undefined, locale: Locale) {
   if (!source) return undefined;
-  return `${citationLabel ?? source.id}: ${source.title} / ${sourceTypeLabel(source.source_type)} / ${Math.round(
+  return `${citationLabel ?? source.id}: ${source.title} / ${displayLabel(sourceTypeLabel(source.source_type), locale)} / ${Math.round(
     source.confidence * 100,
   )}%`;
 }

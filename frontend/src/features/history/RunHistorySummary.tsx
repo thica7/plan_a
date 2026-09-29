@@ -23,7 +23,7 @@ export function RunHistorySummary({
   counts: RunHistoryCounts;
   latestUpdatedAt: string | null;
 }) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const activeRuns = counts.queued + counts.running + counts.interrupted;
   const attentionRuns = counts.blocked + counts.failed;
   const healthyRate = counts.total ? Math.round((counts.completed / counts.total) * 100) : 0;
@@ -60,7 +60,7 @@ export function RunHistorySummary({
         <div className="history-freshness-body">
           <Clock3 size={18} aria-hidden />
           <div>
-            <strong>{latestUpdatedAt ? formatDate(latestUpdatedAt) : t('history.noRuns')}</strong>
+            <strong>{latestUpdatedAt ? formatDate(latestUpdatedAt, locale) : t('history.noRuns')}</strong>
             <span>{t('history.latestRunUpdate')}</span>
           </div>
         </div>

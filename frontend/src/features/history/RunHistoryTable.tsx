@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Clock3, Loader2 } from "lucide-react";
 import type { RunSummary } from "../../api/types";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from "../../i18n/display";
 import { formatDate, statusClass } from "./format";
 
 export function RunHistoryTable({
@@ -13,7 +14,7 @@ export function RunHistoryTable({
   isLoading: boolean;
   runs: RunSummary[];
 }) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   return (
     <section className="panel history-panel">
       <div className="panel-heading-row">
@@ -50,10 +51,10 @@ export function RunHistoryTable({
                 <em>{run.id}</em>
               </span>
               <span className={`flow-status ${run.status}`}>
-                {run.status === "completed_with_blockers" ? "blocked" : run.status}
+                {displayLabel(run.status, locale)}
               </span>
-              <span>{run.execution_mode}</span>
-              <time dateTime={run.updated_at}>{formatDate(run.updated_at)}</time>
+              <span>{displayLabel(run.execution_mode, locale)}</span>
+              <time dateTime={run.updated_at}>{formatDate(run.updated_at, locale)}</time>
             </Link>
           ))}
         </div>

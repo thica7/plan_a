@@ -6,8 +6,8 @@ export function statusClass(status: RunStatus) {
   return "neutral";
 }
 
-export function formatDate(value: string) {
+export function formatDate(value: string, locale = "zh-CN") {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return date.toLocaleString(locale);
 }

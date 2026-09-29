@@ -87,24 +87,24 @@ describe("ReportSourceTrace KB provenance", () => {
       />,
     );
 
-    expect(screen.getAllByText(/KB reused/).length).toBeGreaterThan(0);
-    expect(screen.getByText("KB document")).toBeInTheDocument();
+    expect(screen.getAllByText(/知识库复用/).length).toBeGreaterThan(0);
+    expect(screen.getByText("知识库文档")).toBeInTheDocument();
     expect(screen.getByText("kb-doc-pricing-v3")).toBeInTheDocument();
-    expect(screen.getByText("KB version")).toBeInTheDocument();
+    expect(screen.getByText("知识库版本")).toBeInTheDocument();
     expect(screen.getByText("v3")).toBeInTheDocument();
-    expect(screen.getByText("KB chunk")).toBeInTheDocument();
+    expect(screen.getByText("知识库片段")).toBeInTheDocument();
     expect(screen.getByText("kb-chunk-pricing-7")).toBeInTheDocument();
-    expect(screen.getByText("KB query")).toBeInTheDocument();
+    expect(screen.getByText("知识库查询")).toBeInTheDocument();
     expect(screen.getByText(/AI coding assistant comparison/)).toBeInTheDocument();
-    expect(screen.getByText("KB hit")).toBeInTheDocument();
+    expect(screen.getByText("检索得分")).toBeInTheDocument();
     expect(screen.getByText("87%")).toBeInTheDocument();
-    expect(screen.getByText("KB rerank")).toBeInTheDocument();
+    expect(screen.getByText("重排得分")).toBeInTheDocument();
     expect(screen.getByText("93%")).toBeInTheDocument();
-    expect(screen.getByText("KB raw source")).toBeInTheDocument();
+    expect(screen.getByText("知识库原始来源")).toBeInTheDocument();
     expect(screen.getByText("collector-raw-pricing-001")).toBeInTheDocument();
-    expect(screen.getByText("Collector run")).toBeInTheDocument();
+    expect(screen.getByText("采集运行")).toBeInTheDocument();
     expect(screen.getByText("collector-run-1")).toBeInTheDocument();
-    expect(screen.getByText("Freshness")).toBeInTheDocument();
+    expect(screen.getByText("新鲜度")).toBeInTheDocument();
     expect(screen.getByText("82%")).toBeInTheDocument();
   });
 

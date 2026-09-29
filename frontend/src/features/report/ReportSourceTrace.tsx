@@ -2,6 +2,7 @@ import type { RawSource } from "../../api/types";
 import type { MouseEvent } from "react";
 import { sourceTypeLabel, type SourceTokenGroup } from "./sourceTokens";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from "../../i18n/display";
 
 interface ReportSourceTraceProps {
   activeSourceId: string | null;
@@ -75,20 +76,21 @@ function SourceTraceSummary({
   onSourceJump: (event: MouseEvent<HTMLAnchorElement>, href: string) => void;
   totalCitationCount: number;
 }) {
+  const { locale, t } = useTranslation();
   return (
     <div className="source-trace-summary">
       <div className="source-trace-metrics">
         <span>
           <strong>{totalCitationCount}</strong>
-          <em>source citations</em>
+          <em>{t('report.sourceCitations')}</em>
         </span>
         <span>
           <strong>{citedSourceGroups.length}</strong>
-          <em>resolved evidence</em>
+          <em>{t('report.resolvedEvidence')}</em>
         </span>
         <span className={missingSourceGroups.length > 0 ? "warn" : "ok"}>
           <strong>{missingSourceGroups.length}</strong>
-          <em>missing tokens</em>
+          <em>{t('report.missingTokens')}</em>
         </span>
       </div>
       <div className="source-trace-grid">
@@ -106,12 +108,12 @@ function SourceTraceSummary({
               title={source.url || source.title}
             >
               <strong>
-                {label} 路 {source.title}
+                {label} · {source.title}
               </strong>
               <span>{source.url || group.tokens.map((token) => `[source:${token}]`).join(", ")}</span>
               <em>
-                {source.dimension} / {sourceTypeLabel(source.source_type)} / {group.count} cite
-                {provenance ? ` / ${provenance}` : ""}
+                {displayLabel(source.dimension, locale)} / {displayLabel(sourceTypeLabel(source.source_type), locale)} / {group.count} {t('report.citeCount')}
+                {provenance ? ` / ${displayLabel(provenance, locale)}` : ""}
               </em>
             </a>
           );
@@ -122,11 +124,11 @@ function SourceTraceSummary({
             href={`#missing-source-${group.sourceId}`}
             key={group.sourceId}
             onClick={(event) => onSourceJump(event, `#missing-source-${group.sourceId}`)}
-            title="No matching RawSource id exists in this run."
+            title={t('report.noMatchingSource')}
           >
             <strong>{group.sourceId}</strong>
             <span>{group.tokens.map((token) => `[source:${token}]`).join(", ")}</span>
-            <em>{group.count} unresolved cite</em>
+            <em>{group.count} {t('report.unresolvedCite')}</em>
           </a>
         ))}
       </div>
@@ -135,6 +137,7 @@ function SourceTraceSummary({
 }
 
 function SourceStrip({ citedSourceIds, sources }: { citedSourceIds: Set<string>; sources: RawSource[] }) {
+  const { locale } = useTranslation();
   return (
     <div className="source-strip">
       {sources.map((source) => {
@@ -143,10 +146,10 @@ function SourceStrip({ citedSourceIds, sources }: { citedSourceIds: Set<string>;
           <span
             className={citedSourceIds.has(source.id) ? "cited" : undefined}
             key={source.id}
-            title={`${source.source_type} / ${source.content_hash}`}
+            title={`${displayLabel(source.source_type, locale)} / ${source.content_hash}`}
           >
-            {source.dimension} / {sourceTypeLabel(source.source_type)} / {Math.round(source.confidence * 100)}%
-            {provenance ? ` / ${provenance}` : ""}
+            {displayLabel(source.dimension, locale)} / {displayLabel(sourceTypeLabel(source.source_type), locale)} / {Math.round(source.confidence * 100)}%
+            {provenance ? ` / ${displayLabel(provenance, locale)}` : ""}
           </span>
         );
       })}
@@ -165,7 +168,7 @@ function SourceList({
   citedSourceIds: Set<string>;
   sources: RawSource[];
 }) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   return (
     <div className="source-list" id="source-list">
       <h3>{t("report.evidence")}</h3>
@@ -181,25 +184,25 @@ function SourceList({
           >
             <div>
               <strong>
-                {citationLabels.get(source.id) ?? "uncited"} 路 {source.title}
+                {citationLabels.get(source.id) ?? t('report.uncited')} · {source.title}
               </strong>
               <span>
                 {source.covered_competitors.length > 0 ? source.covered_competitors.join(", ") : source.competitor} /{" "}
-                {source.dimension} / {source.source_type}
+                {displayLabel(source.dimension, locale)} / {displayLabel(source.source_type, locale)}
               </span>
             </div>
-            <code>raw source: {source.id}</code>
+            <code>{t('report.rawSource')} {source.id}</code>
             {source.url ? (
               <a href={source.url} rel="noreferrer" target="_blank">
                 {source.url}
               </a>
             ) : null}
             {auditRows.length > 0 ? (
-              <dl className="source-audit-grid" aria-label={`Audit metadata for ${source.id}`}>
+              <dl className="source-audit-grid" aria-label={t('report.auditMetadata').replace('{id}', source.id)}>
                 {auditRows.map((row) => (
                   <div key={`${row.label}:${row.value}`}>
-                    <dt>{row.label}</dt>
-                    <dd>{row.value}</dd>
+                    <dt>{t(`sourceAudit.${row.label}`)}</dt>
+                    <dd>{['Origin', 'Fetch', 'KB status'].includes(row.label) ? displayLabel(row.value, locale) : row.value}</dd>
                   </div>
                 ))}
               </dl>
@@ -231,7 +234,7 @@ function MissingSourceList({
           key={group.sourceId}
         >
           <strong>{group.tokens.map((token) => `[source:${token}]`).join(", ")}</strong>
-          <span>No matching RawSource id exists in this run.</span>
+          <span>{t('report.noMatchingSource')}</span>
         </article>
       ))}
     </div>

@@ -1,6 +1,8 @@
 import { AlertTriangle, CheckCircle2, Download, Loader2 } from "lucide-react";
 import type { ArtifactRecord, RunComplianceReport } from "../../api/types";
 import { useTranslation } from '../../stores/i18n';
+import { displayLabel } from "../../i18n/display";
+import { SystemMessage } from "../../i18n/SystemMessage";
 import { MetricValue } from "./MetricValue";
 
 interface CompliancePanelProps {
@@ -16,16 +18,16 @@ export function CompliancePanel({
   onExport,
   report,
 }: CompliancePanelProps) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
 
   if (!report) {
     return (
       <aside className="qa-panel run-quality-panel">
         <div className="panel-heading-row">
-          <h2>Compliance</h2>
+          <h2>{t('compliance.title')}</h2>
           <Loader2 className="spin" size={16} aria-hidden />
         </div>
-        <p className="muted-text">Loading compliance report.</p>
+        <p className="muted-text">{t('compliance.loading')}</p>
       </aside>
     );
   }
@@ -42,14 +44,14 @@ export function CompliancePanel({
           type="button"
         >
           <Download size={15} aria-hidden />
-          {isExporting ? "Exporting" : t('common.export')}
+          {isExporting ? t('common.exporting') : t('common.export')}
         </button>
       </div>
       <div className="metric-grid compact">
-        <MetricValue label={t('compliance.status')} value={report.status} />
+        <MetricValue label={t('compliance.status')} value={displayLabel(report.status, locale)} />
         <MetricValue label={t('compliance.findings')} value={String(report.finding_count)} />
-        <MetricValue label="Blockers" value={String(report.blocker_count)} />
-        <MetricValue label="Redactions" value={String(report.redaction_count)} />
+        <MetricValue label={t('report.layers.qaBlockers')} value={String(report.blocker_count)} />
+        <MetricValue label={t('compliance.redactions')} value={String(report.redaction_count)} />
       </div>
       <div className="run-quality-signals">
         <span className={report.policy.redaction_enabled ? "on" : "off"}>
@@ -58,7 +60,7 @@ export function CompliancePanel({
           ) : (
             <AlertTriangle size={13} aria-hidden />
           )}
-          Redaction
+          {t('compliance.redaction')}
         </span>
         <span className={report.policy.require_trace_context ? "on" : "off"}>
           {report.policy.require_trace_context ? (
@@ -66,7 +68,7 @@ export function CompliancePanel({
           ) : (
             <AlertTriangle size={13} aria-hidden />
           )}
-          Trace context
+          {t('compliance.traceContext')}
         </span>
         <span className={report.policy.require_source_urls ? "on" : "off"}>
           {report.policy.require_source_urls ? (
@@ -74,7 +76,7 @@ export function CompliancePanel({
           ) : (
             <AlertTriangle size={13} aria-hidden />
           )}
-          Source URLs
+          {t('compliance.sourceUrls')}
         </span>
       </div>
       {topFindings.length > 0 ? (
@@ -82,9 +84,9 @@ export function CompliancePanel({
           <h3>{t('compliance.findings')}</h3>
           {topFindings.map((finding) => (
             <article className="issue-row reflection-row" key={finding.id}>
-              <strong>{finding.severity}</strong>
+              <strong>{displayLabel(finding.severity, locale)}</strong>
               <span>
-                {finding.category}: {finding.message}
+                {displayLabel(finding.category, locale)}: <SystemMessage message={finding.message} />
               </span>
             </article>
           ))}

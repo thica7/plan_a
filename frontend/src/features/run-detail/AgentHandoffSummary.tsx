@@ -2,6 +2,8 @@ import { FileText, GitBranch, ListChecks, ShieldCheck } from "lucide-react";
 
 import type { AgentMessage, RunDetail as RunDetailRecord, TraceSpan } from "../../api/types";
 import { Panel, StatusPill } from "../../components/ui";
+import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from "../../i18n/display";
 
 interface AgentHandoffSummaryProps {
   detail: RunDetailRecord;
@@ -20,6 +22,7 @@ const EXPECTED_HANDOFFS = [
 ] as const;
 
 export function AgentHandoffSummary({ detail, messages, mode = "full" }: AgentHandoffSummaryProps) {
+  const { locale, t } = useTranslation();
   const latestReflection = detail.reflections[detail.reflections.length - 1];
   const writerReport = latestMessage(messages, (message) => (
     message.payload_schema === "MarkdownReport" || (message.from_agent === "writer" && message.to_agent === "qa")
@@ -42,50 +45,50 @@ export function AgentHandoffSummary({ detail, messages, mode = "full" }: AgentHa
   return (
     <Panel
       className={`agent-handoff-summary ${compact ? "compact" : ""}`}
-      title="Agent handoff"
+      title={t('handoff.title')}
       icon={<GitBranch size={16} aria-hidden />}
     >
       <div className="handoff-signal-grid">
         <SignalBlock
-          label="Layer / scenario"
+          label={t('handoff.layerScenario')}
           tone="neutral"
-          value={`${detail.plan.competitor_layer} / ${detail.plan.scenario_id ?? "auto"}`}
-          detail={`${detail.plan.qa_rule_ids.length} QA rules / ${detail.plan.task_decomposition.length} tasks`}
+          value={`${displayLabel(detail.plan.competitor_layer, locale)} / ${displayLabel(detail.plan.scenario_id ?? "auto", locale)}`}
+          detail={`${detail.plan.qa_rule_ids.length} ${t('runHeader.qaRules')} / ${detail.plan.task_decomposition.length} ${t('tasks.count')}`}
         />
         <SignalBlock
-          label="Reflector gate"
+          label={t('handoff.reflectorGate')}
           tone={gateTone(latestReflection?.gate_status)}
-          value={latestReflection?.gate_status ?? "pending"}
-          detail={`${latestReflection?.writer_constraints.length ?? 0} writer constraints`}
+          value={displayLabel(latestReflection?.gate_status ?? "pending", locale)}
+          detail={`${latestReflection?.writer_constraints.length ?? 0} ${t('handoff.writerConstraints')}`}
         />
         <SignalBlock
-          label="Writer mode"
+          label={t('handoff.writerMode')}
           tone={writerRepairMode === "none" ? "good" : "warn"}
-          value={writerRepairMode}
-          detail={writerMode}
+          value={displayLabel(writerRepairMode, locale)}
+          detail={displayLabel(writerMode, locale)}
         />
       </div>
 
       <div className="agent-workload-grid">
         <article>
           <ListChecks size={15} aria-hidden />
-          <strong>Task split</strong>
+          <strong>{t('handoff.taskSplit')}</strong>
           <span>
-            collector {stageCounts.collector} / analyst {stageCounts.analyst} / survey {stageCounts.survey_interview}
+            {t('tasks.collector')} {stageCounts.collector} / {t('tasks.analyst')} {stageCounts.analyst} / {t('tasks.research')} {stageCounts.survey_interview}
           </span>
         </article>
         <article>
           <ShieldCheck size={15} aria-hidden />
-          <strong>Reflector input</strong>
+          <strong>{t('handoff.reflectorInput')}</strong>
           <span>
-            {detail.comparison_matrix ? `${detail.comparison_matrix.cells.length} matrix cells` : "matrix pending"} /{" "}
-            {detail.reflections.length} reviews
+            {detail.comparison_matrix ? `${detail.comparison_matrix.cells.length} ${t('handoff.matrixCells')}` : t('handoff.matrixPending')} /{" "}
+            {detail.reflections.length} {t('handoff.reviews')}
           </span>
         </article>
         <article>
           <FileText size={15} aria-hidden />
-          <strong>Writer surface</strong>
-          <span>{detail.report_md.length.toLocaleString()} chars / {writerSections.length || 0} repair sections</span>
+          <strong>{t('handoff.writerSurface')}</strong>
+          <span>{detail.report_md.length.toLocaleString()} {t('summary.characters')} / {writerSections.length || 0} {t('handoff.repairSections')}</span>
         </article>
       </div>
 
@@ -116,11 +119,11 @@ export function AgentHandoffSummary({ detail, messages, mode = "full" }: AgentHa
       <div className="handoff-route-list">
         {handoffs.map((handoff) => (
           <article key={`${handoff.from}-${handoff.to}`}>
-            <strong>{handoff.from} -&gt; {handoff.to}</strong>
-            <StatusPill tone={handoff.linked ? "good" : "neutral"}>{handoff.linked ? "linked" : "pending"}</StatusPill>
+            <strong>{displayLabel(handoff.from, locale)} -&gt; {displayLabel(handoff.to, locale)}</strong>
+            <StatusPill tone={handoff.linked ? "good" : "neutral"}>{displayLabel(handoff.linked ? "linked" : "pending", locale)}</StatusPill>
             <span>
-              {handoff.label}
-              {handoff.count > 1 ? ` / ${handoff.count} messages` : handoff.inferred ? " / inferred" : ""}
+              {displayLabel(handoff.label, locale)}
+              {handoff.count > 1 ? ` / ${handoff.count} ${t('handoff.messages')}` : handoff.inferred ? ` / ${t('handoff.inferred')}` : ""}
             </span>
           </article>
         ))}

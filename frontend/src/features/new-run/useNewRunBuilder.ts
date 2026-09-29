@@ -199,7 +199,7 @@ export function useNewRunBuilder() {
       return;
     }
     if (runBlockedByQuota) {
-      setError(quotaDecision?.reason ?? "Workspace quota blocks new runs.");
+      setError(quotaDecision?.reason ?? t('run.disabled.quota'));
       return;
     }
     if (manualScopeError) {
@@ -208,11 +208,11 @@ export function useNewRunBuilder() {
     }
     const productName = targetName.trim();
     if (productName.length < 2) {
-      setError("请填写目标产品名称（至少两个字符）。");
+      setError(t('newRun.invalidTarget'));
       return;
     }
     if (competitorMode === "auto" && !runtime?.has_web_search_key) {
-      setError("自动发现竞品需要搜索服务；也可以改为手动填写竞品。");
+      setError(t('run.disabled.discoverySearch'));
       return;
     }
     const officialUrl = targetUrl.trim();
@@ -220,7 +220,7 @@ export function useNewRunBuilder() {
       try {
         if (!["http:", "https:"].includes(new URL(officialUrl).protocol)) throw new Error();
       } catch {
-        setError("产品官网需要完整的 http 或 https 地址。");
+        setError(t('newRun.invalidUrl'));
         return;
       }
     }
@@ -258,7 +258,7 @@ export function useNewRunBuilder() {
       const run = await createRun(payload);
       navigate(`/runs/${"id" in run ? run.id : run.run_id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create run");
+      setError(err instanceof Error ? err.message : t('newRun.createFailed'));
     } finally {
       submitInFlightRef.current = false;
       setSubmitting(false);

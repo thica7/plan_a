@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { EvidenceReviewPayload } from "../../api/types";
 import { ActionButton } from "../../components/interaction/ActionButton";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel, displayScope } from "../../i18n/display";
+import { SystemMessage } from "../../i18n/SystemMessage";
 
 type EvidenceDecision = "accept" | "redo";
 
@@ -24,7 +26,7 @@ function safeSourceUrl(value: string | null): string | null {
 }
 
 export function EvidenceReviewModal({ message, payload, activeDecision, isSubmitting, onDecision }: Props) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const [note, setNote] = useState("");
   const sources = Array.isArray(payload.sources) ? payload.sources : [];
   const findings = Array.isArray(payload.qa_findings) ? payload.qa_findings : [];
@@ -40,7 +42,7 @@ export function EvidenceReviewModal({ message, payload, activeDecision, isSubmit
     <section className="hitl-panel evidence-review-panel" aria-label={t("hitl.evidenceReview")}>
       <div>
         <h2>{t("hitl.evidenceReview")}</h2>
-        <p>{message}</p>
+        <p><SystemMessage message={message} /></p>
         <p>{t("hitl.evidenceRemaining").replace("{count}", remaining === null ? "—" : String(remaining))}</p>
         {!reviewReady ? <p role="status">{t("hitl.evidenceNotLoaded")}</p> : null}
       </div>
@@ -61,9 +63,9 @@ export function EvidenceReviewModal({ message, payload, activeDecision, isSubmit
                   <dl>
                     <div><dt>{t("hitl.evidenceId")}</dt><dd>{source.id}</dd></div>
                     <div><dt>{t("hitl.evidenceCompetitor")}</dt><dd>{source.competitor}</dd></div>
-                    <div><dt>{t("hitl.evidenceDimension")}</dt><dd>{source.dimension}</dd></div>
+                    <div><dt>{t("hitl.evidenceDimension")}</dt><dd>{displayLabel(source.dimension, locale)}</dd></div>
                     <div><dt>{t("hitl.evidenceUrl")}</dt><dd>{source.url || "—"}</dd></div>
-                    <div><dt>{t("hitl.evidenceType")}</dt><dd>{source.source_type}</dd></div>
+                    <div><dt>{t("hitl.evidenceType")}</dt><dd>{displayLabel(source.source_type, locale)}</dd></div>
                     <div><dt>{t("hitl.evidenceConfidence")}</dt><dd>{Math.round(source.confidence * 100)}%</dd></div>
                     <div><dt>{t("hitl.evidenceFetchedAt")}</dt><dd>{source.fetched_at || "—"}</dd></div>
                     <div><dt>{t("hitl.evidencePublishedAt")}</dt><dd>{source.source_published_at || "—"}</dd></div>
@@ -85,9 +87,9 @@ export function EvidenceReviewModal({ message, payload, activeDecision, isSubmit
           <ul className="evidence-review-findings">
             {findings.map((finding) => (
               <li key={finding.id}>
-                <strong>{finding.severity} · {finding.id}</strong>
+                <strong>{displayLabel(finding.severity, locale)} · {finding.id}</strong>
                 <span>{finding.problem}</span>
-                <small>{[finding.target_agent, finding.target_subagent, finding.target_competitor, finding.field_path].filter(Boolean).join(" · ")}</small>
+                <small>{[finding.target_agent ? displayLabel(finding.target_agent, locale) : null, finding.target_subagent ? displayScope(finding.target_subagent, locale) : null, finding.target_competitor, finding.field_path].filter(Boolean).join(" · ")}</small>
               </li>
             ))}
           </ul>

@@ -1,6 +1,7 @@
 import { Gauge } from "lucide-react";
 import type { ScenarioPack, SkillSpec } from "../../api/types";
 import { useTranslation } from '../../stores/i18n';
+import { dimensionDescription, displayLabel } from "../../i18n/display";
 import { isDimensionLocked } from "./dimensions";
 import { SectionHeading } from "./SectionHeading";
 
@@ -19,7 +20,7 @@ export function DimensionsSection({
   skills,
   toggleDimension,
 }: DimensionsSectionProps) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   return (
     <section className="form-section">
       <SectionHeading
@@ -32,20 +33,22 @@ export function DimensionsSection({
         {skills.map((skill) => {
           const active = selected.includes(skill.name);
           const locked = isDimensionLocked(skill.name, lockedDimensions);
+          const description = dimensionDescription(skill.name, skill.description, locale);
           return (
             <button
               className={active ? "skill-tile active" : "skill-tile"}
               key={skill.name}
               type="button"
+              aria-pressed={active}
               onClick={() => toggleDimension(skill.name)}
             >
-              <strong>{skill.name}</strong>
+              <strong>{displayLabel(skill.name, locale)}</strong>
               <span>
                 {locked
                   ? selectedScenario
-                    ? `${skill.description} ${t('newRun.dimensionsRequired')}`
-                    : `${skill.description} ${t('newRun.dimensionRequired')}`
-                  : skill.description}
+                    ? `${description} ${t('newRun.dimensionsRequired')}`
+                    : `${description} ${t('newRun.dimensionRequired')}`
+                  : description}
               </span>
             </button>
           );

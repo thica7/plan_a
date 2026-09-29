@@ -34,6 +34,11 @@ describe("TraceList decision replay formatting", () => {
     expect(summary).toContain("severity blocker");
     expect(summary).toContain("scope collector");
     expect(summary).toContain("subagent pricing");
+
+    const chinese = formatDecisionPayload(event, "zh-CN");
+    expect(chinese).toContain("严重程度 阻塞项");
+    expect(chinese).toContain("子代理 价格与成本");
+    expect(chinese).toContain("No evidence sources were collected for pricing.");
   });
 
   it("summarizes RAG gap evidence links", () => {

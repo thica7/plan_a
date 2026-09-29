@@ -21,7 +21,7 @@ describe("new run research modes", () => {
     expect(screen.getByText(/5 个竞品.*12 个切片.*3 个来源.*120 次/)).toBeInTheDocument();
     expect(screen.getByText(/8 个竞品.*24 个切片.*5 个来源.*160 次/)).toBeInTheDocument();
     expect(screen.getByText(/部署配置可能进一步收紧/)).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: /快速研究/ }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /极简研究/ }));
     expect(onChange).toHaveBeenCalledWith("quick");
   });
 
@@ -29,7 +29,7 @@ describe("new run research modes", () => {
     const onChange = vi.fn();
     render(<CollaborationSection collaborationMode="ai" setCollaborationMode={onChange} />);
     expect(screen.getByText(/无需等待人工审核/)).toBeInTheDocument();
-    expect(screen.getByText(/计划、证据和 QA/)).toBeInTheDocument();
+    expect(screen.getByText(/计划、证据和质检/)).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: /半人工协作/ }));
     expect(onChange).toHaveBeenCalledWith("assisted");
   });

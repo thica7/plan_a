@@ -2,6 +2,8 @@ import { AlertTriangle, CheckCircle2, Circle, GitBranch, Loader2, Merge, PauseCi
 import type { RunEvent } from "../../api/sse_types";
 import type { RunStatus } from "../../api/types";
 import { useTranslation } from '../../stores/i18n';
+import { displayLabel } from "../../i18n/display";
+import { SystemMessage } from "../../i18n/SystemMessage";
 import {
   analystCaption,
   branchAttemptCount,
@@ -21,7 +23,7 @@ interface ParallelGroupProps {
 }
 
 export function ParallelGroup({ agent, branches, caption, events, status, active }: ParallelGroupProps) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   return (
     <div className="parallel-group">
       {branches.map((branch) => {
@@ -30,10 +32,10 @@ export function ParallelGroup({ agent, branches, caption, events, status, active
           <article className={`parallel-card ${state}`} key={`${agent}-${branch}`}>
             <div className="flow-icon">{renderStateIcon(state)}</div>
             <div>
-              <strong>{agent}</strong>
-              <span>{branchLabel(branch)}</span>
+              <strong>{displayLabel(agent, locale)}</strong>
+              <span>{branchLabel(branch, locale)}</span>
             </div>
-            <p>{agent === "collector" ? collectorCaption(branch) : analystCaption(branch)}</p>
+            <p>{agent === "collector" ? collectorCaption(branch, locale) : analystCaption(branch, locale)}</p>
             <em>
               {caption} · {branchAttemptCount(events, agent, branch)} {t('graph.runCount')}
             </em>
@@ -85,9 +87,9 @@ export function QaNode({ label, caption, state }: { label: string; caption: stri
 }
 
 export function ReturnGroup({ returns }: { returns: ReturnItem[] }) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   return (
-    <div className="return-group" aria-label="QA return path">
+    <div className="return-group" aria-label={t('graph.qaReturnPath')}>
       {returns.map((item) => (
         <article className="return-card" key={`${item.from}-${item.id}`}>
           <div className="flow-icon">
@@ -95,10 +97,10 @@ export function ReturnGroup({ returns }: { returns: ReturnItem[] }) {
           </div>
           <div>
             <strong>
-              {item.from} {t('graph.returnedTo')} {item.to}
+              {displayLabel(item.from, locale)} {t('graph.returnedTo')} {displayLabel(item.to, locale)}
             </strong>
             <span>
-              {item.severity}: {item.problem}
+              {displayLabel(item.severity, locale)}: <SystemMessage message={item.problem} />
             </span>
           </div>
         </article>
@@ -108,9 +110,9 @@ export function ReturnGroup({ returns }: { returns: ReturnItem[] }) {
 }
 
 export function ScopedRedoPanel({ loops }: { loops: ScopedRedoItem[] }) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   return (
-    <div className="scoped-redo-panel" aria-label="Final QA scoped redo returns">
+    <div className="scoped-redo-panel" aria-label={t('graph.finalQaReturns')}>
       {loops.map((loop) => (
         <article className="return-card scoped" key={`scoped-${loop.id}`}>
           <div className="flow-icon">
@@ -118,10 +120,10 @@ export function ScopedRedoPanel({ loops }: { loops: ScopedRedoItem[] }) {
           </div>
           <div>
             <strong>
-              {loop.from} {t('graph.returnedTo')} {loop.to}
+              {displayLabel(loop.from, locale)} {t('graph.returnedTo')} {loop.to}
             </strong>
             <span>
-              {loop.severity}: {loop.problem}
+              {displayLabel(loop.severity, locale)}: <SystemMessage message={loop.problem} />
             </span>
             <em>{loop.scope}</em>
           </div>
@@ -141,12 +143,13 @@ export function Connector({ label }: { label: string }) {
 }
 
 export function SingleNode({ node, state }: { node: SingleFlowNode; state: NodeState }) {
+  const { locale, t } = useTranslation();
   return (
     <article className={`topology-node ${state}`}>
       <div className="flow-icon">{renderStateIcon(state)}</div>
       <div>
-        <strong>{node.label}</strong>
-        <span>{node.caption}</span>
+        <strong>{displayLabel(node.id, locale)}</strong>
+        <span>{t(`graph.caption.${node.id}`)}</span>
       </div>
     </article>
   );

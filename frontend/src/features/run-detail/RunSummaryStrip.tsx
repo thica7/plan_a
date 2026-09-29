@@ -30,29 +30,29 @@ export function RunSummaryStrip({
           <MetricValue label={t('summary.coverage')} value={`${sourceCoverageRate}%`} />
           <MetricValue label={t('summary.citedClaims')} value={`${citedClaimRate}%`} />
           <MetricValue label={t('summary.qaIssues')} value={String(detail.qa_findings.length)} />
-          <MetricValue label="Spans" value={String(detail.metrics.total_spans)} />
+          <MetricValue label={t('summary.spans')} value={String(detail.metrics.total_spans)} />
         </div>
       </article>
       <article className="panel run-inspector-panel">
         <div className="inspector-row">
           <Database size={17} aria-hidden />
           <div>
-            <strong>Evidence scope</strong>
-            <span>{detail.raw_sources.length} raw sources / {detail.plan.competitors.filter((name) => name !== detail.plan.target_product?.name).length} competitors</span>
+            <strong>{t('summary.evidenceScope')}</strong>
+            <span>{detail.raw_sources.length} {t('summary.rawSources')} / {detail.plan.competitors.filter((name) => name !== detail.plan.target_product?.name).length} {t('workbench.competitorCount')}</span>
           </div>
         </div>
         <div className="inspector-row">
           <GitBranch size={17} aria-hidden />
           <div>
-            <strong>Agent graph</strong>
-            <span>{detail.plan.task_decomposition.length} adaptive tasks / {detail.revisions.length} redo rounds</span>
+            <strong>{t('reviewOverview.agentGraph')}</strong>
+            <span>{detail.plan.task_decomposition.length} {t('summary.adaptiveTasks')} / {detail.revisions.length} {t('summary.redoRounds')}</span>
           </div>
         </div>
         <div className="inspector-row">
           <FileText size={17} aria-hidden />
           <div>
-            <strong>Report</strong>
-            <span>{detail.report_md ? `${detail.report_md.length} characters` : "draft pending"}</span>
+            <strong>{t('runTabs.report')}</strong>
+            <span>{detail.report_md ? `${detail.report_md.length} ${t('summary.characters')}` : t('summary.draftPending')}</span>
           </div>
         </div>
       </article>

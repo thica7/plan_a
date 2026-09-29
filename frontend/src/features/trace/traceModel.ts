@@ -1,4 +1,6 @@
 import type { DecisionReplayEvent, TraceSpan } from "../../api/types";
+import { translate, type Locale } from "../../stores/i18n";
+import { displayLabel, displayScope } from "../../i18n/display";
 
 export interface ContextRow {
   contextId: string;
@@ -43,80 +45,84 @@ export function buildContextRows(spans: TraceSpan[]): ContextRow[] {
   );
 }
 
-export function formatSpanMeta(span: TraceSpan) {
+export function formatSpanMeta(span: TraceSpan, locale: Locale = "en-US") {
+  const t = (key: string) => translate(key, locale);
   const parts: string[] = [];
   const provider = span.provider ?? span.model;
   if (provider) parts.push(String(provider));
   const contextId = span.metadata.context_id;
   if (typeof contextId === "string") parts.push(contextId.split(":").slice(-2).join(":"));
-  const kbWarmStartSummary = formatRagKbWarmStartSpan(span);
+  const kbWarmStartSummary = formatRagKbWarmStartSpan(span, locale);
   if (kbWarmStartSummary) parts.push(kbWarmStartSummary);
   const resultCount = span.metadata.result_count;
-  if (typeof resultCount === "number") parts.push(`${resultCount} results`);
+  if (typeof resultCount === "number") parts.push(`${resultCount} ${t('trace.results')}`);
   const validCount = span.metadata.valid_count;
   const unknownCount = span.metadata.unknown_count;
-  if (typeof validCount === "number") parts.push(`${validCount} valid refs`);
-  if (typeof unknownCount === "number" && unknownCount > 0) parts.push(`${unknownCount} unknown refs`);
+  if (typeof validCount === "number") parts.push(`${validCount} ${t('trace.validRefs')}`);
+  if (typeof unknownCount === "number" && unknownCount > 0) parts.push(`${unknownCount} ${t('trace.unknownRefs')}`);
   return parts.join(" / ");
 }
 
-export function formatRagKbWarmStartSpan(span: TraceSpan) {
+export function formatRagKbWarmStartSpan(span: TraceSpan, locale: Locale = "en-US") {
+  const t = (key: string) => translate(key, locale);
   if (span.name !== "rag_kb_warm_start") return "";
   const hitCount = numberMetaOrNull(span, "hit_count");
   const sourceCount = numberMetaOrNull(span, "source_count");
   const rejectionCount = numberMetaOrNull(span, "rejection_count");
   const output = parseSpanOutput(span);
   const rejections = arrayValue(output?.rejections);
-  const rejectionSummary = rejections.map(formatKbRejection).filter(Boolean).slice(0, 3);
+  const rejectionSummary = rejections.map((item) => formatKbRejection(item, locale)).filter(Boolean).slice(0, 3);
   const hiddenRejections =
     rejectionCount !== null ? Math.max(0, rejectionCount - rejectionSummary.length) : 0;
   const parts: string[] = [];
-  if (hitCount !== null) parts.push(`${hitCount} KB hits`);
-  if (sourceCount !== null) parts.push(`${sourceCount} accepted`);
-  if (rejectionCount !== null) parts.push(`${rejectionCount} rejected`);
+  if (hitCount !== null) parts.push(`${hitCount} ${t('trace.kbHits')}`);
+  if (sourceCount !== null) parts.push(`${sourceCount} ${t('trace.accepted')}`);
+  if (rejectionCount !== null) parts.push(`${rejectionCount} ${t('trace.rejected')}`);
   if (rejectionSummary.length > 0) {
     parts.push(
-      `rejections ${rejectionSummary.join("; ")}${hiddenRejections > 0 ? ` +${hiddenRejections}` : ""}`,
+      `${t('trace.rejections')} ${rejectionSummary.join("; ")}${hiddenRejections > 0 ? ` +${hiddenRejections}` : ""}`,
     );
   }
   const topReason = stringValue(span.metadata.top_rejection_reason);
-  if (rejectionSummary.length === 0 && topReason) parts.push(`top rejection ${topReason}`);
+  if (rejectionSummary.length === 0 && topReason) parts.push(`${t('trace.topRejection')} ${locale === 'zh-CN' ? displayLabel(topReason, locale) : topReason}`);
   return parts.join(" / ");
 }
 
-export function formatDecisionPayload(event: DecisionReplayEvent) {
+export function formatDecisionPayload(event: DecisionReplayEvent, locale: Locale = "en-US") {
+  const t = (key: string) => translate(key, locale);
+  const label = (value: string) => locale === 'zh-CN' ? displayScope(value, locale) : value;
   const parts: string[] = [];
   if (event.event_type === "claim.validated") {
     const claimCount = numberPayload(event, "claim_count") ?? arrayPayload(event, "claim_ids").length;
     const sourceCount = numberPayload(event, "source_count") ?? arrayPayload(event, "evidence_ids").length;
     const statusCounts = objectPayload(event, "claim_status_counts");
     const releaseGate = objectPayload(event, "release_gate");
-    if (claimCount > 0) parts.push(`${claimCount} validated claims`);
-    if (sourceCount > 0) parts.push(`${sourceCount} scoped sources`);
+    if (claimCount > 0) parts.push(`${claimCount} ${t('trace.validatedClaims')}`);
+    if (sourceCount > 0) parts.push(`${sourceCount} ${t('trace.scopedSources')}`);
     if (statusCounts) {
       const supported = numberValue(statusCounts.supported) ?? 0;
       const weak = numberValue(statusCounts.weak) ?? 0;
       const blocked = numberValue(statusCounts.blocked) ?? 0;
-      parts.push(`supported ${supported} / weak ${weak} / blocked ${blocked}`);
+      parts.push(`${t('trace.supported')} ${supported} / ${t('trace.weak')} ${weak} / ${t('trace.blocked')} ${blocked}`);
     }
     if (releaseGate) {
       const status = stringValue(releaseGate.status);
       const issues = numberValue(releaseGate.issue_count);
-      if (status) parts.push(`release gate ${status}`);
-      if (issues !== null) parts.push(`${issues} gate issues`);
+      if (status) parts.push(`${t('trace.releaseGate')} ${label(status)}`);
+      if (issues !== null) parts.push(`${issues} ${t('trace.gateIssues')}`);
     }
   }
   if (event.event_type === "self_consistency.sampled") {
     const score = numberPayload(event, "self_consistency_score");
     const votes = objectPayload(event, "consistency_votes");
     const minoritySamples = arrayPayload(event, "minority_validation_samples");
-    if (score !== null) parts.push(`score ${score}`);
-    if (minoritySamples.length > 0) parts.push(`${minoritySamples.length} minority samples`);
+    if (score !== null) parts.push(`${t('trace.score')} ${score}`);
+    if (minoritySamples.length > 0) parts.push(`${minoritySamples.length} ${t('trace.minoritySamples')}`);
     if (votes) {
       const textSupport = numberValue(votes.text_support) ?? 0;
       const evidenceQuality = numberValue(votes.evidence_quality) ?? 0;
       const triangulation = numberValue(votes.triangulation) ?? 0;
-      parts.push(`votes text ${textSupport} / quality ${evidenceQuality} / triangulation ${triangulation}`);
+      parts.push(`${t('trace.votesText')} ${textSupport} / ${t('trace.quality')} ${evidenceQuality} / ${t('trace.triangulation')} ${triangulation}`);
     }
   }
   if (event.event_type === "rag.retrieved") {
@@ -128,20 +134,20 @@ export function formatDecisionPayload(event: DecisionReplayEvent) {
     const gapLinks = objectPayload(event, "gap_evidence_links");
     const resultCount = numberPayload(event, "result_count");
     const candidateUrls = arrayPayload(event, "candidate_urls");
-    if (query) parts.push(`query: ${query}`);
-    if (!query && retrievalQueries.length > 0) parts.push(`${retrievalQueries.length} retrieval queries`);
-    if (retrievalContexts.length > 0) parts.push(`${retrievalContexts.length} gap contexts`);
-    if (chunkIds.length > 0) parts.push(`${chunkIds.length} chunks`);
-    if (rerankScores) parts.push(`${Object.keys(rerankScores).length} rerank scores`);
-    if (gapLinks) parts.push(`${Object.keys(gapLinks).length} linked gaps`);
-    if (resultCount !== null) parts.push(`${resultCount} results`);
-    if (candidateUrls.length > 0) parts.push(`${candidateUrls.length} candidate URLs`);
+    if (query) parts.push(`${t('trace.query')}: ${query}`);
+    if (!query && retrievalQueries.length > 0) parts.push(`${retrievalQueries.length} ${t('trace.retrievalQueries')}`);
+    if (retrievalContexts.length > 0) parts.push(`${retrievalContexts.length} ${t('trace.gapContexts')}`);
+    if (chunkIds.length > 0) parts.push(`${chunkIds.length} ${t('trace.chunks')}`);
+    if (rerankScores) parts.push(`${Object.keys(rerankScores).length} ${t('trace.rerankScores')}`);
+    if (gapLinks) parts.push(`${Object.keys(gapLinks).length} ${t('trace.linkedGaps')}`);
+    if (resultCount !== null) parts.push(`${resultCount} ${t('trace.results')}`);
+    if (candidateUrls.length > 0) parts.push(`${candidateUrls.length} ${t('trace.candidateUrls')}`);
   }
   if (event.event_type === "memory.recalled") {
     const score = numberPayload(event, "score") ?? numberPayload(event, "recall_score");
     const candidates = arrayPayload(event, "candidate_ids");
-    if (score !== null) parts.push(`recall ${score}`);
-    if (candidates.length > 0) parts.push(`${candidates.length} memories`);
+    if (score !== null) parts.push(`${t('trace.recall')} ${score}`);
+    if (candidates.length > 0) parts.push(`${candidates.length} ${t('trace.memories')}`);
   }
   if (event.event_type === "memory.feedback_captured") {
     const feedbackId = stringPayload(event, "feedback_id");
@@ -151,21 +157,21 @@ export function formatDecisionPayload(event: DecisionReplayEvent) {
     const candidateStatuses = stringArrayPayload(event, "candidate_statuses");
     const redactionCounts = objectPayload(event, "redaction_counts");
     const messageExcerpt = stringPayload(event, "message_excerpt");
-    if (feedbackId) parts.push(`feedback ${feedbackId}`);
-    if (candidateCount > 0) parts.push(`${candidateCount} candidates`);
-    if (candidateKinds.length > 0) parts.push(`kinds ${candidateKinds.join(", ")}`);
-    if (candidateStatuses.length > 0) parts.push(`statuses ${candidateStatuses.join(", ")}`);
-    if (targetType) parts.push(`target ${targetType}`);
-    if (redactionCounts) parts.push(`${Object.keys(redactionCounts).length} redaction types`);
+    if (feedbackId) parts.push(`${t('trace.feedback')} ${feedbackId}`);
+    if (candidateCount > 0) parts.push(`${candidateCount} ${t('trace.candidates')}`);
+    if (candidateKinds.length > 0) parts.push(`${t('trace.kinds')} ${candidateKinds.map(label).join(", ")}`);
+    if (candidateStatuses.length > 0) parts.push(`${t('trace.statuses')} ${candidateStatuses.map(label).join(", ")}`);
+    if (targetType) parts.push(`${t('trace.target')} ${label(targetType)}`);
+    if (redactionCounts) parts.push(`${Object.keys(redactionCounts).length} ${t('trace.redactionTypes')}`);
     if (messageExcerpt) parts.push(clipPayloadText(messageExcerpt));
   }
   if (event.event_type === "hitl.reviewed") {
     const decision = stringPayload(event, "decision");
     const stage = stringPayload(event, "stage") ?? event.subagent;
     const dimensions = arrayPayload(event, "dimensions");
-    if (decision) parts.push(`decision ${decision}`);
-    if (stage) parts.push(`stage ${stage}`);
-    if (dimensions.length > 0) parts.push(`${dimensions.length} dimensions`);
+    if (decision) parts.push(`${t('trace.decision')} ${label(decision)}`);
+    if (stage) parts.push(`${t('trace.stage')} ${label(stage)}`);
+    if (dimensions.length > 0) parts.push(`${dimensions.length} ${t('trace.dimensions')}`);
   }
   if (event.event_type === "qa.blocked" || event.event_type === "redo.routed") {
     const issueId = stringPayload(event, "issue_id");
@@ -178,39 +184,40 @@ export function formatDecisionPayload(event: DecisionReplayEvent) {
     const competitor = scope ? stringValue(scope.target_competitor) : "";
     const claimCount = arrayPayload(event, "claim_ids").length || event.claim_ids.length;
     const evidenceCount = arrayPayload(event, "evidence_ids").length || event.evidence_ids.length;
-    if (issueId) parts.push(`issue ${issueId}`);
+    if (issueId) parts.push(`${t('trace.issue')} ${issueId}`);
     if (problem) parts.push(clipPayloadText(problem));
-    if (severity) parts.push(`severity ${severity}`);
-    if (kind) parts.push(`scope ${kind}`);
-    if (!kind && scopeText) parts.push(`scope ${scopeText}`);
-    if (subagent) parts.push(`subagent ${subagent}`);
-    if (competitor) parts.push(`competitor ${competitor}`);
-    if (claimCount > 0) parts.push(`${claimCount} claims`);
-    if (evidenceCount > 0) parts.push(`${evidenceCount} evidence`);
+    if (severity) parts.push(`${t('trace.severity')} ${label(severity)}`);
+    if (kind) parts.push(`${t('trace.scope')} ${label(kind)}`);
+    if (!kind && scopeText) parts.push(`${t('trace.scope')} ${label(scopeText)}`);
+    if (subagent) parts.push(`${t('trace.subagent')} ${label(subagent)}`);
+    if (competitor) parts.push(`${t('trace.competitor')} ${competitor}`);
+    if (claimCount > 0) parts.push(`${claimCount} ${t('trace.claims')}`);
+    if (evidenceCount > 0) parts.push(`${evidenceCount} ${t('trace.evidence')}`);
   }
   if (event.event_type === "benchmark.scored") {
     const score = numberPayload(event, "score");
-    if (score !== null) parts.push(`score ${score}`);
+    if (score !== null) parts.push(`${t('trace.score')} ${score}`);
   }
   if (event.event_type === "report.ready") {
     const versionId = stringPayload(event, "updated_report_version_id") || stringPayload(event, "report_version_id");
     const releaseDelta = objectPayload(event, "release_gate_delta");
     const gapLinks = objectPayload(event, "gap_evidence_links");
-    if (versionId) parts.push(`version ${versionId}`);
-    if (gapLinks) parts.push(`${Object.keys(gapLinks).length} linked gaps`);
+    if (versionId) parts.push(`${t('trace.version')} ${versionId}`);
+    if (gapLinks) parts.push(`${Object.keys(gapLinks).length} ${t('trace.linkedGaps')}`);
     if (releaseDelta) {
       const improved = booleanValue(releaseDelta.release_gate_improved);
       const blockerDelta = numberValue(releaseDelta.release_gate_blocker_delta);
       const readinessDelta = numberValue(releaseDelta.readiness_score_delta);
-      if (improved !== null) parts.push(`gate improved ${improved ? "yes" : "no"}`);
-      if (blockerDelta !== null) parts.push(`blocker delta ${blockerDelta}`);
-      if (readinessDelta !== null) parts.push(`readiness ${readinessDelta}`);
+      if (improved !== null) parts.push(`${t('trace.gateImproved')} ${improved ? t('trace.yes') : t('trace.no')}`);
+      if (blockerDelta !== null) parts.push(`${t('trace.blockerDelta')} ${blockerDelta}`);
+      if (readinessDelta !== null) parts.push(`${t('trace.readiness')} ${readinessDelta}`);
     }
   }
   return parts.join(" / ");
 }
 
-export function formatModuleExecutionStatus(payload: Record<string, unknown>) {
+export function formatModuleExecutionStatus(payload: Record<string, unknown>, locale: Locale = "en-US") {
+  const t = (key: string) => translate(key, locale);
   const moduleStatus = stringValue(payload.module_status);
   const fallback = objectValue(payload.fallback);
   const fallbackUsed = fallback ? booleanValue(fallback.used) : null;
@@ -218,14 +225,14 @@ export function formatModuleExecutionStatus(payload: Record<string, unknown>) {
     const reason = fallback ? stringValue(fallback.reason) : "";
     const timeoutSeconds = fallback ? numberValue(fallback.timeout_seconds) : null;
     const error = fallback ? stringValue(fallback.error) : "";
-    const parts = ["Fallback"];
-    if (reason) parts.push(reason);
-    if (timeoutSeconds !== null) parts.push(`${timeoutSeconds}s`);
+    const parts = [t('trace.fallback')];
+    if (reason) parts.push(locale === 'zh-CN' ? displayLabel(reason, locale) : reason);
+    if (timeoutSeconds !== null) parts.push(`${timeoutSeconds}${t('common.seconds')}`);
     if (error) parts.push(clipPayloadText(error));
     return parts.join(": ");
   }
   if (moduleStatus === "llm" || fallbackUsed === false) {
-    return "LLM";
+    return locale === 'zh-CN' ? displayLabel('llm', locale) : "LLM";
   }
   return "";
 }
@@ -295,10 +302,11 @@ function parseSpanOutput(span: TraceSpan) {
   }
 }
 
-function formatKbRejection(value: unknown) {
+function formatKbRejection(value: unknown, locale: Locale) {
   const item = objectValue(value);
   if (!item) return "";
-  const reason = stringValue(item.reason) || "rejected";
+  const rawReason = stringValue(item.reason) || "rejected";
+  const reason = locale === 'zh-CN' ? displayLabel(rawReason, locale) : rawReason;
   const rank = numberValue(item.rank);
   const documentId = stringValue(item.document_id);
   const chunkId = stringValue(item.chunk_id);
@@ -306,6 +314,6 @@ function formatKbRejection(value: unknown) {
   const locator = documentId || chunkId;
   const parts = [`${reason}${rank !== null ? `@${rank}` : ""}`];
   if (locator) parts.push(locator);
-  if (sourceType) parts.push(sourceType);
+  if (sourceType) parts.push(locale === 'zh-CN' ? displayLabel(sourceType, locale) : sourceType);
   return parts.join(" ");
 }

@@ -80,7 +80,7 @@ export function sourceTypeLabel(sourceType: string) {
   return "llm";
 }
 
-export function buildCitationLabels(sourceGroups: SourceTokenGroup[]) {
+export function buildCitationLabels(sourceGroups: SourceTokenGroup[], missingLabel = "missing") {
   const labels = new Map<string, string>();
   let citedIndex = 1;
   let missingIndex = 1;
@@ -89,7 +89,7 @@ export function buildCitationLabels(sourceGroups: SourceTokenGroup[]) {
       labels.set(group.sourceId, `S${citedIndex}`);
       citedIndex += 1;
     } else {
-      labels.set(group.sourceId, `missing ${missingIndex}`);
+      labels.set(group.sourceId, `${missingLabel} ${missingIndex}`);
       missingIndex += 1;
     }
   }

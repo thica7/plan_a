@@ -1,5 +1,6 @@
 import type { AnalysisPlanTask } from "../../api/types";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from "../../i18n/display";
 import { MetricValue } from "./MetricValue";
 import {
   summarizeTaskStages,
@@ -8,7 +9,7 @@ import {
 } from "./utils";
 
 export function TaskDecompositionPanel({ tasks }: { tasks: AnalysisPlanTask[] }) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const stageCounts = summarizeTaskStages(tasks);
   const watchTasks = [...tasks]
     .sort((left, right) => {
@@ -25,30 +26,30 @@ export function TaskDecompositionPanel({ tasks }: { tasks: AnalysisPlanTask[] })
     <aside className="qa-panel run-quality-panel">
       <div className="panel-heading-row">
         <h2>{t('tasks.title')}</h2>
-        <span className="muted-text">{tasks.length} tasks</span>
+        <span className="muted-text">{tasks.length} {t('tasks.count')}</span>
       </div>
       <div className="metric-grid compact">
         <MetricValue label={t('tasks.collector')} value={String(stageCounts.collector ?? 0)} />
         <MetricValue label={t('tasks.analyst')} value={String(stageCounts.analyst ?? 0)} />
-        <MetricValue label="Research" value={String(stageCounts.survey_interview ?? 0)} />
-        <MetricValue label="High priority" value={String(highPriorityCount)} />
+        <MetricValue label={t('tasks.research')} value={String(stageCounts.survey_interview ?? 0)} />
+        <MetricValue label={t('tasks.highPriority')} value={String(highPriorityCount)} />
       </div>
       <div className="project-meta-row">
-        <span>Max turns {maxTurnBudget}</span>
-        <span>Stages {Object.keys(stageCounts).length}</span>
+        <span>{t('tasks.maxTurns')} {maxTurnBudget}</span>
+        <span>{t('tasks.stages')} {Object.keys(stageCounts).length}</span>
       </div>
       {watchTasks.length > 0 ? (
         <div className="recommendation-list compact">
           {watchTasks.map((task) => (
             <article className={`recommendation-card ${taskPriorityClass(task.priority)}`} key={task.id}>
-              <strong>{task.stage}</strong>
+              <strong>{displayLabel(task.stage, locale)}</strong>
               <span>
-                {task.competitor ?? "all competitors"} / {task.dimension} / {task.priority}
+                {task.competitor ?? t('tasks.allCompetitors')} / {displayLabel(task.dimension, locale)} / {displayLabel(task.priority, locale)}
               </span>
               <p>{task.reason}</p>
               <div className="project-meta-row">
-                <span>Turns {task.max_turns}</span>
-                <span>Deps {task.depends_on.length}</span>
+                <span>{t('tasks.turns')} {task.max_turns}</span>
+                <span>{t('tasks.deps')} {task.depends_on.length}</span>
               </div>
             </article>
           ))}

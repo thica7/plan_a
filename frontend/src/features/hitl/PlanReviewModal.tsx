@@ -1,5 +1,7 @@
 import { CheckCircle2, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useTranslation } from '../../stores/i18n';
+import { displayLabel } from "../../i18n/display";
+import { SystemMessage } from "../../i18n/SystemMessage";
 import type {
   CompetitorReviewDecision,
   CompetitorReviewRow,
@@ -34,42 +36,44 @@ export function PlanReviewModal({
   onAccept,
   onApply,
 }: Props) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
 
   return (
     <section className="hitl-panel">
       <div>
         <h2>{t('hitl.planReview')}</h2>
-        <p>{message}</p>
+        <p><SystemMessage message={message} /></p>
       </div>
       <label>
-        Dimensions
-        <input value={dimensions} onChange={(event) => onDimensionsChange(event.target.value)} />
+        {t('hitl.dimensionIdentifiers')}
+        <input aria-label={t('hitl.dimensionIdentifiers')} value={dimensions} onChange={(event) => onDimensionsChange(event.target.value)} />
         <span className="hitl-field-note">
-          {canApplyChanges ? "Edited plan will replace the planner scope." : "No plan changes detected."}
+          {canApplyChanges ? t('hitl.editedPlanReplace') : t('hitl.noPlanChanges')}
         </span>
+        <span className="hitl-field-note">{t('hitl.dimensionsHint')}</span>
+        <span>{dimensions.split(',').map((dimension) => displayLabel(dimension.trim(), locale)).join('、')}</span>
       </label>
       <div className="competitor-review-panel">
         <div className="competitor-review-heading">
           <div>
-            <strong>Competitors</strong>
-            <span>Review discovered competitors before collection starts.</span>
+            <strong>{t('newRun.competitors')}</strong>
+            <span>{t('hitl.reviewCompetitors')}</span>
           </div>
           <button className="icon-text-button" onClick={onAddCompetitor} type="button">
             <Plus size={15} aria-hidden />
-            Add
+            {t('common.add')}
           </button>
         </div>
         <div className="competitor-review-table-wrap">
           <table className="competitor-review-table">
             <thead>
               <tr>
-                <th>Competitor</th>
-                <th>Decision</th>
-                <th>Confidence</th>
-                <th>Why / evidence</th>
-                <th>Reviewer note</th>
-                <th aria-label="Actions" />
+                <th>{t('knowledge.competitor')}</th>
+                <th>{t('hitl.decision')}</th>
+                <th>{t('hitl.confidence')}</th>
+                <th>{t('hitl.evidenceReason')}</th>
+                <th>{t('hitl.reviewerNote')}</th>
+                <th aria-label={t('common.actions')} />
               </tr>
             </thead>
             <tbody>
@@ -77,16 +81,16 @@ export function PlanReviewModal({
                 <tr key={row.id} className={row.decision !== "keep" ? "muted-row" : undefined}>
                   <td>
                     <input
-                      aria-label={`Competitor ${index + 1} name`}
+                      aria-label={t('hitl.competitorName').replace('{index}', String(index + 1))}
                       value={row.name}
                       onChange={(event) => onCompetitorNameChange(row.id, event.target.value)}
-                      placeholder="Name"
+                      placeholder={t('common.name')}
                     />
-                    {row.manual ? <span className="manual-chip">Manual</span> : null}
+                    {row.manual ? <span className="manual-chip">{t('newRun.manual')}</span> : null}
                   </td>
                   <td>
                     <select
-                      aria-label={`Competitor ${index + 1} decision`}
+                      aria-label={t('hitl.competitorDecision').replace('{index}', String(index + 1))}
                       value={row.decision}
                       onChange={(event) =>
                         onCompetitorDecisionChange(
@@ -95,22 +99,22 @@ export function PlanReviewModal({
                         )
                       }
                     >
-                      <option value="keep">Keep</option>
-                      <option value="remove">Remove</option>
-                      <option value="mark_unrelated">Unrelated</option>
+                      <option value="keep">{displayLabel('keep', locale)}</option>
+                      <option value="remove">{displayLabel('remove', locale)}</option>
+                      <option value="mark_unrelated">{displayLabel('mark_unrelated', locale)}</option>
                     </select>
                   </td>
                   <td>
-                    <span className="confidence-pill">{row.confidenceLabel || "Manual"}</span>
+                    <span className="confidence-pill">{row.confidenceLabel ? displayLabel(row.confidenceLabel, locale) : t('newRun.manual')}</span>
                   </td>
                   <td>
                     <div className="competitor-evidence-cell">
-                      {row.rationale ? <span>{row.rationale}</span> : <span>No system rationale</span>}
+                      {row.rationale ? <span>{row.rationale}</span> : <span>{t('hitl.noRationale')}</span>}
                       {row.evidenceUrls.length ? (
                         <div>
                           {row.evidenceUrls.slice(0, 2).map((url, evidenceIndex) => (
                             <a href={url} key={url} rel="noreferrer" target="_blank">
-                              {row.evidenceTitles[evidenceIndex] || `Source ${evidenceIndex + 1}`}
+                              {row.evidenceTitles[evidenceIndex] || `${t('common.source')} ${evidenceIndex + 1}`}
                             </a>
                           ))}
                         </div>
@@ -119,18 +123,18 @@ export function PlanReviewModal({
                   </td>
                   <td>
                     <input
-                      aria-label={`Competitor ${index + 1} note`}
+                      aria-label={t('hitl.competitorNote').replace('{index}', String(index + 1))}
                       value={row.note}
                       onChange={(event) => onCompetitorNoteChange(row.id, event.target.value)}
-                      placeholder="Reason or source"
+                      placeholder={t('hitl.reasonOrSource')}
                     />
                   </td>
                   <td>
                     <button
-                      aria-label={`Remove ${row.name || "competitor"}`}
+                      aria-label={t('hitl.removeCompetitor').replace('{name}', row.name || t('knowledge.competitor'))}
                       className="icon-button"
                       onClick={() => onDeleteCompetitor(row.id)}
-                      title="Remove from review"
+                      title={t('hitl.removeFromReview')}
                       type="button"
                     >
                       <Trash2 size={15} aria-hidden />
@@ -151,7 +155,7 @@ export function PlanReviewModal({
           className="icon-text-button"
           disabled={!canApplyChanges}
           onClick={onApply}
-          title={canApplyChanges ? "Apply edited plan and resume" : "Edit the plan to enable this action"}
+          title={canApplyChanges ? t('hitl.applyAndResume') : t('hitl.editToEnable')}
           type="button"
         >
           <SlidersHorizontal size={15} aria-hidden />
@@ -161,4 +165,3 @@ export function PlanReviewModal({
     </section>
   );
 }
-

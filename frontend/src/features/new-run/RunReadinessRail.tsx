@@ -17,6 +17,8 @@ import type {
 } from "../../api/types";
 import { ActionButton } from "../../components/interaction/ActionButton";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel, runtimeDiagnostic } from "../../i18n/display";
+import { SystemMessage } from "../../i18n/SystemMessage";
 import { RuntimeLine } from "./RuntimeLine";
 import type { CollaborationMode, CompetitorMode, ExecutionMode, LayerSelection, ResearchDepth } from "./types";
 
@@ -61,7 +63,7 @@ export function RunReadinessRail({
   selectedScenario,
   setAutoRedoWarn,
 }: RunReadinessRailProps) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
 
   const llmReady = Boolean(
     (runtime?.has_ark_api_key && runtime.has_ark_model) ||
@@ -108,7 +110,7 @@ export function RunReadinessRail({
 
         <div className="readiness-checklist" aria-label={t('run.readiness.checklist')}>
           <ReadinessItem icon={<ShieldCheck size={15} />} ok={Boolean(quotaDecision?.allowed ?? true)} title={t('run.workspace')}>
-            {quotaDecision?.allowed === false ? quotaDecision.reason : t('run.acmeCorp')}
+            {quotaDecision?.allowed === false ? <SystemMessage message={quotaDecision.reason} /> : t('run.acmeCorp')}
           </ReadinessItem>
           <ReadinessItem icon={<FileCheck2 size={15} />} ok={selected.length > 0} title={t('newRun.dimensions')}>
             {selected.length} {t('run.selected')}
@@ -175,19 +177,19 @@ export function RunReadinessRail({
         <div className="readiness-section">
           <header>
             <h3>{t('run.runtimeSignals')}</h3>
-            <span>{executionMode}</span>
+            <span>{displayLabel(executionMode, locale)}</span>
           </header>
           <div className="runtime-lines compact">
             <RuntimeLine ok={searchReady}>
               {searchReady ? `${runtime?.web_search_provider} ${t('run.searchEnabled')}` : t('run.searchCredentialsMissing')}
             </RuntimeLine>
             <RuntimeLine ok={temporalReady}>
-              {temporalReady ? `Temporal ${runtime?.temporal_task_queue}` : runtime?.temporal_cutover_reason ?? t('run.temporalUnavailable')}
+              {temporalReady ? `Temporal ${runtime?.temporal_task_queue}` : <SystemMessage message={runtime?.temporal_cutover_reason ?? t('run.temporalUnavailable')} />}
             </RuntimeLine>
             <RuntimeLine ok={pydanticReady}>
               {pydanticReady
                 ? `Pydantic-AI ${runtime?.pydantic_ai_model_name}`
-                : runtime?.pydantic_ai_model_backed_reason ?? t('run.pydanticDisabled')}
+                : <SystemMessage message={runtime?.pydantic_ai_model_backed_reason ?? t('run.pydanticDisabled')} />}
             </RuntimeLine>
             <RuntimeLine ok={complianceReady}>
               {complianceReady ? t('run.complianceRedactionEnabled') : t('run.complianceRedactionDisabled')}
@@ -215,7 +217,7 @@ export function RunReadinessRail({
         </div>
 
         {manualScopeError ? <p className="error-line" role="alert">{manualScopeError}</p> : null}
-        {error ? <p className="error-line">{error}</p> : null}
+        {error ? <p className="error-line"><SystemMessage message={error} /></p> : null}
 
         <ActionButton
           className="primary-button full-width"
@@ -228,7 +230,7 @@ export function RunReadinessRail({
           disabled={Boolean(manualScopeError) || targetName.trim().length < 2 || selected.length === 0 || runBlockedByQuota || (competitorMode === "auto" && !searchReady)}
           disabledReason={
             runBlockedByQuota
-              ? quotaDecision?.reason || t('run.disabled.quota')
+              ? runtimeDiagnostic(quotaDecision?.reason || t('run.disabled.quota'), locale)
               : manualScopeError
                 ? t('run.disabled.scope')
               : targetName.trim().length < 2
@@ -252,7 +254,7 @@ export function RunReadinessRail({
         <dl className="contract-list">
           <div>
             <dt>{t('runHeader.layer')}</dt>
-            <dd>{selectedLayer}</dd>
+            <dd>{displayLabel(selectedLayer, locale)}</dd>
           </div>
           <div>
             <dt>{t('newRun.researchDepth')}</dt>
@@ -264,7 +266,7 @@ export function RunReadinessRail({
           </div>
           <div>
             <dt>{t('runHeader.scenario')}</dt>
-            <dd>{selectedScenario?.name ?? (dynamicScenarioSelected ? t('run.dynamic') : t('newRun.auto'))}</dd>
+            <dd>{selectedScenario ? displayLabel(selectedScenario.name, locale) : dynamicScenarioSelected ? t('run.dynamic') : t('newRun.auto')}</dd>
           </div>
           <div>
             <dt>{t('newRun.competitors')}</dt>
@@ -273,7 +275,7 @@ export function RunReadinessRail({
         </dl>
         <div className="contract-chips">
           {selected.map((dimension) => (
-            <span key={dimension}>{dimension}</span>
+            <span key={dimension}>{displayLabel(dimension, locale)}</span>
           ))}
         </div>
       </section>

@@ -43,12 +43,20 @@ function renderModal(overrides: Partial<ComponentProps<typeof PlanReviewModal>> 
 }
 
 describe("PlanReviewModal", () => {
+  it("labels editable identifiers explicitly and previews their translated names", () => {
+    const props = renderModal();
+    const dimensions = screen.getByLabelText('维度标识');
+    expect(dimensions).toHaveValue('pricing, feature');
+    expect(screen.getByText('价格与成本、功能体验')).toBeInTheDocument();
+    fireEvent.change(dimensions, { target: { value: "feature, pricing, custom" } });
+    expect(props.onDimensionsChange).toHaveBeenCalledWith("feature, pricing, custom");
+  });
   it("renders editable competitor review rows", () => {
     renderModal();
 
-    expect(screen.getByText("Competitors")).toBeInTheDocument();
-    expect(screen.getByLabelText("Competitor 1 name")).toHaveValue("Cursor");
-    expect(screen.getByLabelText("Competitor 1 decision")).toHaveValue("keep");
+    expect(screen.getByRole("columnheader", { name: "竞争对手" })).toBeInTheDocument();
+    expect(screen.getByLabelText("竞品 1 名称")).toHaveValue("Cursor");
+    expect(screen.getByLabelText("竞品 1 决定")).toHaveValue("keep");
     expect(screen.getByRole("link", { name: "Cursor" })).toHaveAttribute("href", "https://cursor.com");
   });
 
@@ -56,11 +64,11 @@ describe("PlanReviewModal", () => {
     const user = userEvent.setup();
     const props = renderModal();
 
-    fireEvent.change(screen.getByLabelText("Competitor 1 name"), { target: { value: "Cursor AI" } });
-    fireEvent.change(screen.getByLabelText("Competitor 1 decision"), { target: { value: "mark_unrelated" } });
-    fireEvent.change(screen.getByLabelText("Competitor 1 note"), { target: { value: "Wrong segment" } });
-    await user.click(screen.getByRole("button", { name: "Remove Cursor" }));
-    await user.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.change(screen.getByLabelText("竞品 1 名称"), { target: { value: "Cursor AI" } });
+    fireEvent.change(screen.getByLabelText("竞品 1 决定"), { target: { value: "mark_unrelated" } });
+    fireEvent.change(screen.getByLabelText("竞品 1 说明"), { target: { value: "Wrong segment" } });
+    await user.click(screen.getByRole("button", { name: "移除 Cursor" }));
+    await user.click(screen.getByRole("button", { name: "添加" }));
 
     expect(props.onCompetitorNameChange).toHaveBeenLastCalledWith("candidate-1-cursor", "Cursor AI");
     expect(props.onCompetitorDecisionChange).toHaveBeenCalledWith("candidate-1-cursor", "mark_unrelated");
@@ -72,6 +80,6 @@ describe("PlanReviewModal", () => {
   it("disables apply until the plan has a real edit", () => {
     renderModal({ canApplyChanges: false });
 
-    expect(screen.getByTitle("Edit the plan to enable this action")).toBeDisabled();
+    expect(screen.getByTitle("修改计划后可应用")).toBeDisabled();
   });
 });

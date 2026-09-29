@@ -1,5 +1,7 @@
 import type { RunEvent } from "../../api/sse_types";
 import type { RunStatus } from "../../api/types";
+import { translate, type Locale } from "../../stores/i18n";
+import { displayLabel, displayScope } from "../../i18n/display";
 import { nodeIds, singleNodes } from "./graphDefinition";
 import type {
   FlowNodeId,
@@ -102,20 +104,20 @@ export function buildPhaseReturns(events: RunEvent[]) {
   };
 }
 
-export function buildScopedRedoLoops(events: RunEvent[]): ScopedRedoItem[] {
+export function buildScopedRedoLoops(events: RunEvent[], locale: Locale = "en-US"): ScopedRedoItem[] {
   return events
     .filter((event) => event.type === "node_started" && event.agent === "orchestrator" && event.message.startsWith("Scoped redo started"))
     .map((event) => {
       const issue = readIssue(event);
       const scope = readRedoScope(event);
-      const target = formatRedoTarget(scope.kind, scope.targetSubagent, scope.targetCompetitor);
+      const target = formatRedoTarget(scope.kind, scope.targetSubagent, scope.targetCompetitor, locale);
       return {
         id: event.id,
         from: "Final QA",
         to: target,
         severity: issue.severity,
         problem: issue.problem,
-        scope: [scope.kind, scope.targetCompetitor, scope.targetSubagent].filter(Boolean).join(" / "),
+        scope: [displayLabel(scope.kind, locale), scope.targetCompetitor, scope.targetSubagent ? displayScope(scope.targetSubagent, locale) : null].filter(Boolean).join(" / "),
       };
     });
 }
@@ -219,38 +221,33 @@ export function joinAttemptCount(events: RunEvent[], agent: ParallelAgent) {
   );
 }
 
-export function qaCaption(events: RunEvent[], phase: "collect" | "analyst", base: string) {
+export function qaCaption(events: RunEvent[], phase: "collect" | "analyst", base: string, locale: Locale = "en-US") {
+  const t = (key: string) => translate(key, locale);
   const checks = events.filter((event) => event.type === "node_started" && event.agent === "qa" && event.subagent === phase).length;
   const issues = events.filter((event) => event.type === "qa_issue" && event.subagent === phase).map(readIssue);
   const blockerCount = issues.filter((issue) => issue.severity === "blocker").length;
   const warnCount = issues.filter((issue) => issue.severity === "warn").length;
   const suffix = [
-    `${Math.max(1, checks)} check(s)`,
-    blockerCount > 0 ? `${blockerCount} blocker` : null,
-    warnCount > 0 ? `${warnCount} warn` : null,
+    `${Math.max(1, checks)} ${t('graph.checks')}`,
+    blockerCount > 0 ? `${blockerCount} ${displayLabel('blocker', locale)}` : null,
+    warnCount > 0 ? `${warnCount} ${displayLabel('warn', locale)}` : null,
   ].filter(Boolean).join(" / ");
   return `${base} / ${suffix}`;
 }
 
-export function branchLabel(branch: string) {
+export function branchLabel(branch: string, locale: Locale = "en-US") {
   const parsed = parseBranch(branch);
-  return parsed.competitor ? `${parsed.competitor} / ${parsed.dimension}` : `slice=${branch}`;
+  return parsed.competitor ? `${parsed.competitor} / ${displayLabel(parsed.dimension, locale)}` : `${translate('graph.slice', locale)}=${displayLabel(branch, locale)}`;
 }
 
-export function collectorCaption(branch: string) {
+export function collectorCaption(branch: string, locale: Locale = "en-US") {
   const dimension = parseBranch(branch).dimension;
-  if (dimension === "pricing") return "search -> fetch -> extract";
-  if (dimension === "review") return "review site -> fetch -> extract";
-  if (dimension === "persona") return "survey sim + interview";
-  return "search -> fetch docs -> extract";
+  return translate(`graph.collectorCaption.${['pricing', 'review', 'persona'].includes(dimension) ? dimension : 'default'}`, locale);
 }
 
-export function analystCaption(branch: string) {
+export function analystCaption(branch: string, locale: Locale = "en-US") {
   const dimension = parseBranch(branch).dimension;
-  if (dimension === "pricing") return "normalize units + citations";
-  if (dimension === "persona") return "sentiment aggregation";
-  if (dimension === "swot") return "cross-competitor view";
-  return "citation-checked findings";
+  return translate(`graph.analystCaption.${['pricing', 'persona', 'swot'].includes(dimension) ? dimension : 'default'}`, locale);
 }
 
 export function formatRunStatus(status: RunStatus) {
@@ -374,13 +371,12 @@ function readRedoScope(event: RunEvent) {
   return { kind: "full", targetSubagent: null, targetCompetitor: null };
 }
 
-function formatRedoTarget(kind: string, targetSubagent: string | null, targetCompetitor: string | null) {
-  const target = [targetCompetitor, targetSubagent].filter(Boolean).join(" / ");
-  if (kind === "collector") return target ? `Collector / ${target}` : "Collector";
-  if (kind === "analyst") return target ? `Analyst / ${target}` : "Analyst";
-  if (kind === "comparator") return "Comparator";
-  if (kind === "writer_only") return "Writer";
-  return "Planner";
+function formatRedoTarget(kind: string, targetSubagent: string | null, targetCompetitor: string | null, locale: Locale) {
+  const target = [targetCompetitor, targetSubagent ? displayScope(targetSubagent, locale) : null].filter(Boolean).join(" / ");
+  if (kind === "collector" || kind === "analyst") return `${displayLabel(kind, locale)}${target ? ` / ${target}` : ''}`;
+  if (kind === "comparator") return displayLabel('comparator', locale);
+  if (kind === "writer_only") return displayLabel('writer', locale);
+  return displayLabel('planner', locale);
 }
 
 function branchId(dimension: string, competitor: string) {

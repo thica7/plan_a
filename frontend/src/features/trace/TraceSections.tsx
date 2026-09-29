@@ -2,6 +2,8 @@ import type { RunEvent } from "../../api/sse_types";
 import type { DecisionReplayReport, RunMetrics, TraceSpan } from "../../api/types";
 import { formatDecisionPayload, formatModuleExecutionStatus, formatSpanMeta, type ContextRow } from "./traceModel";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel, displayScope } from "../../i18n/display";
+import { SystemMessage } from "../../i18n/SystemMessage";
 
 export function TraceMetricsBar({
   metrics,
@@ -13,17 +15,17 @@ export function TraceMetricsBar({
   const { t } = useTranslation();
   const items = [
     [t("trace.spans"), metrics.total_spans],
-    [t("trace.duration"), `${metrics.total_duration_ms}ms`],
-    ["LLM", metrics.llm_calls],
-    ["Search", metrics.search_calls],
-    ["Fetch", metrics.fetch_calls],
-    ["Tool", toolSpanCount],
-    ["Tokens est.", metrics.input_tokens_estimate + metrics.output_tokens_estimate],
-    ["Coverage", `${Math.round(metrics.source_coverage_rate * 100)}%`],
-    ["Verified", `${Math.round(metrics.verified_source_rate * 100)}%`],
-    ["Cited claims", `${Math.round(metrics.claim_citation_rate * 100)}%`],
-    ["Schema", `${Math.round(metrics.schema_pass_rate * 100)}%`],
-    ["QA", metrics.qa_issue_count],
+    [t("trace.duration"), `${metrics.total_duration_ms}${t('common.milliseconds')}`],
+    [t('cost.llm'), metrics.llm_calls],
+    [t('trace.search'), metrics.search_calls],
+    [t('trace.fetch'), metrics.fetch_calls],
+    [t('trace.tool'), toolSpanCount],
+    [t('trace.tokensEst'), metrics.input_tokens_estimate + metrics.output_tokens_estimate],
+    [t('summary.coverage'), `${Math.round(metrics.source_coverage_rate * 100)}%`],
+    [t('summary.verified'), `${Math.round(metrics.verified_source_rate * 100)}%`],
+    [t('summary.citedClaims'), `${Math.round(metrics.claim_citation_rate * 100)}%`],
+    [t('reviewOverview.schemaPass'), `${Math.round(metrics.schema_pass_rate * 100)}%`],
+    [t('summary.qaIssues'), metrics.qa_issue_count],
   ];
   return (
     <div className="trace-metrics">
@@ -38,49 +40,49 @@ export function TraceMetricsBar({
 }
 
 export function DecisionReplaySection({ replay }: { replay: DecisionReplayReport | null | undefined }) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   if (!replay) return null;
   const replayEvents = replay.events.slice(0, 12);
   return (
     <div className="decision-replay">
       <div className="panel-heading-row">
-        <h3>Decision replay</h3>
-        <span className="muted-text">{replay.replay_coverage_score}% coverage</span>
+        <h3>{t('trace.decisionReplay')}</h3>
+        <span className="muted-text">{replay.replay_coverage_score}% {t('summary.coverage')}</span>
       </div>
       <div className="trace-metrics compact">
         <span>
-          Events
+          {t('graph.events')}
           <strong>{replay.event_count}</strong>
         </span>
         <span>
-          Blockers
+          {t('report.layers.qaBlockers')}
           <strong>{replay.blocker_count}</strong>
         </span>
         <span>
-          Warnings
+          {t('trace.warnings')}
           <strong>{replay.warn_count}</strong>
         </span>
         <span>
-          Types
+          {t('trace.types')}
           <strong>{Object.keys(replay.event_type_counts).length}</strong>
         </span>
       </div>
       {replayEvents.length > 0 ? (
         <ol className="trace-list replay-list">
           {replayEvents.map((event) => {
-            const payloadSummary = formatDecisionPayload(event);
+            const payloadSummary = formatDecisionPayload(event, locale);
             return (
               <li key={event.id}>
                 <span>{event.source_event_id ?? "S"}</span>
-                <strong>{event.event_type}</strong>
+                <strong title={event.event_type}>{displayLabel(event.event_type, locale)}</strong>
                 <em>
-                  {event.agent || "system"}
-                  {event.subagent ? `/${event.subagent}` : ""}
+                  {displayLabel(event.agent || "system", locale)}
+                  {event.subagent ? `/${displayScope(event.subagent, locale)}` : ""}
                 </em>
-                <p>{event.message}</p>
+                <p><SystemMessage message={event.message} /></p>
                 <small>
-                  {event.evidence_ids.length} evidence / {event.claim_ids.length} claims /{" "}
-                  {event.related_span_ids.length} spans
+                  {event.evidence_ids.length} {t('trace.evidence')} / {event.claim_ids.length} {t('trace.claims')} /{" "}
+                  {event.related_span_ids.length} {t('trace.spans')}
                 </small>
                 {payloadSummary ? <small className="replay-payload">{payloadSummary}</small> : null}
               </li>
@@ -95,24 +97,25 @@ export function DecisionReplaySection({ replay }: { replay: DecisionReplayReport
 }
 
 export function ContextRows({ rows }: { rows: ContextRow[] }) {
+  const { locale, t } = useTranslation();
   if (rows.length === 0) return null;
   return (
-    <div className="context-list" aria-label="Subagent contexts">
+    <div className="context-list" aria-label={t('trace.contexts')}>
       {rows.map((row) => (
         <article key={row.contextId}>
           <div>
             <strong>
-              {row.agent}
-              {row.subagent ? `/${row.subagent}` : ""}
+              {displayLabel(row.agent, locale)}
+              {row.subagent ? `/${displayScope(row.subagent, locale)}` : ""}
             </strong>
             <code>{row.shortContextId}</code>
           </div>
-          <span>LLM {row.llm}</span>
-          <span>Search {row.search}</span>
-          <span>Fetch {row.fetch}</span>
-          <span>Tool {row.tool}</span>
+          <span>{t('cost.llm')} {row.llm}</span>
+          <span>{t('trace.search')} {row.search}</span>
+          <span>{t('trace.fetch')} {row.fetch}</span>
+          <span>{t('trace.tool')} {row.tool}</span>
           <em>
-            {row.messageCount} messages / {row.toolCallCount} tool calls
+            {row.messageCount} {t('messages.count')} / {row.toolCallCount} {t('messages.toolCallCount')}
           </em>
         </article>
       ))}
@@ -121,24 +124,25 @@ export function ContextRows({ rows }: { rows: ContextRow[] }) {
 }
 
 export function SpanList({ spans }: { spans: TraceSpan[] }) {
+  const { locale, t } = useTranslation();
   if (spans.length === 0) return null;
   return (
     <ol className="span-list">
       {spans.map((span) => (
         <li key={span.id} className={span.status}>
           <div>
-            <strong>{span.kind}</strong>
+            <strong>{displayLabel(span.kind, locale)}</strong>
             <span>
-              {span.agent}
-              {span.subagent ? `/${span.subagent}` : ""}
+              {displayLabel(span.agent, locale)}
+              {span.subagent ? `/${displayScope(span.subagent, locale)}` : ""}
             </span>
           </div>
           <div>
-            <em>{span.name}</em>
+            <em title={span.name}>{displayLabel(span.name, locale)}</em>
             <span>
-              {span.duration_ms}ms / in {span.input_tokens_estimate} / out {span.output_tokens_estimate}
+              {span.duration_ms}{t('common.milliseconds')} / {t('trace.input')} {span.input_tokens_estimate} / {t('trace.output')} {span.output_tokens_estimate}
             </span>
-            <small>{formatSpanMeta(span)}</small>
+            <small>{formatSpanMeta(span, locale)}</small>
           </div>
           <p>{span.input_preview}</p>
           <p>{span.output_preview}</p>
@@ -149,21 +153,21 @@ export function SpanList({ spans }: { spans: TraceSpan[] }) {
 }
 
 export function EventList({ events }: { events: RunEvent[] }) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   if (events.length === 0) return <p>{t("trace.noTraceEvents")}</p>;
   return (
     <ol className="trace-list">
       {events.map((event) => {
-        const moduleStatus = formatModuleExecutionStatus(event.payload);
+        const moduleStatus = formatModuleExecutionStatus(event.payload, locale);
         return (
           <li key={event.id}>
             <span>{event.id}</span>
-            <strong>{event.type}</strong>
+            <strong title={event.type}>{displayLabel(event.type, locale)}</strong>
             <em>
-              {event.agent || "system"}
-              {event.subagent ? `/${event.subagent}` : ""}
+              {displayLabel(event.agent || "system", locale)}
+              {event.subagent ? `/${displayScope(event.subagent, locale)}` : ""}
             </em>
-            <p>{event.message}</p>
+            <p><SystemMessage message={event.message} /></p>
             {moduleStatus ? <small>{moduleStatus}</small> : null}
           </li>
         );

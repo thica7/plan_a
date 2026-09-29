@@ -1,6 +1,7 @@
 import { GitCompareArrows } from "lucide-react";
 import type { RevisionRecord } from "../../api/types";
 import { useTranslation } from '../../stores/i18n';
+import { displayLabel } from "../../i18n/display";
 
 interface RevisionDiffProps {
   compact?: boolean;
@@ -8,13 +9,13 @@ interface RevisionDiffProps {
 }
 
 export function RevisionDiff({ compact = false, revisions }: RevisionDiffProps) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const latest = revisions.length > 0 ? revisions[revisions.length - 1] : undefined;
   const targetCompetitors = latest?.target_competitors?.length
     ? latest.target_competitors.join(", ")
-    : latest?.target_competitor || "all";
+    : latest?.target_competitor || t('common.all');
   const scopeLabel = latest
-    ? `${latest.stage}:${targetCompetitors}/${latest.target_subagent || "all"}`
+    ? `${displayLabel(latest.stage, locale)}:${targetCompetitors}/${latest.target_subagent ? displayLabel(latest.target_subagent, locale) : t('common.all')}`
     : "";
 
   return (
@@ -31,46 +32,46 @@ export function RevisionDiff({ compact = false, revisions }: RevisionDiffProps) 
           <div className="revision-metrics">
             <span>
               <strong>{latest.iteration}</strong>
-              iteration
+              {t('revisions.iteration')}
             </span>
             <span>
               <strong>{scopeLabel}</strong>
-              scope
+              {t('newRun.scope')}
             </span>
             <span>
               <strong>{latest.issue_ids.length}</strong>
-              selected issues
+              {t('revisions.selectedIssues')}
             </span>
             <span>
               <strong>{`${latest.issue_count_before} -> ${latest.issue_count_after}`}</strong>
-              QA issues
+              {t('summary.qaIssues')}
             </span>
             <span>
               <strong>{latest.convergence_ratio.toFixed(2)}</strong>
-              convergence
+              {t('revisions.convergence')}
             </span>
           </div>
 
           {compact ? (
             <div className="revision-compact-grid">
               <article>
-                <strong>Before preview</strong>
-                <p>{compactText(latest.before_md) || "No prior report body."}</p>
+                <strong>{t('revisions.beforePreview')}</strong>
+                <p>{compactText(latest.before_md) || t('revisions.noPriorReport')}</p>
               </article>
               <article>
-                <strong>After preview</strong>
-                <p>{compactText(latest.after_md) || "No updated report body."}</p>
+                <strong>{t('revisions.afterPreview')}</strong>
+                <p>{compactText(latest.after_md) || t('revisions.noUpdatedReport')}</p>
               </article>
             </div>
           ) : (
             <div className="revision-diff-grid">
               <article>
                 <strong>{t('revisions.before')}</strong>
-                <pre>{latest.before_md || "No prior report body."}</pre>
+                <pre>{latest.before_md || t('revisions.noPriorReport')}</pre>
               </article>
               <article>
                 <strong>{t('revisions.after')}</strong>
-                <pre>{latest.after_md || "No updated report body."}</pre>
+                <pre>{latest.after_md || t('revisions.noUpdatedReport')}</pre>
               </article>
             </div>
           )}

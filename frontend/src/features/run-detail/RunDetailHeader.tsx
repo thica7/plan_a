@@ -1,5 +1,6 @@
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { useTranslation } from '../../stores/i18n';
+import { displayLabel } from "../../i18n/display";
 import type { RunDetail as RunDetailRecord } from "../../api/types";
 
 interface RunDetailHeaderProps {
@@ -8,7 +9,7 @@ interface RunDetailHeaderProps {
 }
 
 export function RunDetailHeader({ detail, recommendedDimensions }: RunDetailHeaderProps) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const targetName = detail.plan.target_product?.name;
   const verifiedHomepage = targetName && detail.plan.homepage_verified?.[targetName]
     ? detail.plan.homepage_hints?.[targetName]
@@ -24,28 +25,28 @@ export function RunDetailHeader({ detail, recommendedDimensions }: RunDetailHead
             {detail.plan.target_product_evidence ? (
               <a href={verifiedHomepage || detail.plan.target_product_evidence.source_url} rel="noreferrer" target="_blank">
                 {verifiedHomepage
-                  ? "官网已核验"
+                  ? t('runHeader.homepageVerified')
                   : detail.plan.target_product_evidence.status === "verified"
-                    ? "页面提及目标产品，官网待核验"
-                    : "官网待核验"}
+                    ? t('runHeader.productMentioned')
+                    : t('runHeader.homepageUnverified')}
               </a>
-            ) : <span>官网资料待核验</span>}
+            ) : <span>{t('runHeader.homepagePending')}</span>}
           </div>
         ) : null}
         <p>
-          {detail.plan.competitors.join(" vs ")} / {detail.plan.dimensions.join(", ")} /{" "}
-          {detail.execution_mode}
+          {detail.plan.competitors.join(` ${t('runHeader.versus')} `)} / {detail.plan.dimensions.map((dimension) => displayLabel(dimension, locale)).join(", ")} /{" "}
+          {displayLabel(detail.execution_mode, locale)}
         </p>
         <div className="run-meta-row">
-          <span>{t('runHeader.layer')} {detail.plan.competitor_layer}</span>
-          <span>{t('runHeader.scenario')} {detail.plan.scenario_id ?? "auto"}</span>
-          <span>QA rules {detail.plan.qa_rule_ids.length}</span>
+          <span>{t('runHeader.layer')} {displayLabel(detail.plan.competitor_layer, locale)}</span>
+          <span>{t('runHeader.scenario')} {displayLabel(detail.plan.scenario_id ?? "auto", locale)}</span>
+          <span>{t('runHeader.qaRules')} {detail.plan.qa_rule_ids.length}</span>
           <span>{t('runHeader.tasks')} {detail.plan.task_decomposition.length}</span>
           {detail.plan.qa_rule_ids.slice(0, 4).map((ruleId) => (
-            <span key={ruleId}>{ruleId}</span>
+            <span key={ruleId} title={ruleId}>{displayLabel(ruleId, locale)}</span>
           ))}
           {recommendedDimensions.length > 0 ? (
-            <span>{t('runHeader.recommended')} {recommendedDimensions.join(", ")}</span>
+            <span>{t('runHeader.recommended')} {recommendedDimensions.map((dimension) => displayLabel(dimension, locale)).join(", ")}</span>
           ) : null}
         </div>
       </div>
@@ -57,7 +58,7 @@ export function RunDetailHeader({ detail, recommendedDimensions }: RunDetailHead
         ) : (
           <Loader2 size={16} aria-hidden />
         )}
-        {detail.status === "completed_with_blockers" ? "completed, blocked" : detail.status}
+        {displayLabel(detail.status, locale)}
       </div>
     </header>
   );

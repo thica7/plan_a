@@ -133,6 +133,14 @@ function makeDetail(): RunDetail {
 }
 
 describe("RunReportReviewStudio artifact layers", () => {
+  it("shows Chinese review labels and counts Chinese text by characters", () => {
+    const detail = { ...makeDetail(), report_md: "中文报告", report_artifact: null };
+    render(<RunReportReviewStudio detail={detail} reportSources={{ aliases: {}, sources: [coreSource] }} />);
+    expect(screen.getByLabelText("报告审核状态")).toHaveTextContent("4 字符");
+    expect(screen.getByText("审查操作")).toBeInTheDocument();
+    expect(screen.getByText("中文报告")).toBeInTheDocument();
+    expect(screen.getByText("Core evidence.")).toBeInTheDocument();
+  });
   it("uses the selected artifact layer for the visible outline and source trace", async () => {
     render(
       <RunReportReviewStudio

@@ -21,7 +21,7 @@ export function CompetitorDiscoveryView({ discovery }: CompetitorDiscoveryViewPr
       </div>
 
       <div className="discovery-summary">
-        <span>{discovery.selected_competitors.length} selected</span>
+        <span>{discovery.selected_competitors.length} {t('discovery.selected')}</span>
         <code>{discovery.query}</code>
       </div>
       {discovery.rationale ? <p className="discovery-rationale">{discovery.rationale}</p> : null}

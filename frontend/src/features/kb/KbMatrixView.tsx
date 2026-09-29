@@ -1,5 +1,6 @@
 import type { ComparisonMatrix, CompetitorKB, CompetitorKnowledge, KnowledgeClaim, RawSource } from "../../api/types";
 import { useTranslation } from '../../stores/i18n';
+import { displayLabel } from "../../i18n/display";
 
 interface Props {
   kbs: Record<string, CompetitorKB>;
@@ -9,7 +10,7 @@ interface Props {
 }
 
 export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const competitors = matrix?.competitors ?? Array.from(new Set([...Object.keys(kbs), ...Object.keys(knowledge)]));
   const dimensions =
     matrix?.dimensions ??
@@ -27,7 +28,7 @@ export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
             <table className="matrix-table">
               <thead>
                 <tr>
-                  <th>Dimension</th>
+                  <th>{t('kb.dimension')}</th>
                   {competitors.map((competitor) => (
                     <th key={competitor}>
                       {competitor}{matrix?.target_product === competitor ? ` · ${t('kb.targetProduct')}` : ""}
@@ -38,7 +39,7 @@ export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
               <tbody>
                 {dimensions.map((dimension) => (
                   <tr key={dimension}>
-                    <th>{dimension}</th>
+                    <th>{displayLabel(dimension, locale)}</th>
                     {competitors.map((competitor) => {
                       const cell = matrix?.cells.find(
                         (item) => item.dimension === dimension && item.competitor === competitor,
@@ -69,10 +70,10 @@ export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
             {Object.values(kbs).map((kb) => (
               <article key={kb.competitor}>
                 <strong>{kb.competitor}{matrix?.target_product === kb.competitor ? ` · ${t('kb.targetProduct')}` : ""}</strong>
-                <span>{Math.round(kb.confidence * 100)}% avg confidence · {kb.sources.length} sources</span>
+                <span>{Math.round(kb.confidence * 100)}% {t('kb.avgConfidence')} · {kb.sources.length} {t('kb.sources')}</span>
                 {Object.entries(kb.slices).map(([dimension, findings]) => (
                   <div key={dimension}>
-                    <em>{dimension}</em>
+                    <em>{displayLabel(dimension, locale)}</em>
                     <ul>
                       {findings.map((finding) => (
                         <li key={finding}>{finding}</li>
@@ -87,9 +88,9 @@ export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
           <div className="knowledge-list">
             {Object.values(knowledge).map((item) => (
               <article key={item.competitor}>
-                <strong>{item.competitor} schema</strong>
-                <span>{Math.round(item.confidence * 100)}% confidence · {item.source_ids.length} traced sources</span>
-                <KnowledgeSection title="Feature tree" claims={item.feature_tree.summary_claims} sourceMap={sourceMap} />
+                <strong>{item.competitor} {t('kb.schema')}</strong>
+                <span>{Math.round(item.confidence * 100)}% {t('kb.confidence')} · {item.source_ids.length} {t('kb.tracedSources')}</span>
+                <KnowledgeSection title={t('kb.featureTree')} claims={item.feature_tree.summary_claims} sourceMap={sourceMap} />
                 {item.feature_tree.nodes.map((node) => (
                   <div key={`${item.competitor}-${node.name}`}>
                     <em>{node.name}</em>
@@ -97,7 +98,7 @@ export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
                   </div>
                 ))}
                 <KnowledgeSection
-                  title="Pricing model"
+                  title={t('kb.pricingModel')}
                   claims={[
                     ...item.pricing_model.notes,
                     ...item.pricing_model.tiers.flatMap((tier) => tier.claims),
@@ -105,7 +106,7 @@ export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
                   sourceMap={sourceMap}
                 />
                 <KnowledgeSection
-                  title="User personas"
+                  title={t('kb.userPersonas')}
                   claims={[
                     ...item.user_personas.summary_claims,
                     ...item.user_personas.segments.flatMap((segment) => segment.claims),
@@ -114,7 +115,7 @@ export function KbMatrixView({ kbs, knowledge, matrix, sources }: Props) {
                 />
                 {item.user_personas.segments.length > 0 ? (
                   <div>
-                    <em>Persona segments</em>
+                    <em>{t('kb.personaSegments')}</em>
                     <ul>
                       {item.user_personas.segments.map((segment) => (
                         <li key={`${item.competitor}-${segment.name}`}>
@@ -170,6 +171,7 @@ function ClaimList({ claims, sourceMap }: { claims: KnowledgeClaim[]; sourceMap:
 }
 
 function SourceIds({ ids, sourceMap }: { ids: string[]; sourceMap: Map<string, RawSource> }) {
+  const { locale, t } = useTranslation();
   if (ids.length === 0) return null;
   return (
     <span className="source-id-links">
@@ -181,7 +183,7 @@ function SourceIds({ ids, sourceMap }: { ids: string[]; sourceMap: Map<string, R
             key={id}
             rel={source?.url ? "noreferrer" : undefined}
             target={source?.url ? "_blank" : undefined}
-            title={source ? `${source.title} / ${source.dimension}` : "Unknown source"}
+            title={source ? `${source.title} / ${displayLabel(source.dimension, locale)}` : t('kb.unknownSource')}
           >
             {id}
           </a>

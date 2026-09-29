@@ -16,6 +16,8 @@ import { RevisionDiff } from "../revisions/RevisionDiff";
 import { ReportOutline } from "./ReportOutline";
 import { ReportReaderWorkspace } from "./ReportReaderWorkspace";
 import { ReportStatusStrip } from "./ReportStatusStrip";
+import { displayLabel } from "../../i18n/display";
+import { SystemMessage } from "../../i18n/SystemMessage";
 
 interface RunReportReviewStudioProps {
   detail: RunDetailRecord;
@@ -25,7 +27,7 @@ interface RunReportReviewStudioProps {
 type ReviewActionState = "idle" | "pending" | "success" | "error";
 
 export function RunReportReviewStudio({ detail, reportSources }: RunReportReviewStudioProps) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   const markdown = detail.report_md ?? "";
   const [activeLayer, setActiveLayer] = useState<ReportViewLayer>("report");
   const selectedMarkdown = selectReportLayerMarkdown(detail.report_artifact, markdown, activeLayer, {
@@ -33,7 +35,9 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
     warnings: t("report.layers.qaWarnings"),
     blockers: t("report.layers.qaBlockers"),
   });
-  const wordCount = selectedMarkdown.trim() ? selectedMarkdown.trim().split(/\s+/).length : 0;
+  const wordCount = locale === "zh-CN"
+    ? Array.from(selectedMarkdown.replace(/\s/g, "")).length
+    : selectedMarkdown.trim() ? selectedMarkdown.trim().split(/\s+/).length : 0;
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [actionState, setActionState] = useState<ReviewActionState>("idle");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -53,7 +57,7 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
     () => new Set(citedSourceGroups.map((group) => group.sourceId)),
     [citedSourceGroups],
   );
-  const citationLabels = useMemo(() => buildCitationLabels(sourceGroups), [sourceGroups]);
+  const citationLabels = useMemo(() => buildCitationLabels(sourceGroups, t('report.missing')), [sourceGroups, locale, t]);
   const totalCitationCount = sourceGroups.reduce((total, group) => total + group.count, 0);
 
   function handleSourceJump(event: MouseEvent<HTMLAnchorElement>, href: string) {
@@ -75,31 +79,31 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
   async function handleRequestApproval() {
     if (!reportVersion) return;
     setActionState("pending");
-    setActionMessage("Starting approval workflow...");
+    setActionMessage(t('reportStudio.startingApproval'));
     try {
       const response = await startReportApprovalWorkflow({
         report_version_id: reportVersion.id,
         requested_by: "frontend-review-studio",
       });
       setActionState("success");
-      setActionMessage(`${t('reportStudio.approvalWorkflow')} ${response.status}: ${response.workflow_id}`);
+      setActionMessage(`${t('reportStudio.approvalWorkflow')} ${displayLabel(response.status, locale)}: ${response.workflow_id}`);
     } catch (err) {
       setActionState("error");
-      setActionMessage(err instanceof Error ? err.message : "Unable to request approval");
+      setActionMessage(err instanceof Error ? err.message : t('reportStudio.unableToApprove'));
     }
   }
 
   async function handleExport(format: "markdown" | "html" | "csv") {
     if (!reportVersion) return;
     setActionState("pending");
-    setActionMessage(`Exporting ${format}...`);
+    setActionMessage(`${t('common.exporting')} ${format.toUpperCase()}`);
     try {
       const response = await exportReportVersion(reportVersion.id, format);
       setActionState("success");
-      setActionMessage(`Exported ${response.artifact.filename}`);
+      setActionMessage(`${t('reportStudio.exported')} ${response.artifact.filename}`);
     } catch (err) {
       setActionState("error");
-      setActionMessage(err instanceof Error ? err.message : "Unable to export report");
+      setActionMessage(err instanceof Error ? err.message : t('reportStudio.unableToExport'));
     }
   }
 
@@ -129,7 +133,7 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
             icon={<ShieldCheck size={16} aria-hidden />}
             actions={
               <StatusPill tone={missingSourceGroups.length ? "warn" : "good"}>
-                {missingSourceGroups.length ? `${missingSourceGroups.length} missing` : "linked"}
+                {missingSourceGroups.length ? `${missingSourceGroups.length} ${t('report.missing')}` : t('report.linked')}
               </StatusPill>
             }
           >
@@ -147,12 +151,12 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
 
           <RevisionDiff compact revisions={detail.revisions} />
 
-          <Panel className="report-review-actions-panel" title="Review actions">
+          <Panel className="report-review-actions-panel" title={t('reportStudio.reviewActions')}>
             <button className="primary-action" disabled={actionDisabled} onClick={handleRequestApproval} type="button">
               <Send size={15} aria-hidden />
               {t('reportStudio.requestApproval')}
             </button>
-            <div className="report-review-export-grid" aria-label="Report export actions">
+            <div className="report-review-export-grid" aria-label={t('reportStudio.exportActions')}>
               {(["markdown", "html", "csv"] as const).map((format) => (
                 <button
                   className="icon-text-button"
@@ -166,8 +170,8 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
                 </button>
               ))}
             </div>
-            {!reportVersion ? <p className="muted-line">No enterprise report version is linked to this run.</p> : null}
-            {actionMessage ? <p className={`review-action-message ${actionState}`}>{actionMessage}</p> : null}
+            {!reportVersion ? <p className="muted-line">{t('reportStudio.noEnterpriseReport')}</p> : null}
+            {actionMessage ? <p className={`review-action-message ${actionState}`}><SystemMessage message={actionMessage} /></p> : null}
           </Panel>
         </aside>
       </div>

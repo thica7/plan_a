@@ -8,6 +8,7 @@ import { RunDetailTabs } from "../features/run-detail/RunDetailTabs";
 import { RunSummaryStrip } from "../features/run-detail/RunSummaryStrip";
 import { useRunDetailController } from "../features/run-detail/useRunDetailController";
 import { useTranslation } from "../stores/i18n";
+import { SystemMessage } from "../i18n/SystemMessage";
 import type { EvidenceReviewPayload } from "../api/types";
 
 export function RunDetail() {
@@ -60,7 +61,7 @@ export function RunDetail() {
       <section className="work-surface">
         <div className="empty-state">
           <AlertTriangle aria-hidden />
-          <p>{error}</p>
+          <p><SystemMessage message={error} /></p>
         </div>
       </section>
     );

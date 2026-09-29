@@ -25,8 +25,8 @@ describe("EvidenceReviewModal", () => {
     expect(screen.getByRole("heading", { name: "证据审核" })).toBeInTheDocument();
     expect(screen.getByText("source-1")).toBeInTheDocument();
     expect(screen.getByText("竞品甲")).toBeInTheDocument();
-    expect(screen.getByText("pricing")).toBeInTheDocument();
-    expect(screen.getByText("webpage_verified")).toBeInTheDocument();
+    expect(screen.getByText("价格与成本")).toBeInTheDocument();
+    expect(screen.getByText("已核验网页")).toBeInTheDocument();
     expect(screen.getByText("82%")).toBeInTheDocument();
     expect(screen.getByText("2026-09-20")).toBeInTheDocument();
     expect(screen.getByText("https://example.com/source")).toBeInTheDocument();

@@ -55,6 +55,13 @@ function renderRail(props: Partial<ComponentProps<typeof RunReadinessRail>> = {}
 }
 
 describe("RunReadinessRail", () => {
+  it("localizes runtime diagnostics and keeps their original text inspectable", () => {
+    const reason = "Set PYDANTIC_AI_MODEL_BACKED_ENABLED=true to use model-backed quality agents.";
+    renderRail({ runtime: { ...runtime, pydantic_ai_model_backed_ready: false, pydantic_ai_model_backed_reason: reason } });
+    expect(screen.getByText("真实数据")).toBeInTheDocument();
+    expect(screen.getByText("价格与成本")).toBeInTheDocument();
+    expect(screen.getByText("尚未启用模型质量代理。")).toHaveAttribute("title", `系统原文：${reason}`);
+  });
   it("requires web search for automatic competitor discovery", () => {
     renderRail({ competitorMode: "auto", runtime: { ...runtime, has_web_search_key: false } });
     expect(screen.getByRole("button", { name: /开始运行/i })).toBeDisabled();

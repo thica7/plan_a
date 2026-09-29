@@ -1,6 +1,8 @@
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import type { RunQualityComparison, RunSummary } from "../../api/types";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel, runtimeDiagnostic } from "../../i18n/display";
+import { SystemMessage } from "../../i18n/SystemMessage";
 import { MetricValue } from "./MetricValue";
 import { formatQualityValue, metricWeightedLoss } from "./utils";
 
@@ -17,7 +19,7 @@ export function RunQualityPanel({
   onBaselineRunChange,
   runHistory,
 }: RunQualityPanelProps) {
-  const { t } = useTranslation();
+  const { locale, t } = useTranslation();
   if (!comparison) {
     return (
       <aside className="qa-panel run-quality-panel">
@@ -25,7 +27,7 @@ export function RunQualityPanel({
           <h2>{t("runQuality.title")}</h2>
           <Loader2 className="spin" size={16} aria-hidden />
         </div>
-        <p className="muted-text">Loading quality comparison.</p>
+        <p className="muted-text">{t('runQuality.loading')}</p>
       </aside>
     );
   }
@@ -59,11 +61,11 @@ export function RunQualityPanel({
           <label className="compact-select">
             <span>{t("runQuality.baseline")}</span>
             <select
-              aria-label="Run quality baseline"
+              aria-label={t('runQuality.baselineLabel')}
               onChange={(event) => onBaselineRunChange(event.target.value)}
               value={baselineRunId}
             >
-              <option value="">None</option>
+              <option value="">{t('common.none')}</option>
               {runHistory.slice(0, 30).map((run) => (
                 <option key={run.id} value={run.id}>
                   {run.topic} / {run.id.slice(0, 8)}
@@ -80,44 +82,44 @@ export function RunQualityPanel({
       </div>
       <div className="metric-grid compact">
         <MetricValue label={t("runQuality.score")} value={`${comparison.target_score}/100`} />
-        <MetricValue label={t("runQuality.verdict")} value={comparison.verdict} />
-        <MetricValue label={t("runQuality.gate")} value={comparison.regression_gate_status} />
+        <MetricValue label={t("runQuality.verdict")} value={displayLabel(comparison.verdict, locale)} />
+        <MetricValue label={t("runQuality.gate")} value={displayLabel(comparison.regression_gate_status, locale)} />
         <MetricValue
           label={t("runQuality.baseline")}
-          value={comparison.baseline_score === null || comparison.baseline_score === undefined ? "none" : `${comparison.baseline_score}/100`}
+          value={comparison.baseline_score === null || comparison.baseline_score === undefined ? t('common.none') : `${comparison.baseline_score}/100`}
         />
         <MetricValue
           label={t("runQuality.delta")}
-          value={comparison.delta_score === null || comparison.delta_score === undefined ? "n/a" : String(comparison.delta_score)}
+          value={comparison.delta_score === null || comparison.delta_score === undefined ? t('common.unavailable') : String(comparison.delta_score)}
         />
       </div>
       <div className="run-quality-signals">
         {signalChecks.map((check) => (
-          <span className={check.passed ? "on" : "off"} key={check.signal} title={check.reason}>
+          <span className={check.passed ? "on" : "off"} key={check.signal} title={runtimeDiagnostic(check.reason, locale)}>
             {check.passed ? <CheckCircle2 size={13} aria-hidden /> : <AlertTriangle size={13} aria-hidden />}
-            {check.label}
+            {displayLabel(check.label, locale)}
           </span>
         ))}
       </div>
       <div className="reflection-review">
-        <h3>Regression gate</h3>
+        <h3>{t('runQuality.regressionGate')}</h3>
         {comparison.regression_gate_reasons.map((reason) => (
           <article className="issue-row reflection-row" key={reason}>
-            <strong>{comparison.regression_gate_passed ? "pass" : comparison.regression_gate_status}</strong>
-            <span>{reason}</span>
+            <strong>{displayLabel(comparison.regression_gate_passed ? "pass" : comparison.regression_gate_status, locale)}</strong>
+            <SystemMessage message={reason} />
           </article>
         ))}
       </div>
       {failedSignalChecks.length > 0 ? (
         <div className="reflection-review">
-          <h3>Signal blockers</h3>
+          <h3>{t('runQuality.signalBlockers')}</h3>
           {failedSignalChecks.map((check) => (
             <article className="issue-row reflection-row" key={check.signal}>
-              <strong>{check.label}</strong>
+              <strong>{displayLabel(check.label, locale)}</strong>
               <span>
-                {check.reason}
+                <SystemMessage message={check.reason} />
                 {check.blocking_metric_names.length > 0
-                  ? ` Blocked by ${check.blocking_metric_names.join(", ")}.`
+                  ? ` ${t('runQuality.blockedBy')} ${check.blocking_metric_names.map((name) => displayLabel(name, locale)).join(", ")}.`
                   : ""}
               </span>
             </article>
@@ -126,19 +128,19 @@ export function RunQualityPanel({
       ) : null}
       {highlightedMetrics.length > 0 ? (
         <div className="reflection-review">
-          <h3>Score drivers</h3>
+          <h3>{t('runQuality.scoreDrivers')}</h3>
           {highlightedMetrics.map((metric) => (
             <article className="issue-row reflection-row" key={metric.name}>
               <strong>
                 {Math.round(metric.target_normalized_score * 100)}/100
               </strong>
               <span>
-                {metric.name}: raw {formatQualityValue(metric.target_value)}
+                {displayLabel(metric.name, locale)}: {t('common.rawValue')} {formatQualityValue(metric.target_value)}
                 {metricWeightedLoss(metric) > 0
-                  ? ` / weighted loss ${metricWeightedLoss(metric).toFixed(1)} pts`
+                  ? ` / ${t('runQuality.weightedLoss')} ${metricWeightedLoss(metric).toFixed(1)} ${t('common.points')}`
                   : ""}
                 {metric.baseline_value !== null && metric.baseline_value !== undefined
-                  ? ` / baseline ${formatQualityValue(metric.baseline_value)}`
+                  ? ` / ${t('runQuality.baseline')} ${formatQualityValue(metric.baseline_value)}`
                   : ""}
               </span>
             </article>
@@ -150,8 +152,8 @@ export function RunQualityPanel({
           <h3>{t("runQuality.recommendations")}</h3>
           {comparison.recommendations.slice(0, 3).map((item) => (
             <article className="issue-row reflection-row" key={item}>
-              <strong>next</strong>
-              <span>{item}</span>
+              <strong>{t('workbench.next')}</strong>
+              <SystemMessage message={item} />
             </article>
           ))}
         </div>

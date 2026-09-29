@@ -22,7 +22,6 @@ import { RunQualityPanel } from "./RunQualityPanel";
 import { RunReportReviewStudio } from "./RunReportReviewStudio";
 import { RunReviewOverview } from "./RunReviewOverview";
 import type { ReflectionItem, RunDetailView } from "./types";
-import { useTranslation } from "../../stores/i18n";
 
 interface RunDetailContentProps {
   activeView: RunDetailView;
@@ -71,7 +70,6 @@ export function RunDetailContent({
   agentMessages,
   toolCallMessages,
 }: RunDetailContentProps) {
-  const { t } = useTranslation();
   const renderedTraceSpans = traceSpans ?? detail.trace_spans;
   const renderedAgentMessages = agentMessages ?? detail.agent_messages;
   const renderedToolCallMessages = toolCallMessages ?? detail.tool_call_messages;
