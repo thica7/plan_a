@@ -11,13 +11,13 @@ from packages.research.capture.policy import (
     fallback_candidate_reason,
     invalid_candidate_reason,
 )
+from packages.research.coverage_contract import evaluate_coverage_contract
 from packages.research.discovery import (
     homepage_candidates,
     rank_and_dedupe_candidates,
     search_result_candidates,
     trusted_registry_candidates,
 )
-from packages.research.coverage_contract import evaluate_coverage_contract
 from packages.research.evaluation import quality_gaps_from_extractions
 from packages.research.evaluation.release_gate import quality_gaps_from_release_gate
 from packages.research.evidence import (
@@ -1533,6 +1533,55 @@ async def test_run_research_pipeline_executes_gap_driven_repair_round() -> None:
         field.kind == "pricing" and field.price
         for field in result.normalized_fields
     )
+
+
+@pytest.mark.asyncio
+async def test_explicit_depth_shares_network_and_candidate_budget_across_repair_passes() -> None:
+    brief = ResearchBrief(
+        run_id="run-shared-budget",
+        topic="LLM APIs",
+        competitor="AcmeAI",
+        dimension="pricing",
+        research_depth="standard",
+        max_search_queries=1,
+        max_candidates=1,
+        max_fetches=1,
+        max_repair_rounds=1,
+        include_trusted_sources=False,
+        include_homepage_candidates=False,
+    )
+    search_calls: list[str] = []
+    fetch_calls: list[str] = []
+
+    async def fake_search(query: str, max_results: int) -> list[SearchResult]:
+        search_calls.append(query)
+        return [
+            SearchResult(
+                title="AcmeAI pricing overview",
+                url=f"https://acme.example/page-{len(search_calls)}",
+                snippet="AcmeAI offers business software.",
+            )
+        ][:max_results]
+
+    async def fake_fetch(url: str) -> EvidenceFetchResult:
+        fetch_calls.append(url)
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="AcmeAI overview",
+            text="AcmeAI helps organizations adopt AI products and business workflows.",
+            content_hash=f"hash-{len(fetch_calls)}",
+            status_code=200,
+            quality_score=0.76,
+        )
+
+    result = await run_research_pipeline(brief, fetch=fake_fetch, search=fake_search)
+
+    assert result.metrics["initial_gap_count"] > 0
+    assert len(search_calls) == 1
+    assert len(fetch_calls) == 1
+    assert len(result.candidates) <= 1
+    assert result.metrics["repair_round_count"] == 0
 
 
 def test_release_gate_issues_become_repair_tasks_and_redo_scopes() -> None:

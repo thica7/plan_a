@@ -542,7 +542,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                     record, "collector", dimension, url, context,
                     allow_advanced=advanced_fetch_count < brief.max_advanced_fetches,
                 )
-                if str(getattr(result, "fetch_method", "")).startswith("webfetch_v2"):
+                if getattr(result, "advanced_fetch_attempted", False):
                     advanced_fetch_count += 1
                 return result
             except Exception:  # noqa: BLE001 - one failed candidate should not abort collection.
@@ -1113,10 +1113,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                 if depth_budget is not None else max(6, self._collector_search_max_results())
             ),
             max_fetches=(
-                min(
-                    depth_budget.max_fetches,
-                    max(3, int(self._settings.collector_target_verified_sources_per_branch)),
-                )
+                depth_budget.max_fetches
                 if depth_budget is not None else max(3, target_source_count)
             ),
             max_advanced_fetches=min(

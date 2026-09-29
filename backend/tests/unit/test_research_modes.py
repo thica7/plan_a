@@ -356,7 +356,7 @@ async def test_deployment_settings_cap_explicit_budgets() -> None:
     brief = service._research_brief(detail, "Cursor", "pricing")
     assert detail.max_iterations == 1
     assert brief.target_source_count == 1
-    assert brief.max_fetches == 3
+    assert brief.max_fetches == 8
     assert brief.max_advanced_fetches <= 3
     assert service._run_llm_budget(service._runs[detail.id]).max_calls == 40
 
@@ -468,8 +468,10 @@ async def test_clean_pipeline_search_respects_settings_result_ceiling(
 
 
 @pytest.mark.asyncio
-async def test_clean_pipeline_limits_advanced_fetch_results(
+@pytest.mark.parametrize("fetch_method", ["webfetch_v2:browser", "basic_httpx_low_quality"])
+async def test_clean_pipeline_counts_advanced_attempt_even_after_basic_fallback(
     monkeypatch: pytest.MonkeyPatch,
+    fetch_method: str,
 ) -> None:
     service = _service()
     detail = await service.create_run(_request(research_depth="quick"))
@@ -478,7 +480,10 @@ async def test_clean_pipeline_limits_advanced_fetch_results(
 
     async def fake_trace_fetch(*args: object, allow_advanced: bool = True) -> SimpleNamespace:
         allow_advanced_values.append(allow_advanced)
-        return SimpleNamespace(fetch_method="webfetch_v2:browser")
+        return SimpleNamespace(
+            fetch_method=fetch_method,
+            advanced_fetch_attempted=allow_advanced,
+        )
 
     async def fake_pipeline(brief: object, **kwargs: object) -> SimpleNamespace:
         await kwargs["fetch"]("https://example.com/first")

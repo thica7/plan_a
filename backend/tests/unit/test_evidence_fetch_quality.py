@@ -55,6 +55,7 @@ async def test_ordinary_product_copy_uses_fast_path(monkeypatch) -> None:
     result = await evidence_fetch.fetch_evidence_page("https://example.com/product")
     assert result.ok is True
     assert result.fetch_method == "basic_httpx"
+    assert result.advanced_fetch_attempted is False
     assert result.quality_score > 0.55
 
 
@@ -76,6 +77,7 @@ async def test_low_quality_basic_skips_advanced_when_budget_disallows_it(monkeyp
     assert result.ok is False
     assert result.fetch_method == "basic_httpx_low_quality"
     assert result.failure_reason == "content_too_short"
+    assert result.advanced_fetch_attempted is False
 
 
 @pytest.mark.asyncio
@@ -115,3 +117,4 @@ async def test_browser_login_shell_does_not_replace_weak_basic_evidence(monkeypa
     result = await evidence_fetch.fetch_evidence_page(url)
     assert result.ok is False
     assert result.quality_score < 0.55
+    assert result.advanced_fetch_attempted is True

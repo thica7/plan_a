@@ -62,10 +62,34 @@ async def run_research_pipeline(
     capture_cache: CaptureCache | None = None,
 ) -> ResearchResult:
     cache = capture_cache or CaptureCache()
+    search_calls = 0
+    fetch_calls = 0
+    active_search = search
+    active_fetch = fetch
+    if brief.research_depth is not None:
+        if search is not None:
+            async def budgeted_search(query: str, max_results: int) -> list[SearchResult]:
+                nonlocal search_calls
+                if search_calls >= brief.max_search_queries:
+                    return []
+                search_calls += 1
+                return await search(query, max_results)
+
+            active_search = budgeted_search
+
+        async def budgeted_fetch(url: str) -> Any:
+            nonlocal fetch_calls
+            if fetch_calls >= brief.max_fetches:
+                return None
+            fetch_calls += 1
+            return await fetch(url)
+
+        active_fetch = budgeted_fetch
+
     first_pass = await _run_research_pass(
         brief,
-        fetch=fetch,
-        search=search,
+        fetch=active_fetch,
+        search=active_search,
         seed_candidates=seed_candidates or [],
         repair_tasks=repair_tasks or [],
         capture_cache=cache,
@@ -89,10 +113,22 @@ async def run_research_pipeline(
         if not active_repairs:
             break
         repair_brief = _repair_brief(brief, active_repairs, round_index=round_index + 1)
+        if brief.research_depth is not None:
+            remaining_candidates = brief.max_candidates - len(candidates)
+            remaining_fetches = brief.max_fetches - fetch_calls
+            if remaining_candidates <= 0 or remaining_fetches <= 0:
+                break
+            repair_brief = repair_brief.model_copy(
+                update={
+                    "max_search_queries": max(0, brief.max_search_queries - search_calls),
+                    "max_candidates": remaining_candidates,
+                    "max_fetches": remaining_fetches,
+                }
+            )
         repair_pass = await _run_research_pass(
             repair_brief,
-            fetch=fetch,
-            search=search,
+            fetch=active_fetch,
+            search=active_search,
             seed_candidates=[],
             repair_tasks=active_repairs,
             capture_cache=cache,

@@ -19,6 +19,7 @@ class EvidenceFetchResult:
     status_code: int | None = None
     error: str | None = None
     fetch_method: str = "basic_httpx"
+    advanced_fetch_attempted: bool = False
     quality_score: float = 0.0
     text_length: int = 0
     failure_reason: str | None = None
@@ -82,6 +83,7 @@ async def fetch_evidence_page(
             basic,
             fetch_method="basic_httpx_low_quality",
             failure_reason=content_problem or "content_too_short",
+            advanced_fetch_attempted=True,
         )
     return _from_failed_fetch(basic, advanced)
 
@@ -155,6 +157,7 @@ def _from_basic_fetch(
     *,
     fetch_method: str = "basic_httpx",
     failure_reason: str | None = None,
+    advanced_fetch_attempted: bool = False,
 ) -> EvidenceFetchResult:
     return EvidenceFetchResult(
         url=result.url,
@@ -165,6 +168,7 @@ def _from_basic_fetch(
         status_code=result.status_code,
         error=result.error,
         fetch_method=fetch_method,
+        advanced_fetch_attempted=advanced_fetch_attempted,
         quality_score=0.8 if result.ok and failure_reason is None else 0.0,
         text_length=len(result.text),
         failure_reason=failure_reason,
@@ -190,6 +194,7 @@ def _from_advanced_fetch(result: AdvancedFetchResult) -> EvidenceFetchResult:
         status_code=result.status_code,
         error=result.error,
         fetch_method=f"webfetch_v2:{result.fetch_method}",
+        advanced_fetch_attempted=True,
         quality_score=result.quality.score,
         text_length=result.quality.text_length or len(text),
         failure_reason=result.failure_reason,
@@ -217,6 +222,7 @@ def _from_failed_fetch(
         status_code=advanced.status_code or basic.status_code,
         error=error,
         fetch_method=f"webfetch_v2:{advanced.fetch_method}",
+        advanced_fetch_attempted=True,
         quality_score=advanced.quality.score,
         text_length=advanced.quality.text_length or len(advanced.text or basic.text),
         failure_reason=failure_reason,

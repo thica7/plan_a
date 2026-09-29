@@ -7,6 +7,9 @@ import pytest
 from packages.config import Settings
 from packages.crawler.policy import SSRFGuard
 from packages.governance import build_tool_registry_report
+from packages.research.capture.webfetch_adapter import fetch_candidate_page
+from packages.research.evidence.admission import raw_source_from_capture
+from packages.research.models import ResearchBrief, SourceCandidate
 from packages.tools import (
     AdvancedFetchQuality,
     AdvancedFetchResult,
@@ -16,9 +19,6 @@ from packages.tools import (
     fetch_page,
 )
 from packages.tools.webfetch_runtime import DEFAULT_WEBFETCH_V2_ROOT, resolve_webfetch_v2_root
-from packages.research.capture.webfetch_adapter import fetch_candidate_page
-from packages.research.evidence.admission import raw_source_from_capture
-from packages.research.models import ResearchBrief, SourceCandidate
 
 
 class _FakeProcess:
@@ -315,6 +315,7 @@ async def test_fetch_evidence_page_falls_back_to_webfetch_v2_for_weak_basic_fetc
 
     assert result.ok is True
     assert result.fetch_method == "webfetch_v2:playwright"
+    assert result.advanced_fetch_attempted is True
     assert result.quality_score == 0.92
     assert result.text.startswith("Example pricing")
     assert calls == ["basic:12.0", "advanced:auto:15.0:0.55"]
