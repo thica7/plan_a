@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 from packages.i18n.language import DEFAULT_OUTPUT_LANGUAGE, OutputLanguage
 from packages.schema.enterprise import EnterpriseRunProjection
@@ -12,6 +12,7 @@ from packages.schema.models import (
     CompetitorDiscovery,
     CompetitorKB,
     CompetitorKnowledge,
+    DecisionBrief,
     QCIssue,
     RawSource,
     ReflectionRecord,
@@ -46,6 +47,9 @@ class RunCreateRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=200)
     topic: str = Field(min_length=2, max_length=200)
     target_product: TargetProduct | None = None
+    research_depth: Literal["quick", "standard", "deep"] | None = None
+    collaboration_mode: Literal["ai", "assisted"] | None = None
+    decision_brief: DecisionBrief | None = None
     competitors: list[str] = Field(default_factory=list, max_length=8)
     dimensions: list[str] = Field(min_length=1, max_length=8)
     competitor_layer: Literal["L1", "L2", "L3"] | None = None
@@ -54,6 +58,16 @@ class RunCreateRequest(BaseModel):
     output_language: OutputLanguage = DEFAULT_OUTPUT_LANGUAGE
     auto_redo_warn_enabled: bool | None = None
     hitl_enabled: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_collaboration_mode(self) -> "RunCreateRequest":
+        if (
+            self.collaboration_mode is not None
+            and self.hitl_enabled is not None
+            and self.hitl_enabled != (self.collaboration_mode == "assisted")
+        ):
+            raise ValueError("collaboration_mode conflicts with hitl_enabled")
+        return self
 
 
 class CompetitorEdit(BaseModel):

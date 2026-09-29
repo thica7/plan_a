@@ -86,6 +86,14 @@ class TargetProduct(BaseModel):
     market: str = Field(default="", max_length=120)
 
 
+class DecisionBrief(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision_question: str = Field(default="", max_length=500)
+    primary_job: str = Field(default="", max_length=500)
+    success_metric: str = Field(default="", max_length=500)
+
+
 class TargetProductEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -104,6 +112,9 @@ class AnalysisPlan(BaseModel):
 
     topic: str
     target_product: TargetProduct | None = None
+    research_depth: Literal["quick", "standard", "deep"] | None = None
+    collaboration_mode: Literal["ai", "assisted"] | None = None
+    decision_brief: DecisionBrief | None = None
     target_product_evidence: TargetProductEvidence | None = None
     competitors: list[str]
     dimensions: list[str]

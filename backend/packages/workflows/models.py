@@ -50,6 +50,9 @@ class CompetitiveIntelWorkflowInput:
     topic: str
     dimensions: list[str]
     target_product: dict[str, Any] | None = None
+    research_depth: Literal["quick", "standard", "deep"] | None = None
+    collaboration_mode: Literal["ai", "assisted"] | None = None
+    decision_brief: dict[str, str] | None = None
     competitors: list[str] = field(default_factory=list)
     workspace_id: str = "default-workspace"
     project_id: str | None = None

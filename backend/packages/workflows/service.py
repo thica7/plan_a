@@ -260,6 +260,10 @@ def competitive_intel_input_from_run_request(
         topic=request.topic,
         target_product=request.target_product.model_dump(mode="json")
         if request.target_product is not None else None,
+        research_depth=request.research_depth,
+        collaboration_mode=request.collaboration_mode,
+        decision_brief=request.decision_brief.model_dump(mode="json")
+        if request.decision_brief is not None else None,
         competitors=request.competitors,
         dimensions=request.dimensions,
         competitor_layer=request.competitor_layer,
@@ -365,7 +369,13 @@ def temporal_cutover_status(settings: Settings) -> TemporalCutoverStatus:
 
 
 def workflow_idempotency_key(request: RunCreateRequest) -> str:
-    payload = request.model_dump(mode="json", exclude={"idempotency_key"})
+    excluded = {"idempotency_key"}
+    excluded.update(
+        field_name
+        for field_name in ("research_depth", "collaboration_mode", "decision_brief")
+        if getattr(request, field_name) is None
+    )
+    payload = request.model_dump(mode="json", exclude=excluded)
     normalized_payload = json.loads(
         json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     )

@@ -105,6 +105,7 @@ from packages.schema.models import (
     AnalysisPlanTask,
     CompetitorCandidate,
     CompetitorDiscovery,
+    DecisionBrief,
     QCIssue,
     RawSource,
     RedoScope,
@@ -173,6 +174,9 @@ def _active_run_fingerprint(
     auto_redo_warn_enabled: bool,
     hitl_enabled: bool,
     target_product: TargetProduct | None = None,
+    research_depth: str | None = None,
+    collaboration_mode: str | None = None,
+    decision_brief: DecisionBrief | None = None,
 ) -> str:
     payload = {
         "workspace_id": workspace_id.strip().casefold(),
@@ -189,6 +193,12 @@ def _active_run_fingerprint(
         "auto_redo_warn_enabled": auto_redo_warn_enabled,
         "hitl_enabled": hitl_enabled,
     }
+    if research_depth is not None:
+        payload["research_depth"] = research_depth
+    if collaboration_mode is not None:
+        payload["collaboration_mode"] = collaboration_mode
+    if decision_brief is not None:
+        payload["decision_brief"] = decision_brief.model_dump(mode="json")
     return stable_prefixed_id("active-run", payload, length=32)
 
 
@@ -355,6 +365,9 @@ class RunService(
             auto_redo_warn_enabled=auto_redo_warn_enabled,
             hitl_enabled=hitl_enabled,
             target_product=request.target_product,
+            research_depth=request.research_depth,
+            collaboration_mode=request.collaboration_mode,
+            decision_brief=request.decision_brief,
         )
         duplicate = None
         if not skip_active_duplicate_check:
@@ -401,6 +414,9 @@ class RunService(
         plan = AnalysisPlan(
             topic=request.topic,
             target_product=request.target_product,
+            research_depth=request.research_depth,
+            collaboration_mode=request.collaboration_mode,
+            decision_brief=request.decision_brief,
             competitors=competitors,
             dimensions=valid_dimensions,
             complexity="medium",
@@ -534,6 +550,9 @@ class RunService(
             auto_redo_warn_enabled=auto_redo_warn_enabled,
             hitl_enabled=hitl_enabled,
             target_product=request.target_product,
+            research_depth=request.research_depth,
+            collaboration_mode=request.collaboration_mode,
+            decision_brief=request.decision_brief,
         )
         async with self._lock:
             duplicate = self._find_active_duplicate_run(fingerprint, datetime.utcnow())
@@ -4414,6 +4433,8 @@ class RunService(
         execution_mode: str,
         requested_competitors: list[str],
     ) -> bool:
+        if request.collaboration_mode is not None:
+            return request.collaboration_mode == "assisted"
         if request.hitl_enabled is not None:
             return request.hitl_enabled
         if self._settings.hitl_enabled:
