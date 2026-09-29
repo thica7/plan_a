@@ -418,7 +418,7 @@ def test_product_opportunity_allows_competitor_in_task_or_with_citation() -> Non
     heading = report_label(detail.output_language, "product_opportunities")
     generic = (
         f"## {heading}\n- Hypothesis to validate: test onboarding — "
-        "User task: evaluate Cursor onboarding; Validation action: run a pilot; "
+        "User task: evaluate Cursor onboarding [source:source-pricing]; Validation action: run a pilot; "
         "Success signal — the team completes setup."
     )
     cited = (
@@ -430,6 +430,58 @@ def test_product_opportunity_allows_competitor_in_task_or_with_citation() -> Non
     assert segment["allowed_source_ids"] == ["source-pricing"]
     assert validate_segment_contract(generic, contract).status == "pass"
     assert validate_segment_contract(cited, contract).status == "pass"
+
+
+@pytest.mark.parametrize(
+    ("language", "bullet"),
+    [
+        (
+            "en-US",
+            "Hypothesis to validate: test onboarding because Cursor offers free SSO — "
+            "User task: compare Cursor pricing [source:source-pricing]; "
+            "Validation action: run a pilot; Success signal — complete setup.",
+        ),
+        (
+            "zh-CN",
+            "待验证机会假设：借助 Cursor 免费 SSO 改进入门，"
+            "用户任务：比较 Cursor 价格 [source:source-pricing]；"
+            "验证动作：开展试点；成功信号：完成设置。",
+        ),
+        (
+            "en-US",
+            "Cursor offers free SSO — User task: compare Cursor pricing; "
+            "Validation action: run a pilot; Success signal — complete setup [source:source-pricing].",
+        ),
+    ],
+)
+def test_task_or_signal_citation_cannot_support_prior_competitor_fact(language: str, bullet: str) -> None:
+    detail = _detail(DecisionBrief(primary_job="Compare Cursor pricing"), language=language)
+    segment = next(
+        item
+        for item in segment_payloads_from_briefs(detail, build_section_briefs(detail))
+        if item["section_key"] == "product_opportunities"
+    )
+    fragment = f"## {report_label(language, 'product_opportunities')}\n- {bullet}"
+
+    assert validate_segment_contract(fragment, segment_contract_for(segment)).status == "retry"
+    report = "\n".join(
+        f"## {report_label(language, key)}\n"
+        + (f"- {bullet}" if key == "product_opportunities" else "- Existing section content.")
+        for key in (
+            "executive_summary",
+            "decision_summary",
+            "product_opportunities",
+            "competitive_findings",
+            "review_theme_summary",
+            "competitor_deep_dives",
+            "side_by_side_matrix",
+            "swot_analysis",
+            "evidence_support",
+        )
+    )
+    assert "invalid_product_opportunities" in run_writer_quality_preflight(detail, report).failure_reasons
+    with pytest.raises(RuntimeError, match="quality preflight"):
+        _service()._harden_schema_contract_report_markdown(detail, report)
 
 
 def test_fallback_hardener_adds_uncited_validation_section_from_user_brief() -> None:
