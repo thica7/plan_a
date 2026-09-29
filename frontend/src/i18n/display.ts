@@ -2,6 +2,10 @@ import type { Locale } from "../stores/i18n";
 
 // Display-only vocabulary. Call this only for known UI enums, never report prose or source titles.
 const labels: Record<string, readonly [string, string]> = {
+  evidence_count: ["证据数量", "Evidence count"],
+  real_source_rate: ["真实来源比例", "Real source rate"],
+  report_structure_score: ["报告结构得分", "Report structure score"],
+  report_length_score: ["报告长度得分", "Report length score"],
   "Planner": ["研究规划","Planner"],
   "Collector": ["资料采集","Collector"],
   "Analyst": ["资料分析","Analyst"],
@@ -343,6 +347,8 @@ export function dimensionDescription(name: string, description: string, locale: 
 }
 
 const diagnostics: Record<string, string> = {
+  "Evidence is ready for review.": "证据已就绪，请审核。",
+  "QA review is ready.": "质检已就绪，请审核。",
   "Collected sources are ready for review.": "资料采集完成，请审核来源。",
   "QA findings are ready for review.": "质检完成，请审核发现的问题。",
   "No QA findings to redo.": "没有需要重做的质检问题。",
@@ -393,6 +399,10 @@ const diagnostics: Record<string, string> = {
 export function runtimeDiagnostic(message: string, locale: Locale): string {
   if (locale !== "zh-CN") return message;
   if (Object.prototype.hasOwnProperty.call(diagnostics, message)) return diagnostics[message];
+  const redo = /^Scoped redo started: (collector|analyst|writer_only|comparator|full)\.$/.exec(message);
+  if (redo) return `已开始定向重做：${displayLabel(redo[1], locale)}。`;
+  const decision = /^Runtime command accepted HITL decision: (accept|modify_plan|force_pass|redo)\.$/.exec(message);
+  if (decision) return `已接收人工审核决定：${displayLabel(decision[1], locale)}。`;
   const readyModel = /^Pydantic-AI model-backed agents are ready with (.+)\.$/.exec(message);
   return readyModel ? `模型质量代理已就绪，使用 ${readyModel[1]}。` : message;
 }

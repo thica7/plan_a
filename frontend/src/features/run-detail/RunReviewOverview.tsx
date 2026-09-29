@@ -8,7 +8,7 @@ import { SwimlaneView } from "../swimlane/SwimlaneView";
 import { AgentHandoffSummary } from "./AgentHandoffSummary";
 import type { ReflectionItem, RunDetailView } from "./types";
 import { useTranslation, type Locale } from "../../stores/i18n";
-import { displayLabel, runtimeDiagnostic } from "../../i18n/display";
+import { displayLabel, displayScope, runtimeDiagnostic } from "../../i18n/display";
 import { SystemMessage } from "../../i18n/SystemMessage";
 import { parseUTC } from "../workbench/format";
 
@@ -205,7 +205,7 @@ function buildTimelineRows(detail: RunDetailRecord, replay: DecisionReplayReport
     return replay.events.slice(-6).reverse().map((event) => ({
       id: event.id,
       title: displayLabel(event.event_type, locale),
-      meta: `${displayLabel(event.agent ?? "system", locale)}${event.subagent ? `/${displayLabel(event.subagent, locale)}` : ""} / ${runtimeDiagnostic(event.message, locale)}`,
+      meta: `${displayLabel(event.agent ?? "system", locale)}${event.subagent ? `/${displayScope(event.subagent, locale)}` : ""} / ${runtimeDiagnostic(event.message, locale)}`,
       time: event.created_at,
     }));
   }
@@ -214,7 +214,7 @@ function buildTimelineRows(detail: RunDetailRecord, replay: DecisionReplayReport
     return detail.trace_spans.slice(-6).reverse().map((span) => ({
       id: span.id,
       title: `${displayLabel(span.kind, locale)} / ${displayLabel(span.name, locale)}`,
-      meta: `${displayLabel(span.agent, locale)}${span.subagent ? `/${displayLabel(span.subagent, locale)}` : ""} / ${displayLabel(span.status, locale)} / ${span.duration_ms}${locale === 'zh-CN' ? '毫秒' : 'ms'}`,
+      meta: `${displayLabel(span.agent, locale)}${span.subagent ? `/${displayScope(span.subagent, locale)}` : ""} / ${displayLabel(span.status, locale)} / ${span.duration_ms}${locale === 'zh-CN' ? '毫秒' : 'ms'}`,
       time: span.created_at,
     }));
   }
