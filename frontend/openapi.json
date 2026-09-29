@@ -12663,6 +12663,47 @@
               }
             ]
           },
+          "research_depth": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "quick",
+                  "standard",
+                  "deep"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Depth"
+          },
+          "collaboration_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ai",
+                  "assisted"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collaboration Mode"
+          },
+          "decision_brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "target_product_evidence": {
             "anyOf": [
               {
@@ -14643,6 +14684,30 @@
         ],
         "title": "ClaimValidationSample"
       },
+      "CollectorResearchUsage": {
+        "properties": {
+          "search_calls": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Search Calls",
+            "default": 0
+          },
+          "fetch_calls": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Fetch Calls",
+            "default": 0
+          },
+          "advanced_fetch_attempts": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Advanced Fetch Attempts",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "CollectorResearchUsage"
+      },
       "ComparisonCell": {
         "properties": {
           "competitor": {
@@ -15811,6 +15876,31 @@
           "buckets"
         ],
         "title": "DataRetentionReport"
+      },
+      "DecisionBrief": {
+        "properties": {
+          "decision_question": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Decision Question",
+            "default": ""
+          },
+          "primary_job": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Primary Job",
+            "default": ""
+          },
+          "success_metric": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Success Metric",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DecisionBrief"
       },
       "DecisionCard": {
         "properties": {
@@ -21058,6 +21148,82 @@
         ],
         "title": "OtelTraceExport"
       },
+      "PendingGraphRedo": {
+        "properties": {
+          "iteration": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Iteration"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "writer_only",
+              "comparator",
+              "analyst",
+              "collector",
+              "full"
+            ],
+            "title": "Stage"
+          },
+          "redo_scope": {
+            "$ref": "#/components/schemas/RedoScope"
+          },
+          "redo_scopes": {
+            "items": {
+              "$ref": "#/components/schemas/RedoScope"
+            },
+            "type": "array",
+            "title": "Redo Scopes"
+          },
+          "before_md": {
+            "type": "string",
+            "title": "Before Md"
+          },
+          "issue_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Issue Ids"
+          },
+          "qa_issue_ids_before": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Qa Issue Ids Before"
+          },
+          "issue_count_before": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Issue Count Before"
+          },
+          "structured_targets": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Structured Targets"
+          },
+          "auto_continue": {
+            "type": "boolean",
+            "title": "Auto Continue",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "iteration",
+          "stage",
+          "redo_scope",
+          "redo_scopes",
+          "before_md",
+          "issue_ids",
+          "qa_issue_ids_before",
+          "issue_count_before"
+        ],
+        "title": "PendingGraphRedo"
+      },
       "PolicyDecision": {
         "properties": {
           "allowed": {
@@ -23993,6 +24159,47 @@
               }
             ]
           },
+          "research_depth": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "quick",
+                  "standard",
+                  "deep"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Depth"
+          },
+          "collaboration_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ai",
+                  "assisted"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collaboration Mode"
+          },
+          "decision_brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "competitors": {
             "items": {
               "type": "string"
@@ -24276,6 +24483,104 @@
             "type": "array",
             "title": "Qa Findings"
           },
+          "collect_qa_findings": {
+            "items": {
+              "$ref": "#/components/schemas/QCIssue"
+            },
+            "type": "array",
+            "title": "Collect Qa Findings"
+          },
+          "evidence_repair_rounds": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Evidence Repair Rounds",
+            "default": 0
+          },
+          "evidence_review_dimensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Review Dimensions"
+          },
+          "evidence_review_competitors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Review Competitors"
+          },
+          "evidence_refresh_active": {
+            "type": "boolean",
+            "title": "Evidence Refresh Active",
+            "default": false
+          },
+          "evidence_review_note": {
+            "type": "string",
+            "title": "Evidence Review Note",
+            "default": ""
+          },
+          "pending_graph_redo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingGraphRedo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interrupt_graph_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "real",
+                  "demo",
+                  "scoped_redo"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interrupt Graph Kind"
+          },
+          "interrupt_thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interrupt Thread Id"
+          },
+          "overridden_qa_findings": {
+            "items": {
+              "$ref": "#/components/schemas/QCIssue"
+            },
+            "type": "array",
+            "title": "Overridden Qa Findings"
+          },
+          "qa_override_note": {
+            "type": "string",
+            "title": "Qa Override Note",
+            "default": ""
+          },
+          "qa_override_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qa Override At"
+          },
           "reflections": {
             "items": {
               "$ref": "#/components/schemas/ReflectionRecord"
@@ -24310,6 +24615,13 @@
             },
             "type": "array",
             "title": "Trace Spans"
+          },
+          "collector_research_usage": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CollectorResearchUsage"
+            },
+            "type": "object",
+            "title": "Collector Research Usage"
           },
           "metrics": {
             "$ref": "#/components/schemas/RunMetrics"

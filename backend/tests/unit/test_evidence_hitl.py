@@ -114,7 +114,10 @@ async def test_assisted_demo_pauses_at_planner_evidence_and_final_qa() -> None:
 
         await _advance(service, detail.id, "evidence_hitl", "interrupted")
         assert service.has_pending_interrupt(detail.id)
-        assert service._runs[detail.id].pending_interrupts["evidence"]["interrupt_node"] == "evidence_hitl"
+        assert (
+            service._runs[detail.id].pending_interrupts["evidence"]["interrupt_node"]
+            == "evidence_hitl"
+        )
 
         await _advance(service, detail.id, "qa_hitl", "interrupted")
         await _advance(service, detail.id, None, "completed")
@@ -151,7 +154,10 @@ async def test_ai_and_legacy_hitl_modes_keep_their_existing_pause_counts() -> No
         )
         await service.run_pipeline(ai.id)
         assert ai.status == "completed"
-        assert [event for event in service.get_trace(ai.id) or [] if event.type == "interrupt"] == []
+        assert [
+            event for event in service.get_trace(ai.id) or []
+            if event.type == "interrupt"
+        ] == []
 
         legacy = await service.create_run(
             RunCreateRequest(
@@ -587,7 +593,10 @@ async def test_real_refresh_pipeline_prioritizes_old_url_with_one_fetch_remainin
         if search_remaining:
             assert search_queries == []
         else:
-            assert detail.collector_research_usage[context.subagent].search_calls == budget.max_search_queries
+            assert (
+                detail.collector_research_usage[context.subagent].search_calls
+                == budget.max_search_queries
+            )
         assert detail.raw_sources == [old]
         assert seed_candidates[0].origin == "web_search"
         assert seed_candidates[0].confidence <= 0.5
@@ -807,7 +816,10 @@ async def test_kb_refresh_uses_new_web_identity_without_losing_kb_provenance() -
         assert refreshed.metadata.get("kb_retrieved") is not True
         assert refreshed.metadata["prior_kb_document_id"] == "kb-doc-1"
         assert refreshed.metadata["prior_kb_fetched_at"] == old_time
-        assert [item["candidate_origin"] for item in refreshed.metadata["refresh_observations"]] == [
+        assert [
+            item["candidate_origin"]
+            for item in refreshed.metadata["refresh_observations"]
+        ] == [
             "rag_kb", "web_search",
         ]
         assert service._source_observed_at(refreshed) == datetime.fromisoformat(new_time)
@@ -864,7 +876,10 @@ async def test_quick_evidence_redo_rejects_without_consuming_interrupt() -> None
         with pytest.raises(ValueError, match="Evidence redo limit reached"):
             await service.resume(detail.id, HitlResumeRequest(decision="redo"))
         assert detail.status == "interrupted"
-        assert service._runs[detail.id].pending_interrupts["evidence"]["interrupt_node"] == "evidence_hitl"
+        assert (
+            service._runs[detail.id].pending_interrupts["evidence"]["interrupt_node"]
+            == "evidence_hitl"
+        )
         assert detail.evidence_repair_rounds == 0
     finally:
         await service._graph_checkpointer.aclose()
@@ -984,7 +999,10 @@ async def test_journal_hydrates_evidence_pending_interrupt_and_repair_counter(tm
         assert hydrated is not None
         assert hydrated.status == "interrupted"
         assert hydrated.evidence_repair_rounds == 1
-        assert reloaded._runs[detail.id].pending_interrupts["evidence"]["interrupt_node"] == "evidence_hitl"
+        assert (
+            reloaded._runs[detail.id].pending_interrupts["evidence"]["interrupt_node"]
+            == "evidence_hitl"
+        )
         await reloaded.resume(detail.id, HitlResumeRequest(decision="accept"))
         assert hydrated.status == "running"
     finally:
@@ -992,7 +1010,9 @@ async def test_journal_hydrates_evidence_pending_interrupt_and_repair_counter(tm
 
 
 @pytest.mark.asyncio
-async def test_scoped_redo_evidence_interrupt_restores_its_graph_thread_from_journal(tmp_path) -> None:
+async def test_scoped_redo_evidence_interrupt_restores_its_graph_thread_from_journal(
+    tmp_path,
+) -> None:
     journal = RunJournal(tmp_path / "scoped-evidence-runs.db")
     checkpoint_path = tmp_path / "scoped-evidence-checkpoints.db"
     original = _service(

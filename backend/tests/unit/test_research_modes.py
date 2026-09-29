@@ -220,7 +220,10 @@ async def test_quick_scope_rejects_excess_slices_and_caps_task_turns() -> None:
         dimensions=["pricing", "feature", "persona"],
     ))
     assert len(detail.plan.competitors) * len(detail.plan.dimensions) == 6
-    assert {task.max_turns for task in detail.plan.task_decomposition if task.stage in {"collector", "analyst"}} == {1}
+    assert {
+        task.max_turns for task in detail.plan.task_decomposition
+        if task.stage in {"collector", "analyst"}
+    } == {1}
     assert service._run_llm_budget(service._runs[detail.id]).max_calls - 6 * 2 >= 20
 
 
@@ -241,7 +244,10 @@ async def test_low_deployment_llm_cap_reduces_allowed_scope_for_writer_reserve()
         dimensions=["pricing", "feature"],
     ))
     assert len(detail.plan.competitors) * len(detail.plan.dimensions) == 4
-    assert {task.max_turns for task in detail.plan.task_decomposition if task.stage == "analyst"} == {1}
+    assert {
+        task.max_turns for task in detail.plan.task_decomposition
+        if task.stage == "analyst"
+    } == {1}
     assert service._run_llm_budget(service._runs[detail.id]).max_calls == 38
 
 
@@ -261,7 +267,10 @@ async def test_slice_limit_is_contiguous_across_analyst_one_shot_transition() ->
         dimensions=["pricing", "feature", "persona", "security"],
     ))
     assert len(detail.plan.competitors) * len(detail.plan.dimensions) == 8
-    assert {task.max_turns for task in detail.plan.task_decomposition if task.stage == "analyst"} == {1}
+    assert {
+        task.max_turns for task in detail.plan.task_decomposition
+        if task.stage == "analyst"
+    } == {1}
 
 
 @pytest.mark.asyncio
@@ -299,7 +308,10 @@ async def test_deep_low_llm_budget_admits_seven_eight_nine_slices_with_one_shot(
             research_depth="deep", competitors=competitors, dimensions=dimensions,
         ))
         assert len(detail.plan.competitors) * len(detail.plan.dimensions) == expected_slices
-        analyst_turns = {task.max_turns for task in detail.plan.task_decomposition if task.stage == "analyst"}
+        analyst_turns = {
+            task.max_turns for task in detail.plan.task_decomposition
+            if task.stage == "analyst"
+        }
         assert analyst_turns == ({3} if expected_slices == 6 else {1})
         assert service._should_use_analyst_react(
             detail, dimension="pricing", qa_feedback=[{"issue": "gap"}],
@@ -395,7 +407,9 @@ async def test_fixed_analyst_fanout_uses_one_shot_for_explicit_depth() -> None:
         dimensions=["pricing", "feature", "persona"],
     ))
     assert len(detail.plan.competitors) * len(detail.plan.dimensions) == 12
-    assert service._should_use_analyst_react(detail, dimension="pricing", qa_feedback=[{"issue": "gap"}]) is False
+    assert service._should_use_analyst_react(
+        detail, dimension="pricing", qa_feedback=[{"issue": "gap"}]
+    ) is False
 
 
 @pytest.mark.asyncio
@@ -416,7 +430,10 @@ async def test_deep_max_scope_leaves_writer_llm_reserve(
         dimensions=["pricing", "feature", "persona"],
     ))
     assert len(detail.plan.competitors) * len(detail.plan.dimensions) == 24
-    assert {task.max_turns for task in detail.plan.task_decomposition if task.stage == "analyst"} == {1}
+    assert {
+        task.max_turns for task in detail.plan.task_decomposition
+        if task.stage == "analyst"
+    } == {1}
     budget = service._run_llm_budget(service._runs[detail.id])
     assert budget.max_calls - 24 * (3 + 1 + 1) - 2 - 4 >= 32
 
@@ -447,13 +464,18 @@ async def test_collector_search_budget_counts_filtered_fallback_and_community(
         return []
     monkeypatch.setattr("packages.orchestrator.service.web_search", fake_web_search)
     service._search = SimpleNamespace(is_enabled=True)
-    await service._search_research_candidates(record, detail, "pricing", context, "Cursor pricing", 5)
+    await service._search_research_candidates(
+        record, detail, "pricing", context, "Cursor pricing", 5
+    )
     await service._trace_search(record, agent="collector", subagent=context.subagent,
                                 query="react retry", max_results=3, context=context)
     await service._community_source_candidates(record, detail, "pricing", "Cursor", context)
     assert calls == ["Cursor pricing", "Cursor pricing"]
     assert detail.collector_research_usage[context.subagent].search_calls == 2
-    assert RunDetail.model_validate(detail.model_dump()).collector_research_usage[context.subagent].search_calls == 2
+    assert (
+        RunDetail.model_validate(detail.model_dump())
+        .collector_research_usage[context.subagent].search_calls == 2
+    )
 
 
 @pytest.mark.asyncio
@@ -488,7 +510,9 @@ async def test_collector_fetch_and_advanced_budget_shared_with_later_pipeline(
     monkeypatch.setattr("packages.agents.collectors.logic.run_research_pipeline", fake_pipeline)
     monkeypatch.setattr(service, "_raw_sources_from_research_result", lambda *args, **kwargs: [])
     monkeypatch.setattr(service, "_trace_local_tool", lambda *args, **kwargs: None)
-    await service._trace_fetch(record, "collector", context.subagent, "https://example.com/react", context)
+    await service._trace_fetch(
+        record, "collector", context.subagent, "https://example.com/react", context
+    )
     await service._collect_competitor_with_research_pipeline(
         record, detail, "pricing", "Cursor", context, batch_sources=[],
         target_source_count=2, include_official=True, enable_search=False,
@@ -496,7 +520,10 @@ async def test_collector_fetch_and_advanced_budget_shared_with_later_pipeline(
     assert network_calls == [True, False, False]
     usage = detail.collector_research_usage[context.subagent]
     assert (usage.fetch_calls, usage.advanced_fetch_attempts) == (3, 1)
-    assert RunDetail.model_validate(detail.model_dump()).collector_research_usage[context.subagent] == usage
+    assert (
+        RunDetail.model_validate(detail.model_dump())
+        .collector_research_usage[context.subagent] == usage
+    )
 
 
 @pytest.mark.asyncio
@@ -754,7 +781,9 @@ def test_repair_pass_keeps_explicit_budget_caps_and_legacy_expansion() -> None:
         ResearchBrief(**common, research_depth="standard"), [task], round_index=1
     )
     legacy = _repair_brief(ResearchBrief(**common), [task], round_index=1)
-    assert (explicit.max_search_queries, explicit.max_candidates, explicit.max_fetches) == (2, 10, 5)
+    assert (
+        explicit.max_search_queries, explicit.max_candidates, explicit.max_fetches
+    ) == (2, 10, 5)
     assert (legacy.max_search_queries, legacy.max_candidates, legacy.max_fetches) == (3, 12, 6)
 
 
@@ -923,6 +952,8 @@ async def test_default_segment_writer_prompt_includes_depth_length(
             language_guidance="English", memory_context="none",
             layer_context="L1", required_sections="Decision Summary", retry_count=0,
         )
-    for prompt, target in zip(captured[:3], ("4,000-6,000", "8,000-12,000", "16,000-20,000"), strict=True):
+    for prompt, target in zip(
+        captured[:3], ("4,000-6,000", "8,000-12,000", "16,000-20,000"), strict=True
+    ):
         assert f"Full report target: {target} characters" in prompt
     assert "Full report target" not in captured[3]

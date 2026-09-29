@@ -68,6 +68,102 @@ async def test_resume_review_requires_pending_hitl_interrupt() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("stage", "first_request", "second_request"),
+    [
+        (
+            "evidence",
+            HitlResumeRequest(decision="accept"),
+            HitlResumeRequest(decision="redo"),
+        ),
+        (
+            "planner",
+            HitlResumeRequest(decision="modify_plan", dimensions=["feature"]),
+            HitlResumeRequest(decision="modify_plan", dimensions=["pricing"]),
+        ),
+    ],
+)
+async def test_concurrent_conflicting_review_does_not_report_ignored_decision_as_success(
+    stage: str, first_request: HitlResumeRequest, second_request: HitlResumeRequest,
+) -> None:
+    store = EnterpriseMemoryStore()
+    run_service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+        preference_memory=PreferenceMemoryStore.in_memory(),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    runtime = RuntimeCommandService(
+        settings=_settings(),
+        run_service=run_service,
+        workflow_service=object(),
+        enterprise_store=store,
+        preference_memory=PreferenceMemoryStore.in_memory(),
+    )
+    prior_resume: asyncio.Task[None] | None = None
+
+    async def fake_resume_graph(_run_id: str, _request: HitlResumeRequest) -> None:
+        return None
+
+    run_service._resume_interrupted_graph = fake_resume_graph  # type: ignore[method-assign]
+    try:
+        detail = await run_service.create_run(
+            RunCreateRequest(
+                topic="Concurrent evidence review",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+                collaboration_mode="assisted",
+                research_depth="standard",
+            )
+        )
+        record = run_service._runs[detail.id]
+        gate = asyncio.Event()
+        prior_resume = asyncio.create_task(gate.wait())
+        record.resume_task = prior_resume
+        record.pending_interrupts[stage] = {
+            "stage": stage, "interrupt_node": f"{stage}_hitl",
+        }
+        detail.status = "interrupted"
+        detail.current_node = f"{stage}_hitl"
+
+        accept = asyncio.create_task(
+            runtime.resume_review(
+                ResumeReviewCommand(
+                    run_id=detail.id, request=first_request
+                ),
+                actor=_actor(),
+            )
+        )
+        await asyncio.sleep(0)
+        redo = asyncio.create_task(
+            runtime.resume_review(
+                ResumeReviewCommand(
+                    run_id=detail.id, request=second_request
+                ),
+                actor=_actor(),
+            )
+        )
+        await asyncio.sleep(0)
+        gate.set()
+        results = await asyncio.gather(accept, redo, return_exceptions=True)
+        succeeded = [result for result in results if not isinstance(result, BaseException)]
+        rejected = [result for result in results if isinstance(result, RuntimeCommandError)]
+        assert len(succeeded) == 1
+        assert len(rejected) == 1
+        assert rejected[0].status_code == 409
+        assert record.pending_interrupts[stage]["resume_decision"] == first_request.decision
+        if stage == "planner":
+            assert detail.plan.dimensions == ["feature"]
+    finally:
+        if prior_resume is not None:
+            prior_resume.cancel()
+            await asyncio.gather(prior_resume, return_exceptions=True)
+        await run_service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_quick_evidence_redo_limit_returns_conflict_through_runtime_and_api() -> None:
     store = EnterpriseMemoryStore()
     run_service = RunService(

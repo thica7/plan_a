@@ -213,7 +213,9 @@ def test_report_core_accepts_optional_cited_product_opportunities() -> None:
     core = ReportCore.model_validate({
         **_core().model_dump(),
         "product_opportunities": [
-            _claim("Pilot a pricing comparison workflow before committing to a product direction.").model_dump()
+            _claim(
+                "Pilot a pricing comparison workflow before committing to a product direction."
+            ).model_dump()
         ],
     })
 

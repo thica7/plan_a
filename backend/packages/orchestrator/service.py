@@ -174,6 +174,10 @@ class EvidenceReviewInputError(ValueError):
     """An evidence review decision is not valid for this checkpoint."""
 
 
+class HitlDecisionConflictError(ValueError):
+    """A different review request already resumed this checkpoint."""
+
+
 def _aggregate_consistency_votes(validation: ClaimValidationReport) -> dict[str, int]:
     totals = {"text_support": 0, "evidence_quality": 0, "triangulation": 0}
     for result in validation.results:
@@ -513,7 +517,9 @@ class RunService(
             plan=plan,
             max_iterations=min(
                 self._settings.max_iterations,
-                {"quick": 1, "standard": 2}.get(request.research_depth, self._settings.max_iterations),
+                {"quick": 1, "standard": 2}.get(
+                    request.research_depth, self._settings.max_iterations
+                ),
             ),
             auto_redo_warn_enabled=auto_redo_warn_enabled,
             hitl_enabled=hitl_enabled,
@@ -1058,16 +1064,37 @@ class RunService(
         record = self._runs.get(run_id)
         if record is None:
             return None
-        if any(pending.get("resume_in_progress") for pending in record.pending_interrupts.values()):
+        stage_at_request = self._active_pending_interrupt_stage(record)
+        pending_at_request = record.pending_interrupts.get(stage_at_request)
+        if pending_at_request and pending_at_request.get("resume_in_progress"):
+            if pending_at_request.get("resume_request") != request.model_dump(
+                mode="json", exclude_none=True
+            ):
+                raise HitlDecisionConflictError(
+                    "A different HITL review request is already resuming this checkpoint."
+                )
             return record.detail
         if record.resume_task is not None and not record.resume_task.done():
-            await record.resume_task
+            await asyncio.shield(record.resume_task)
+        if (
+            pending_at_request is not None
+            and record.pending_interrupts.get(stage_at_request) is not pending_at_request
+        ):
+            raise HitlDecisionConflictError(
+                "The HITL checkpoint changed while this decision was waiting."
+            )
         if record.pending_interrupts:
             stage = self._active_pending_interrupt_stage(record) or next(
                 iter(record.pending_interrupts)
             )
             pending = record.pending_interrupts.get(stage, {})
             if pending.get("resume_in_progress"):
+                if pending.get("resume_request") != request.model_dump(
+                    mode="json", exclude_none=True
+                ):
+                    raise HitlDecisionConflictError(
+                        "A different HITL review request is already resuming this checkpoint."
+                    )
                 return record.detail
             if stage == "evidence":
                 if request.decision not in {"accept", "redo"}:
@@ -1150,74 +1177,99 @@ class RunService(
                 self._refresh_quality_metrics(record.detail)
             pending["resume_in_progress"] = True
             pending["resume_decision"] = request.decision
+            pending["resume_request"] = request.model_dump(mode="json", exclude_none=True)
             record.pending_interrupts[stage] = pending
-            await self._record_hitl_lifecycle_event(
-                record,
-                lifecycle_stage=lifecycle_stage_for_resume_decision(
-                    request.decision,
-                    note=request.note,
-                ),
-                review_kind=review_kind_for_stage(stage),
-                stage=stage,
-                decision=request.decision,
-                actor_id=hitl_actor_id,
-                target_type="run",
-                target_id=run_id,
-                result_action="resume_langgraph",
-                note=request.note or "",
-                metadata={
-                    "dimensions": request.dimensions or [],
-                    "competitors": request.competitors or [],
-                    "competitor_edits": [
-                        edit.model_dump(mode="json") for edit in request.competitor_edits
-                    ],
-                    "pending_interrupt": record.pending_interrupts.get(stage, {}),
-                },
-            )
-            record.detail.status = "running"
-            record.detail.updated_at = datetime.utcnow()
-            self._persist_run(run_id)
-            await self._record_hitl_lifecycle_event(
-                record,
-                lifecycle_stage="resumed",
-                review_kind=review_kind_for_stage(stage),
-                stage=stage,
-                decision=request.decision,
-                actor_id=hitl_actor_id,
-                target_type="run",
-                target_id=run_id,
-                result_action="graph_resume_scheduled",
-                note=request.note or "",
-                metadata={
-                    "dimensions": request.dimensions or [],
-                    "competitors": request.competitors or [],
-                    "competitor_edits": [
-                        edit.model_dump(mode="json") for edit in request.competitor_edits
-                    ],
-                },
-            )
-            await self.emit(
-                run_id,
-                "node_completed",
-                "hitl",
-                None,
-                f"HITL decision received: {request.decision}",
-                request.model_dump(exclude_none=True),
-            )
-            if memory_feedback_payload is not None:
+            try:
+                await self._record_hitl_lifecycle_event(
+                    record,
+                    lifecycle_stage=lifecycle_stage_for_resume_decision(
+                        request.decision,
+                        note=request.note,
+                    ),
+                    review_kind=review_kind_for_stage(stage),
+                    stage=stage,
+                    decision=request.decision,
+                    actor_id=hitl_actor_id,
+                    target_type="run",
+                    target_id=run_id,
+                    result_action="resume_langgraph",
+                    note=request.note or "",
+                    metadata={
+                        "dimensions": request.dimensions or [],
+                        "competitors": request.competitors or [],
+                        "competitor_edits": [
+                            edit.model_dump(mode="json") for edit in request.competitor_edits
+                        ],
+                        "pending_interrupt": record.pending_interrupts.get(stage, {}),
+                    },
+                )
+                record.detail.status = "running"
+                record.detail.updated_at = datetime.utcnow()
+                self._persist_run(run_id)
+                await self._record_hitl_lifecycle_event(
+                    record,
+                    lifecycle_stage="resumed",
+                    review_kind=review_kind_for_stage(stage),
+                    stage=stage,
+                    decision=request.decision,
+                    actor_id=hitl_actor_id,
+                    target_type="run",
+                    target_id=run_id,
+                    result_action="graph_resume_scheduled",
+                    note=request.note or "",
+                    metadata={
+                        "dimensions": request.dimensions or [],
+                        "competitors": request.competitors or [],
+                        "competitor_edits": [
+                            edit.model_dump(mode="json") for edit in request.competitor_edits
+                        ],
+                    },
+                )
                 await self.emit(
                     run_id,
-                    "memory.feedback_captured",
-                    "memory",
+                    "node_completed",
+                    "hitl",
                     None,
-                    "HITL feedback was captured as reviewable MemoryAgent candidate input.",
-                    memory_feedback_payload,
+                    f"HITL decision received: {request.decision}",
+                    request.model_dump(exclude_none=True),
                 )
-            if hitl_actor_id == "system":
-                record.pending_interrupts.setdefault(stage, {})["auto_resume"] = (
-                    request.model_dump(mode="json", exclude_none=True)
+                if memory_feedback_payload is not None:
+                    await self.emit(
+                        run_id,
+                        "memory.feedback_captured",
+                        "memory",
+                        None,
+                        "HITL feedback was captured as reviewable MemoryAgent candidate input.",
+                        memory_feedback_payload,
+                    )
+                if hitl_actor_id == "system":
+                    record.pending_interrupts.setdefault(stage, {})["auto_resume"] = (
+                        request.model_dump(mode="json", exclude_none=True)
+                    )
+                record.resume_task = asyncio.create_task(
+                    self._resume_interrupted_graph(run_id, request)
                 )
-            record.resume_task = asyncio.create_task(self._resume_interrupted_graph(run_id, request))
+            except asyncio.CancelledError:
+                # Once accepted, a disconnected HTTP request must not strand the checkpoint.
+                record.detail.status = "running"
+                record.detail.updated_at = datetime.utcnow()
+                if hitl_actor_id == "system":
+                    record.pending_interrupts.setdefault(stage, {})["auto_resume"] = (
+                        request.model_dump(mode="json", exclude_none=True)
+                    )
+                self._persist_run(run_id)
+                record.resume_task = asyncio.create_task(
+                    self._resume_interrupted_graph(run_id, request)
+                )
+                self._append_run_event_sync(
+                    record,
+                    "hitl.reviewed",
+                    "hitl",
+                    stage,
+                    "HITL review request was cancelled after acceptance; graph resume continued.",
+                    {"stage": stage, "decision": request.decision},
+                )
+                raise
             return record.detail
         if request.decision in {"accept", "modify_plan", "force_pass"}:
             return record.detail
@@ -1702,9 +1754,13 @@ class RunService(
             detail.plan.competitors = ["Demo Alpha", "Demo Beta", "Demo Gamma"]
             depth_budget = research_depth_budget(detail.plan.research_depth)
             if depth_budget is not None:
-                detail.plan.competitors = detail.plan.competitors[:self._research_auto_competitor_limit(
-                    detail.plan.research_depth, detail.plan.dimensions, detail.plan.target_product
-                )]
+                detail.plan.competitors = detail.plan.competitors[
+                    : self._research_auto_competitor_limit(
+                        detail.plan.research_depth,
+                        detail.plan.dimensions,
+                        detail.plan.target_product,
+                    )
+                ]
             detail.plan.homepage_hints = {
                 competitor: f"https://example.com/{self._issue_id_fragment(competitor)}"
                 for competitor in detail.plan.competitors
@@ -2063,7 +2119,9 @@ class RunService(
             fetched_at = next(
                 (
                     metadata[key]
-                    for key in ("fetched_at", "source_fetched_at", "crawl_fetched_at", "kb_fetched_at")
+                    for key in (
+                        "fetched_at", "source_fetched_at", "crawl_fetched_at", "kb_fetched_at"
+                    )
                     if metadata.get(key)
                 ),
                 None,
@@ -4115,8 +4173,14 @@ class RunService(
                 output_text=str(exc),
                 metadata=self._trace_metadata(
                     context,
-                    {"provider": self._settings.web_search_provider, "error": str(exc),
-                     "filters": json.dumps(filters.payload(), ensure_ascii=False) if filters else ""},
+                    {
+                        "provider": self._settings.web_search_provider,
+                        "error": str(exc),
+                        "filters": (
+                            json.dumps(filters.payload(), ensure_ascii=False)
+                            if filters else ""
+                        ),
+                    },
                 ),
             )
             raise

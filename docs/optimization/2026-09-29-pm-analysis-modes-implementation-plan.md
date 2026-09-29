@@ -84,7 +84,7 @@ assert "待验证" in unsupported_opportunity
 
 **Files:** `frontend/src/features/new-run/DepthSection.tsx`、`frontend/src/features/new-run/ExecutionModePanel.tsx`、`frontend/src/features/new-run/RunReadinessRail.tsx`、`frontend/src/features/new-run/useNewRunBuilder.ts`、`frontend/src/features/new-run/types.ts`、`frontend/src/features/run-detail/planReview.ts`、`frontend/src/pages/RunDetail.tsx`、新建 `frontend/src/features/hitl/EvidenceReviewModal.tsx`、`frontend/src/api/types.ts`、`frontend/src/stores/i18n.ts`、对应 Vitest。
 
-- [ ] 写失败前端测试：L1/L2/L3 标签为研究视角；选 quick/standard/deep 和 AI/assisted 会发送独立字段；决策简报与预算摘要可见；`evidence_hitl` 渲染来源审核且接受/补采能调用现有恢复接口。
+- [x] 写失败前端测试：L1/L2/L3 标签为研究视角；选 quick/standard/deep 和 AI/assisted 会发送独立字段；决策简报与预算摘要可见；`evidence_hitl` 渲染来源审核且接受/补采能调用现有恢复接口。
 
 ```ts
 expect(request.research_depth).toBe("quick");
@@ -92,15 +92,15 @@ expect(request.collaboration_mode).toBe("assisted");
 expect(screen.getByText(/证据审核/)).toBeInTheDocument();
 ```
 
-- [ ] 运行相关 `pnpm vitest run ...` 确认控件/请求缺失。
-- [ ] 实现新控件和文案；`execution_mode` 继续表示真实/演示；半人工的三次暂停及全 AI 无等待说明清楚，成本栏只展示可保证的上限。
-- [ ] 跑前端相关测试、`pnpm test`、`pnpm build`、交互审计。
+- [x] 运行相关 `pnpm vitest run ...` 确认控件/请求缺失。
+- [x] 实现新控件和文案；`execution_mode` 继续表示真实/演示；半人工的三次暂停及全 AI 无等待说明清楚，成本栏只展示可保证的上限。
+- [x] 跑前端相关测试、`pnpm test`、`pnpm build`、交互审计。
 
 ### Task 6: 组合验收、文档和提交
 
 **Files:** `frontend/openapi.json`、`frontend/src/api/openapi.ts`、`README.md`、`docs/optimization/2026-09-29-pm-modes-results.md`、后端与前端组合测试。
 
-- [ ] 从后端导出 OpenAPI 并生成 TS；断言 API 文档和运行响应三轴一致。
-- [ ] 用固定 demo 输入执行 3 深度 × 2 协作模式；验证预算单调、人工暂停/恢复、报告章节、旧请求兼容和无凭据 real 明确失败。
-- [ ] 完整执行 `.venv/bin/python -m pytest backend/tests -q`、`pnpm test`、`pnpm build`、WebFetch 测试、最小运行及 Temporal 薄壳烟测、密钥扫描、Ruff 和 `git diff --check`。
-- [ ] 记录真实模型/搜索不可测范围、测试计数和模式预算，代码审查后提交分支。
+- [x] 从后端导出 OpenAPI 并生成 TS；断言 API 文档和运行响应三轴一致。
+- [x] 用固定 demo 输入执行 3 视角 × 3 深度 × 2 协作 × 2 执行模式；验证预算单调、人工暂停/恢复、报告章节、旧请求兼容和无凭据 real 明确失败。
+- [x] 完整执行 `.venv/bin/python -m pytest backend/tests -q`、`pnpm test`、`pnpm build`、WebFetch 测试、最小运行及 Temporal 薄壳烟测、密钥扫描、Ruff 和 `git diff --check`；全库 Ruff 既有问题见验收记录。
+- [x] 记录真实模型/搜索不可测范围、测试计数和模式预算，代码审查后提交分支。

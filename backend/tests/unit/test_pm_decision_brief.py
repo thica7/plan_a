@@ -105,7 +105,12 @@ def _service() -> RunService:
 @pytest.mark.parametrize("field", ["decision_question", "primary_job", "success_metric"])
 @pytest.mark.parametrize(
     "token",
-    ["[source:source-pricing]", "[SOURCE :source-pricing]", "[source：source-pricing]", "[来源:source-pricing]"],
+    [
+        "[source:source-pricing]",
+        "[SOURCE :source-pricing]",
+        "[source：source-pricing]",
+        "[来源:source-pricing]",
+    ],
 )
 def test_decision_brief_rejects_source_token_in_any_field(field: str, token: str) -> None:
     with pytest.raises(ValidationError, match="source citation"):
@@ -181,18 +186,26 @@ def test_legacy_decision_brief_full_report_does_not_cite_user_input() -> None:
         (DecisionBrief(primary_job="Compare daily coding workflows"), True),
     ],
 )
-def test_product_opportunities_brief_is_conditional(brief: DecisionBrief | None, expected: bool) -> None:
+def test_product_opportunities_brief_is_conditional(
+    brief: DecisionBrief | None, expected: bool,
+) -> None:
     detail = _detail(brief)
     keys = [section.section_key for section in build_section_briefs(detail)]
 
     assert ("product_opportunities" in keys) is expected
     if expected:
         assert keys.index("product_opportunities") == keys.index("decision_summary") + 1
-        opportunity = next(item for item in build_section_briefs(detail) if item.section_key == "product_opportunities")
+        opportunity = next(
+            item for item in build_section_briefs(detail)
+            if item.section_key == "product_opportunities"
+        )
         assert opportunity.layer == "core"
         assert opportunity.allowed_claim_card_ids == ["claim-pricing"]
         assert opportunity.allowed_source_ids == ["source-pricing"]
-        assert any("three" in rule.lower() and "validat" in rule.lower() for rule in opportunity.must_include)
+        assert any(
+            "three" in rule.lower() and "validat" in rule.lower()
+            for rule in opportunity.must_include
+        )
         assert any("user-provided" in rule.lower() for rule in opportunity.must_not_claim)
         assert opportunity.minimum_depth["maximum_bullet_items"] == 3
 
@@ -204,7 +217,9 @@ def test_product_opportunity_segment_survives_schema_contract_and_assembly() -> 
         for item in segment_payloads_from_briefs(detail, build_section_briefs(detail))
         if item["section_key"] == "product_opportunities"
     )
-    assert segment["user_provided_decision_brief"] == {"decision_question": "Where should we invest?"}
+    assert segment["user_provided_decision_brief"] == {
+        "decision_question": "Where should we invest?"
+    }
     contract = segment_contract_for(segment)
     assert contract.allowed_heading_keys == ("product_opportunities",)
     assert contract.required_heading_keys == ("product_opportunities",)
@@ -241,8 +256,14 @@ def test_product_opportunity_segment_survives_schema_contract_and_assembly() -> 
         output_language=detail.output_language,
         competitors=detail.plan.competitors,
     )
-    assert assembled.markdown.index("## Decision Summary") < assembled.markdown.index(f"## {heading}")
-    assert assembled.markdown.index(f"## {heading}") < assembled.markdown.index("## Evidence & QA Support")
+    assert (
+        assembled.markdown.index("## Decision Summary")
+        < assembled.markdown.index(f"## {heading}")
+    )
+    assert (
+        assembled.markdown.index(f"## {heading}")
+        < assembled.markdown.index("## Evidence & QA Support")
+    )
     assert "<!-- report-section:key=product_opportunities layer=core -->" in assembled.markdown
     assert validate_publication_contract(
         assembled.markdown,
@@ -360,7 +381,10 @@ def test_uncited_hypothesis_cannot_hide_second_competitor_fact(language: str, bu
             "evidence_support",
         )
     )
-    assert "invalid_product_opportunities" in run_writer_quality_preflight(detail, report).failure_reasons
+    assert (
+        "invalid_product_opportunities"
+        in run_writer_quality_preflight(detail, report).failure_reasons
+    )
 
 
 @pytest.mark.parametrize(
@@ -404,7 +428,10 @@ def test_uncited_hypothesis_cannot_name_competitor_before_task(language: str, bu
             "evidence_support",
         )
     )
-    assert "invalid_product_opportunities" in run_writer_quality_preflight(detail, report).failure_reasons
+    assert (
+        "invalid_product_opportunities"
+        in run_writer_quality_preflight(detail, report).failure_reasons
+    )
 
 
 def test_product_opportunity_allows_competitor_in_task_or_with_citation() -> None:
@@ -418,7 +445,8 @@ def test_product_opportunity_allows_competitor_in_task_or_with_citation() -> Non
     heading = report_label(detail.output_language, "product_opportunities")
     generic = (
         f"## {heading}\n- Hypothesis to validate: test onboarding — "
-        "User task: evaluate Cursor onboarding [source:source-pricing]; Validation action: run a pilot; "
+        "User task: evaluate Cursor onboarding [source:source-pricing]; "
+        "Validation action: run a pilot; "
         "Success signal — the team completes setup."
     )
     cited = (
@@ -450,11 +478,14 @@ def test_product_opportunity_allows_competitor_in_task_or_with_citation() -> Non
         (
             "en-US",
             "Cursor offers free SSO — User task: compare Cursor pricing; "
-            "Validation action: run a pilot; Success signal — complete setup [source:source-pricing].",
+            "Validation action: run a pilot; Success signal — complete setup "
+            "[source:source-pricing].",
         ),
     ],
 )
-def test_task_or_signal_citation_cannot_support_prior_competitor_fact(language: str, bullet: str) -> None:
+def test_task_or_signal_citation_cannot_support_prior_competitor_fact(
+    language: str, bullet: str,
+) -> None:
     detail = _detail(DecisionBrief(primary_job="Compare Cursor pricing"), language=language)
     segment = next(
         item
@@ -479,7 +510,10 @@ def test_task_or_signal_citation_cannot_support_prior_competitor_fact(language: 
             "evidence_support",
         )
     )
-    assert "invalid_product_opportunities" in run_writer_quality_preflight(detail, report).failure_reasons
+    assert (
+        "invalid_product_opportunities"
+        in run_writer_quality_preflight(detail, report).failure_reasons
+    )
     with pytest.raises(RuntimeError, match="quality preflight"):
         _service()._harden_schema_contract_report_markdown(detail, report)
 
@@ -610,8 +644,14 @@ def test_quality_preflight_requires_product_opportunities_when_brief_exists() ->
         )
     )
 
-    assert "product_opportunities" in run_writer_quality_preflight(detail, headings).missing_core_sections
-    assert "product_opportunities" not in run_writer_quality_preflight(_detail(), headings).missing_core_sections
+    assert (
+        "product_opportunities"
+        in run_writer_quality_preflight(detail, headings).missing_core_sections
+    )
+    assert (
+        "product_opportunities"
+        not in run_writer_quality_preflight(_detail(), headings).missing_core_sections
+    )
 
 
 @pytest.mark.parametrize(
@@ -624,8 +664,9 @@ def test_quality_preflight_requires_product_opportunities_when_brief_exists() ->
         ),
         "- Hypothesis to validate: improve pricing comparison.",
         (
-                "- Hypothesis to validate: improve pricing comparison — User task: compare plans; "
-            "Validation action: run a buyer pilot; Success signal — buyers complete the comparison.\n"
+            "- Hypothesis to validate: improve pricing comparison — User task: "
+            "compare plans; Validation action: run a buyer pilot; Success signal — "
+            "buyers complete the comparison.\n"
             "### Fourth opportunity\nAn additional unsupported product idea."
         ),
     ],
@@ -648,7 +689,10 @@ def test_schema_contract_final_preflight_rejects_invalid_product_repair(product_
         )
     )
 
-    assert "invalid_product_opportunities" in run_writer_quality_preflight(detail, report).failure_reasons
+    assert (
+        "invalid_product_opportunities"
+        in run_writer_quality_preflight(detail, report).failure_reasons
+    )
     with pytest.raises(RuntimeError, match="quality preflight"):
         _service()._harden_schema_contract_report_markdown(detail, report)
 
@@ -681,7 +725,10 @@ def test_schema_contract_final_preflight_accepts_valid_product_section() -> None
         competitors=detail.plan.competitors,
     )
     assert run_writer_quality_preflight(detail, assembled.markdown).passed
-    assert _service()._harden_schema_contract_report_markdown(detail, assembled.markdown) == assembled.markdown
+    assert (
+        _service()._harden_schema_contract_report_markdown(detail, assembled.markdown)
+        == assembled.markdown
+    )
 
 
 @pytest.mark.asyncio
@@ -842,7 +889,11 @@ async def test_demo_pipeline_only_adds_uncited_product_section_for_brief(with_br
     ("language", "heading", "labels"),
     [
         ("zh-CN", "产品机会与验证", ("用户任务：", "验证动作：", "成功信号：")),
-        ("en-US", "Product Opportunities and Validation", ("User task:", "validation action:", "success signal —")),
+        (
+            "en-US",
+            "Product Opportunities and Validation",
+            ("User task:", "validation action:", "success signal —"),
+        ),
     ],
 )
 def test_demo_opportunity_is_one_complete_uncited_bullet(

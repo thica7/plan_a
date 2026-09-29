@@ -2120,8 +2120,12 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         metadata = dict(refreshed.metadata if use_refreshed_identity else existing.metadata)
         metadata["fetched_at"] = new_fetched
         if not use_refreshed_identity:
-            old_verified = self._parse_refresh_fetch_time(existing.metadata.get("last_verified_at"))
-            new_verified = self._parse_refresh_fetch_time(refreshed.metadata.get("last_verified_at"))
+            old_verified = self._parse_refresh_fetch_time(
+                existing.metadata.get("last_verified_at")
+            )
+            new_verified = self._parse_refresh_fetch_time(
+                refreshed.metadata.get("last_verified_at")
+            )
             if new_verified is not None and (
                 old_verified is None or new_verified > old_verified
             ):

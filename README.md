@@ -17,6 +17,10 @@ Docker-first deployment scaffolding.
   substitutes, and research the target alongside those products. Product facts
   and comparison cells retain source references; legacy topic-only runs remain
   available through the API.
+- Choose a research lens (direct rivals, adjacent substitutes, or market view),
+  a separate quick/standard/deep research budget, and AI or assisted review.
+  A decision brief can steer the report toward a product question, user job,
+  success signal, and evidence-backed opportunities to validate.
 - Orchestrate planner, collector, analyst, comparator, writer, QA, reflector,
   and scoped redo stages through a graph-based pipeline.
 - Collect evidence from trusted registries, web search, fetched web pages,
@@ -125,6 +129,18 @@ discovery requires configured web search; you can also provide rival names
 manually. The target appears separately in the comparison matrix. The browser
 fetch path needs optional Playwright/Chromium dependencies for dynamic pages;
 scanned PDFs need OCR before their text can support claims.
+
+The New Run form separates three choices:
+
+| Choice | Options | Effect |
+| --- | --- | --- |
+| Research lens | L1 direct rivals, L2 adjacent substitutes, L3 market view | Sets the rival discovery perspective. |
+| Research depth | Quick, standard, deep | Caps rivals, research slices, search/fetch attempts, model calls, and report length. Deployment limits may tighten these caps. |
+| Collaboration | AI, assisted | Assisted runs pause for plan, evidence, and final QA review; AI runs proceed without those pauses. |
+
+Demo and real execution remain separate from those choices. With a decision
+brief, the report adds a product opportunities and validation section. User
+inputs shape the analysis but are not treated as verified product facts.
 
 Useful commands:
 

@@ -226,7 +226,9 @@ def test_renderer_localizes_zh_structural_headings_and_keeps_support_after_core(
     ("language", "heading"),
     [("zh-CN", "产品机会与验证"), ("en-US", "Product Opportunities and Validation")],
 )
-def test_renderer_emits_optional_product_opportunities_near_decision_summary(language: str, heading: str) -> None:
+def test_renderer_emits_optional_product_opportunities_near_decision_summary(
+    language: str, heading: str,
+) -> None:
     report = _report(language)
     report.core = report.core.model_copy(update={
         "product_opportunities": [_claim("Test a product opportunity with a pilot.")],

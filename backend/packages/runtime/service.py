@@ -31,6 +31,7 @@ from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.service import (
     EvidenceRedoLimitError,
     EvidenceReviewInputError,
+    HitlDecisionConflictError,
     RunService,
 )
 from packages.runtime.commands import (
@@ -504,6 +505,10 @@ class RuntimeCommandService:
         except EvidenceReviewInputError as exc:
             raise RuntimeCommandError(
                 422, str(exc), command_type="resume_review"
+            ) from exc
+        except HitlDecisionConflictError as exc:
+            raise RuntimeCommandError(
+                409, str(exc), command_type="resume_review"
             ) from exc
         if updated is None:
             raise RuntimeCommandError(404, "Run not found", command_type="resume_review")

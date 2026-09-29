@@ -3581,16 +3581,28 @@ class WriterAgentMixin:
                 [
                     "Required segment outline:",
                     h2("product_opportunities"),
-                    "Write exactly one H2 heading followed by 1-3 single-line opportunity bullets. No preamble, paragraphs, numbered lists, extra headings, or continuation lines.",
+                    "Write exactly one H2 heading followed by 1-3 single-line "
+                    "opportunity bullets. No preamble, paragraphs, numbered lists, "
+                    "extra headings, or continuation lines.",
                     (
-                        "Each bullet must state 待验证 or include an allowed [source:ID], followed by 用户任务：...；验证动作：...；成功信号：...。"
-                        if is_zh else
-                        "Each bullet must state Hypothesis to validate or include an allowed [source:ID], followed by User task: ...; Validation action: ...; Success signal — ... ."
+                        (
+                            "Each bullet must state 待验证 or include an allowed [source:ID], "
+                            "followed by 用户任务：...；验证动作：...；成功信号：...。"
+                        )
+                        if is_zh
+                        else (
+                            "Each bullet must state Hypothesis to validate or include an "
+                            "allowed [source:ID], followed by User task: ...; "
+                            "Validation action: ...; Success signal — ... ."
+                        )
                     ),
-                    "Before User task, write only one hypothesis clause; do not add a semicolon or second sentence without a source citation.",
-                    "Do not name a researched competitor before User task without a citation; competitor names in the user task are allowed.",
+                    "Before User task, write only one hypothesis clause; do not add a "
+                    "semicolon or second sentence without a source citation.",
+                    "Do not name a researched competitor before User task without a "
+                    "citation; competitor names in the user task are allowed.",
                     "Treat the decision brief as user-provided context, not competitor evidence.",
-                    "Cite competitor facts only from this segment's allowed source and claim cards; label unsupported ideas as hypotheses.",
+                    "Cite competitor facts only from this segment's allowed source and "
+                    "claim cards; label unsupported ideas as hypotheses.",
                     source_warning,
                 ]
             )
@@ -3818,7 +3830,8 @@ class WriterAgentMixin:
         depth_budget = research_depth_budget(detail.plan.research_depth)
         report_target_instruction = (
             f"Full report target: {depth_budget.report_chars} characters. "
-            "Keep this section proportionate to that target while covering its evidence and required headings.\n"
+            "Keep this section proportionate to that target while covering its "
+            "evidence and required headings.\n"
             if depth_budget is not None else ""
         )
         segment_json = json.dumps(
@@ -5235,7 +5248,10 @@ class WriterAgentMixin:
             replacement = self._section_body(self._backfill_product_opportunities_section(detail))
             if marker:
                 replacement = f"{marker}\n{replacement}"
-            return f"{markdown[:start].rstrip()}\n\n{replacement}\n\n{markdown[end:].lstrip()}".strip()
+            return (
+                f"{markdown[:start].rstrip()}\n\n{replacement}\n\n"
+                f"{markdown[end:].lstrip()}"
+            ).strip()
         return markdown
 
     def _backfill_product_opportunities_section(self, detail: RunDetail) -> list[str]:
@@ -5246,21 +5262,31 @@ class WriterAgentMixin:
         task = safe_decision_brief_text(
             brief.get("primary_job") or brief.get("decision_question") or detail.topic
         )
-        metric = safe_decision_brief_text(brief.get("success_metric") or (
-            "试点前约定可衡量的任务完成标准"
-            if is_zh else "a measurable task completion threshold agreed before the pilot"
-        ))
+        metric = safe_decision_brief_text(
+            brief.get("success_metric")
+            or (
+                "试点前约定可衡量的任务完成标准"
+                if is_zh
+                else "a measurable task completion threshold agreed before the pilot"
+            )
+        )
         heading = report_label(detail.output_language, "product_opportunities")
         if is_zh:
             return [
                 "",
                 f"## {heading}",
-                f"- 待验证机会假设：探索与用户任务相关的产品改进，用户任务：{task}；验证动作：让目标用户完成同一任务并记录阻碍；成功信号：{metric}。用户简报仅作为输入上下文，竞品差异与用户需求仍待验证。",
+                f"- 待验证机会假设：探索与用户任务相关的产品改进，用户任务：{task}；"
+                f"验证动作：让目标用户完成同一任务并记录阻碍；成功信号：{metric}。"
+                "用户简报仅作为输入上下文，竞品差异与用户需求仍待验证。",
             ]
         return [
             "",
             f"## {heading}",
-            f"- Hypothesis to validate: explore a product improvement tied to the user task — User task: {task}; Validation action: have target users complete the same task and record blockers; Success signal — {metric}. The user-provided brief is context; competitor differences and user demand remain unverified.",
+            "- Hypothesis to validate: explore a product improvement tied to the user "
+            f"task — User task: {task}; Validation action: have target users complete "
+            f"the same task and record blockers; Success signal — {metric}. "
+            "The user-provided brief is context; competitor differences and user "
+            "demand remain unverified.",
         ]
 
     def _layer_section_heading(self, detail: RunDetail) -> str:

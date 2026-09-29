@@ -143,7 +143,10 @@ def build_section_briefs(detail: RunDetail) -> list[SectionBrief]:
                     "Do not cite or rely on claim, decision, or source IDs outside this brief.",
                     "Do not convert evidence gaps into factual claims.",
                     *(
-                        ["The user-provided decision brief is context, not a competitor source or verified fact."]
+                        [
+                            "The user-provided decision brief is context, not a "
+                            "competitor source or verified fact."
+                        ]
                         if decision_brief_fields(detail.plan.decision_brief) else []
                     ),
                 ],
@@ -394,7 +397,11 @@ def _core_section_keys(detail: RunDetail) -> list[CoreSectionKey]:
     return _unique(
         [
             "decision_summary",
-            *(["product_opportunities"] if decision_brief_fields(detail.plan.decision_brief) else []),
+            *(
+                ["product_opportunities"]
+                if decision_brief_fields(detail.plan.decision_brief)
+                else []
+            ),
             "review_theme_summary",
             "competitor_deep_dives",
             "side_by_side_matrix",
@@ -668,11 +675,13 @@ def _same_name(value: str | None, expected: str) -> bool:
 def _required_questions(section_key: str) -> list[str]:
     questions = {
         "decision_summary": [
-            "What should the buyer or strategy owner do, and how confident is that recommendation?",
+            "What should the buyer or strategy owner do, and how confident is "
+            "that recommendation?",
             "Which competitors, risks, and evidence boundaries most affect the decision?",
         ],
         "product_opportunities": [
-            "Which product opportunities or explicitly unverified hypotheses follow from the user's decision brief and scoped evidence?",
+            "Which product opportunities or explicitly unverified hypotheses "
+            "follow from the user's decision brief and scoped evidence?",
             "For each, what user task, validation action, and success signal would test it?",
         ],
         "review_theme_summary": [
@@ -726,8 +735,10 @@ def _must_include(section_key: str) -> list[str]:
             "Recommendation posture, confidence, and risk boundary.",
         ],
         "product_opportunities": [
-            "At most three evidence-grounded opportunities or hypotheses to validate; each has a user task, validation action, and success signal.",
-            "Cite competitor facts only from the allowed claim cards and source IDs; label unsupported ideas as hypotheses to validate.",
+            "At most three evidence-grounded opportunities or hypotheses to "
+            "validate; each has a user task, validation action, and success signal.",
+            "Cite competitor facts only from the allowed claim cards and source "
+            "IDs; label unsupported ideas as hypotheses to validate.",
         ],
         "review_theme_summary": [
             "User/community themes and evidence gaps separated from unsupported claims.",

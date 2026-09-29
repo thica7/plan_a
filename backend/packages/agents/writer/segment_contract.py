@@ -473,14 +473,21 @@ def product_opportunity_errors(
     for line in nonempty_lines[1:]:
         match = re.fullmatch(r"[-*+]\s+(.+)", line)
         if match is None:
-            return ["product_opportunities allows only single-line opportunity bullets after its H2"]
+            return [
+                "product_opportunities allows only single-line opportunity bullets "
+                "after its H2"
+            ]
         bullets.append(match.group(1))
     if not 1 <= len(bullets) <= 3:
         return ["product_opportunities requires 1-3 single-line opportunity bullets"]
     field_patterns = (
         (r"用户任务\s*[:：]\s*\S", r"验证动作\s*[:：]\s*\S", r"成功信号\s*[:：]\s*\S")
-        if output_language == "zh-CN" else
-        (r"User task\s*:\s*\S", r"Validation action\s*:\s*\S", r"Success signal\s*—\s*\S")
+        if output_language == "zh-CN"
+        else (
+            r"User task\s*:\s*\S",
+            r"Validation action\s*:\s*\S",
+            r"Success signal\s*—\s*\S",
+        )
     )
     errors: list[str] = []
     for index, bullet in enumerate(bullets, start=1):
@@ -489,7 +496,8 @@ def product_opportunity_errors(
             for pattern in field_patterns
         ):
             errors.append(
-                f"product_opportunities bullet {index} needs user task, validation action, and success signal"
+                f"product_opportunities bullet {index} needs user task, "
+                "validation action, and success signal"
             )
         task_label = re.search(field_patterns[0], bullet, flags=re.IGNORECASE)
         opportunity_statement = bullet[:task_label.start()] if task_label else bullet
@@ -500,12 +508,14 @@ def product_opportunity_errors(
             flags=re.IGNORECASE,
         ) is None:
             errors.append(
-                f"product_opportunities bullet {index} needs a source citation or explicit validation-hypothesis label"
+                f"product_opportunities bullet {index} needs a source citation or "
+                "explicit validation-hypothesis label"
             )
         if not statement_has_source:
             if re.search(r"[;；。.!?！？]", opportunity_statement):
                 errors.append(
-                    f"product_opportunities bullet {index} cannot contain a second uncited statement before the user task"
+                    f"product_opportunities bullet {index} cannot contain a second "
+                    "uncited statement before the user task"
                 )
             if any(
                 re.search(
@@ -517,7 +527,8 @@ def product_opportunity_errors(
                 if isinstance(name, str) and name.strip()
             ):
                 errors.append(
-                    f"product_opportunities bullet {index} cannot name a researched competitor before the user task without a citation"
+                    f"product_opportunities bullet {index} cannot name a researched "
+                    "competitor before the user task without a citation"
                 )
     return errors
 

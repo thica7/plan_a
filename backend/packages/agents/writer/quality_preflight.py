@@ -126,9 +126,16 @@ def run_writer_quality_preflight(
         for index, match in enumerate(h2_matches):
             if heading_key_for(match.group(1), detail.output_language) != "product_opportunities":
                 continue
-            block_end = h2_matches[index + 1].start() if index + 1 < len(h2_matches) else len(markdown)
+            block_end = (
+                h2_matches[index + 1].start()
+                if index + 1 < len(h2_matches)
+                else len(markdown)
+            )
             block_lines = markdown[match.start():block_end].rstrip().splitlines()
-            if index + 1 < len(h2_matches) and parse_report_section_marker(block_lines[-1]) is not None:
+            if (
+                index + 1 < len(h2_matches)
+                and parse_report_section_marker(block_lines[-1]) is not None
+            ):
                 block_lines.pop()
             if product_opportunity_errors(
                 "\n".join(block_lines),

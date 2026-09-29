@@ -114,21 +114,37 @@ def build_demo_report(detail: RunDetail, *, source_refs: str, memory_section: st
     user_brief = decision_brief_fields(detail.plan.decision_brief)
     if user_brief:
         labels = (
-            {"decision_question": "决策问题", "primary_job": "主要任务", "success_metric": "成功指标"}
-            if zh else
-            {"decision_question": "decision question", "primary_job": "primary job", "success_metric": "success metric"}
+            {
+                "decision_question": "决策问题",
+                "primary_job": "主要任务",
+                "success_metric": "成功指标",
+            }
+            if zh
+            else {
+                "decision_question": "decision question",
+                "primary_job": "primary job",
+                "success_metric": "success metric",
+            }
         )
         user_input = "; ".join(
             f"{labels[key]}: {safe_decision_brief_text(value)}"
             for key, value in user_brief.items()
         )
-        job = user_brief.get("primary_job") or user_brief.get("decision_question") or detail.topic
+        job = (
+            user_brief.get("primary_job")
+            or user_brief.get("decision_question")
+            or detail.topic
+        )
         safe_job = safe_decision_brief_text(job)
         metric = user_brief.get("success_metric")
         safe_metric = (
             safe_decision_brief_text(metric)
-            if metric else
-            ("试点前约定可衡量的任务完成标准" if zh else "a measurable task completion threshold agreed before the pilot")
+            if metric
+            else (
+                "试点前约定可衡量的任务完成标准"
+                if zh
+                else "a measurable task completion threshold agreed before the pilot"
+            )
         )
         parts.append(f"## {report_label(language, 'product_opportunities')}")
         parts.append(
@@ -140,8 +156,9 @@ def build_demo_report(detail: RunDetail, *, source_refs: str, memory_section: st
             if zh else
             (
                 "- Hypothesis to validate: explore a product improvement tied to the user task — "
-                f"User task: {safe_job}; validation action: have target users try candidate approaches "
-                f"on the same task and record completion and blockers; success signal — {safe_metric}. "
+                f"User task: {safe_job}; validation action: have target users "
+                "try candidate approaches on the same task and record completion "
+                f"and blockers; success signal — {safe_metric}. "
                 f"User-provided context (not competitor evidence): {user_input}; "
                 "competitor differences and real demand remain unverified."
             )

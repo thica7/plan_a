@@ -2411,6 +2411,11 @@ export interface components {
             /** Topic */
             topic: string;
             target_product?: components["schemas"]["TargetProduct"] | null;
+            /** Research Depth */
+            research_depth?: ("quick" | "standard" | "deep") | null;
+            /** Collaboration Mode */
+            collaboration_mode?: ("ai" | "assisted") | null;
+            decision_brief?: components["schemas"]["DecisionBrief"] | null;
             target_product_evidence?: components["schemas"]["TargetProductEvidence"] | null;
             /** Competitors */
             competitors: string[];
@@ -3280,6 +3285,24 @@ export interface components {
             /** Evidence Ids */
             evidence_ids?: string[];
         };
+        /** CollectorResearchUsage */
+        CollectorResearchUsage: {
+            /**
+             * Search Calls
+             * @default 0
+             */
+            search_calls: number;
+            /**
+             * Fetch Calls
+             * @default 0
+             */
+            fetch_calls: number;
+            /**
+             * Advanced Fetch Attempts
+             * @default 0
+             */
+            advanced_fetch_attempts: number;
+        };
         /** ComparisonCell */
         ComparisonCell: {
             /** Competitor */
@@ -3779,6 +3802,24 @@ export interface components {
              * Format: date-time
              */
             generated_at?: string;
+        };
+        /** DecisionBrief */
+        DecisionBrief: {
+            /**
+             * Decision Question
+             * @default
+             */
+            decision_question: string;
+            /**
+             * Primary Job
+             * @default
+             */
+            primary_job: string;
+            /**
+             * Success Metric
+             * @default
+             */
+            success_metric: string;
         };
         /** DecisionCard */
         DecisionCard: {
@@ -6039,6 +6080,36 @@ export interface components {
              */
             generated_at?: string;
         };
+        /** PendingGraphRedo */
+        PendingGraphRedo: {
+            /** Iteration */
+            iteration: number;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "writer_only" | "comparator" | "analyst" | "collector" | "full";
+            redo_scope: components["schemas"]["RedoScope"];
+            /** Redo Scopes */
+            redo_scopes: components["schemas"]["RedoScope"][];
+            /** Before Md */
+            before_md: string;
+            /** Issue Ids */
+            issue_ids: string[];
+            /** Qa Issue Ids Before */
+            qa_issue_ids_before: string[];
+            /** Issue Count Before */
+            issue_count_before: number;
+            /** Structured Targets */
+            structured_targets?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Auto Continue
+             * @default false
+             */
+            auto_continue: boolean;
+        };
         /** PolicyDecision */
         PolicyDecision: {
             /** Allowed */
@@ -7347,6 +7418,11 @@ export interface components {
             /** Topic */
             topic: string;
             target_product?: components["schemas"]["TargetProduct"] | null;
+            /** Research Depth */
+            research_depth?: ("quick" | "standard" | "deep") | null;
+            /** Collaboration Mode */
+            collaboration_mode?: ("ai" | "assisted") | null;
+            decision_brief?: components["schemas"]["DecisionBrief"] | null;
             /** Competitors */
             competitors?: string[];
             /** Dimensions */
@@ -7459,6 +7535,41 @@ export interface components {
             comparison_matrix?: components["schemas"]["ComparisonMatrix"] | null;
             /** Qa Findings */
             qa_findings?: components["schemas"]["QCIssue"][];
+            /** Collect Qa Findings */
+            collect_qa_findings?: components["schemas"]["QCIssue"][];
+            /**
+             * Evidence Repair Rounds
+             * @default 0
+             */
+            evidence_repair_rounds: number;
+            /** Evidence Review Dimensions */
+            evidence_review_dimensions?: string[];
+            /** Evidence Review Competitors */
+            evidence_review_competitors?: string[];
+            /**
+             * Evidence Refresh Active
+             * @default false
+             */
+            evidence_refresh_active: boolean;
+            /**
+             * Evidence Review Note
+             * @default
+             */
+            evidence_review_note: string;
+            pending_graph_redo?: components["schemas"]["PendingGraphRedo"] | null;
+            /** Interrupt Graph Kind */
+            interrupt_graph_kind?: ("real" | "demo" | "scoped_redo") | null;
+            /** Interrupt Thread Id */
+            interrupt_thread_id?: string | null;
+            /** Overridden Qa Findings */
+            overridden_qa_findings?: components["schemas"]["QCIssue"][];
+            /**
+             * Qa Override Note
+             * @default
+             */
+            qa_override_note: string;
+            /** Qa Override At */
+            qa_override_at?: string | null;
             /** Reflections */
             reflections?: components["schemas"]["ReflectionRecord"][];
             /** Revisions */
@@ -7469,6 +7580,10 @@ export interface components {
             tool_call_messages?: components["schemas"]["ToolCallMessage"][];
             /** Trace Spans */
             trace_spans?: components["schemas"]["TraceSpan"][];
+            /** Collector Research Usage */
+            collector_research_usage?: {
+                [key: string]: components["schemas"]["CollectorResearchUsage"];
+            };
             metrics?: components["schemas"]["RunMetrics"];
             /** Current Node */
             current_node?: string | null;
