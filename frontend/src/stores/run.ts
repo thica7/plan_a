@@ -2,7 +2,11 @@ import { create } from "zustand";
 import type { RunEvent } from "../api/sse_types";
 import type { RunDetail } from "../api/types";
 
-function detailFromEventRun(current: RunDetail | undefined, incoming: RunEvent["payload"]["run"]): RunDetail | undefined {
+function detailFromEventRun(
+  current: RunDetail | undefined,
+  incoming: RunEvent["payload"]["run"],
+  evidenceRepairRounds: unknown,
+): RunDetail | undefined {
   if (!incoming) return current;
   if ("plan" in incoming && incoming.plan) return incoming as RunDetail;
   if (!current || incoming.id !== current.id) return current;
@@ -10,6 +14,9 @@ function detailFromEventRun(current: RunDetail | undefined, incoming: RunEvent["
     ...current,
     status: incoming.status,
     ...("current_node" in incoming ? { current_node: incoming.current_node } : {}),
+    ...(typeof evidenceRepairRounds === "number" && Number.isInteger(evidenceRepairRounds) && evidenceRepairRounds >= 0
+      ? { evidence_repair_rounds: Math.max(current.evidence_repair_rounds ?? 0, evidenceRepairRounds) }
+      : {}),
   };
 }
 
@@ -51,7 +58,7 @@ function createRunStore() {
       events: [...state.events, event],
       detail:
         event.payload.run && !isNotNewerThanLoadedDetail(event, state.detail)
-          ? detailFromEventRun(state.detail, event.payload.run)
+          ? detailFromEventRun(state.detail, event.payload.run, event.payload.evidence_repair_rounds)
           : event.type === "report_updated" && state.detail && !isNotNewerThanLoadedDetail(event, state.detail)
           ? {
               ...state.detail,

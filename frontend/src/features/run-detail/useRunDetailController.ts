@@ -213,7 +213,7 @@ export function useRunDetailController() {
     const refreshEvents = events.filter(
       (event) =>
         !processedRefreshEventIdsRef.current.has(event.id) &&
-        (["interrupt", "run_completed", "run_failed"].includes(event.type) ||
+        (["interrupt", "run_completed", "run_failed", "hitl.reviewed"].includes(event.type) ||
           (event.type === "report_updated" &&
             !Object.prototype.hasOwnProperty.call(event.payload, "report_artifact"))),
     );

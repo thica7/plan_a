@@ -97,6 +97,22 @@ describe("plan review dimension helpers", () => {
     expect(interrupt?.message).toBe("Evidence is ready for review.");
   });
 
+  it("never falls back to an older evidence event when the newest round differs", () => {
+    const interrupt = visibleHitlInterruptForRun("interrupted", "evidence_hitl", [
+      {
+        type: "interrupt", message: "Old review",
+        payload: { stage: "evidence", interrupt_node: "evidence_hitl", evidence_repair_rounds: 0, sources: [{ id: "old-source" }], qa_findings: [], redo_remaining: 1 },
+      },
+      {
+        type: "interrupt", message: "New review",
+        payload: { stage: "evidence", interrupt_node: "evidence_hitl", evidence_repair_rounds: 1, sources: [{ id: "new-source" }], qa_findings: [], redo_remaining: 0 },
+      },
+    ], 0);
+    expect(interrupt?.payload.sources).toBeUndefined();
+    expect(interrupt?.payload.redo_remaining).toBeUndefined();
+    expect(interrupt?.message).toBe("Evidence is ready for review.");
+  });
+
   it("ignores stale planner interrupts when the persisted node is QA review", () => {
     const interrupt = visibleHitlInterruptForRun("interrupted", "qa_hitl", [
       {

@@ -133,4 +133,23 @@ describe('independent run sessions', () => {
     expect(store.getState().detail?.report_md).toBe('Invalid date');
     store.getState().reset();
   });
+
+  it('merges the numeric evidence round from an SSE interrupt payload', () => {
+    const store = getRunStore('round-sse');
+    store.getState().reset();
+    store.getState().setDetail({
+      id: 'round-sse', status: 'interrupted', current_node: 'evidence_hitl',
+      updated_at: '2026-09-29T10:00:01Z', evidence_repair_rounds: 0,
+    } as RunDetail);
+    store.getState().addEvent({
+      id: 9, run_id: 'round-sse', type: 'interrupt', message: 'New round',
+      payload: {
+        stage: 'evidence', evidence_repair_rounds: 1,
+        run: { id: 'round-sse', status: 'interrupted', current_node: 'evidence_hitl' },
+      },
+      created_at: '2026-09-29T10:00:02Z',
+    });
+    expect(store.getState().detail?.evidence_repair_rounds).toBe(1);
+    store.getState().reset();
+  });
 });

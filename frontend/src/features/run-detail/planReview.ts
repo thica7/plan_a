@@ -70,14 +70,8 @@ function interruptNodeForStage(stage: HitlReviewStage): "planner_hitl" | "eviden
   return "qa_hitl";
 }
 
-function interruptMatchesStage(
-  event: HitlInterruptEventLike,
-  stage: HitlReviewStage,
-  evidenceRepairRounds: number | undefined,
-): boolean {
-  if (event.payload.stage !== stage && event.payload.interrupt_node !== interruptNodeForStage(stage)) return false;
-  return stage !== "evidence" ||
-    (typeof evidenceRepairRounds === "number" && event.payload.evidence_repair_rounds === evidenceRepairRounds);
+function interruptMatchesStage(event: HitlInterruptEventLike, stage: HitlReviewStage): boolean {
+  return event.payload.stage === stage || event.payload.interrupt_node === interruptNodeForStage(stage);
 }
 
 export function visibleHitlInterruptForRun(
@@ -90,9 +84,13 @@ export function visibleHitlInterruptForRun(
   const stage = hitlStageFromCurrentNode(currentNode);
   if (!stage) return undefined;
 
-  const matchingInterrupt = [...events]
+  const latestStageInterrupt = [...events]
     .reverse()
-    .find((event) => event.type === "interrupt" && interruptMatchesStage(event, stage, evidenceRepairRounds));
+    .find((event) => event.type === "interrupt" && interruptMatchesStage(event, stage));
+  const matchingInterrupt = stage !== "evidence" ||
+    (typeof evidenceRepairRounds === "number" && latestStageInterrupt?.payload.evidence_repair_rounds === evidenceRepairRounds)
+    ? latestStageInterrupt
+    : undefined;
   const interruptNode = interruptNodeForStage(stage);
   if (matchingInterrupt) {
     return {
