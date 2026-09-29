@@ -2123,8 +2123,6 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                     metadata[key] = existing.metadata[key]
                 else:
                     metadata.pop(key, None)
-            if use_refreshed_identity:
-                metadata.pop("last_verified_at", None)
         else:
             for key in page_date_keys:
                 if refreshed.metadata.get(key):

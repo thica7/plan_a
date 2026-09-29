@@ -792,7 +792,6 @@ async def test_kb_refresh_uses_new_web_identity_without_losing_kb_provenance() -
             update={"metadata": {
                 "fetched_at": new_time,
                 "source_published_at": new_time,
-                "last_verified_at": new_time,
             }}
         )
         detail.raw_sources = [old_page, new_page]
@@ -800,6 +799,20 @@ async def test_kb_refresh_uses_new_web_identity_without_losing_kb_provenance() -
         assert published.metadata["source_published_at"] == old_time
         assert service._source_observed_at(published) == datetime.fromisoformat(old_time)
         assert service._source_freshness_problem(published) is not None
+
+        explicitly_verified = live_web.model_copy(
+            update={"metadata": {
+                "fetched_at": new_time,
+                "source_published_at": new_time,
+                "last_verified_at": new_time,
+            }}
+        )
+        detail.raw_sources = [old_page, explicitly_verified]
+        verified = service._normalize_collected_sources(detail, ["pricing"])[0]
+        assert verified.metadata["source_published_at"] == old_time
+        assert verified.metadata["last_verified_at"] == new_time
+        assert service._source_observed_at(verified) == datetime.fromisoformat(new_time)
+        assert service._source_freshness_problem(verified) is None
     finally:
         await service._graph_checkpointer.aclose()
 
