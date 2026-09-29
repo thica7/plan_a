@@ -70,14 +70,21 @@ function interruptNodeForStage(stage: HitlReviewStage): "planner_hitl" | "eviden
   return "qa_hitl";
 }
 
-function interruptMatchesStage(event: HitlInterruptEventLike, stage: HitlReviewStage): boolean {
-  return event.payload.stage === stage || event.payload.interrupt_node === interruptNodeForStage(stage);
+function interruptMatchesStage(
+  event: HitlInterruptEventLike,
+  stage: HitlReviewStage,
+  evidenceRepairRounds: number | undefined,
+): boolean {
+  if (event.payload.stage !== stage && event.payload.interrupt_node !== interruptNodeForStage(stage)) return false;
+  return stage !== "evidence" ||
+    (typeof evidenceRepairRounds === "number" && event.payload.evidence_repair_rounds === evidenceRepairRounds);
 }
 
 export function visibleHitlInterruptForRun(
   status: string | null | undefined,
   currentNode: string | null | undefined,
   events: HitlInterruptEventLike[],
+  evidenceRepairRounds?: number,
 ): VisibleHitlInterrupt | undefined {
   if (status !== "interrupted") return undefined;
   const stage = hitlStageFromCurrentNode(currentNode);
@@ -85,7 +92,7 @@ export function visibleHitlInterruptForRun(
 
   const matchingInterrupt = [...events]
     .reverse()
-    .find((event) => event.type === "interrupt" && interruptMatchesStage(event, stage));
+    .find((event) => event.type === "interrupt" && interruptMatchesStage(event, stage, evidenceRepairRounds));
   const interruptNode = interruptNodeForStage(stage);
   if (matchingInterrupt) {
     return {

@@ -67,6 +67,7 @@ describe("RunReadinessRail", () => {
   });
   it("does not display fabricated dollar estimates", () => {
     renderRail();
+    expect(screen.getByText("研究视角")).toBeInTheDocument();
     expect(screen.queryByText("~$48.60")).not.toBeInTheDocument();
   });
   it("submits only when required dimensions are selected", () => {

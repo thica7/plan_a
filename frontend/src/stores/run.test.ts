@@ -113,4 +113,24 @@ describe('independent run sessions', () => {
     expect(store.getState().detail?.report_md).toBe('New report');
     store.getState().reset();
   });
+
+  it('keeps a newer detail when an older HTTP snapshot arrives', () => {
+    const store = getRunStore('late-http');
+    store.getState().reset();
+    store.getState().setDetail({ id: 'late-http', current_node: 'qa_hitl', updated_at: '2026-09-29T10:00:05Z' } as RunDetail);
+    store.getState().setDetail({ id: 'late-http', current_node: 'evidence_hitl', updated_at: '2026-09-29T10:00:01Z' } as RunDetail);
+    expect(store.getState().detail?.current_node).toBe('qa_hitl');
+    store.getState().reset();
+  });
+
+  it('accepts HTTP snapshots without usable timestamps for legacy fixtures', () => {
+    const store = getRunStore('legacy-http');
+    store.getState().reset();
+    store.getState().setDetail({ id: 'legacy-http', report_md: 'Before', updated_at: '2026-09-29T10:00:05Z' } as RunDetail);
+    store.getState().setDetail({ id: 'legacy-http', report_md: 'Without date' } as RunDetail);
+    expect(store.getState().detail?.report_md).toBe('Without date');
+    store.getState().setDetail({ id: 'legacy-http', report_md: 'Invalid date', updated_at: 'unknown' } as RunDetail);
+    expect(store.getState().detail?.report_md).toBe('Invalid date');
+    store.getState().reset();
+  });
 });

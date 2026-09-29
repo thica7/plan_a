@@ -80,8 +80,8 @@ export function useRunDetailController() {
       )
     : false;
   const visibleInterrupt = useMemo(
-    () => visibleHitlInterruptForRun(detail?.status, detail?.current_node, events),
-    [detail?.current_node, detail?.status, events],
+    () => visibleHitlInterruptForRun(detail?.status, detail?.current_node, events, detail?.evidence_repair_rounds),
+    [detail?.current_node, detail?.evidence_repair_rounds, detail?.status, events],
   );
   const reportSources = useMemo(() => {
     const projection = detail?.enterprise_projection;
@@ -224,7 +224,7 @@ export function useRunDetailController() {
       const refreshEvent = refreshEvents[refreshEvents.length - 1];
       getRun(runId)
         .then((loaded) => {
-          if (isStaleReportRefresh(runId, refreshEvent.id)) return;
+          if (hasNewerStateEvent(runId, refreshEvent.id)) return;
           setDetail(loaded);
         })
         .catch((err: Error) => {
@@ -441,13 +441,13 @@ function parseRunDetailView(value: string | null): RunDetailView | null {
   return null;
 }
 
-function isStaleReportRefresh(runId: string, refreshEventId: number) {
+function hasNewerStateEvent(runId: string, refreshEventId: number) {
   return getRunStore(runId)
     .getState()
     .events.some(
       (event) =>
         event.id > refreshEventId &&
-        event.type === "report_updated" &&
-        Object.prototype.hasOwnProperty.call(event.payload, "report_artifact"),
+        (Boolean(event.payload.run) ||
+          ["interrupt", "run_completed", "run_failed", "report_updated", "hitl.reviewed"].includes(event.type)),
     );
 }

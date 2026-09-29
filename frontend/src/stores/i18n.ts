@@ -575,7 +575,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'reportStatus.words': '字',
 
     // ─── Run Detail - Header ───
-    'runHeader.layer': '层级',
+    'runHeader.layer': '研究视角',
     'runHeader.scenario': '场景',
     'runHeader.qaRules': 'QA 规则',
     'runHeader.tasks': '任务',
@@ -1426,7 +1426,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'reportStatus.words': 'words',
 
     // ─── Run Detail - Header ───
-    'runHeader.layer': 'Layer',
+    'runHeader.layer': 'Research lens',
     'runHeader.scenario': 'Scenario',
     'runHeader.qaRules': 'QA rules',
     'runHeader.tasks': 'Tasks',

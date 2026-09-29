@@ -18,6 +18,7 @@ it('shows the target product and its homepage verification state', () => {
     },
   } as unknown as RunDetail;
   render(<RunDetailHeader detail={detail} recommendedDimensions={[]} />);
+  expect(screen.getByText('研究视角 L1')).toBeInTheDocument();
   expect(screen.getByText('示例无线吸尘器')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /官网待核验/ })).toHaveAttribute('href', 'https://example.com/vacuum');
 });

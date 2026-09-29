@@ -74,11 +74,27 @@ describe("plan review dimension helpers", () => {
     const interrupt = visibleHitlInterruptForRun("interrupted", "evidence_hitl", [{
       type: "interrupt",
       message: "Review collected evidence",
-      payload: { stage: "evidence", interrupt_node: "evidence_hitl", sources: [{ id: "s1" }], redo_remaining: 0 },
-    }]);
+      payload: { stage: "evidence", interrupt_node: "evidence_hitl", evidence_repair_rounds: 0, sources: [{ id: "s1" }], redo_remaining: 0 },
+    }], 0);
     expect(interrupt?.payload.stage).toBe("evidence");
     expect(interrupt?.payload.sources).toEqual([{ id: "s1" }]);
     expect(interrupt?.payload.redo_remaining).toBe(0);
+  });
+
+  it("does not reuse a previous evidence round while the new interrupt is pending", () => {
+    const interrupt = visibleHitlInterruptForRun("interrupted", "evidence_hitl", [{
+      type: "interrupt",
+      message: "Previous evidence round",
+      payload: {
+        stage: "evidence", interrupt_node: "evidence_hitl", evidence_repair_rounds: 0,
+        sources: [{ id: "old-source" }], qa_findings: [], redo_remaining: 1,
+      },
+    }], 1);
+    expect(interrupt?.payload.stage).toBe("evidence");
+    expect(interrupt?.payload.sources).toBeUndefined();
+    expect(interrupt?.payload.qa_findings).toBeUndefined();
+    expect(interrupt?.payload.redo_remaining).toBeUndefined();
+    expect(interrupt?.message).toBe("Evidence is ready for review.");
   });
 
   it("ignores stale planner interrupts when the persisted node is QA review", () => {

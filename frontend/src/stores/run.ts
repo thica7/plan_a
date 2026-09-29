@@ -27,6 +27,13 @@ function isNotNewerThanLoadedDetail(event: RunEvent, detail: RunDetail | undefin
   return Number.isFinite(eventTime) && Number.isFinite(detailTime) && eventTime <= detailTime;
 }
 
+function isOlderSnapshot(incoming: RunDetail, current: RunDetail | undefined): boolean {
+  if (!current || incoming.id !== current.id) return false;
+  const incomingTime = timestampMicroseconds(incoming.updated_at);
+  const currentTime = timestampMicroseconds(current.updated_at);
+  return Number.isFinite(incomingTime) && Number.isFinite(currentTime) && incomingTime < currentTime;
+}
+
 interface RunState {
   detail?: RunDetail;
   events: RunEvent[];
@@ -38,7 +45,7 @@ interface RunState {
 function createRunStore() {
   return create<RunState>((set) => ({
   events: [],
-  setDetail: (detail) => set({ detail }),
+  setDetail: (detail) => set((state) => isOlderSnapshot(detail, state.detail) ? state : { detail }),
   addEvent: (event) =>
     set((state) => state.events.some((item) => item.id === event.id) ? state : ({
       events: [...state.events, event],

@@ -412,6 +412,7 @@ export interface EvidenceReviewFinding {
 }
 
 export interface EvidenceReviewPayload {
+  evidence_repair_rounds?: number;
   sources?: EvidenceReviewSource[];
   source_count?: number;
   sources_truncated?: boolean;
@@ -976,6 +977,7 @@ export interface RunDetail extends RunSummary {
   max_iterations: number;
   auto_redo_warn_enabled: boolean;
   hitl_enabled: boolean;
+  evidence_repair_rounds?: number;
   report_md: string;
   claim_card_bundles: ClaimCardBundle[];
   decision_card_bundle?: DecisionCardBundle | null;

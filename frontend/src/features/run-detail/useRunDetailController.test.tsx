@@ -180,6 +180,71 @@ describe("useRunDetailController background refresh", () => {
     expect(mocks.resumeRun).toHaveBeenCalledWith("run-1", { decision: "redo", note: "核查发布日期" });
   });
 
+  it("keeps QA after resume when an older evidence refresh returns late", async () => {
+    const evidence = { ...makeDetail(), current_node: "evidence_hitl", updated_at: "2026-06-10T00:00:01Z" };
+    const qa = { ...makeDetail(), current_node: "qa_hitl", updated_at: "2026-06-10T00:00:05Z" };
+    const refresh = deferred<ReturnType<typeof makeDetail>>();
+    mocks.getRun.mockResolvedValueOnce(evidence).mockReturnValueOnce(refresh.promise);
+    mocks.resumeRun.mockResolvedValue(qa);
+    mocks.subscribeRun.mockReturnValue(vi.fn());
+
+    const { result } = renderHook(() => useRunDetailController(), { wrapper });
+    await waitFor(() => expect(result.current.detail?.current_node).toBe("evidence_hitl"));
+    act(() => useRunStore.getState().addEvent({
+      id: 21, run_id: "run-1", type: "interrupt", message: "Review evidence",
+      payload: { stage: "evidence", interrupt_node: "evidence_hitl" },
+      created_at: "2026-06-10T00:00:02Z",
+    }));
+    await waitFor(() => expect(mocks.getRun).toHaveBeenCalledTimes(2));
+    await act(async () => { await result.current.handleHitl("accept"); });
+    expect(result.current.detail?.current_node).toBe("qa_hitl");
+    await act(async () => { refresh.resolve(evidence); await refresh.promise; });
+    expect(result.current.detail?.current_node).toBe("qa_hitl");
+  });
+
+  it("keeps a newer SSE QA interrupt when an older evidence refresh returns late", async () => {
+    const evidence = { ...makeDetail(), current_node: "evidence_hitl", updated_at: "2026-06-10T00:00:01Z" };
+    const staleEvidence = { ...evidence, updated_at: "unknown" };
+    const qa = { ...makeDetail(), current_node: "qa_hitl", updated_at: "2026-06-10T00:00:05Z" };
+    const refresh = deferred<ReturnType<typeof makeDetail>>();
+    mocks.getRun.mockResolvedValueOnce(evidence).mockReturnValueOnce(refresh.promise).mockResolvedValueOnce(qa);
+    mocks.subscribeRun.mockReturnValue(vi.fn());
+
+    const { result } = renderHook(() => useRunDetailController(), { wrapper });
+    await waitFor(() => expect(result.current.detail?.current_node).toBe("evidence_hitl"));
+    act(() => useRunStore.getState().addEvent({
+      id: 31, run_id: "run-1", type: "interrupt", message: "Review evidence",
+      payload: { stage: "evidence", interrupt_node: "evidence_hitl" },
+      created_at: "2026-06-10T00:00:02Z",
+    }));
+    await waitFor(() => expect(mocks.getRun).toHaveBeenCalledTimes(2));
+    act(() => useRunStore.getState().addEvent({
+      id: 32, run_id: "run-1", type: "interrupt", message: "Review QA",
+      payload: { stage: "qa", interrupt_node: "qa_hitl" },
+      created_at: "2026-06-10T00:00:04Z",
+    }));
+    await waitFor(() => expect(result.current.detail?.current_node).toBe("qa_hitl"));
+    await act(async () => { refresh.resolve(staleEvidence); await refresh.promise; });
+    expect(result.current.detail?.current_node).toBe("qa_hitl");
+  });
+
+  it("keeps the prior evidence round hidden until the new round payload arrives", async () => {
+    mocks.getRun.mockResolvedValue({ ...makeDetail(), current_node: "evidence_hitl", evidence_repair_rounds: 1 });
+    mocks.subscribeRun.mockReturnValue(vi.fn());
+    const { result } = renderHook(() => useRunDetailController(), { wrapper });
+    await waitFor(() => expect(result.current.detail?.current_node).toBe("evidence_hitl"));
+    act(() => useRunStore.getState().addEvent({
+      id: 41, run_id: "run-1", type: "interrupt", message: "Previous evidence round",
+      payload: {
+        stage: "evidence", interrupt_node: "evidence_hitl", evidence_repair_rounds: 0,
+        sources: [{ id: "old-source" }], qa_findings: [], redo_remaining: 1,
+      },
+      created_at: "2026-06-10T00:00:02Z",
+    }));
+    expect(result.current.latestInterrupt?.payload.sources).toBeUndefined();
+    expect(result.current.latestInterrupt?.payload.redo_remaining).toBeUndefined();
+  });
+
   it("keeps the loaded detail when an event-triggered refresh fails", async () => {
     const detail = makeDetail();
     mocks.getRun.mockResolvedValueOnce(detail).mockRejectedValueOnce(new Error("Failed to fetch"));
