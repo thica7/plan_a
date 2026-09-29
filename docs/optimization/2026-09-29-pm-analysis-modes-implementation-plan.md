@@ -8,13 +8,15 @@
 
 **Tech Stack:** Pydantic、LangGraph、Temporal、FastAPI、React、TypeScript、pytest、Vitest。
 
+当前隔离目录复用 `../plan_a/.venv/bin/python`；下方 `.venv/bin/python` 命令在原仓库或具有同名虚拟环境的 checkout 中运行。
+
 ---
 
 ### Task 1: 三轴契约及 Temporal 传播
 
 **Files:** `backend/packages/schema/models.py`、`backend/packages/schema/api_dto.py`、`backend/packages/workflows/models.py`、`backend/packages/workflows/service.py`、`backend/packages/workflows/activities.py`、`backend/packages/orchestrator/service.py`、`backend/tests/unit/test_research_modes.py`。
 
-- [ ] 写失败测试：`RunCreateRequest` 能接受 `research_depth="quick"`、`collaboration_mode="assisted"`、`decision_brief={...}`；服务计划保留它们；旧请求不改变行为；`collaboration_mode="ai"` 与 `hitl_enabled=True` 冲突时验证失败。
+- [x] 写失败测试：`RunCreateRequest` 能接受 `research_depth="quick"`、`collaboration_mode="assisted"`、`decision_brief={...}`；服务计划保留它们；旧请求不改变行为；`collaboration_mode="ai"` 与 `hitl_enabled=True` 冲突时验证失败。
 
 ```python
 request = RunCreateRequest(topic="产品选择", dimensions=["feature"],
@@ -25,25 +27,25 @@ request = RunCreateRequest(topic="产品选择", dimensions=["feature"],
 assert request.research_depth == "quick"
 ```
 
-- [ ] 运行 `.venv/bin/python -m pytest backend/tests/unit/test_research_modes.py -q`，确认因字段不存在而失败。
-- [ ] 增加 `DecisionBrief` 与可选枚举字段，计划和活跃运行指纹保留三轴；Temporal 输入及 activity 入参原样传递。`_resolve_hitl_enabled` 对显式 collaboration mode 优先，旧分支不变。
-- [ ] 运行目标测试、`test_product_research_contract.py`、`test_temporal_workflows.py`。
+- [x] 运行 `.venv/bin/python -m pytest backend/tests/unit/test_research_modes.py -q`，确认因字段不存在而失败。
+- [x] 增加 `DecisionBrief` 与可选枚举字段，计划和活跃运行指纹保留三轴；Temporal 输入及 activity 入参原样传递。`_resolve_hitl_enabled` 对显式 collaboration mode 优先，旧分支不变。
+- [x] 运行目标测试、`test_product_research_contract.py`、`test_temporal_workflows.py`。
 
 ### Task 2: 深度预算策略及执行接线
 
 **Files:** 新建 `backend/packages/research/budget.py`，修改 `backend/packages/orchestrator/service.py`、`backend/packages/agents/planner/logic.py`、`backend/packages/agents/collectors/logic.py`、`backend/packages/orchestrator/llm_execution.py`、`backend/packages/agents/writer/prompt_builder.py`、`backend/packages/agents/writer/logic.py`、`backend/tests/unit/test_research_modes.py`。
 
-- [ ] 写失败测试：相同输入下 quick/standard/deep 的候选、来源、抓取和 LLM 上限单调增加；旧请求仍使用 Settings；超出显式竞品上限报错；Writer 的目标长度随深度变化。
+- [x] 写失败测试：相同输入下 quick/standard/deep 的候选、来源、抓取和 LLM 上限单调增加；旧请求仍使用 Settings；超出显式竞品或切片上限报错；Writer 的目标长度随深度变化。首轮、筛选回退、ReAct、社区和 repair 共享同一分支的实际网络额度；高级抓取回退基础结果仍计数，repair 可使用首轮未抓候选。
 
 ```python
-assert depth_budget("quick").target_sources < depth_budget("standard").target_sources
-assert depth_budget("standard").target_sources < depth_budget("deep").target_sources
+assert research_depth_budget("quick").target_sources < research_depth_budget("standard").target_sources
+assert research_depth_budget("standard").target_sources < research_depth_budget("deep").target_sources
 assert "4,000-6,000" in first_draft_prompt(quick_detail).user
 ```
 
-- [ ] 运行目标测试确认缺预算函数或上限相同导致失败。
-- [ ] 实现 `depth_budget()` 的固定三档和部署设置上限；在自动发现、ResearchBrief、Collector 目标来源、LLM RunLLMBudget、Writer 提示中应用。`None` 继续旧值，所有深度共用证据准入和事实时效规则。
-- [ ] 跑目标测试、`test_research_pipeline.py`、`test_advanced_fetch.py`、`test_writer_structured_report.py`。
+- [x] 运行目标测试确认缺预算函数或上限相同导致失败。
+- [x] 实现 `research_depth_budget()` 的固定三档和部署设置上限；在自动发现、ResearchBrief、Collector 目标来源、LLM RunLLMBudget、Writer 提示中应用。`None` 继续旧值，所有深度共用证据准入和事实时效规则。
+- [x] 跑目标测试、`test_research_pipeline.py`、`test_advanced_fetch.py`、`test_writer_structured_report.py`。
 
 ### Task 3: 采集后的证据审核关口
 
