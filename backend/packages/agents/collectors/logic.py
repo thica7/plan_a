@@ -531,6 +531,9 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                 if enable_repair and self._requires_verified_web_evidence(detail, dimension)
                 else 0
             )
+        allow_search_discovery = (
+            enable_search and self._search.is_enabled and not refresh_candidates
+        )
         brief = self._research_brief(detail, competitor, dimension).model_copy(
             update={
                 "target_source_count": target_source_count,
@@ -541,7 +544,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                     "collector_adapter": "clean_research_pipeline",
                     "include_official": allow_official_discovery,
                     "seed_candidate_count": len(seed_candidates or []),
-                    "search_enabled": enable_search and self._search.is_enabled,
+                    "search_enabled": allow_search_discovery,
                     "repair_enabled": enable_repair,
                 },
             }
@@ -576,7 +579,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         result = await run_research_pipeline(
             brief,
             fetch=fetch,
-            search=search if enable_search and self._search.is_enabled else None,
+            search=search if allow_search_discovery else None,
             seed_candidates=seed_candidates,
         )
         if result.coverage is not None:
@@ -2116,6 +2119,13 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         use_refreshed_identity = old_kb and live_web
         metadata = dict(refreshed.metadata if use_refreshed_identity else existing.metadata)
         metadata["fetched_at"] = new_fetched
+        if not use_refreshed_identity:
+            old_verified = self._parse_refresh_fetch_time(existing.metadata.get("last_verified_at"))
+            new_verified = self._parse_refresh_fetch_time(refreshed.metadata.get("last_verified_at"))
+            if new_verified is not None and (
+                old_verified is None or new_verified > old_verified
+            ):
+                metadata["last_verified_at"] = refreshed.metadata["last_verified_at"]
         page_date_keys = ("source_published_at", "source_updated_at")
         if any(existing.metadata.get(key) for key in page_date_keys):
             for key in page_date_keys:

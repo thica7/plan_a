@@ -474,22 +474,25 @@ async def test_evidence_refresh_refetches_existing_url_without_removing_old_sour
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("competitor", "old_url", "include_official", "with_target_product"),
+    ("competitor", "old_url", "include_official", "with_target_product", "search_remaining"),
     [
-        ("A", "https://example.com/a/pricing", False, False),
-        ("OpenAI", "https://example.com/openai/custom-pricing", True, False),
-        ("OpenAI", "https://example.com/openai/custom-pricing", True, True),
+        ("A", "https://example.com/a/pricing", False, False, False),
+        ("OpenAI", "https://example.com/openai/custom-pricing", True, False, False),
+        ("OpenAI", "https://example.com/openai/custom-pricing", True, True, False),
+        ("A", "https://example.com/a/pricing", False, False, True),
     ],
 )
-async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exhausted(
+async def test_real_refresh_pipeline_prioritizes_old_url_with_one_fetch_remaining(
     monkeypatch: pytest.MonkeyPatch,
     competitor: str,
     old_url: str,
     include_official: bool,
     with_target_product: bool,
+    search_remaining: bool,
 ) -> None:
     service = _service(real=True, search_enabled=True)
     network_calls: list[str] = []
+    search_queries: list[str] = []
     seed_candidates = []
     original_pipeline = collector_logic.run_research_pipeline
 
@@ -517,6 +520,16 @@ async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exh
     monkeypatch.setattr(collector_logic, "run_research_pipeline", observe_pipeline)
     monkeypatch.setattr(service, "_trace_robots", allow_robots)
     monkeypatch.setattr("packages.orchestrator.service.fetch_evidence_page", fetch_page)
+    if search_remaining:
+        async def search_candidates(*_args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+            search_queries.append(kwargs["query"])
+            return [SearchResult(
+                title="A current pricing search result",
+                url="https://search.example.com/a/pricing",
+                snippet="A current pricing plans",
+            )]
+
+        monkeypatch.setattr(service, "_trace_search", search_candidates)
     try:
         detail = await service.create_run(
             RunCreateRequest(
@@ -560,7 +573,7 @@ async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exh
         assert budget is not None
         context = SubagentContext(detail.id, "collector", f"pricing::{competitor}")
         detail.collector_research_usage[context.subagent] = CollectorResearchUsage(
-            search_calls=budget.max_search_queries,
+            search_calls=0 if search_remaining else budget.max_search_queries,
             fetch_calls=budget.max_fetches - 1,
         )
 
@@ -571,7 +584,10 @@ async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exh
 
         assert network_calls == [old_url]
         assert detail.collector_research_usage[context.subagent].fetch_calls == budget.max_fetches
-        assert detail.collector_research_usage[context.subagent].search_calls == budget.max_search_queries
+        if search_remaining:
+            assert search_queries == []
+        else:
+            assert detail.collector_research_usage[context.subagent].search_calls == budget.max_search_queries
         assert detail.raw_sources == [old]
         assert seed_candidates[0].origin == "web_search"
         assert seed_candidates[0].confidence <= 0.5
@@ -682,6 +698,8 @@ async def test_duplicate_refresh_keeps_new_fetch_time_and_original_page_date() -
             url="https://example.com/a/pricing",
             content_hash="same-content-hash",
             confidence=0.8,
+            candidate_origin="web_search",
+            fetch_method="basic_httpx",
             metadata={"fetched_at": old_time},
         )
         new = old.model_copy(update={"metadata": {"fetched_at": new_time}})
@@ -719,6 +737,16 @@ async def test_duplicate_refresh_keeps_new_fetch_time_and_original_page_date() -
         mixed_dates = service._normalize_collected_sources(detail, ["pricing"])
         assert mixed_dates[0].metadata.get("source_updated_at") is None
         assert service._source_observed_at(mixed_dates[0]) == datetime.fromisoformat(old_time)
+
+        explicitly_verified = old.model_copy(
+            update={"metadata": {"fetched_at": new_time, "last_verified_at": new_time}}
+        )
+        detail.raw_sources = [old_page, explicitly_verified]
+        verified = service._normalize_collected_sources(detail, ["pricing"])[0]
+        assert verified.metadata["source_published_at"] == old_time
+        assert verified.metadata["last_verified_at"] == new_time
+        assert service._source_observed_at(verified) == datetime.fromisoformat(new_time)
+        assert service._source_freshness_problem(verified) is None
     finally:
         await service._graph_checkpointer.aclose()
 
