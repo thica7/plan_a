@@ -13,7 +13,7 @@ from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.research.budget import research_depth_budget
 from packages.schema.api_dto import CollectorResearchUsage, HitlResumeRequest, RunCreateRequest
-from packages.schema.models import QCIssue, RawSource, RedoScope
+from packages.schema.models import QCIssue, RawSource, RedoScope, TargetProductEvidence
 from packages.search import SearchResult
 from packages.skills.registry import SkillRegistry
 from packages.tools.evidence_fetch import EvidenceFetchResult
@@ -474,10 +474,11 @@ async def test_evidence_refresh_refetches_existing_url_without_removing_old_sour
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("competitor", "old_url", "include_official"),
+    ("competitor", "old_url", "include_official", "with_target_product"),
     [
-        ("A", "https://example.com/a/pricing", False),
-        ("OpenAI", "https://example.com/openai/custom-pricing", True),
+        ("A", "https://example.com/a/pricing", False, False),
+        ("OpenAI", "https://example.com/openai/custom-pricing", True, False),
+        ("OpenAI", "https://example.com/openai/custom-pricing", True, True),
     ],
 )
 async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exhausted(
@@ -485,6 +486,7 @@ async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exh
     competitor: str,
     old_url: str,
     include_official: bool,
+    with_target_product: bool,
 ) -> None:
     service = _service(real=True, search_enabled=True)
     network_calls: list[str] = []
@@ -521,6 +523,10 @@ async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exh
                 topic=f"{competitor} brand refresh",
                 competitors=[competitor],
                 dimensions=["pricing"],
+                target_product={
+                    "name": competitor,
+                    "official_url": "https://openai.com/pricing",
+                } if with_target_product else None,
                 execution_mode="real",
                 collaboration_mode="assisted",
                 research_depth="standard",
@@ -544,6 +550,12 @@ async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exh
         detail.raw_sources = [old]
         detail.evidence_refresh_active = True
         detail.plan.homepage_hints = {}
+        if with_target_product:
+            detail.plan.target_product_evidence = TargetProductEvidence(
+                status="verified",
+                source_url="https://openai.com/pricing",
+                title="OpenAI official pricing",
+            )
         budget = research_depth_budget("standard")
         assert budget is not None
         context = SubagentContext(detail.id, "collector", f"pricing::{competitor}")
@@ -575,6 +587,12 @@ async def test_refresh_without_old_url_keeps_trusted_registry_discovery(
 ) -> None:
     service = _service(real=True, search_enabled=True)
     network_calls: list[str] = []
+    seed_candidates = []
+    original_pipeline = collector_logic.run_research_pipeline
+
+    async def observe_pipeline(brief, **kwargs):  # noqa: ANN001, ANN202
+        seed_candidates.extend(kwargs.get("seed_candidates") or [])
+        return await original_pipeline(brief, **kwargs)
 
     async def allow_robots(*_args, **_kwargs):  # noqa: ANN002, ANN003, ANN202
         return SimpleNamespace(allowed=True)
@@ -588,6 +606,7 @@ async def test_refresh_without_old_url_keeps_trusted_registry_discovery(
             quality_score=0.9, text_length=len(text),
         )
 
+    monkeypatch.setattr(collector_logic, "run_research_pipeline", observe_pipeline)
     monkeypatch.setattr(service, "_trace_robots", allow_robots)
     monkeypatch.setattr("packages.orchestrator.service.fetch_evidence_page", fetch_page)
     try:
@@ -596,6 +615,10 @@ async def test_refresh_without_old_url_keeps_trusted_registry_discovery(
                 topic="OpenAI registry fallback",
                 competitors=["OpenAI"],
                 dimensions=["pricing"],
+                target_product={
+                    "name": "OpenAI",
+                    "official_url": "https://openai.com/pricing",
+                },
                 execution_mode="real",
                 collaboration_mode="assisted",
                 research_depth="standard",
@@ -604,6 +627,11 @@ async def test_refresh_without_old_url_keeps_trusted_registry_discovery(
         detail.raw_sources = []
         detail.evidence_refresh_active = True
         detail.plan.homepage_hints = {}
+        detail.plan.target_product_evidence = TargetProductEvidence(
+            status="verified",
+            source_url="https://openai.com/pricing",
+            title="OpenAI official pricing",
+        )
         budget = research_depth_budget("standard")
         assert budget is not None
         context = SubagentContext(detail.id, "collector", "pricing::OpenAI")
@@ -619,6 +647,11 @@ async def test_refresh_without_old_url_keeps_trusted_registry_discovery(
 
         assert network_calls == ["https://developers.openai.com/api/docs/pricing"]
         assert detail.collector_research_usage[context.subagent].fetch_calls == budget.max_fetches
+        assert any(
+            candidate.url == "https://openai.com/pricing"
+            and candidate.metadata["authority"] == "unverified"
+            for candidate in seed_candidates
+        )
     finally:
         await service._graph_checkpointer.aclose()
 

@@ -518,7 +518,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             seed_candidates = [*refresh_candidates, *(seed_candidates or [])]
         allow_official_discovery = include_official and not refresh_candidates
         target_candidate = self._target_product_user_candidate(detail, competitor, dimension)
-        if target_candidate is not None:
+        if target_candidate is not None and not refresh_candidates:
             seed_candidates = [*(seed_candidates or []), target_candidate]
         max_repair_rounds = (
             1 if enable_repair and self._requires_verified_web_evidence(detail, dimension) else 0
