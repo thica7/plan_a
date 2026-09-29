@@ -97,6 +97,7 @@ from packages.identity.source_resolver import (
 )
 from packages.llm.errors import LLMExecutionLimitError
 from packages.rag.grounded_prompt import build_run_grounding_prompt
+from packages.research.budget import research_depth_budget
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
 from packages.schema.api_dto import RunDetail
@@ -2134,6 +2135,20 @@ class WriterAgentMixin:
         timeout_seconds: float,
     ) -> str:
         detail = record.detail
+        depth_budget = research_depth_budget(detail.plan.research_depth)
+        report_chars = depth_budget.report_chars if depth_budget is not None else "16,000-20,000"
+        core_depth_instruction = (
+            "Cover every required core section and every competitor concisely, "
+            "including all SWOT quadrants. "
+            if detail.plan.research_depth == "quick" else
+            "Core section minimums: Decision Summary 800+ characters; "
+            "Competitive Findings 1,200+; User Review Themes 1,000+ when "
+            "review, community, survey, interview, or persona evidence exists; "
+            "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
+            "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
+            "Threats for every competitor; Matrix Interpretation 900+; "
+            "Layer-specific Battlecard/Workflow/Market section 1,200+. "
+        )
         layer_context = self._writer_layer_context(detail)
         memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
         required_sections = self._writer_required_sections(detail)
@@ -2202,17 +2217,11 @@ class WriterAgentMixin:
                     f"{self._writer_community_policy_text()}\n"
                     f"Report Evidence Context JSON: {writer_context_json}\n\n"
                     f"Required sections:\n{required_sections}\n"
-                    "Target 16,000-20,000 characters for the first draft. Use about "
+                    f"Target {report_chars} characters for the first draft. Use about "
                     "70-80% of the report on the Core analysis layer: decision summary, "
                     "competitive findings, user review themes, competitor deep dives, "
                     "SWOT, matrix interpretation, and layer-specific implications. "
-                    "Core section minimums: Decision Summary 800+ characters; "
-                    "Competitive Findings 1,200+; User Review Themes 1,000+ when "
-                    "review, community, survey, interview, or persona evidence exists; "
-                    "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
-                    "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
-                    "Threats for every competitor; Matrix Interpretation 900+; "
-                    "Layer-specific Battlecard/Workflow/Market section 1,200+. Keep "
+                    f"{core_depth_instruction}Keep "
                     "the Support/audit layer concise and complete; it is the audit trail, "
                     "not the main readout. Prefer deeper cited analysis and decision "
                     "implications over repeated source IDs or QA boilerplate."
@@ -3781,6 +3790,12 @@ class WriterAgentMixin:
         contract_missing_required_heading_keys: list[str] | None = None,
     ) -> str:
         detail = record.detail
+        depth_budget = research_depth_budget(detail.plan.research_depth)
+        report_target_instruction = (
+            f"Full report target: {depth_budget.report_chars} characters. "
+            "Keep this section proportionate to that target while covering its evidence and required headings.\n"
+            if depth_budget is not None else ""
+        )
         segment_json = json.dumps(
             _prompt_safe_writer_segment(segment),
             ensure_ascii=False,
@@ -3936,6 +3951,7 @@ class WriterAgentMixin:
                     f"{self._writer_community_policy_text()}\n"
                     f"Segment Context JSON: {segment_json}\n\n"
                     f"Required sections for full report:\n{required_sections}\n"
+                    f"{report_target_instruction}"
                     "Write with consulting depth for this segment. Keep support material "
                     "concise and preserve [source:ID] citation syntax."
                 ),

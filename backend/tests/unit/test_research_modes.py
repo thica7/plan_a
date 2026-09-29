@@ -1,14 +1,18 @@
 from dataclasses import asdict
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 
+from packages.agents.writer.prompt_builder import WriterPromptBuilder
 from packages.config import Settings
 from packages.identity import compute_workflow_idempotency_key
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService, _active_run_fingerprint
+from packages.research.models import RepairTask, ResearchBrief
+from packages.research.pipeline import _repair_brief
 from packages.schema import models
-from packages.schema.api_dto import RunCreateRequest
+from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail
 from packages.skills.registry import SkillRegistry
 from packages.workflows.activities import CompetitiveIntelActivities
 from packages.workflows.models import CompetitiveIntelWorkflowInput
@@ -19,13 +23,14 @@ from packages.workflows.service import (
 
 
 def _request(**overrides: object) -> RunCreateRequest:
-    return RunCreateRequest(
+    payload = dict(
         topic="AI coding assistant comparison",
         competitors=["Cursor"],
         dimensions=["pricing"],
         execution_mode="demo",
-        **overrides,
     )
+    payload.update(overrides)
+    return RunCreateRequest(**payload)
 
 
 def _service(*, hitl_enabled: bool = False) -> RunService:
@@ -163,3 +168,428 @@ async def test_temporal_round_trip_preserves_research_modes_to_run_plan() -> Non
     assert detail.plan.collaboration_mode == "assisted"
     assert detail.plan.decision_brief == request.decision_brief
     assert detail.hitl_enabled is True
+
+
+def test_research_depth_budget_table_is_exact_and_monotonic() -> None:
+    from packages.research.budget import research_depth_budget
+
+    expected = {
+        "quick": (2, 2, 1, 6, 3, 1, 0, 60, "4,000-6,000"),
+        "standard": (5, 3, 2, 10, 5, 2, 1, 120, "8,000-12,000"),
+        "deep": (8, 5, 3, 16, 8, 3, 2, 160, "16,000-20,000"),
+    }
+    fields = (
+        "competitor_limit", "target_sources", "max_search_queries",
+        "max_candidates", "max_fetches", "max_advanced_fetches",
+        "max_repair_rounds", "llm_max_calls", "report_chars",
+    )
+    budgets = [research_depth_budget(depth) for depth in expected]
+    for depth, budget in zip(expected, budgets, strict=True):
+        assert tuple(getattr(budget, field) for field in fields) == expected[depth]
+    for field in fields[:-1]:
+        assert getattr(budgets[0], field) <= getattr(budgets[1], field)
+        assert getattr(budgets[1], field) <= getattr(budgets[2], field)
+    assert research_depth_budget(None) is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_depth_caps_manual_competitors_and_iterations() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(demo_mode=True, max_iterations=4),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    names = ["Cursor", "Copilot", "Windsurf"]
+    with pytest.raises(ValueError, match="quick.*2 competitors"):
+        await service.create_run(_request(research_depth="quick", competitors=names))
+
+    quick = await service.create_run(_request(research_depth="quick"))
+    standard = await service.create_run(_request(research_depth="standard"))
+    deep = await service.create_run(_request(research_depth="deep"))
+    legacy = await service.create_run(_request(competitors=names))
+    assert [item.max_iterations for item in (quick, standard, deep, legacy)] == [1, 2, 4, 4]
+    assert legacy.plan.competitors == names
+
+
+@pytest.mark.asyncio
+async def test_explicit_depth_caps_scenario_seed_competitors() -> None:
+    service = _service()
+    detail = await service.create_run(
+        _request(
+            competitors=[],
+            research_depth="quick",
+            scenario_id="l3_market_landscape",
+            dimensions=["market", "persona"],
+        )
+    )
+    assert detail.plan.competitors == ["Cursor", "GitHub Copilot"]
+
+
+@pytest.mark.asyncio
+async def test_demo_auto_discovery_respects_quick_limit() -> None:
+    service = _service()
+    detail = await service.create_run(_request(competitors=[], research_depth="quick"))
+    await service._demo_planner_step(service._runs[detail.id])
+    assert detail.plan.competitors == ["Demo Alpha", "Demo Beta"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("depth", "expected_count"),
+    [("quick", 2), ("standard", 5), ("deep", 8), (None, 5)],
+)
+async def test_auto_discovery_respects_depth_limit(depth: str | None, expected_count: int) -> None:
+    service = _service()
+    detail = await service.create_run(
+        _request(competitors=[], research_depth=depth)
+    )
+    names = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta"]
+
+    prompts: list[str] = []
+
+    async def fake_llm_json(*args: object, **kwargs: object) -> dict[str, object]:
+        prompts.append(str(kwargs["user"]))
+        return {"selected_competitors": names, "candidates": names}
+
+    service._trace_llm_json = fake_llm_json  # type: ignore[method-assign]
+    discovery = await service._discover_competitors(service._runs[detail.id])
+    assert discovery.selected_competitors == names[:expected_count]
+    if depth is not None:
+        assert f"Select at most {expected_count} competitors" in prompts[0]
+
+
+def test_hitl_competitor_edit_cannot_exceed_explicit_depth_limit() -> None:
+    service = _service()
+    detail = models.AnalysisPlan(
+        topic="AI coding assistant comparison",
+        research_depth="quick",
+        competitors=["Cursor", "Copilot"],
+        dimensions=["pricing"],
+    )
+    run_detail = RunDetail(
+        id="run-hitl-budget",
+        topic=detail.topic,
+        status="interrupted",
+        execution_mode="demo",
+        created_at="2026-09-29T00:00:00",
+        updated_at="2026-09-29T00:00:00",
+        plan=detail,
+    )
+    with pytest.raises(ValueError, match="quick.*2 competitors"):
+        service._apply_planner_competitor_review(
+            run_detail,
+            HitlResumeRequest(
+                decision="modify_plan",
+                competitors=["Cursor", "Copilot", "Windsurf"],
+            ),
+        )
+    assert run_detail.plan.competitors == ["Cursor", "Copilot"]
+
+
+@pytest.mark.asyncio
+async def test_hitl_over_limit_preserves_pending_review_and_other_plan_fields() -> None:
+    service = _service(hitl_enabled=True)
+    detail = await service.create_run(_request(research_depth="quick"))
+    service._runs[detail.id].pending_interrupts["planner"] = {"stage": "planner"}
+    with pytest.raises(ValueError, match="quick.*2 competitors"):
+        await service.resume(
+            detail.id,
+            HitlResumeRequest(
+                decision="modify_plan",
+                dimensions=["feature"],
+                competitors=["Cursor", "Copilot", "Windsurf"],
+            ),
+        )
+    assert detail.plan.dimensions == ["pricing"]
+    assert detail.plan.competitors == ["Cursor"]
+    assert service._runs[detail.id].pending_interrupts["planner"] == {"stage": "planner"}
+
+
+@pytest.mark.asyncio
+async def test_collector_and_llm_budgets_follow_depth_with_legacy_unchanged() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            collector_target_verified_sources_per_branch=10,
+            collector_search_max_results=20,
+            run_llm_max_calls=200,
+        ),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    expected = {
+        "quick": (2, 1, 6, 3, 1, 0, 60),
+        "standard": (3, 2, 10, 5, 2, 1, 120),
+        "deep": (5, 3, 16, 8, 3, 2, 160),
+        None: (10, 2, 20, 10, 3, 1, 200),
+    }
+    for depth, values in expected.items():
+        detail = await service.create_run(_request(research_depth=depth))
+        detail.execution_mode = "real"
+        brief = service._research_brief(detail, "Cursor", "pricing")
+        budget = service._run_llm_budget(service._runs[detail.id])
+        assert (
+            brief.target_source_count,
+            brief.max_search_queries,
+            brief.max_candidates,
+            brief.max_fetches,
+            brief.max_advanced_fetches,
+            brief.max_repair_rounds,
+            budget.max_calls,
+        ) == values
+
+
+@pytest.mark.asyncio
+async def test_deployment_settings_cap_explicit_budgets() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=True,
+            collector_target_verified_sources_per_branch=1,
+            run_llm_max_calls=40,
+            max_iterations=1,
+        ),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    detail = await service.create_run(_request(research_depth="deep"))
+    detail.execution_mode = "real"
+    brief = service._research_brief(detail, "Cursor", "pricing")
+    assert detail.max_iterations == 1
+    assert brief.target_source_count == 1
+    assert brief.max_fetches == 3
+    assert brief.max_advanced_fetches <= 3
+    assert service._run_llm_budget(service._runs[detail.id]).max_calls == 40
+
+
+@pytest.mark.asyncio
+async def test_legacy_llm_budget_keeps_minimum_one_call() -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(demo_mode=True, run_llm_max_calls=0),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    detail = await service.create_run(_request())
+    assert service._run_llm_budget(service._runs[detail.id]).max_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_pipeline_receives_depth_repair_rounds_and_source_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _service()
+    captured: list[tuple[int, int]] = []
+
+    async def fake_pipeline(brief: object, **kwargs: object) -> SimpleNamespace:
+        captured.append((brief.max_repair_rounds, brief.target_source_count))
+        return SimpleNamespace(
+            coverage=None,
+            gaps=[],
+            repair_tasks=[],
+            metrics={},
+            candidate_ledger=[],
+            candidates=[],
+        )
+
+    monkeypatch.setattr("packages.agents.collectors.logic.run_research_pipeline", fake_pipeline)
+    monkeypatch.setattr(service, "_raw_sources_from_research_result", lambda *args, **kwargs: [])
+    monkeypatch.setattr(service, "_trace_local_tool", lambda *args, **kwargs: None)
+    for depth in ("quick", "standard", "deep", None):
+        detail = await service.create_run(_request(research_depth=depth))
+        detail.execution_mode = "real"
+        await service._collect_competitor_with_research_pipeline(
+            service._runs[detail.id],
+            detail,
+            "pricing",
+            "Cursor",
+            SimpleNamespace(subagent="pricing::Cursor"),
+            batch_sources=[],
+            target_source_count=9,
+            include_official=True,
+            enable_search=False,
+        )
+    assert captured == [(0, 2), (1, 3), (2, 5), (1, 9)]
+
+
+def test_repair_pass_keeps_explicit_budget_caps_and_legacy_expansion() -> None:
+    task = RepairTask(
+        gap_id="gap-pricing",
+        strategy="targeted_discovery",
+        competitor="Cursor",
+        dimension="pricing",
+        acceptance_rule="Find current official pricing.",
+    )
+    common = dict(
+        run_id="run-repair-budget", topic="AI IDE", competitor="Cursor",
+        dimension="pricing", max_search_queries=2, max_candidates=10, max_fetches=5,
+    )
+    explicit = _repair_brief(
+        ResearchBrief(**common, research_depth="standard"), [task], round_index=1
+    )
+    legacy = _repair_brief(ResearchBrief(**common), [task], round_index=1)
+    assert (explicit.max_search_queries, explicit.max_candidates, explicit.max_fetches) == (2, 10, 5)
+    assert (legacy.max_search_queries, legacy.max_candidates, legacy.max_fetches) == (3, 12, 6)
+
+
+@pytest.mark.asyncio
+async def test_clean_pipeline_search_respects_settings_result_ceiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(demo_mode=True, collector_search_max_results=3),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    detail = await service.create_run(_request(research_depth="deep"))
+    detail.execution_mode = "real"
+    service._search = SimpleNamespace(is_enabled=True)
+    requested_results: list[int] = []
+
+    async def fake_search(*args: object) -> list[object]:
+        requested_results.append(int(args[-1]))
+        return []
+
+    async def fake_pipeline(brief: object, **kwargs: object) -> SimpleNamespace:
+        await kwargs["search"]("cursor pricing", brief.max_candidates)
+        return SimpleNamespace(
+            coverage=None, gaps=[], repair_tasks=[], metrics={},
+            candidate_ledger=[], candidates=[],
+        )
+
+    monkeypatch.setattr(service, "_search_research_candidates", fake_search)
+    monkeypatch.setattr("packages.agents.collectors.logic.run_research_pipeline", fake_pipeline)
+    monkeypatch.setattr(service, "_raw_sources_from_research_result", lambda *args, **kwargs: [])
+    monkeypatch.setattr(service, "_trace_local_tool", lambda *args, **kwargs: None)
+    await service._collect_competitor_with_research_pipeline(
+        service._runs[detail.id], detail, "pricing", "Cursor",
+        SimpleNamespace(subagent="pricing::Cursor"),
+        batch_sources=[], target_source_count=5, include_official=True,
+    )
+    assert requested_results == [3]
+
+
+@pytest.mark.asyncio
+async def test_clean_pipeline_limits_advanced_fetch_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _service()
+    detail = await service.create_run(_request(research_depth="quick"))
+    detail.execution_mode = "real"
+    allow_advanced_values: list[bool] = []
+
+    async def fake_trace_fetch(*args: object, allow_advanced: bool = True) -> SimpleNamespace:
+        allow_advanced_values.append(allow_advanced)
+        return SimpleNamespace(fetch_method="webfetch_v2:browser")
+
+    async def fake_pipeline(brief: object, **kwargs: object) -> SimpleNamespace:
+        await kwargs["fetch"]("https://example.com/first")
+        await kwargs["fetch"]("https://example.com/second")
+        return SimpleNamespace(
+            coverage=None, gaps=[], repair_tasks=[], metrics={},
+            candidate_ledger=[], candidates=[],
+        )
+
+    monkeypatch.setattr(service, "_trace_fetch", fake_trace_fetch)
+    monkeypatch.setattr("packages.agents.collectors.logic.run_research_pipeline", fake_pipeline)
+    monkeypatch.setattr(service, "_raw_sources_from_research_result", lambda *args, **kwargs: [])
+    monkeypatch.setattr(service, "_trace_local_tool", lambda *args, **kwargs: None)
+    await service._collect_competitor_with_research_pipeline(
+        service._runs[detail.id], detail, "pricing", "Cursor",
+        SimpleNamespace(subagent="pricing::Cursor"),
+        batch_sources=[], target_source_count=2, include_official=True,
+        enable_search=False,
+    )
+    assert allow_advanced_values == [True, False]
+
+
+@pytest.mark.asyncio
+async def test_writer_first_draft_prompt_uses_depth_target() -> None:
+    service = _service()
+    for depth, target in (
+        ("quick", "4,000-6,000"),
+        ("standard", "8,000-12,000"),
+        ("deep", "16,000-20,000"),
+        (None, "16,000-20,000"),
+    ):
+        detail = await service.create_run(_request(research_depth=depth))
+        prompt = WriterPromptBuilder().first_draft_prompt(
+            detail,
+            language_guidance="English",
+            user_research_policy="Policy",
+            memory_context="none",
+            layer_context="L1",
+            grounding_prompt="Grounding",
+            community_policy_text="Community",
+            writer_context_json="{}",
+            required_sections="Decision Summary",
+        )
+        assert f"Target {target} characters" in prompt.user
+        if depth == "quick":
+            assert "Core section minimums:" not in prompt.user
+        else:
+            assert "Core section minimums:" in prompt.user
+
+
+@pytest.mark.asyncio
+async def test_writer_legacy_markdown_path_uses_depth_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _service()
+    captured: list[str] = []
+
+    async def fake_grounding(*args: object) -> str:
+        return "Grounding"
+
+    async def fake_llm_text(*args: object, **kwargs: object) -> str:
+        captured.append(str(kwargs["user"]))
+        return "## Decision Summary\nDraft"
+
+    monkeypatch.setattr(service, "_writer_grounding_prompt", fake_grounding)
+    monkeypatch.setattr(service, "_trace_llm_text", fake_llm_text)
+    evidence_pack = SimpleNamespace(
+        metrics=SimpleNamespace(segmented_writer_required=False),
+        to_prompt_json=lambda: "{}",
+    )
+    for depth in ("quick", "standard", "deep", None):
+        detail = await service.create_run(_request(research_depth=depth))
+        result = await service._writer_markdown_report_from_evidence_pack(
+            service._runs[detail.id], evidence_pack, timeout_seconds=1
+        )
+        assert result.startswith("## Decision Summary")
+    assert [
+        "Target 4,000-6,000 characters" in captured[0],
+        "Target 8,000-12,000 characters" in captured[1],
+        "Target 16,000-20,000 characters" in captured[2],
+        "Target 16,000-20,000 characters" in captured[3],
+    ] == [True] * 4
+    assert "Core section minimums:" not in captured[0]
+    assert "Core section minimums:" in captured[3]
+
+
+@pytest.mark.asyncio
+async def test_default_segment_writer_prompt_includes_depth_length(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _service()
+    captured: list[str] = []
+
+    async def fake_llm_text(*args: object, **kwargs: object) -> str:
+        captured.append(str(kwargs["user"]))
+        return "## Decision Summary\nDraft"
+
+    monkeypatch.setattr(service, "_trace_llm_text", fake_llm_text)
+    segment = {
+        "segment_name": "decision_summary",
+        "section_id": "decision_summary",
+        "segment_kind": "section_fragment",
+        "allowed_source_ids": [],
+    }
+    for depth in ("quick", "standard", "deep", None):
+        detail = await service.create_run(_request(research_depth=depth))
+        await service._writer_segment_markdown(
+            service._runs[detail.id], segment=segment, timeout_seconds=1,
+            language_guidance="English", memory_context="none",
+            layer_context="L1", required_sections="Decision Summary", retry_count=0,
+        )
+    for prompt, target in zip(captured[:3], ("4,000-6,000", "8,000-12,000", "16,000-20,000"), strict=True):
+        assert f"Full report target: {target} characters" in prompt
+    assert "Full report target" not in captured[3]

@@ -6,6 +6,7 @@ from typing import Any
 
 from packages.research.assembly import assemble_research_summary
 from packages.research.capture import CaptureCache, capture_candidate, select_capture_candidates
+from packages.research.coverage_contract import evaluate_coverage_contract
 from packages.research.discovery import (
     build_search_queries,
     homepage_candidates,
@@ -13,7 +14,6 @@ from packages.research.discovery import (
     search_result_candidates,
     trusted_registry_candidates,
 )
-from packages.research.coverage_contract import evaluate_coverage_contract
 from packages.research.evaluation import evaluate_research_quality
 from packages.research.evidence import (
     admit_evidence_items,
@@ -463,17 +463,18 @@ def _repair_brief(
     *,
     round_index: int,
 ) -> ResearchBrief:
+    explicit_depth = brief.research_depth is not None
     return brief.model_copy(
         update={
-            "max_search_queries": max(
+            "max_search_queries": brief.max_search_queries if explicit_depth else max(
                 brief.max_search_queries,
                 max((task.max_queries for task in repair_tasks), default=brief.max_search_queries),
             ),
-            "max_candidates": max(
+            "max_candidates": brief.max_candidates if explicit_depth else max(
                 brief.max_candidates,
                 max((task.max_candidates for task in repair_tasks), default=brief.max_candidates),
             ),
-            "max_fetches": max(
+            "max_fetches": brief.max_fetches if explicit_depth else max(
                 brief.max_fetches,
                 max((task.max_fetches for task in repair_tasks), default=brief.max_fetches),
             ),

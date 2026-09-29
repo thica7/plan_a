@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from packages.identity import stable_prefixed_id
+from packages.research.budget import ResearchDepth
 
 CandidateOrigin = Literal[
     "trusted_registry",
@@ -83,6 +84,7 @@ class ResearchBrief(ResearchBaseModel):
     topic: str
     competitor: str
     dimension: str
+    research_depth: ResearchDepth | None = None
     product_name: str = ""
     product_category: str = ""
     product_use_cases: list[str] = Field(default_factory=list)

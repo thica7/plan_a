@@ -33,6 +33,7 @@ class EvidenceFetchResult:
 async def fetch_evidence_page(
     url: str,
     *,
+    allow_advanced: bool = True,
     timeout_seconds: float = 12.0,
     min_text_chars: int = 120,
     advanced_quality_threshold: float = 0.55,
@@ -59,6 +60,12 @@ async def fetch_evidence_page(
         )
     if not content_problem and _basic_fetch_is_sufficient(basic, min_text_chars=min_text_chars):
         return _from_basic_fetch(basic)
+    if not allow_advanced:
+        return _from_basic_fetch(
+            basic,
+            fetch_method="basic_httpx_low_quality",
+            failure_reason=content_problem or "content_too_short",
+        )
 
     advanced = await advanced_fetch_page(
         url,

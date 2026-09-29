@@ -27,6 +27,7 @@ from packages.community import (
 from packages.community.source_classifier import classify_community_source
 from packages.identity import compute_raw_source_id
 from packages.refs import merge_ordered_refs
+from packages.research.budget import research_depth_budget
 from packages.research.discovery import (
     homepage_candidates,
     trusted_registry_candidates,
@@ -497,6 +498,14 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         max_repair_rounds = (
             1 if enable_repair and self._requires_verified_web_evidence(detail, dimension) else 0
         )
+        depth_budget = research_depth_budget(detail.plan.research_depth)
+        if depth_budget is not None:
+            target_source_count = min(target_source_count, depth_budget.target_sources)
+            max_repair_rounds = (
+                depth_budget.max_repair_rounds
+                if enable_repair and self._requires_verified_web_evidence(detail, dimension)
+                else 0
+            )
         brief = self._research_brief(detail, competitor, dimension).model_copy(
             update={
                 "target_source_count": target_source_count,
@@ -516,13 +525,26 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         async def search(query: str, max_results: int) -> list[SearchResult]:
             if not self._search.is_enabled:
                 return []
+            if depth_budget is not None:
+                max_results = min(max_results, self._collector_search_max_results())
             return await self._search_research_candidates(
                 record, detail, dimension, context, query, max_results,
             )
 
+        advanced_fetch_count = 0
+
         async def fetch(url: str):
+            nonlocal advanced_fetch_count
             try:
-                return await self._trace_fetch(record, "collector", dimension, url, context)
+                if depth_budget is None:
+                    return await self._trace_fetch(record, "collector", dimension, url, context)
+                result = await self._trace_fetch(
+                    record, "collector", dimension, url, context,
+                    allow_advanced=advanced_fetch_count < brief.max_advanced_fetches,
+                )
+                if str(getattr(result, "fetch_method", "")).startswith("webfetch_v2"):
+                    advanced_fetch_count += 1
+                return result
             except Exception:  # noqa: BLE001 - one failed candidate should not abort collection.
                 return None
 
@@ -813,7 +835,9 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
     def _collector_target_source_count(self, detail: RunDetail, dimension: str) -> int:
         if not self._requires_verified_web_evidence(detail, dimension):
             return 1
-        return max(1, int(self._settings.collector_target_verified_sources_per_branch))
+        target = max(1, int(self._settings.collector_target_verified_sources_per_branch))
+        depth_budget = research_depth_budget(detail.plan.research_depth)
+        return min(target, depth_budget.target_sources) if depth_budget is not None else target
 
     def _collector_search_max_results(self) -> int:
         return max(3, int(self._settings.collector_search_max_results))
@@ -1066,11 +1090,14 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         competitor: str,
         dimension: str,
     ) -> ResearchBrief:
+        target_source_count = self._collector_target_source_count(detail, dimension)
+        depth_budget = research_depth_budget(detail.plan.research_depth)
         return ResearchBrief(
             run_id=detail.id,
             topic=detail.topic,
             competitor=competitor,
             dimension=dimension,
+            research_depth=detail.plan.research_depth,
             product_name=detail.plan.target_product.name if detail.plan.target_product else "",
             product_category=detail.plan.target_product.category if detail.plan.target_product else "",
             product_use_cases=list(detail.plan.target_product.use_cases)
@@ -1079,11 +1106,26 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             product_audience=detail.plan.target_product.audience if detail.plan.target_product else "",
             execution_mode=detail.execution_mode,
             homepage_hint=detail.plan.homepage_hints.get(competitor),
-            target_source_count=self._collector_target_source_count(detail, dimension),
-            max_search_queries=2,
-            max_candidates=max(6, self._collector_search_max_results()),
-            max_fetches=max(3, self._collector_target_source_count(detail, dimension)),
-            max_advanced_fetches=getattr(self._settings, "web_fetch_advanced_max", 3),
+            target_source_count=target_source_count,
+            max_search_queries=depth_budget.max_search_queries if depth_budget is not None else 2,
+            max_candidates=(
+                depth_budget.max_candidates
+                if depth_budget is not None else max(6, self._collector_search_max_results())
+            ),
+            max_fetches=(
+                min(
+                    depth_budget.max_fetches,
+                    max(3, int(self._settings.collector_target_verified_sources_per_branch)),
+                )
+                if depth_budget is not None else max(3, target_source_count)
+            ),
+            max_advanced_fetches=min(
+                getattr(self._settings, "web_fetch_advanced_max", 3),
+                depth_budget.max_advanced_fetches,
+            ) if depth_budget is not None else getattr(self._settings, "web_fetch_advanced_max", 3),
+            max_repair_rounds=(
+                depth_budget.max_repair_rounds if depth_budget is not None else 1
+            ),
         )
 
     @staticmethod

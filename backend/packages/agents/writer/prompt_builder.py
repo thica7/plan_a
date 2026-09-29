@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from packages.research.budget import research_depth_budget
 from packages.schema.api_dto import RunDetail
 
 
@@ -27,6 +28,20 @@ class WriterPromptBuilder:
         writer_context_json: str,
         required_sections: str,
     ) -> WriterPrompt:
+        depth_budget = research_depth_budget(detail.plan.research_depth)
+        report_chars = depth_budget.report_chars if depth_budget is not None else "16,000-20,000"
+        core_depth_instruction = (
+            "Cover every required core section and every competitor concisely, "
+            "including all SWOT quadrants. "
+            if detail.plan.research_depth == "quick" else
+            "Core section minimums: Decision Summary 800+ characters; "
+            "Competitive Findings 1,200+; User Review Themes 1,000+ when "
+            "review, community, survey, interview, or persona evidence exists; "
+            "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
+            "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
+            "Threats for every competitor; Matrix Interpretation 900+; "
+            "Layer-specific Battlecard/Workflow/Market section 1,200+. "
+        )
         return WriterPrompt(
             system=(
                 "You are a senior enterprise competitive-intelligence analyst. "
@@ -71,17 +86,11 @@ class WriterPromptBuilder:
                 f"{community_policy_text}\n"
                 f"Writer Report Brief JSON: {writer_context_json}\n\n"
                 f"Required sections:\n{required_sections}\n"
-                "Target 16,000-20,000 characters for the first draft. Use about "
+                f"Target {report_chars} characters for the first draft. Use about "
                 "70-80% of the report on the Core analysis layer: decision summary, "
                 "competitive findings, user review themes, competitor deep dives, "
                 "SWOT, matrix interpretation, and layer-specific implications. "
-                "Core section minimums: Decision Summary 800+ characters; "
-                "Competitive Findings 1,200+; User Review Themes 1,000+ when "
-                "review, community, survey, interview, or persona evidence exists; "
-                "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
-                "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
-                "Threats for every competitor; Matrix Interpretation 900+; "
-                "Layer-specific Battlecard/Workflow/Market section 1,200+. Keep "
+                f"{core_depth_instruction}Keep "
                 "the Support/audit layer concise and complete; it is the audit trail, "
                 "not the main readout. Prefer deeper cited analysis and decision "
                 "implications over repeated source IDs or QA boilerplate."

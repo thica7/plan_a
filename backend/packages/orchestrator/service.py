@@ -84,6 +84,7 @@ from packages.orchestrator.graph import (
 from packages.orchestrator.llm_execution import LLMExecutionMixin
 from packages.quality import FinalQualityResult, build_final_quality_result
 from packages.refs import merge_ordered_refs, normalize_dimension_refs
+from packages.research.budget import research_depth_budget
 from packages.research.evaluation import quality_gaps_from_release_gate
 from packages.research.repair import (
     repair_task_to_redo_scope,
@@ -328,8 +329,16 @@ class RunService(
         self._ensure_workspace_quota_allows_run(request.workspace_id)
         execution_mode = self._resolve_execution_mode(request.execution_mode)
         competitors = self._normalize_competitor_names(request.competitors)
+        depth_budget = research_depth_budget(request.research_depth)
+        if depth_budget is not None and len(competitors) > depth_budget.competitor_limit:
+            raise ValueError(
+                f"{request.research_depth} research depth supports at most "
+                f"{depth_budget.competitor_limit} competitors."
+            )
         if not competitors:
             competitors = self._scenario_seed_competitors(request.scenario_id)
+            if depth_budget is not None:
+                competitors = competitors[:depth_budget.competitor_limit]
         valid_dimensions = self._normalize_requested_dimensions(
             request.dimensions,
             require_core_schema=not competitors and request.target_product is None,
@@ -457,7 +466,10 @@ class RunService(
             created_at=now,
             updated_at=now,
             plan=plan,
-            max_iterations=self._settings.max_iterations,
+            max_iterations=min(
+                self._settings.max_iterations,
+                {"quick": 1, "standard": 2}.get(request.research_depth, self._settings.max_iterations),
+            ),
             auto_redo_warn_enabled=auto_redo_warn_enabled,
             hitl_enabled=hitl_enabled,
             current_node="planner",
@@ -521,8 +533,16 @@ class RunService(
     async def find_active_duplicate_run(self, request: RunCreateRequest) -> RunDetail | None:
         execution_mode = self._resolve_execution_mode(request.execution_mode)
         competitors = self._normalize_competitor_names(request.competitors)
+        depth_budget = research_depth_budget(request.research_depth)
+        if depth_budget is not None and len(competitors) > depth_budget.competitor_limit:
+            raise ValueError(
+                f"{request.research_depth} research depth supports at most "
+                f"{depth_budget.competitor_limit} competitors."
+            )
         if not competitors:
             competitors = self._scenario_seed_competitors(request.scenario_id)
+            if depth_budget is not None:
+                competitors = competitors[:depth_budget.competitor_limit]
         valid_dimensions = self._normalize_requested_dimensions(
             request.dimensions,
             require_core_schema=not competitors and request.target_product is None,
@@ -960,6 +980,17 @@ class RunService(
                 raise ValueError("Competitor edits require modify_plan decision.")
             if has_competitor_edits and stage != "planner":
                 raise ValueError("Competitor edits can only be applied during planner review.")
+            if request.competitors is not None:
+                proposed_competitors = self._normalize_requested_competitors(request.competitors)
+                depth_budget = research_depth_budget(record.detail.plan.research_depth)
+                if (
+                    depth_budget is not None
+                    and len(proposed_competitors) > depth_budget.competitor_limit
+                ):
+                    raise ValueError(
+                        f"{record.detail.plan.research_depth} research depth supports at most "
+                        f"{depth_budget.competitor_limit} competitors."
+                    )
             hitl_actor_id = (
                 "system"
                 if (request.note or "").startswith("Auto-accepted after HITL timeout")
@@ -1518,6 +1549,9 @@ class RunService(
         detail.current_node = "planner"
         if not detail.plan.competitors:
             detail.plan.competitors = ["Demo Alpha", "Demo Beta", "Demo Gamma"]
+            depth_budget = research_depth_budget(detail.plan.research_depth)
+            if depth_budget is not None:
+                detail.plan.competitors = detail.plan.competitors[:depth_budget.competitor_limit]
             detail.plan.homepage_hints = {
                 competitor: f"https://example.com/{self._issue_id_fragment(competitor)}"
                 for competitor in detail.plan.competitors
@@ -3776,6 +3810,8 @@ class RunService(
         subagent: str | None,
         url: str,
         context: SubagentContext | None = None,
+        *,
+        allow_advanced: bool = True,
     ):
         robots_result = await self._trace_robots(record, agent, subagent, url, context)
         if not robots_result.allowed:
@@ -3792,7 +3828,10 @@ class RunService(
         started = time.perf_counter()
         if context is not None:
             context.add_tool_call("fetch_page", url)
-        result = await fetch_evidence_page(url)
+        result = (
+            await fetch_evidence_page(url)
+            if allow_advanced else await fetch_evidence_page(url, allow_advanced=False)
+        )
         metadata: dict[str, str | int | float | bool | None] = {
             "url": result.url,
             "ok": result.ok,
@@ -4485,6 +4524,12 @@ class RunService(
         if request.competitors is None:
             return
         competitors = self._normalize_requested_competitors(request.competitors)
+        depth_budget = research_depth_budget(detail.plan.research_depth)
+        if depth_budget is not None and len(competitors) > depth_budget.competitor_limit:
+            raise ValueError(
+                f"{detail.plan.research_depth} research depth supports at most "
+                f"{depth_budget.competitor_limit} competitors."
+            )
         detail.plan.homepage_hints = self._migrate_plan_homepage_map(
             detail.plan.homepage_hints,
             competitors,

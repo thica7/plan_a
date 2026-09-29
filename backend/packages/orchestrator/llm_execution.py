@@ -7,6 +7,7 @@ from typing import Any
 
 from packages.llm.errors import LLMExecutionLimitError
 from packages.llm.execution_budget import LLMCallExecution, RunLLMBudget, current_llm_execution
+from packages.research.budget import research_depth_budget
 
 
 class LLMExecutionMixin:
@@ -15,9 +16,14 @@ class LLMExecutionMixin:
     def _run_llm_budget(self, record) -> RunLLMBudget:
         if record.llm_budget is None:
             spans = [span for span in record.detail.trace_spans if span.kind == "llm"]
+            depth_budget = research_depth_budget(record.detail.plan.research_depth)
+            max_calls = max(1, self._settings.run_llm_max_calls)
             # Trace spans are persisted with RunDetail across process recovery.
             record.llm_budget = RunLLMBudget(
-                max_calls=max(1, self._settings.run_llm_max_calls),
+                max_calls=min(
+                    max_calls,
+                    depth_budget.llm_max_calls if depth_budget is not None else max_calls,
+                ),
                 max_repairs=max(0, self._settings.run_llm_max_repairs),
                 calls=sum(int(span.metadata.get("llm_request_attempts", 1)) for span in spans),
                 repairs=sum(int(span.metadata.get("llm_repair_attempts", 0)) for span in spans),

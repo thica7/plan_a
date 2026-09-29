@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 from packages.business_intel.entity_resolver import normalize_competitor_key
 from packages.business_intel.homepage import verify_homepage, verify_homepages
+from packages.research.budget import research_depth_budget
 from packages.research.discovery.planner import build_competitor_queries
 from packages.schema.models import (
     AnalysisPlan,
@@ -142,6 +143,17 @@ class PlannerAgentMixin:
     async def _discover_competitors(self, record: RunRecord) -> CompetitorDiscovery:
         detail = record.detail
         product = detail.plan.target_product
+        depth_budget = research_depth_budget(detail.plan.research_depth)
+        if depth_budget is None:
+            candidate_instruction = (
+                "Return 3 to 5 candidates, separating direct products, adjacent products, "
+            )
+        else:
+            candidate_instruction = (
+                f"Select at most {depth_budget.competitor_limit} competitors. "
+                f"Return up to {depth_budget.competitor_limit} candidates, "
+                "separating direct products, adjacent products, "
+            )
         queries = (
             build_competitor_queries(product, topic=detail.topic)
             if product is not None
@@ -179,7 +191,7 @@ class PlannerAgentMixin:
                 f"Target product: {product.model_dump_json() if product else 'not specified'}\n"
                 f"Target page evidence: {detail.plan.target_product_evidence.model_dump_json() if detail.plan.target_product_evidence else 'not available'}\n"
                 f"Search results JSON: {json.dumps(search_context, ensure_ascii=False)}\n\n"
-                "Return 3 to 5 candidates, separating direct products, adjacent products, "
+                f"{candidate_instruction}"
                 "and substitutes for the same user task. "
                 "Prefer product or company names, not article titles. "
                 "Use matched search results as evidence and name the shared user task. "
@@ -193,7 +205,7 @@ class PlannerAgentMixin:
         )
         selected = self._normalize_competitor_names(
             payload.get("selected_competitors") or payload.get("competitors")
-        )[:5]
+        )[:depth_budget.competitor_limit if depth_budget is not None else 5]
         candidate_names = self._candidate_names(payload, selected)
         if product is not None:
             target_key = normalize_competitor_key(product.name)

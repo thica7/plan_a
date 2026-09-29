@@ -59,6 +59,26 @@ async def test_ordinary_product_copy_uses_fast_path(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_low_quality_basic_skips_advanced_when_budget_disallows_it(monkeypatch) -> None:
+    async def basic(url, **_kwargs):
+        return FetchPageResult(
+            url=url, ok=True, title="Loading", text="Loading...", content_hash="short"
+        )
+
+    async def advanced(_url, **_kwargs):
+        raise AssertionError("Advanced fetch must not run after budget is exhausted")
+
+    monkeypatch.setattr(evidence_fetch, "fetch_page", basic)
+    monkeypatch.setattr(evidence_fetch, "advanced_fetch_page", advanced)
+    result = await evidence_fetch.fetch_evidence_page(
+        "https://example.com/product", allow_advanced=False
+    )
+    assert result.ok is False
+    assert result.fetch_method == "basic_httpx_low_quality"
+    assert result.failure_reason == "content_too_short"
+
+
+@pytest.mark.asyncio
 async def test_short_but_readable_pdf_does_not_require_browser(monkeypatch) -> None:
     async def basic(url, **_kwargs):
         return FetchPageResult(
