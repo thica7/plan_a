@@ -133,17 +133,17 @@ def build_demo_report(detail: RunDetail, *, source_refs: str, memory_section: st
         parts.append(f"## {report_label(language, 'product_opportunities')}")
         parts.append(
             (
-                f"- 待验证机会假设：用户输入（非竞品证据）：{user_input}；围绕“{safe_job}”探索产品改进；用户任务：{safe_job}；"
+                f"- 待验证机会假设：探索与用户任务相关的产品改进，用户任务：{safe_job}；"
                 f"验证动作：让目标用户用相同任务试用候选方案并记录完成情况与阻碍；成功信号：{safe_metric}。"
-                "竞品差异与真实需求仍待验证。"
+                f"用户输入（非竞品证据）：{user_input}；竞品差异与真实需求仍待验证。"
             )
             if zh else
             (
-                f"- Hypothesis to validate: User-provided context (not competitor evidence): {user_input}; "
-                f"explore a product improvement around “{safe_job}”; "
+                "- Hypothesis to validate: explore a product improvement tied to the user task — "
                 f"User task: {safe_job}; validation action: have target users try candidate approaches "
                 f"on the same task and record completion and blockers; success signal — {safe_metric}. "
-                "Competitor differences and real demand remain unverified."
+                f"User-provided context (not competitor evidence): {user_input}; "
+                "competitor differences and real demand remain unverified."
             )
         )
     section(

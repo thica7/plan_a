@@ -482,7 +482,8 @@ def product_opportunity_errors(
             errors.append(
                 f"product_opportunities bullet {index} needs user task, validation action, and success signal"
             )
-        if not SOURCE_TOKEN_RE.search(bullet) and re.match(
+        has_source = SOURCE_TOKEN_RE.search(bullet) is not None
+        if not has_source and re.match(
             r"(?:待验证|假设|hypothesis\b|unverified\b)",
             bullet,
             flags=re.IGNORECASE,
@@ -490,6 +491,13 @@ def product_opportunity_errors(
             errors.append(
                 f"product_opportunities bullet {index} needs a source citation or explicit validation-hypothesis label"
             )
+        if not has_source:
+            task_label = re.search(field_patterns[0], bullet, flags=re.IGNORECASE)
+            opportunity_statement = bullet[:task_label.start()] if task_label else bullet
+            if re.search(r"[;；。.!?！？]", opportunity_statement):
+                errors.append(
+                    f"product_opportunities bullet {index} cannot contain a second uncited statement before the user task"
+                )
     return errors
 
 

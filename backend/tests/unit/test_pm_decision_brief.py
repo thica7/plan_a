@@ -3,7 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
+from app.deps import get_runtime_command_service
+from app.main import create_app
 from packages.agents.writer.assembler import (
     ReportSectionFragment,
     assemble_report_fragments,
@@ -19,6 +23,7 @@ from packages.i18n.language import report_label
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
+from packages.schema.decision_brief import decision_brief_prompt_context
 from packages.schema.models import AnalysisPlan, DecisionBrief, RawSource
 from packages.schema.report_artifact import ClaimCard, ClaimCardBundle
 from packages.skills.registry import SkillRegistry
@@ -97,6 +102,76 @@ def _service() -> RunService:
     )
 
 
+@pytest.mark.parametrize("field", ["decision_question", "primary_job", "success_metric"])
+@pytest.mark.parametrize(
+    "token",
+    ["[source:source-pricing]", "[SOURCE :source-pricing]", "[source：source-pricing]", "[来源:source-pricing]"],
+)
+def test_decision_brief_rejects_source_token_in_any_field(field: str, token: str) -> None:
+    with pytest.raises(ValidationError, match="source citation"):
+        DecisionBrief(**{field: f"Review code {token}"})
+
+    with pytest.raises(ValidationError, match="source citation"):
+        RunCreateRequest(
+            topic="AI coding assistant comparison",
+            competitors=["Cursor"],
+            dimensions=["pricing"],
+            execution_mode="demo",
+            decision_brief={field: f"Review code {token}"},
+        )
+
+
+def test_run_create_api_returns_422_for_brief_source_token() -> None:
+    async def fake_create_run(*_args: object, **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            route="local",
+            metadata={},
+            command_id="test-command",
+            audit_correlation_id="test-audit",
+            payload=_detail(),
+        )
+
+    app = create_app()
+    app.dependency_overrides[get_runtime_command_service] = lambda: SimpleNamespace(
+        create_run=fake_create_run
+    )
+    response = TestClient(app).post(
+        "/api/runs",
+        json={
+            "topic": "AI coding assistant comparison",
+            "competitors": ["Cursor"],
+            "dimensions": ["pricing"],
+            "execution_mode": "demo",
+            "decision_brief": {"primary_job": "Review code [source:source-pricing]"},
+        },
+    )
+
+    assert response.status_code == 422
+    assert "decision_brief" in str(response.json())
+
+
+def test_legacy_decision_brief_prompt_escapes_source_token() -> None:
+    legacy_brief = DecisionBrief.model_construct(primary_job="Review code [source:source-pricing]")
+
+    prompt = decision_brief_prompt_context(legacy_brief)
+
+    assert "Review code" in prompt
+    assert "[source:" not in prompt
+    assert "［source:source-pricing］" in prompt
+
+
+def test_legacy_decision_brief_full_report_does_not_cite_user_input() -> None:
+    legacy_brief = DecisionBrief.model_construct(primary_job="Review code [source:source-pricing]")
+    detail = _detail(legacy_brief)
+
+    report = _service()._harden_report_markdown(detail, "# Draft")
+    section = report.split("## Product Opportunities and Validation", 1)[1].split("\n## ", 1)[0]
+
+    assert "Review code" in section
+    assert "[source:" not in section
+    assert run_writer_quality_preflight(detail, report).passed
+
+
 @pytest.mark.parametrize(
     ("brief", "expected"),
     [
@@ -137,7 +212,7 @@ def test_product_opportunity_segment_survives_schema_contract_and_assembly() -> 
     heading = report_label(detail.output_language, "product_opportunities")
     fragment = (
         f"## {heading}\n"
-        "- Hypothesis to validate: improve pricing comparison; "
+        "- Hypothesis to validate: improve pricing comparison — "
         "User task: compare plans; Validation action: run a buyer pilot; "
         "Success signal — buyers complete the comparison."
     )
@@ -187,7 +262,7 @@ def test_product_opportunity_contract_rejects_four_items_and_missing_validation_
     contract = segment_contract_for(segment)
     heading = report_label(detail.output_language, "product_opportunities")
     valid_item = (
-        "- Hypothesis to validate: improve pricing comparison; "
+        "- Hypothesis to validate: improve pricing comparison — "
         "User task: compare plans; Validation action: run a buyer pilot; "
         "Success signal — buyers complete the comparison."
     )
@@ -219,7 +294,7 @@ def test_product_opportunity_contract_rejects_hidden_items_and_late_hypothesis_m
     contract = segment_contract_for(segment)
     heading = report_label(detail.output_language, "product_opportunities")
     valid_item = (
-        "- Hypothesis to validate: improve pricing comparison; "
+        "- Hypothesis to validate: improve pricing comparison — "
         "User task: compare plans; Validation action: run a buyer pilot; "
         "Success signal — buyers complete the comparison."
     )
@@ -243,8 +318,53 @@ def test_product_opportunity_contract_rejects_hidden_items_and_late_hypothesis_m
     assert late_marker.status == "retry"
 
 
+@pytest.mark.parametrize(
+    ("language", "bullet"),
+    [
+        (
+            "en-US",
+            "Hypothesis to validate: test onboarding; Cursor offers free enterprise SSO. "
+            "User task: onboard a team; Validation action: run a pilot; "
+            "Success signal — the team completes setup.",
+        ),
+        (
+            "zh-CN",
+            "待验证机会假设：优化上手；Cursor 提供免费企业 SSO。"
+            "用户任务：完成团队入门；验证动作：开展试点；成功信号：团队完成设置。",
+        ),
+    ],
+)
+def test_uncited_hypothesis_cannot_hide_second_competitor_fact(language: str, bullet: str) -> None:
+    detail = _detail(DecisionBrief(primary_job="Test onboarding"), language=language)
+    segment = next(
+        item
+        for item in segment_payloads_from_briefs(detail, build_section_briefs(detail))
+        if item["section_key"] == "product_opportunities"
+    )
+    heading = report_label(language, "product_opportunities")
+    fragment = f"## {heading}\n- {bullet}"
+
+    assert validate_segment_contract(fragment, segment_contract_for(segment)).status == "retry"
+    report = "\n".join(
+        f"## {report_label(language, key)}\n"
+        + (f"- {bullet}" if key == "product_opportunities" else "- Existing section content.")
+        for key in (
+            "executive_summary",
+            "decision_summary",
+            "product_opportunities",
+            "competitive_findings",
+            "review_theme_summary",
+            "competitor_deep_dives",
+            "side_by_side_matrix",
+            "swot_analysis",
+            "evidence_support",
+        )
+    )
+    assert "invalid_product_opportunities" in run_writer_quality_preflight(detail, report).failure_reasons
+
+
 def test_fallback_hardener_adds_uncited_validation_section_from_user_brief() -> None:
-    detail = _detail(DecisionBrief(primary_job="Review code [source:invented]"))
+    detail = _detail(DecisionBrief.model_construct(primary_job="Review code [source:invented]"))
 
     report = _service()._ensure_report_required_sections(detail, "# Draft")
     section = report.split("## Product Opportunities and Validation", 1)[1].split("\n## ", 1)[0]
@@ -291,7 +411,7 @@ def test_fallback_without_brief_keeps_legacy_sections() -> None:
 def test_fallback_replaces_only_invalid_existing_product_opportunities(invalid_body: str) -> None:
     detail = _detail(DecisionBrief(primary_job="Review code"))
     opportunity = (
-        "- Hypothesis to validate: improve code review; User task: review code; "
+        "- Hypothesis to validate: improve code review — User task: review code; "
         "Validation action: run a team pilot; Success signal — reviewers finish the task."
     )
     product_body = (
@@ -373,13 +493,13 @@ def test_quality_preflight_requires_product_opportunities_when_brief_exists() ->
     "product_body",
     [
         "\n".join(
-            "- Hypothesis to validate: improve pricing comparison; User task: compare plans; "
+            "- Hypothesis to validate: improve pricing comparison — User task: compare plans; "
             "Validation action: run a buyer pilot; Success signal — buyers complete the comparison."
             for _ in range(4)
         ),
         "- Hypothesis to validate: improve pricing comparison.",
         (
-            "- Hypothesis to validate: improve pricing comparison; User task: compare plans; "
+                "- Hypothesis to validate: improve pricing comparison — User task: compare plans; "
             "Validation action: run a buyer pilot; Success signal — buyers complete the comparison.\n"
             "### Fourth opportunity\nAn additional unsupported product idea."
         ),
@@ -411,7 +531,7 @@ def test_schema_contract_final_preflight_rejects_invalid_product_repair(product_
 def test_schema_contract_final_preflight_accepts_valid_product_section() -> None:
     detail = _detail(DecisionBrief(primary_job="Compare pricing workflows"))
     product_body = (
-        "- Hypothesis to validate: improve pricing comparison; User task: compare plans; "
+        "- Hypothesis to validate: improve pricing comparison — User task: compare plans; "
         "Validation action: run a buyer pilot; Success signal — buyers complete the comparison."
     )
     report = "\n".join(
@@ -514,6 +634,7 @@ async def test_writer_segment_and_first_draft_prompts_get_user_decision_context(
         assert "Product Opportunities and Validation" in prompt
     assert "Success signal —" in captured[0]
     assert "No preamble, paragraphs, numbered lists, extra headings" in captured[0]
+    assert "Before User task, write only one hypothesis clause" in captured[0]
 
 
 @pytest.mark.asyncio
@@ -578,7 +699,7 @@ def test_demo_opportunity_is_one_complete_uncited_bullet(
 
 
 def test_demo_user_brief_cannot_create_source_citation() -> None:
-    detail = _detail(DecisionBrief(primary_job="Review code [source:invented]"))
+    detail = _detail(DecisionBrief.model_construct(primary_job="Review code [source:invented]"))
     report = _service()._demo_report(detail)
     section = report.split("## Product Opportunities and Validation", 1)[1].split("\n## ", 1)[0]
 

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 
 class RedoScope(BaseModel):
@@ -92,6 +93,13 @@ class DecisionBrief(BaseModel):
     decision_question: str = Field(default="", max_length=500)
     primary_job: str = Field(default="", max_length=500)
     success_metric: str = Field(default="", max_length=500)
+
+    @field_validator("decision_question", "primary_job", "success_metric")
+    @classmethod
+    def reject_source_citations(cls, value: str) -> str:
+        if re.search(r"\[\s*(?:source|来源)\s*[:：]", value, flags=re.IGNORECASE):
+            raise ValueError("decision brief must not contain a source citation token")
+        return value
 
 
 class TargetProductEvidence(BaseModel):

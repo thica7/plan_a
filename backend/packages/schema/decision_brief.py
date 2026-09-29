@@ -24,7 +24,7 @@ def decision_brief_prompt_context(brief: DecisionBrief | None) -> str:
     return (
         "User-provided decision brief (context, not evidence or a source; "
         "do not cite it as a competitor fact): "
-        f"{json.dumps(fields, ensure_ascii=False)}\n"
+        f"{json.dumps({key: safe_decision_brief_text(value) for key, value in fields.items()}, ensure_ascii=False)}\n"
     )
 
 

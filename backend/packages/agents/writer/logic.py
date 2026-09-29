@@ -3587,6 +3587,7 @@ class WriterAgentMixin:
                         if is_zh else
                         "Each bullet must state Hypothesis to validate or include an allowed [source:ID], followed by User task: ...; Validation action: ...; Success signal — ... ."
                     ),
+                    "Before User task, write only one hypothesis clause; do not add a semicolon or second sentence without a source citation.",
                     "Treat the decision brief as user-provided context, not competitor evidence.",
                     "Cite competitor facts only from this segment's allowed source and claim cards; label unsupported ideas as hypotheses.",
                     source_warning,
@@ -5252,12 +5253,12 @@ class WriterAgentMixin:
             return [
                 "",
                 f"## {heading}",
-                f"- 待验证机会假设：用户简报仅作为输入上下文，竞品差异与用户需求仍待验证；围绕“{task}”探索产品改进；用户任务：{task}；验证动作：让目标用户完成同一任务并记录阻碍；成功信号：{metric}。",
+                f"- 待验证机会假设：探索与用户任务相关的产品改进，用户任务：{task}；验证动作：让目标用户完成同一任务并记录阻碍；成功信号：{metric}。用户简报仅作为输入上下文，竞品差异与用户需求仍待验证。",
             ]
         return [
             "",
             f"## {heading}",
-            f"- Hypothesis to validate: the user-provided brief is context; competitor differences and user demand remain unverified; explore a product improvement around “{task}”; User task: {task}; Validation action: have target users complete the same task and record blockers; Success signal — {metric}.",
+            f"- Hypothesis to validate: explore a product improvement tied to the user task — User task: {task}; Validation action: have target users complete the same task and record blockers; Success signal — {metric}. The user-provided brief is context; competitor differences and user demand remain unverified.",
         ]
 
     def _layer_section_heading(self, detail: RunDetail) -> str:
