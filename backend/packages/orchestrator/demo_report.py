@@ -130,22 +130,25 @@ def build_demo_report(detail: RunDetail, *, source_refs: str, memory_section: st
             if metric else
             ("试点前约定可衡量的任务完成标准" if zh else "a measurable task completion threshold agreed before the pilot")
         )
-        section(
-            "product_opportunities",
-            [
-                (f"用户输入（非竞品证据）：{user_input}。" if zh else f"User-provided context (not competitor evidence): {user_input}."),
-                (
-                    f"待验证机会假设 1：围绕“{safe_job}”探索产品改进；竞品差异与真实需求仍待验证。"
-                    if zh else
-                    f"Opportunity hypothesis 1 to validate: explore a product improvement around “{safe_job}”; competitor differences and real demand remain unverified."
-                ),
-                (
-                    f"对应任务：{safe_job}；验证动作：让目标用户用相同任务试用候选方案并记录完成情况与阻碍；成功信号：{safe_metric}。"
-                    if zh else
-                    f"User task: {safe_job}; validation action: have target users try candidate approaches on the same task and record completion and blockers; success signal — {safe_metric}."
-                ),
-            ],
-            cite=False,
+        parts.append(f"## {report_label(language, 'product_opportunities')}")
+        parts.append(
+            f"用户输入（非竞品证据）：{user_input}。"
+            if zh else
+            f"User-provided context (not competitor evidence): {user_input}."
+        )
+        parts.append(
+            (
+                f"- 待验证机会假设：围绕“{safe_job}”探索产品改进；用户任务：{safe_job}；"
+                f"验证动作：让目标用户用相同任务试用候选方案并记录完成情况与阻碍；成功信号：{safe_metric}。"
+                "竞品差异与真实需求仍待验证。"
+            )
+            if zh else
+            (
+                f"- Hypothesis to validate: explore a product improvement around “{safe_job}”; "
+                f"User task: {safe_job}; validation action: have target users try candidate approaches "
+                f"on the same task and record completion and blockers; success signal — {safe_metric}. "
+                "Competitor differences and real demand remain unverified."
+            )
         )
     section(
         "competitive_findings",

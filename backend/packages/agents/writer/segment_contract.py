@@ -342,10 +342,9 @@ def validate_segment_contract(
         )
 
     if contract.section_id == "product_opportunities":
-        opportunity_errors = _product_opportunity_errors(
+        opportunity_errors = product_opportunity_errors(
             markdown,
             output_language=contract.output_language,
-            h2_headings=h2_headings,
         )
         if opportunity_errors:
             return SegmentValidationResult(
@@ -449,15 +448,24 @@ def _h3_headings(markdown: str) -> list[str]:
     return [match.group(1).strip() for match in _H3_RE.finditer(markdown)]
 
 
-def _product_opportunity_errors(
+def product_opportunity_errors(
     markdown: str,
     *,
     output_language: str,
-    h2_headings: list[str],
 ) -> list[str]:
-    if len(h2_headings) != 1 or _H3_H4_RE.search(markdown):
-        return ["product_opportunities requires exactly one H2 and no H3/H4 headings"]
-    bullets = re.findall(r"(?m)^\s*[-*+]\s+(.+)$", markdown)
+    nonempty_lines = [line for line in markdown.splitlines() if line.strip()]
+    if (
+        len(_h2_headings(markdown)) != 1
+        or not nonempty_lines
+        or _H2_RE.fullmatch(nonempty_lines[0]) is None
+    ):
+        return ["product_opportunities requires exactly one H2 heading first"]
+    bullets: list[str] = []
+    for line in nonempty_lines[1:]:
+        match = re.fullmatch(r"[-*+]\s+(.+)", line)
+        if match is None:
+            return ["product_opportunities allows only single-line opportunity bullets after its H2"]
+        bullets.append(match.group(1))
     if not 1 <= len(bullets) <= 3:
         return ["product_opportunities requires 1-3 single-line opportunity bullets"]
     field_patterns = (
@@ -474,10 +482,11 @@ def _product_opportunity_errors(
             errors.append(
                 f"product_opportunities bullet {index} needs user task, validation action, and success signal"
             )
-        if not SOURCE_TOKEN_RE.search(bullet) and not any(
-            marker in bullet.casefold()
-            for marker in ("待验证", "假设", "hypothesis", "to validate", "unverified")
-        ):
+        if not SOURCE_TOKEN_RE.search(bullet) and re.match(
+            r"(?:待验证|假设|hypothesis\b|unverified\b)",
+            bullet,
+            flags=re.IGNORECASE,
+        ) is None:
             errors.append(
                 f"product_opportunities bullet {index} needs a source citation or explicit validation-hypothesis label"
             )

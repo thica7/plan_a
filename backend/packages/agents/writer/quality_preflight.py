@@ -7,7 +7,9 @@ from packages.agents.writer.segment_contract import (
     CORE_HEADING_KEYS,
     SUPPORT_HEADING_KEYS,
     heading_key_for,
+    product_opportunity_errors,
 )
+from packages.business_intel.report_sections import parse_report_section_marker
 from packages.schema.api_dto import RunDetail
 from packages.schema.decision_brief import decision_brief_fields
 
@@ -74,7 +76,8 @@ def run_writer_quality_preflight(
     detail: RunDetail,
     markdown: str,
 ) -> WriterQualityPreflightResult:
-    h2_headings = [match.group(1).strip() for match in _H2_RE.finditer(markdown)]
+    h2_matches = list(_H2_RE.finditer(markdown))
+    h2_headings = [match.group(1).strip() for match in h2_matches]
     h2_keys: list[str] = []
     h2_identities: list[str] = []
     for heading in h2_headings:
@@ -119,6 +122,20 @@ def run_writer_quality_preflight(
         failure_reasons.append("missing_core_sections")
     if core_sections_after_support:
         failure_reasons.append("core_sections_after_support")
+    if decision_brief_fields(detail.plan.decision_brief) and "product_opportunities" in h2_keys:
+        for index, match in enumerate(h2_matches):
+            if heading_key_for(match.group(1), detail.output_language) != "product_opportunities":
+                continue
+            block_end = h2_matches[index + 1].start() if index + 1 < len(h2_matches) else len(markdown)
+            block_lines = markdown[match.start():block_end].rstrip().splitlines()
+            if index + 1 < len(h2_matches) and parse_report_section_marker(block_lines[-1]) is not None:
+                block_lines.pop()
+            if product_opportunity_errors(
+                "\n".join(block_lines),
+                output_language=detail.output_language,
+            ):
+                failure_reasons.append("invalid_product_opportunities")
+            break
 
     return WriterQualityPreflightResult(
         passed=not failure_reasons,

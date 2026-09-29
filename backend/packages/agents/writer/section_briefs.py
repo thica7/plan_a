@@ -761,6 +761,8 @@ def _must_include(section_key: str) -> list[str]:
 def _minimum_depth(section_key: str) -> dict[str, object]:
     if section_key == "decision_summary":
         return {"paragraphs": 3, "requires_executive_summary": True}
+    if section_key == "product_opportunities":
+        return {"bullet_items": 1, "maximum_bullet_items": 3}
     if section_key in {"side_by_side_matrix", "swot_analysis"}:
         return {"paragraphs": 2, "requires_structured_comparison": True}
     return {"paragraphs": 2}

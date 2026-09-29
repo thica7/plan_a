@@ -3580,14 +3580,14 @@ class WriterAgentMixin:
                 [
                     "Required segment outline:",
                     h2("product_opportunities"),
-                    "Write 1-3 single-line opportunity bullets, with no other bullets or H3 headings in this segment.",
+                    "Write exactly one H2 heading followed by 1-3 single-line opportunity bullets. No preamble, paragraphs, numbered lists, extra headings, or continuation lines.",
                     (
                         "Each bullet must state 待验证 or include an allowed [source:ID], followed by 用户任务：...；验证动作：...；成功信号：...。"
                         if is_zh else
                         "Each bullet must state Hypothesis to validate or include an allowed [source:ID], followed by User task: ...; Validation action: ...; Success signal — ... ."
                     ),
-                    "- Treat the decision brief as user-provided context, not competitor evidence.",
-                    "- Cite competitor facts only from this segment's allowed source and claim cards; label unsupported ideas as hypotheses.",
+                    "Treat the decision brief as user-provided context, not competitor evidence.",
+                    "Cite competitor facts only from this segment's allowed source and claim cards; label unsupported ideas as hypotheses.",
                     source_warning,
                 ]
             )
@@ -6717,11 +6717,23 @@ class WriterAgentMixin:
 
     def _ensure_report_claim_citations(self, detail: RunDetail, markdown: str) -> str:
         hardened_lines: list[str] = []
+        current_section_key: str | None = None
         for line in markdown.splitlines():
+            heading = re.match(r"^##\s+(.+?)\s*$", line)
+            if heading is not None:
+                current_section_key = heading_key_for(
+                    heading.group(1), detail.output_language
+                )
             if not self._report_line_needs_citation(line):
                 hardened_lines.append(line)
                 continue
             if self._extract_cited_source_ids(line):
+                hardened_lines.append(line)
+                continue
+            if (
+                current_section_key == "product_opportunities"
+                and self._report_line_is_product_context_or_hypothesis(line)
+            ):
                 hardened_lines.append(line)
                 continue
             source_ids = self._source_ids_for_report_line(detail, line)
@@ -6735,6 +6747,21 @@ class WriterAgentMixin:
             else:
                 hardened_lines.append(f"{stripped} {citation_text}")
         return "\n".join(hardened_lines)
+
+    def _report_line_is_product_context_or_hypothesis(self, line: str) -> bool:
+        stripped = line.strip()
+        if stripped.casefold().startswith((
+            "the user-provided brief is context",
+            "user-provided context",
+            "用户简报仅作为",
+            "用户输入（非竞品证据）",
+        )):
+            return True
+        return re.match(
+            r"^[-*+]\s+(?:待验证|假设|hypothesis\b|unverified\b)",
+            stripped,
+            flags=re.IGNORECASE,
+        ) is not None
 
     def _report_line_needs_citation(self, line: str) -> bool:
         stripped = line.strip()

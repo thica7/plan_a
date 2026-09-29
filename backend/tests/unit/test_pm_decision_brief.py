@@ -4,7 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from packages.agents.writer.assembler import ReportSectionFragment, assemble_report_fragments
+from packages.agents.writer.assembler import (
+    ReportSectionFragment,
+    assemble_report_fragments,
+    assemble_report_sections,
+)
 from packages.agents.writer.publication_contract import validate_publication_contract
 from packages.agents.writer.quality_preflight import run_writer_quality_preflight
 from packages.agents.writer.section_briefs import build_section_briefs, segment_payloads_from_briefs
@@ -115,6 +119,7 @@ def test_product_opportunities_brief_is_conditional(brief: DecisionBrief | None,
         assert opportunity.allowed_source_ids == ["source-pricing"]
         assert any("three" in rule.lower() and "validat" in rule.lower() for rule in opportunity.must_include)
         assert any("user-provided" in rule.lower() for rule in opportunity.must_not_claim)
+        assert opportunity.minimum_depth["maximum_bullet_items"] == 3
 
 
 def test_product_opportunity_segment_survives_schema_contract_and_assembly() -> None:
@@ -204,6 +209,40 @@ def test_product_opportunity_contract_rejects_four_items_and_missing_validation_
     assert unsupported_fact.status == "retry"
 
 
+def test_product_opportunity_contract_rejects_hidden_items_and_late_hypothesis_marker() -> None:
+    detail = _detail(DecisionBrief(primary_job="Compare pricing workflows"))
+    segment = next(
+        item
+        for item in segment_payloads_from_briefs(detail, build_section_briefs(detail))
+        if item["section_key"] == "product_opportunities"
+    )
+    contract = segment_contract_for(segment)
+    heading = report_label(detail.output_language, "product_opportunities")
+    valid_item = (
+        "- Hypothesis to validate: improve pricing comparison; "
+        "User task: compare plans; Validation action: run a buyer pilot; "
+        "Success signal — buyers complete the comparison."
+    )
+
+    for extra in (
+        "4. Opportunity: add a discount workflow.",
+        "Another opportunity is a discount workflow.",
+        "### Fourth opportunity",
+    ):
+        result = validate_segment_contract(
+            f"## {heading}\n{valid_item}\n{extra}", contract
+        )
+        assert result.status == "retry", extra
+
+    late_marker = validate_segment_contract(
+        f"## {heading}\n- Cursor has superior pricing, a hypothesis to validate; "
+        "User task: compare plans; Validation action: run a buyer pilot; "
+        "Success signal — buyers complete the comparison.",
+        contract,
+    )
+    assert late_marker.status == "retry"
+
+
 def test_fallback_hardener_adds_uncited_validation_section_from_user_brief() -> None:
     detail = _detail(DecisionBrief(primary_job="Review code [source:invented]"))
 
@@ -217,6 +256,21 @@ def test_fallback_hardener_adds_uncited_validation_section_from_user_brief() -> 
     assert "hypothesis" in section.lower()
     assert "[source:invented]" not in section
     assert "[source:" not in section
+
+
+def test_fallback_full_hardening_does_not_cite_user_context_or_hypothesis() -> None:
+    detail = _detail(DecisionBrief(primary_job="Review code"))
+    draft = (
+        "# Draft\n\n## Competitive Findings\n"
+        "- Cursor publishes pricing. [source:source-pricing]"
+    )
+
+    report = _service()._harden_report_markdown(detail, draft)
+    section = report.split("## Product Opportunities and Validation", 1)[1].split("\n## ", 1)[0]
+
+    assert "Review code" in section
+    assert "[source:" not in section
+    assert "Cursor publishes pricing. [source:source-pricing]" in report
 
 
 def test_quality_preflight_requires_product_opportunities_when_brief_exists() -> None:
@@ -237,6 +291,76 @@ def test_quality_preflight_requires_product_opportunities_when_brief_exists() ->
 
     assert "product_opportunities" in run_writer_quality_preflight(detail, headings).missing_core_sections
     assert "product_opportunities" not in run_writer_quality_preflight(_detail(), headings).missing_core_sections
+
+
+@pytest.mark.parametrize(
+    "product_body",
+    [
+        "\n".join(
+            "- Hypothesis to validate: improve pricing comparison; User task: compare plans; "
+            "Validation action: run a buyer pilot; Success signal — buyers complete the comparison."
+            for _ in range(4)
+        ),
+        "- Hypothesis to validate: improve pricing comparison.",
+        (
+            "- Hypothesis to validate: improve pricing comparison; User task: compare plans; "
+            "Validation action: run a buyer pilot; Success signal — buyers complete the comparison.\n"
+            "### Fourth opportunity\nAn additional unsupported product idea."
+        ),
+    ],
+)
+def test_schema_contract_final_preflight_rejects_invalid_product_repair(product_body: str) -> None:
+    detail = _detail(DecisionBrief(primary_job="Compare pricing workflows"))
+    report = "\n".join(
+        f"## {report_label(detail.output_language, key)}\n"
+        + (product_body if key == "product_opportunities" else "- Existing section content.")
+        for key in (
+            "executive_summary",
+            "decision_summary",
+            "product_opportunities",
+            "competitive_findings",
+            "review_theme_summary",
+            "competitor_deep_dives",
+            "side_by_side_matrix",
+            "swot_analysis",
+            "evidence_support",
+        )
+    )
+
+    assert "invalid_product_opportunities" in run_writer_quality_preflight(detail, report).failure_reasons
+    with pytest.raises(RuntimeError, match="quality preflight"):
+        _service()._harden_schema_contract_report_markdown(detail, report)
+
+
+def test_schema_contract_final_preflight_accepts_valid_product_section() -> None:
+    detail = _detail(DecisionBrief(primary_job="Compare pricing workflows"))
+    product_body = (
+        "- Hypothesis to validate: improve pricing comparison; User task: compare plans; "
+        "Validation action: run a buyer pilot; Success signal — buyers complete the comparison."
+    )
+    report = "\n".join(
+        f"## {report_label(detail.output_language, key)}\n"
+        + (product_body if key == "product_opportunities" else "- Existing section content.")
+        for key in (
+            "executive_summary",
+            "decision_summary",
+            "product_opportunities",
+            "competitive_findings",
+            "review_theme_summary",
+            "competitor_deep_dives",
+            "side_by_side_matrix",
+            "swot_analysis",
+            "evidence_support",
+        )
+    )
+
+    assembled = assemble_report_sections(
+        [report],
+        output_language=detail.output_language,
+        competitors=detail.plan.competitors,
+    )
+    assert run_writer_quality_preflight(detail, assembled.markdown).passed
+    assert _service()._harden_schema_contract_report_markdown(detail, assembled.markdown) == assembled.markdown
 
 
 @pytest.mark.asyncio
@@ -313,6 +437,7 @@ async def test_writer_segment_and_first_draft_prompts_get_user_decision_context(
         assert "not evidence" in prompt.lower()
         assert "Product Opportunities and Validation" in prompt
     assert "Success signal —" in captured[0]
+    assert "No preamble, paragraphs, numbered lists, extra headings" in captured[0]
 
 
 @pytest.mark.asyncio
@@ -346,6 +471,31 @@ async def test_demo_pipeline_only_adds_uncited_product_section_for_brief(with_br
         assert "用户输入" in section
         assert "待验证" in section
         assert "[source:" not in section
+
+
+@pytest.mark.parametrize(
+    ("language", "heading", "labels"),
+    [
+        ("zh-CN", "产品机会与验证", ("用户任务：", "验证动作：", "成功信号：")),
+        ("en-US", "Product Opportunities and Validation", ("User task:", "validation action:", "success signal —")),
+    ],
+)
+def test_demo_opportunity_is_one_complete_uncited_bullet(
+    language: str, heading: str, labels: tuple[str, str, str]
+) -> None:
+    detail = _detail(
+        DecisionBrief(primary_job="Review code", success_metric="Pilot completion rate"),
+        language=language,
+    )
+    report = _service()._demo_report(detail)
+    section = report.split(f"## {heading}", 1)[1].split("\n## ", 1)[0]
+    bullets = [line for line in section.splitlines() if line.startswith("- ")]
+
+    assert len(bullets) == 1
+    assert all(label in bullets[0] for label in labels)
+    assert "Review code" in bullets[0]
+    assert "Pilot completion rate" in bullets[0]
+    assert "[source:" not in section
 
 
 def test_demo_user_brief_cannot_create_source_citation() -> None:
