@@ -25,6 +25,7 @@ from packages.business_intel import (
     get_scenario_pack,
     validate_project_claims,
 )
+from packages.business_intel.entity_resolver import normalize_competitor_key
 from packages.business_intel.homepage import verify_homepages
 from packages.business_intel.release_repair import (
     apply_release_gate_warning_report_repair,
@@ -84,14 +85,24 @@ from packages.orchestrator.graph import (
 from packages.orchestrator.llm_execution import LLMExecutionMixin
 from packages.quality import FinalQualityResult, build_final_quality_result
 from packages.refs import merge_ordered_refs, normalize_dimension_refs
-from packages.research.budget import research_depth_budget
+from packages.research.budget import (
+    ANALYST_ONE_SHOT_FANOUT_SLICES,
+    ResearchDepthBudget,
+    research_depth_budget,
+)
 from packages.research.evaluation import quality_gaps_from_release_gate
 from packages.research.repair import (
     repair_task_to_redo_scope,
     repair_tasks_from_gaps,
     repair_tasks_to_redo_scopes,
 )
-from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest, RunDetail, RunSummary
+from packages.schema.api_dto import (
+    CollectorResearchUsage,
+    HitlResumeRequest,
+    RunCreateRequest,
+    RunDetail,
+    RunSummary,
+)
 from packages.schema.enterprise import (
     ClaimValidationReport,
     EnterpriseRunProjection,
@@ -120,7 +131,13 @@ from packages.schema.models import (
 from packages.schema.survey import UserResearchImportRequest, UserResearchImportResult
 from packages.search import PerplexitySearchClient, SearchFilters, SearchResult
 from packages.skills.registry import SkillRegistry
-from packages.tools import WebSearchRequest, fetch_evidence_page, robots_check, web_search
+from packages.tools import (
+    EvidenceFetchResult,
+    WebSearchRequest,
+    fetch_evidence_page,
+    robots_check,
+    web_search,
+)
 
 if TYPE_CHECKING:
     from packages.agents.writer.structured_report import StructuredReport
@@ -329,6 +346,7 @@ class RunService(
         self._ensure_workspace_quota_allows_run(request.workspace_id)
         execution_mode = self._resolve_execution_mode(request.execution_mode)
         competitors = self._normalize_competitor_names(request.competitors)
+        manual_competitors = bool(competitors)
         depth_budget = research_depth_budget(request.research_depth)
         if depth_budget is not None and len(competitors) > depth_budget.competitor_limit:
             raise ValueError(
@@ -337,11 +355,30 @@ class RunService(
             )
         if not competitors:
             competitors = self._scenario_seed_competitors(request.scenario_id)
+            if depth_budget is not None and request.target_product is not None:
+                target_key = normalize_competitor_key(request.target_product.name)
+                competitors = [
+                    name for name in competitors
+                    if normalize_competitor_key(name) != target_key
+                ]
             if depth_budget is not None:
                 competitors = competitors[:depth_budget.competitor_limit]
         valid_dimensions = self._normalize_requested_dimensions(
             request.dimensions,
             require_core_schema=not competitors and request.target_product is None,
+        )
+        if depth_budget is not None and not manual_competitors:
+            auto_limit = self._research_auto_competitor_limit(
+                request.research_depth, valid_dimensions, request.target_product
+            )
+            if auto_limit < 1:
+                raise ValueError(
+                    f"{request.research_depth} research depth has insufficient slices "
+                    "for the target product and one competitor."
+                )
+            competitors = competitors[:auto_limit]
+        self._validate_research_scope(
+            request.research_depth, competitors, valid_dimensions, request.target_product
         )
         now = datetime.utcnow()
         run_id = _run_id_for_idempotency_key(request.idempotency_key) or new_run_id()
@@ -420,6 +457,19 @@ class RunService(
                 valid_dimensions,
                 business_plan.scenario_pack.required_dimensions,
             )
+        if depth_budget is not None and not manual_competitors:
+            auto_limit = self._research_auto_competitor_limit(
+                request.research_depth, valid_dimensions, request.target_product
+            )
+            if auto_limit < 1:
+                raise ValueError(
+                    f"{request.research_depth} research depth has insufficient slices "
+                    "for the target product and one competitor."
+                )
+            competitors = competitors[:auto_limit]
+        self._validate_research_scope(
+            request.research_depth, competitors, valid_dimensions, request.target_product
+        )
         plan = AnalysisPlan(
             topic=request.topic,
             target_product=request.target_product,
@@ -533,6 +583,7 @@ class RunService(
     async def find_active_duplicate_run(self, request: RunCreateRequest) -> RunDetail | None:
         execution_mode = self._resolve_execution_mode(request.execution_mode)
         competitors = self._normalize_competitor_names(request.competitors)
+        manual_competitors = bool(competitors)
         depth_budget = research_depth_budget(request.research_depth)
         if depth_budget is not None and len(competitors) > depth_budget.competitor_limit:
             raise ValueError(
@@ -541,11 +592,30 @@ class RunService(
             )
         if not competitors:
             competitors = self._scenario_seed_competitors(request.scenario_id)
+            if depth_budget is not None and request.target_product is not None:
+                target_key = normalize_competitor_key(request.target_product.name)
+                competitors = [
+                    name for name in competitors
+                    if normalize_competitor_key(name) != target_key
+                ]
             if depth_budget is not None:
                 competitors = competitors[:depth_budget.competitor_limit]
         valid_dimensions = self._normalize_requested_dimensions(
             request.dimensions,
             require_core_schema=not competitors and request.target_product is None,
+        )
+        if depth_budget is not None and not manual_competitors:
+            auto_limit = self._research_auto_competitor_limit(
+                request.research_depth, valid_dimensions, request.target_product
+            )
+            if auto_limit < 1:
+                raise ValueError(
+                    f"{request.research_depth} research depth has insufficient slices "
+                    "for the target product and one competitor."
+                )
+            competitors = competitors[:auto_limit]
+        self._validate_research_scope(
+            request.research_depth, competitors, valid_dimensions, request.target_product
         )
         auto_redo_warn_enabled = (
             self._settings.auto_redo_warn_enabled
@@ -799,6 +869,7 @@ class RunService(
 
     def _build_task_decomposition(self, plan: AnalysisPlan) -> list[AnalysisPlanTask]:
         tasks: list[AnalysisPlanTask] = []
+        depth_budget = research_depth_budget(plan.research_depth)
         for competitor in plan.competitors:
             for dimension in plan.dimensions:
                 priority = self._task_priority(plan, dimension)
@@ -810,9 +881,12 @@ class RunService(
                         competitor=competitor,
                         dimension=dimension,
                         priority=priority,
-                        max_turns=self._adaptive_task_max_turns(
-                            base=self._settings.collector_react_max_turns,
-                            priority=priority,
+                        max_turns=min(
+                            self._adaptive_task_max_turns(
+                                base=self._settings.collector_react_max_turns,
+                                priority=priority,
+                            ),
+                            depth_budget.collector_max_turns if depth_budget is not None else 6,
                         ),
                         reason=self._task_reason(plan, dimension, competitor),
                     )
@@ -824,9 +898,17 @@ class RunService(
                         competitor=competitor,
                         dimension=dimension,
                         priority=priority,
-                        max_turns=self._adaptive_task_max_turns(
-                            base=self._settings.analyst_react_max_turns,
-                            priority=priority,
+                        max_turns=min(
+                            self._adaptive_task_max_turns(
+                                base=self._settings.analyst_react_max_turns,
+                                priority=priority,
+                            ),
+                            (
+                                1 if depth_budget is not None
+                                and len(plan.competitors) * len(plan.dimensions)
+                                > ANALYST_ONE_SHOT_FANOUT_SLICES
+                                else depth_budget.analyst_max_turns if depth_budget is not None else 6
+                            ),
                         ),
                         reason="Analyze the collected slice with schema-first source support.",
                         depends_on=[collector_id],
@@ -852,24 +934,32 @@ class RunService(
     def _collector_task_max_turns(
         self, plan: AnalysisPlan, dimension: str, competitor: str | None = None
     ) -> int:
-        return self._plan_task_max_turns(
+        turns = self._plan_task_max_turns(
             plan,
             stage="collector",
             dimension=dimension,
             competitor=competitor,
             default=self._settings.collector_react_max_turns,
         )
+        depth_budget = research_depth_budget(plan.research_depth)
+        return min(turns, depth_budget.collector_max_turns) if depth_budget is not None else turns
 
     def _analyst_task_max_turns(
         self, plan: AnalysisPlan, dimension: str, competitor: str | None = None
     ) -> int:
-        return self._plan_task_max_turns(
+        turns = self._plan_task_max_turns(
             plan,
             stage="analyst",
             dimension=dimension,
             competitor=competitor,
             default=self._settings.analyst_react_max_turns,
         )
+        depth_budget = research_depth_budget(plan.research_depth)
+        if depth_budget is None:
+            return turns
+        if len(plan.competitors) * len(plan.dimensions) > ANALYST_ONE_SHOT_FANOUT_SLICES:
+            return 1
+        return min(turns, depth_budget.analyst_max_turns)
 
     def _plan_task_metadata(
         self, plan: AnalysisPlan, stage: str, dimension: str, competitor: str
@@ -991,6 +1081,21 @@ class RunService(
                         f"{record.detail.plan.research_depth} research depth supports at most "
                         f"{depth_budget.competitor_limit} competitors."
                     )
+            else:
+                proposed_competitors = record.detail.plan.competitors
+            proposed_dimensions = (
+                self._normalize_requested_dimensions(
+                    request.dimensions,
+                    require_core_schema=self._plan_requires_core_schema(record.detail),
+                )
+                if request.dimensions else record.detail.plan.dimensions
+            )
+            self._validate_research_scope(
+                record.detail.plan.research_depth,
+                proposed_competitors,
+                proposed_dimensions,
+                record.detail.plan.target_product,
+            )
             hitl_actor_id = (
                 "system"
                 if (request.note or "").startswith("Auto-accepted after HITL timeout")
@@ -1127,10 +1232,17 @@ class RunService(
             )
             return record.detail
         if request.dimensions:
-            record.detail.plan.dimensions = self._normalize_requested_dimensions(
+            proposed_dimensions = self._normalize_requested_dimensions(
                 request.dimensions,
                 require_core_schema=self._plan_requires_core_schema(record.detail),
             )
+            self._validate_research_scope(
+                record.detail.plan.research_depth,
+                record.detail.plan.competitors,
+                proposed_dimensions,
+                record.detail.plan.target_product,
+            )
+            record.detail.plan.dimensions = proposed_dimensions
             self._refresh_task_decomposition(record.detail.plan)
         memory_feedback_payload = self._capture_hitl_memory_feedback(record, request)
         if memory_feedback_payload is not None:
@@ -1551,7 +1663,9 @@ class RunService(
             detail.plan.competitors = ["Demo Alpha", "Demo Beta", "Demo Gamma"]
             depth_budget = research_depth_budget(detail.plan.research_depth)
             if depth_budget is not None:
-                detail.plan.competitors = detail.plan.competitors[:depth_budget.competitor_limit]
+                detail.plan.competitors = detail.plan.competitors[:self._research_auto_competitor_limit(
+                    detail.plan.research_depth, detail.plan.dimensions, detail.plan.target_product
+                )]
             detail.plan.homepage_hints = {
                 competitor: f"https://example.com/{self._issue_id_fragment(competitor)}"
                 for competitor in detail.plan.competitors
@@ -1572,6 +1686,10 @@ class RunService(
                 ],
             )
         self._include_target_product_in_plan(detail.plan)
+        self._validate_research_scope(
+            detail.plan.research_depth, detail.plan.competitors,
+            detail.plan.dimensions, detail.plan.target_product,
+        )
         self._refresh_task_decomposition(detail.plan)
         self._append_agent_message(
             record,
@@ -3713,6 +3831,22 @@ class RunService(
         )
         return f"{scope.kind}:{competitors}:{scope.target_subagent or '*'}"
 
+    def _collector_research_budget_usage(
+        self,
+        record: RunRecord,
+        agent: str,
+        subagent: str | None,
+        context: SubagentContext | None,
+    ) -> tuple[CollectorResearchUsage, ResearchDepthBudget] | None:
+        budget = research_depth_budget(record.detail.plan.research_depth)
+        if agent != "collector" or budget is None:
+            return None
+        key = context.subagent if context is not None else subagent or "collector"
+        usage = record.detail.collector_research_usage.setdefault(
+            key, CollectorResearchUsage()
+        )
+        return usage, budget
+
     async def _trace_search(
         self,
         record: RunRecord,
@@ -3725,6 +3859,26 @@ class RunService(
         filters: SearchFilters | None = None,
     ) -> list[SearchResult]:
         started = time.perf_counter()
+        collector_budget = self._collector_research_budget_usage(
+            record, agent, subagent, context
+        )
+        if collector_budget is not None:
+            usage, budget = collector_budget
+            if usage.search_calls >= budget.max_search_queries:
+                self._append_trace_span(
+                    record,
+                    kind="search",
+                    agent=agent,
+                    subagent=subagent,
+                    name="web_search",
+                    status="error",
+                    started=started,
+                    input_text=query,
+                    output_text="collector_search_budget_exhausted",
+                    metadata={"budget_exhausted": True},
+                )
+                return []
+            usage.search_calls += 1
         if context is not None:
             context.add_tool_call("web_search", query)
         try:
@@ -3813,6 +3967,23 @@ class RunService(
         *,
         allow_advanced: bool = True,
     ):
+        collector_budget = self._collector_research_budget_usage(
+            record, agent, subagent, context
+        )
+        if collector_budget is not None:
+            usage, budget = collector_budget
+            if usage.fetch_calls >= budget.max_fetches:
+                return EvidenceFetchResult(
+                    url=url,
+                    ok=False,
+                    title="",
+                    text="",
+                    content_hash=compute_content_hash(f"budget:{url}")[:16],
+                    error="collector_fetch_budget_exhausted",
+                    fetch_method="budget_exhausted",
+                    failure_reason="collector_fetch_budget_exhausted",
+                )
+            usage.fetch_calls += 1
         robots_result = await self._trace_robots(record, agent, subagent, url, context)
         if not robots_result.allowed:
             from packages.tools import FetchPageResult
@@ -3825,6 +3996,15 @@ class RunService(
                 content_hash=compute_content_hash(f"robots:{url}")[:16],
                 error=f"Blocked by robots.txt at {robots_result.robots_url}",
             )
+        advanced_reserved = False
+        if collector_budget is not None:
+            usage, budget = collector_budget
+            allow_advanced = (
+                allow_advanced and usage.advanced_fetch_attempts < budget.max_advanced_fetches
+            )
+            if allow_advanced:
+                usage.advanced_fetch_attempts += 1
+                advanced_reserved = True
         started = time.perf_counter()
         if context is not None:
             context.add_tool_call("fetch_page", url)
@@ -3832,12 +4012,15 @@ class RunService(
             await fetch_evidence_page(url)
             if allow_advanced else await fetch_evidence_page(url, allow_advanced=False)
         )
+        if advanced_reserved and not getattr(result, "advanced_fetch_attempted", False):
+            usage.advanced_fetch_attempts -= 1
         metadata: dict[str, str | int | float | bool | None] = {
             "url": result.url,
             "ok": result.ok,
             "status_code": result.status_code,
             "error": result.error,
             "fetch_method": getattr(result, "fetch_method", None),
+            "advanced_fetch_attempted": getattr(result, "advanced_fetch_attempted", False),
             "quality_score": getattr(result, "quality_score", None),
             "text_length": getattr(result, "text_length", None),
             "failure_reason": getattr(result, "failure_reason", None),
@@ -4480,6 +4663,44 @@ class RunService(
             return True
         return execution_mode == "real" and len(requested_competitors) == 0
 
+    def _research_auto_competitor_limit(
+        self,
+        depth: str | None,
+        dimensions: list[str],
+        target_product: TargetProduct | None,
+    ) -> int:
+        budget = research_depth_budget(depth)
+        if budget is None:
+            return 5
+        slices = budget.allowed_slices(self._settings.run_llm_max_calls)
+        capacity = slices // max(1, len(dimensions)) - int(target_product is not None)
+        return max(0, min(budget.competitor_limit, capacity))
+
+    def _validate_research_scope(
+        self,
+        depth: str | None,
+        competitors: list[str],
+        dimensions: list[str],
+        target_product: TargetProduct | None,
+    ) -> None:
+        budget = research_depth_budget(depth)
+        if budget is None:
+            return
+        target_count = int(
+            target_product is not None
+            and all(
+                normalize_competitor_key(name) != normalize_competitor_key(target_product.name)
+                for name in competitors
+            )
+        )
+        slices = max(1, len(competitors) + target_count) * len(dimensions)
+        allowed = budget.allowed_slices(self._settings.run_llm_max_calls)
+        if slices > allowed:
+            raise ValueError(
+                f"{depth} research depth supports at most {allowed} slices "
+                f"with the configured LLM call limit; requested {slices}."
+            )
+
     def _normalize_competitor_names(self, value: object) -> list[str]:
         if not isinstance(value, list):
             return []
@@ -4530,6 +4751,10 @@ class RunService(
                 f"{detail.plan.research_depth} research depth supports at most "
                 f"{depth_budget.competitor_limit} competitors."
             )
+        self._validate_research_scope(
+            detail.plan.research_depth, competitors,
+            detail.plan.dimensions, detail.plan.target_product,
+        )
         detail.plan.homepage_hints = self._migrate_plan_homepage_map(
             detail.plan.homepage_hints,
             competitors,

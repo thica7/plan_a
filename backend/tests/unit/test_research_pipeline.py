@@ -1584,6 +1584,114 @@ async def test_explicit_depth_shares_network_and_candidate_budget_across_repair_
     assert result.metrics["repair_round_count"] == 0
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("depth", "candidate_count", "initial_fetch_limit", "repair_fetch_limit"),
+    [("standard", 5, 3, 2), ("deep", 8, 5, 3)],
+)
+async def test_explicit_depth_reserves_fetches_and_reuses_unfetched_candidates(
+    depth: str,
+    candidate_count: int,
+    initial_fetch_limit: int,
+    repair_fetch_limit: int,
+) -> None:
+    brief = ResearchBrief(
+        run_id=f"run-{depth}-repair-reserve",
+        topic="AI IDE",
+        competitor="AcmeAI",
+        dimension="feature",
+        research_depth=depth,
+        target_source_count=3,
+        max_search_queries=0,
+        max_candidates=candidate_count,
+        max_fetches=candidate_count,
+        max_repair_rounds=1,
+        include_trusted_sources=False,
+        include_homepage_candidates=False,
+    )
+    seeds = [
+        SourceCandidate(
+            title=f"AcmeAI page {index}",
+            url=f"https://acme.example/docs/page-{index}",
+            origin="web_search",
+            competitor="AcmeAI",
+            dimension="feature",
+        )
+        for index in range(candidate_count)
+    ]
+    fetched: list[str] = []
+
+    async def fake_fetch(url: str) -> EvidenceFetchResult:
+        fetched.append(url)
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="AcmeAI overview",
+            text="AcmeAI helps organizations adopt AI products and business workflows.",
+            content_hash=f"hash-{len(fetched)}",
+            status_code=200,
+            quality_score=0.76,
+        )
+
+    result = await run_research_pipeline(brief, fetch=fake_fetch, seed_candidates=seeds)
+
+    assert result.metrics["initial_gap_count"] > 0
+    assert result.metrics["repair_round_count"] == 1
+    assert result.metrics["repair_capture_count"] == repair_fetch_limit
+    assert len(fetched) == initial_fetch_limit + repair_fetch_limit
+    assert len(result.candidates) == candidate_count
+
+
+@pytest.mark.asyncio
+async def test_repair_uses_initial_fetch_allowance_left_unused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = ResearchBrief(
+        run_id="run-standard-unused-fetches",
+        topic="AI IDE",
+        competitor="AcmeAI",
+        dimension="feature",
+        research_depth="standard",
+        max_search_queries=0,
+        max_candidates=10,
+        max_fetches=5,
+        max_repair_rounds=1,
+        include_homepage_candidates=False,
+    )
+    initial = SourceCandidate(
+        title="AcmeAI overview", url="https://acme.example/overview",
+        origin="web_search", competitor="AcmeAI", dimension="feature",
+    )
+    repair_candidates = [
+        SourceCandidate(
+            title=f"AcmeAI docs {index}",
+            url=f"https://acme.example/docs/{index}",
+            origin="trusted_registry", competitor="AcmeAI", dimension="feature",
+        )
+        for index in range(4)
+    ]
+    monkeypatch.setattr(
+        "packages.research.pipeline.trusted_registry_candidates",
+        lambda pass_brief: repair_candidates if pass_brief.metadata.get("repair_round") else [],
+    )
+    fetched: list[str] = []
+
+    async def fake_fetch(url: str) -> EvidenceFetchResult:
+        fetched.append(url)
+        return EvidenceFetchResult(
+            url=url, ok=True, title="AcmeAI overview",
+            text="AcmeAI helps organizations adopt AI products and business workflows.",
+            content_hash=f"hash-{len(fetched)}", status_code=200, quality_score=0.76,
+        )
+
+    result = await run_research_pipeline(brief, fetch=fake_fetch, seed_candidates=[initial])
+
+    assert result.metrics["initial_gap_count"] > 0
+    assert result.metrics["repair_round_count"] == 1
+    assert result.metrics["repair_capture_count"] == 4
+    assert len(fetched) == 5
+
+
 def test_release_gate_issues_become_repair_tasks_and_redo_scopes() -> None:
     gate = ReportReleaseGate(
         report_version_id="report-version-1",

@@ -100,6 +100,10 @@ class PlannerAgentMixin:
                 else:
                     detail.plan.homepage_hints.pop(name, None)
         self._include_target_product_in_plan(detail.plan)
+        self._validate_research_scope(
+            detail.plan.research_depth, detail.plan.competitors,
+            detail.plan.dimensions, detail.plan.target_product,
+        )
         self._refresh_task_decomposition(detail.plan)
         self._append_agent_message(
             record,
@@ -144,14 +148,23 @@ class PlannerAgentMixin:
         detail = record.detail
         product = detail.plan.target_product
         depth_budget = research_depth_budget(detail.plan.research_depth)
+        competitor_limit = (
+            min(
+                depth_budget.competitor_limit,
+                self._research_auto_competitor_limit(
+                    detail.plan.research_depth, detail.plan.dimensions, product
+                ),
+            )
+            if depth_budget is not None else 5
+        )
         if depth_budget is None:
             candidate_instruction = (
                 "Return 3 to 5 candidates, separating direct products, adjacent products, "
             )
         else:
             candidate_instruction = (
-                f"Select at most {depth_budget.competitor_limit} competitors. "
-                f"Return up to {depth_budget.competitor_limit} candidates, "
+                f"Select at most {competitor_limit} competitors. "
+                f"Return up to {competitor_limit} candidates, "
                 "separating direct products, adjacent products, "
             )
         queries = (
@@ -205,7 +218,7 @@ class PlannerAgentMixin:
         )
         selected = self._normalize_competitor_names(
             payload.get("selected_competitors") or payload.get("competitors")
-        )[:depth_budget.competitor_limit if depth_budget is not None else 5]
+        )
         candidate_names = self._candidate_names(payload, selected)
         if product is not None:
             target_key = normalize_competitor_key(product.name)
@@ -214,6 +227,7 @@ class PlannerAgentMixin:
                 if normalize_competitor_key(name) != target_key
                 and self._candidate_evidence(name, search_results)
             ]
+        selected = selected[:competitor_limit]
         selected_set = {name.casefold() for name in selected}
         candidates = [
             CompetitorCandidate(

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from packages.research.assembly import assemble_research_summary
+from packages.research.budget import research_depth_budget
 from packages.research.capture import CaptureCache, capture_candidate, select_capture_candidates
 from packages.research.coverage_contract import evaluate_coverage_contract
 from packages.research.discovery import (
@@ -86,8 +87,16 @@ async def run_research_pipeline(
 
         active_fetch = budgeted_fetch
 
+    depth_budget = research_depth_budget(brief.research_depth)
+    initial_brief = brief
+    if depth_budget is not None and brief.max_repair_rounds:
+        initial_fetch_limit = min(
+            brief.max_fetches,
+            3 if brief.research_depth == "standard" else 5 if brief.research_depth == "deep" else 3,
+        )
+        initial_brief = brief.model_copy(update={"max_fetches": initial_fetch_limit})
     first_pass = await _run_research_pass(
-        brief,
+        initial_brief,
         fetch=active_fetch,
         search=active_search,
         seed_candidates=seed_candidates or [],
@@ -113,25 +122,45 @@ async def run_research_pipeline(
         if not active_repairs:
             break
         repair_brief = _repair_brief(brief, active_repairs, round_index=round_index + 1)
+        carry_candidates: list[SourceCandidate] = []
+        existing_candidate_ids: set[str] | None = None
+        remaining_candidates: int | None = None
         if brief.research_depth is not None:
+            captured_candidate_ids = {page.candidate_id for page in captured_pages}
+            carry_candidates = [
+                candidate for candidate in candidates
+                if candidate.id not in captured_candidate_ids
+            ]
+            existing_candidate_ids = {candidate.id for candidate in candidates}
             remaining_candidates = brief.max_candidates - len(candidates)
             remaining_fetches = brief.max_fetches - fetch_calls
-            if remaining_candidates <= 0 or remaining_fetches <= 0:
+            if remaining_fetches <= 0 or (remaining_candidates <= 0 and not carry_candidates):
                 break
             repair_brief = repair_brief.model_copy(
                 update={
-                    "max_search_queries": max(0, brief.max_search_queries - search_calls),
-                    "max_candidates": remaining_candidates,
+                    "max_search_queries": (
+                        max(0, brief.max_search_queries - search_calls)
+                        if remaining_candidates > 0 else 0
+                    ),
+                    "max_candidates": len(carry_candidates) + max(0, remaining_candidates),
                     "max_fetches": remaining_fetches,
+                    "include_trusted_sources": (
+                        brief.include_trusted_sources if remaining_candidates > 0 else False
+                    ),
+                    "include_homepage_candidates": (
+                        brief.include_homepage_candidates if remaining_candidates > 0 else False
+                    ),
                 }
             )
         repair_pass = await _run_research_pass(
             repair_brief,
             fetch=active_fetch,
             search=active_search,
-            seed_candidates=[],
+            seed_candidates=carry_candidates,
             repair_tasks=active_repairs,
             capture_cache=cache,
+            existing_candidate_ids=existing_candidate_ids,
+            max_new_candidates=remaining_candidates,
         )
         candidates = dedupe_by_id([*candidates, *repair_pass.candidates])
         captured_pages = dedupe_by_id([*captured_pages, *repair_pass.captured_pages])
@@ -221,6 +250,8 @@ async def _run_research_pass(
     seed_candidates: list[SourceCandidate],
     repair_tasks: list[RepairTask],
     capture_cache: CaptureCache,
+    existing_candidate_ids: set[str] | None = None,
+    max_new_candidates: int | None = None,
 ) -> ResearchPass:
     candidates = await _discover_candidates(
         brief,
@@ -228,6 +259,12 @@ async def _run_research_pass(
         seed_candidates=seed_candidates,
         repair_tasks=repair_tasks,
     )
+    if existing_candidate_ids is not None and max_new_candidates is not None:
+        new_candidates = [
+            candidate for candidate in candidates
+            if candidate.id not in existing_candidate_ids
+        ][:max_new_candidates]
+        candidates = dedupe_by_id([*seed_candidates, *new_candidates])
     captured_pages, capture_metrics, overflow_queue = await _capture_candidates(
         brief,
         candidates,

@@ -11,6 +11,7 @@ from packages.agents.analysts.cards import build_claim_card_bundle
 from packages.agents.analysts.citation_tools import inspect_sources, validate_source_ids
 from packages.memory import KBCacheEntry
 from packages.refs import merge_ordered_refs
+from packages.research.budget import ANALYST_ONE_SHOT_FANOUT_SLICES, research_depth_budget
 from packages.research.evidence.text import (
     deterministic_claim_text_from_source,
     source_business_snippet,
@@ -635,6 +636,11 @@ class AnalystAgentMixin:
         qa_feedback: list[dict[str, Any]],
     ) -> bool:
         if not self._settings.analyst_react_enabled:
+            return False
+        if (
+            research_depth_budget(detail.plan.research_depth) is not None
+            and self._analyst_fanout_branch_count(detail) > ANALYST_ONE_SHOT_FANOUT_SLICES
+        ):
             return False
         if qa_feedback:
             return True

@@ -111,6 +111,12 @@ class RunSummary(BaseModel):
     updated_at: datetime
 
 
+class CollectorResearchUsage(BaseModel):
+    search_calls: int = Field(default=0, ge=0)
+    fetch_calls: int = Field(default=0, ge=0)
+    advanced_fetch_attempts: int = Field(default=0, ge=0)
+
+
 class WorkflowStartResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -260,6 +266,7 @@ class RunDetail(RunSummary):
     agent_messages: list[AgentMessage] = Field(default_factory=list)
     tool_call_messages: list[ToolCallMessage] = Field(default_factory=list)
     trace_spans: list[TraceSpan] = Field(default_factory=list)
+    collector_research_usage: dict[str, CollectorResearchUsage] = Field(default_factory=dict)
     metrics: RunMetrics = Field(default_factory=RunMetrics)
     current_node: str | None = None
     enterprise_projection: EnterpriseRunProjection | None = None
