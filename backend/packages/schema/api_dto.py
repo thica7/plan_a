@@ -261,6 +261,15 @@ class RunDetail(RunSummary):
     competitor_discovery: CompetitorDiscovery | None = None
     comparison_matrix: ComparisonMatrix | None = None
     qa_findings: list[QCIssue] = Field(default_factory=list)
+    collect_qa_findings: list[QCIssue] = Field(default_factory=list)
+    evidence_repair_rounds: int = Field(default=0, ge=0)
+    evidence_refresh_active: bool = False
+    evidence_review_note: str = ""
+    interrupt_graph_kind: Literal["real", "demo", "scoped_redo"] | None = None
+    interrupt_thread_id: str | None = None
+    overridden_qa_findings: list[QCIssue] = Field(default_factory=list)
+    qa_override_note: str = ""
+    qa_override_at: datetime | None = None
     reflections: list[ReflectionRecord] = Field(default_factory=list)
     revisions: list[RevisionRecord] = Field(default_factory=list)
     agent_messages: list[AgentMessage] = Field(default_factory=list)

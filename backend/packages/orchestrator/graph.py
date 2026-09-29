@@ -48,7 +48,12 @@ def build_real_analysis_graph(service: Any, checkpointer: Any | None = None):
     graph.add_conditional_edges(
         "collect_qa",
         lambda state: service._route_phase_qa(state, "collect"),
-        {"retry": "collector_dispatch", "pass": "analyst_dispatch", "fail": END},
+        {"retry": "collector_dispatch", "pass": "evidence_hitl", "fail": END},
+    )
+    graph.add_conditional_edges(
+        "evidence_hitl",
+        _route_evidence,
+        {"accept": "analyst_dispatch", "redo": "collector_dispatch"},
     )
     graph.add_conditional_edges("analyst_dispatch", _send_analysts, ["analyst"])
     graph.add_edge("analyst", "analyst_join")
@@ -131,7 +136,12 @@ def build_scoped_redo_graph(service: Any, checkpointer: Any | None = None):
     graph.add_conditional_edges(
         "collect_qa",
         lambda state: service._route_phase_qa(state, "collect"),
-        {"retry": "collector_dispatch", "pass": "analyst_dispatch", "fail": END},
+        {"retry": "collector_dispatch", "pass": "evidence_hitl", "fail": END},
+    )
+    graph.add_conditional_edges(
+        "evidence_hitl",
+        _route_evidence,
+        {"accept": "analyst_dispatch", "redo": "collector_dispatch"},
     )
     graph.add_conditional_edges("analyst_dispatch", _send_analysts, ["analyst"])
     graph.add_edge("analyst", "analyst_join")
@@ -179,7 +189,12 @@ def build_demo_analysis_graph(service: Any, checkpointer: Any | None = None):
     graph.add_conditional_edges(
         "collect_qa",
         lambda state: service._route_phase_qa(state, "collect"),
-        {"retry": "collector_dispatch", "pass": "analyst_dispatch", "fail": END},
+        {"retry": "collector_dispatch", "pass": "evidence_hitl", "fail": END},
+    )
+    graph.add_conditional_edges(
+        "evidence_hitl",
+        _route_evidence,
+        {"accept": "analyst_dispatch", "redo": "collector_dispatch"},
     )
     graph.add_conditional_edges("analyst_dispatch", _send_analysts, ["analyst"])
     graph.add_edge("analyst", "analyst_join")
@@ -256,6 +271,7 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
             or record.detail.plan.dimensions
         )
         await collector_agent.join(service, record, list(dimensions))
+        record.detail.evidence_refresh_active = False
         return {"current_node": "collect_join", "dimensions": list(dimensions)}
 
     async def survey_interview(state: GraphState) -> GraphState:
@@ -336,6 +352,13 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
             "target_competitors": next_competitors,
         }
 
+    async def evidence_hitl(state: GraphState) -> GraphState:
+        record = service._runs[state["run_id"]]
+        if getattr(record.detail.plan, "collaboration_mode", None) != "assisted":
+            return {"current_node": "evidence_hitl", "evidence_route": "accept"}
+        route_state = await service._real_evidence_hitl_step(record)
+        return {"current_node": "evidence_hitl", **route_state}
+
     async def analyst_qa(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
         await qa_agent.run_phase(service, record, "analyst")
@@ -392,6 +415,7 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
     graph.add_node("collect_join", collect_join)
     graph.add_node("survey_interview", survey_interview)
     graph.add_node("collect_qa", collect_qa)
+    graph.add_node("evidence_hitl", evidence_hitl)
     graph.add_node("analyst_dispatch", analyst_dispatch)
     graph.add_node("analyst", analyst)
     graph.add_node("analyst_join", analyst_join)
@@ -446,6 +470,7 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
             or record.detail.plan.dimensions
         )
         await service._demo_collect_join_step(record, list(dimensions))
+        record.detail.evidence_refresh_active = False
         return {"current_node": "collect_join", "dimensions": list(dimensions)}
 
     async def survey_interview(state: GraphState) -> GraphState:
@@ -472,6 +497,13 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
                 state.get("target_competitors") or record.detail.plan.competitors
             ),
         }
+
+    async def evidence_hitl(state: GraphState) -> GraphState:
+        record = service._runs[state["run_id"]]
+        if getattr(record.detail.plan, "collaboration_mode", None) != "assisted":
+            return {"current_node": "evidence_hitl", "evidence_route": "accept"}
+        route_state = await service._real_evidence_hitl_step(record)
+        return {"current_node": "evidence_hitl", **route_state}
 
     async def analyst_dispatch(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
@@ -558,6 +590,7 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
     graph.add_node("collect_join", collect_join)
     graph.add_node("survey_interview", survey_interview)
     graph.add_node("collect_qa", collect_qa)
+    graph.add_node("evidence_hitl", evidence_hitl)
     graph.add_node("analyst_dispatch", analyst_dispatch)
     graph.add_node("analyst", analyst)
     graph.add_node("analyst_join", analyst_join)
@@ -608,6 +641,10 @@ def _route_final_qa(state: GraphState) -> str:
     if route in _FINAL_QA_REDO_ROUTES:
         return route
     return "end"
+
+
+def _route_evidence(state: GraphState) -> str:
+    return "redo" if state.get("evidence_route") == "redo" else "accept"
 
 
 def _route_after_writer(service: Any, state: GraphState) -> str:

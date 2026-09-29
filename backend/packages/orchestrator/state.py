@@ -13,6 +13,7 @@ class GraphState(TypedDict, total=False):
     current_node: str
     redo_kind: Literal["writer_only", "comparator", "analyst", "collector", "full"] | None
     collect_qa_attempts: int
+    evidence_route: Literal["accept", "redo"]
     analyst_qa_attempts: int
     final_qa_attempts: int
     final_qa_limit_reached: bool

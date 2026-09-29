@@ -22,6 +22,7 @@ HitlLifecycleStage = Literal[
 
 HitlReviewKind = Literal[
     "planner_review",
+    "evidence_review",
     "qa_review",
     "manual_redo",
     "manual_report_revision",
@@ -132,6 +133,8 @@ def review_kind_for_stage(stage: str) -> HitlReviewKind:
     key = stage.casefold()
     if key == "planner":
         return "planner_review"
+    if key == "evidence":
+        return "evidence_review"
     if key == "qa":
         return "qa_review"
     return "manual_redo"

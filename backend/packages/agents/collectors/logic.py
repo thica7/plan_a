@@ -854,7 +854,12 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         if not url:
             return False
         normalized_url = url.rstrip("/")
-        for source in (*detail.raw_sources, *batch_sources):
+        existing_sources = (
+            batch_sources
+            if detail.evidence_refresh_active
+            else (*detail.raw_sources, *batch_sources)
+        )
+        for source in existing_sources:
             if source.dimension != dimension or not self._source_matches_competitor(
                 source, competitor
             ):
@@ -1468,7 +1473,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             competitor=competitor,
             dimension=dimension,
         )
-        if any(
+        if not detail.evidence_refresh_active and any(
             source.url
             and str(source.url) == result.url
             and source.dimension == dimension
@@ -1749,20 +1754,23 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             **task_metadata,
         }
         memory_official_first = self._memory_prefers_official_sources(detail.plan)
-        try:
-            kb_sources = await self._collect_competitor_from_kb(
-                record,
-                detail,
-                dimension,
-                competitor,
-                context,
-                target_source_count=target_source_count,
-            )
-            self._extend_source_batch(sources, kb_sources, target_source_count)
-            collect_payload["kb_warm_start_source_count"] = len(kb_sources)
-            collect_payload["kb_warm_start_source_ids"] = [source.id for source in kb_sources]
-        except Exception as exc:  # noqa: BLE001 - KB warm-start must never block collection.
-            collect_payload["kb_warm_start_error"] = str(exc)
+        if detail.evidence_refresh_active:
+            collect_payload["kb_warm_start_skipped_for_evidence_refresh"] = True
+        else:
+            try:
+                kb_sources = await self._collect_competitor_from_kb(
+                    record,
+                    detail,
+                    dimension,
+                    competitor,
+                    context,
+                    target_source_count=target_source_count,
+                )
+                self._extend_source_batch(sources, kb_sources, target_source_count)
+                collect_payload["kb_warm_start_source_count"] = len(kb_sources)
+                collect_payload["kb_warm_start_source_ids"] = [source.id for source in kb_sources]
+            except Exception as exc:  # noqa: BLE001 - KB warm-start must never block collection.
+                collect_payload["kb_warm_start_error"] = str(exc)
         try:
             sources = await self._collect_competitor_with_web_search(
                 record,

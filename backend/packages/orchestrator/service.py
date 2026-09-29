@@ -165,6 +165,10 @@ QUALITY_USER_RESEARCH_SOURCE_TYPES = {
 }
 
 
+class EvidenceRedoLimitError(ValueError):
+    """An evidence review redo exceeds its configured repair budget."""
+
+
 def _aggregate_consistency_votes(validation: ClaimValidationReport) -> dict[str, int]:
     totals = {"text_support": 0, "evidence_quality": 0, "triangulation": 0}
     for result in validation.results:
@@ -1069,6 +1073,23 @@ class RunService(
             pending = record.pending_interrupts.get(stage, {})
             if pending.get("resume_in_progress"):
                 return record.detail
+            if stage == "evidence":
+                if request.decision not in {"accept", "redo"}:
+                    raise ValueError("Evidence review only accepts accept or redo decisions.")
+                if (
+                    request.dimensions is not None
+                    or request.competitors is not None
+                    or request.competitor_edits
+                ):
+                    raise ValueError("Evidence review cannot edit the analysis plan.")
+                if (
+                    request.decision == "redo"
+                    and record.detail.evidence_repair_rounds
+                    >= self._evidence_redo_limit(record.detail)
+                ):
+                    raise EvidenceRedoLimitError(
+                        "Evidence redo limit reached; accept the current evidence."
+                    )
             has_competitor_edits = request.competitors is not None or bool(
                 request.competitor_edits
             )
@@ -1544,6 +1565,8 @@ class RunService(
             record.detail.updated_at = datetime.utcnow()
             record.pending_interrupts.clear()
             self._cancel_hitl_timeout(record)
+            record.detail.interrupt_graph_kind = None
+            record.detail.interrupt_thread_id = None
             await self.emit(
                 run_id,
                 "run_failed",
@@ -1582,6 +1605,8 @@ class RunService(
             return False
         record.active_graph_kind = None
         record.active_thread_id = None
+        record.detail.interrupt_graph_kind = None
+        record.detail.interrupt_thread_id = None
         return True
 
     async def _finalize_real_pipeline(self, record: RunRecord) -> None:
@@ -1964,6 +1989,100 @@ class RunService(
             self._scoped_redo_graph = build_scoped_redo_graph(self, checkpointer)
         return self._scoped_redo_graph
 
+    @staticmethod
+    def _evidence_redo_limit(detail: RunDetail) -> int:
+        budget = research_depth_budget(detail.plan.research_depth)
+        if budget is None:
+            return detail.max_iterations
+        return min(budget.max_repair_rounds, detail.max_iterations)
+
+    def _evidence_review_payload(self, detail: RunDetail) -> dict[str, object]:
+        def preview(value: object, limit: int) -> str:
+            text = str(value or "")
+            return text if len(text) <= limit else f"{text[:limit - 1]}…"
+
+        sources: list[dict[str, object]] = []
+        for source in detail.raw_sources[:100]:
+            metadata = source.metadata
+            fetched_at = next(
+                (
+                    metadata[key]
+                    for key in ("fetched_at", "source_fetched_at", "crawl_fetched_at", "kb_fetched_at")
+                    if metadata.get(key)
+                ),
+                None,
+            )
+            sources.append(
+                {
+                    "id": source.id,
+                    "competitor": source.competitor,
+                    "dimension": source.dimension,
+                    "title": preview(source.title, 240),
+                    "url": str(source.url) if source.url is not None else None,
+                    "source_type": source.source_type,
+                    "confidence": source.confidence,
+                    "quality_score": source.quality_score,
+                    "fetched_at": preview(fetched_at, 64) if fetched_at else None,
+                    "extracted_at": source.extracted_at.isoformat(),
+                    "source_published_at": preview(metadata.get("source_published_at"), 64) or None,
+                    "source_updated_at": preview(metadata.get("source_updated_at"), 64) or None,
+                }
+            )
+        findings = [
+            {
+                "id": issue.id,
+                "severity": issue.severity,
+                "target_agent": issue.target_agent,
+                "target_subagent": issue.target_subagent,
+                "target_competitor": issue.target_competitor,
+                "field_path": preview(issue.field_path, 240),
+                "problem": preview(issue.problem, 500),
+            }
+            for issue in detail.collect_qa_findings[:50]
+        ]
+        redo_limit = self._evidence_redo_limit(detail)
+        return {
+            "sources": sources,
+            "source_count": len(detail.raw_sources),
+            "sources_truncated": len(detail.raw_sources) > len(sources),
+            "qa_findings": findings,
+            "qa_issue_count": len(detail.collect_qa_findings),
+            "qa_findings_truncated": len(detail.collect_qa_findings) > len(findings),
+            "evidence_repair_rounds": detail.evidence_repair_rounds,
+            "redo_limit": redo_limit,
+            "redo_remaining": max(0, redo_limit - detail.evidence_repair_rounds),
+        }
+
+    async def _real_evidence_hitl_step(self, record: RunRecord) -> dict[str, object]:
+        detail = record.detail
+        detail.current_node = "evidence_hitl"
+        await self.emit(
+            detail.id, "node_started", "hitl", "evidence", "Evidence HITL checkpoint reached."
+        )
+        decision = await self._maybe_interrupt(
+            record,
+            stage="evidence",
+            message="Collected sources are ready for review.",
+            payload=self._evidence_review_payload(detail),
+        )
+        if decision.decision == "redo":
+            detail.evidence_repair_rounds += 1
+            detail.evidence_refresh_active = True
+            detail.evidence_review_note = (decision.note or "").strip()
+        else:
+            detail.evidence_review_note = ""
+        detail.updated_at = datetime.utcnow()
+        await self.emit(
+            detail.id,
+            "node_completed",
+            "hitl",
+            "evidence",
+            f"Evidence HITL checkpoint completed with {decision.decision}.",
+            {"decision": decision.model_dump(exclude_none=True),
+             "evidence_repair_rounds": detail.evidence_repair_rounds},
+        )
+        return {"evidence_route": "redo" if decision.decision == "redo" else "accept"}
+
     async def _maybe_interrupt(
         self,
         record: RunRecord,
@@ -1975,11 +2094,13 @@ class RunService(
         detail = record.detail
         if not detail.hitl_enabled:
             return HitlResumeRequest(decision="accept")
-        interrupt_node = f"{stage}_hitl" if stage in {"planner", "qa"} else stage
+        interrupt_node = f"{stage}_hitl" if stage in {"planner", "evidence", "qa"} else stage
         if stage not in record.pending_interrupts:
             detail.status = "interrupted"
             detail.current_node = interrupt_node
             detail.updated_at = datetime.utcnow()
+            detail.interrupt_graph_kind = record.active_graph_kind
+            detail.interrupt_thread_id = record.active_thread_id
             record.pending_interrupts[stage] = {
                 "stage": stage,
                 "graph_kind": record.active_graph_kind,
@@ -2017,7 +2138,15 @@ class RunService(
                     "interrupt_protocol": "langgraph_interrupt_command_resume",
                     "resume_command": "Command(resume=HitlResumeRequest)",
                     "timeout_seconds": self._settings.hitl_timeout_seconds,
-                    "run": detail.model_dump(mode="json"),
+                    "run": (
+                        {
+                            "id": detail.id,
+                            "status": detail.status,
+                            "current_node": detail.current_node,
+                        }
+                        if stage == "evidence"
+                        else detail.model_dump(mode="json")
+                    ),
                 },
             )
             self._schedule_hitl_timeout(record, stage)
@@ -3479,14 +3608,17 @@ class RunService(
         stage = None
         if detail.current_node == "planner_hitl":
             stage = "planner"
+        elif detail.current_node == "evidence_hitl":
+            stage = "evidence"
         elif detail.current_node == "qa_hitl":
             stage = "qa"
         if stage is None:
             return
         graph_kind: Literal["real", "demo", "scoped_redo"] = (
-            "demo" if detail.execution_mode == "demo" else "real"
+            detail.interrupt_graph_kind
+            or ("demo" if detail.execution_mode == "demo" else "real")
         )
-        thread_id = (
+        thread_id = detail.interrupt_thread_id or (
             compute_graph_thread_id(detail.id, "demo") if graph_kind == "demo" else detail.id
         )
         record.active_graph_kind = graph_kind
@@ -3503,7 +3635,9 @@ class RunService(
         detail = record.detail
         if detail.status != "running":
             return
-        if detail.current_node not in {"planner_hitl", "qa_hitl"}:
+        if detail.current_node not in {"planner_hitl", "evidence_hitl", "qa_hitl"}:
+            return
+        if any(pending.get("resume_in_progress") for pending in record.pending_interrupts.values()):
             return
         detail.status = "interrupted"
         detail.updated_at = datetime.utcnow()
@@ -5051,7 +5185,10 @@ class RunService(
         competitor: str,
     ) -> list[dict[str, str | bool | None]]:
         feedback: list[dict[str, str | bool | None]] = []
-        for issue in detail.qa_findings:
+        issues = list(detail.qa_findings)
+        if agent == "collector" and detail.evidence_refresh_active:
+            issues.extend(detail.collect_qa_findings)
+        for issue in issues:
             if issue.target_agent != agent:
                 continue
             if issue.target_subagent and issue.target_subagent != dimension:
@@ -5068,6 +5205,19 @@ class RunService(
                     "target_subagent": issue.target_subagent,
                     "target_competitor": issue.target_competitor,
                     "self_found": issue.self_found,
+                }
+            )
+        if agent == "collector" and detail.evidence_refresh_active and detail.evidence_review_note:
+            feedback.append(
+                {
+                    "id": "evidence-review-note",
+                    "severity": "warn",
+                    "field_path": "evidence_review.note",
+                    "problem": detail.evidence_review_note[:1000],
+                    "redo_kind": "collector",
+                    "target_subagent": dimension,
+                    "target_competitor": competitor,
+                    "self_found": False,
                 }
             )
         return feedback

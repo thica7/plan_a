@@ -222,6 +222,8 @@ class QualityAgentMixin:
         record = self._runs[str(state["run_id"])]
         detail = record.detail
         blockers = self._blocking_phase_issues(detail, phase)
+        if phase == "collect":
+            detail.collect_qa_findings = list(detail.qa_findings)
         if not blockers:
             detail.qa_findings = []
             detail.updated_at = datetime.utcnow()
@@ -349,8 +351,12 @@ class QualityAgentMixin:
             },
         )
         if decision.decision == "force_pass":
+            detail.overridden_qa_findings.extend(detail.qa_findings)
+            detail.qa_override_note = decision.note or ""
+            detail.qa_override_at = datetime.utcnow()
             detail.qa_findings = []
             detail.updated_at = datetime.utcnow()
+            self._refresh_quality_metrics(detail)
             await self.emit(
                 detail.id,
                 "node_completed",

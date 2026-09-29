@@ -1,7 +1,9 @@
 import asyncio
 
 import pytest
+from fastapi import HTTPException
 
+from app.routers.hitl import resume_run
 from packages.auth import EnterpriseUserContext
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
@@ -61,6 +63,61 @@ async def test_resume_review_requires_pending_hitl_interrupt() -> None:
         assert blocked.value.status_code == 409
         assert "no pending HITL interrupt" in str(blocked.value.detail)
         assert run_service._runs[detail.id].detail.status == "completed"
+    finally:
+        await run_service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_quick_evidence_redo_limit_returns_conflict_through_runtime_and_api() -> None:
+    store = EnterpriseMemoryStore()
+    run_service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+        preference_memory=PreferenceMemoryStore.in_memory(),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    runtime = RuntimeCommandService(
+        settings=_settings(),
+        run_service=run_service,
+        workflow_service=object(),
+        enterprise_store=store,
+        preference_memory=PreferenceMemoryStore.in_memory(),
+    )
+    try:
+        detail = await run_service.create_run(
+            RunCreateRequest(
+                topic="Quick evidence conflict",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+                collaboration_mode="assisted",
+                research_depth="quick",
+            )
+        )
+        detail.status = "interrupted"
+        detail.current_node = "evidence_hitl"
+        record = run_service._runs[detail.id]
+        record.pending_interrupts["evidence"] = {
+            "stage": "evidence",
+            "graph_kind": "demo",
+            "thread_id": detail.id,
+            "interrupt_node": "evidence_hitl",
+        }
+        request = HitlResumeRequest(decision="redo")
+
+        with pytest.raises(RuntimeCommandError) as runtime_error:
+            await runtime.resume_review(
+                ResumeReviewCommand(run_id=detail.id, request=request), actor=_actor()
+            )
+        assert runtime_error.value.status_code == 409
+        assert "Evidence redo limit reached" in runtime_error.value.detail
+
+        with pytest.raises(HTTPException) as api_error:
+            await resume_run(detail.id, request, runtime, _actor())
+        assert api_error.value.status_code == 409
+        assert detail.status == "interrupted"
+        assert run_service.has_pending_interrupt(detail.id)
     finally:
         await run_service._graph_checkpointer.aclose()
 
