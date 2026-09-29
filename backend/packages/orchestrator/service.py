@@ -98,6 +98,7 @@ from packages.research.repair import (
 from packages.schema.api_dto import (
     CollectorResearchUsage,
     HitlResumeRequest,
+    PendingGraphRedo,
     RunCreateRequest,
     RunDetail,
     RunSummary,
@@ -262,20 +263,6 @@ def _compact_run_detail(detail: RunDetail) -> RunDetail:
             "tool_call_messages": [],
         }
     )
-
-
-@dataclass
-class PendingGraphRedo:
-    iteration: int
-    stage: str
-    redo_scope: RedoScope
-    redo_scopes: list[RedoScope]
-    before_md: str
-    issue_ids: list[str]
-    qa_issue_ids_before: list[str]
-    issue_count_before: int
-    structured_targets: dict[str, Any] = field(default_factory=dict)
-    auto_continue: bool = False
 
 
 @dataclass
@@ -3630,6 +3617,7 @@ class RunService(
             record = RunRecord(
                 detail=detail,
                 events=self._journal.load_events(detail.id),
+                pending_graph_redo=detail.pending_graph_redo,
             )
             self._hydrate_pending_interrupt_from_detail(record)
             self._runs[detail.id] = record
@@ -3653,12 +3641,18 @@ class RunService(
         events = self._journal.load_events(detail.id) if self._journal is not None else []
         record = self._runs.get(detail.id)
         if record is None:
-            record = RunRecord(detail=detail, events=events)
+            record = RunRecord(
+                detail=detail,
+                events=events,
+                pending_graph_redo=detail.pending_graph_redo,
+            )
             self._runs[detail.id] = record
             self._hydrate_pending_interrupt_from_detail(record)
             return record
         record.detail = detail
         record.events = events
+        if record.pending_graph_redo is None:
+            record.pending_graph_redo = detail.pending_graph_redo
         self._hydrate_pending_interrupt_from_detail(record)
         return record
 
@@ -3710,6 +3704,7 @@ class RunService(
             return
         record = self._runs.get(run_id)
         if record is not None:
+            record.detail.pending_graph_redo = record.pending_graph_redo
             self._journal.save_run(record.detail)
 
     async def _record_revision(

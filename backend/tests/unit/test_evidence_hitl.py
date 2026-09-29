@@ -586,6 +586,7 @@ async def test_scoped_redo_evidence_interrupt_restores_its_graph_thread_from_jou
             )
         )
         detail.status = "completed"
+        detail.report_md = "Before scoped evidence redo"
         detail.qa_findings = [_warning().model_copy(update={"severity": "blocker"})]
         await original.run_scoped_redo(detail.id)
         assert detail.status == "interrupted"
@@ -622,8 +623,26 @@ async def test_scoped_redo_evidence_interrupt_restores_its_graph_thread_from_jou
         await reloaded.resume(detail.id, HitlResumeRequest(decision="accept"))
         await _wait_for(reloaded, detail.id, "qa_hitl", "interrupted")
         assert reloaded._runs[detail.id].active_graph_kind == "scoped_redo"
+        await reloaded.resume(detail.id, HitlResumeRequest(decision="accept"))
+        await _wait_for(reloaded, detail.id, None, "completed")
+        completed = reloaded._runs[detail.id].detail
+        assert len(completed.revisions) == 1
+        assert completed.revisions[0].stage == "collector"
+        assert completed.revisions[0].redo_scopes[0].target_subagent == "pricing"
+        assert completed.revisions[0].issue_ids == ["qc-evidence-date"]
+        assert completed.pending_graph_redo is None
     finally:
         await reloaded._graph_checkpointer.aclose()
+
+    final_reload = _service(journal=journal, real=True)
+    try:
+        persisted = final_reload.get_run(detail.id)
+        assert persisted is not None
+        assert len(persisted.revisions) == 1
+        assert persisted.revisions[0].issue_ids == ["qc-evidence-date"]
+        assert persisted.pending_graph_redo is None
+    finally:
+        await final_reload._graph_checkpointer.aclose()
 
 
 @pytest.mark.asyncio

@@ -15,6 +15,7 @@ from packages.schema.models import (
     DecisionBrief,
     QCIssue,
     RawSource,
+    RedoScope,
     ReflectionRecord,
     RevisionRecord,
     RunMetrics,
@@ -115,6 +116,21 @@ class CollectorResearchUsage(BaseModel):
     search_calls: int = Field(default=0, ge=0)
     fetch_calls: int = Field(default=0, ge=0)
     advanced_fetch_attempts: int = Field(default=0, ge=0)
+
+
+class PendingGraphRedo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    iteration: int = Field(ge=1)
+    stage: Literal["writer_only", "comparator", "analyst", "collector", "full"]
+    redo_scope: RedoScope
+    redo_scopes: list[RedoScope]
+    before_md: str
+    issue_ids: list[str]
+    qa_issue_ids_before: list[str]
+    issue_count_before: int = Field(ge=0)
+    structured_targets: dict[str, Any] = Field(default_factory=dict)
+    auto_continue: bool = False
 
 
 class WorkflowStartResponse(BaseModel):
@@ -267,6 +283,7 @@ class RunDetail(RunSummary):
     evidence_review_competitors: list[str] = Field(default_factory=list)
     evidence_refresh_active: bool = False
     evidence_review_note: str = ""
+    pending_graph_redo: PendingGraphRedo | None = None
     interrupt_graph_kind: Literal["real", "demo", "scoped_redo"] | None = None
     interrupt_thread_id: str | None = None
     overridden_qa_findings: list[QCIssue] = Field(default_factory=list)
