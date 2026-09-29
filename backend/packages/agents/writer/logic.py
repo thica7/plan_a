@@ -3588,6 +3588,7 @@ class WriterAgentMixin:
                         "Each bullet must state Hypothesis to validate or include an allowed [source:ID], followed by User task: ...; Validation action: ...; Success signal — ... ."
                     ),
                     "Before User task, write only one hypothesis clause; do not add a semicolon or second sentence without a source citation.",
+                    "Do not name a researched competitor before User task without a citation; competitor names in the user task are allowed.",
                     "Treat the decision brief as user-provided context, not competitor evidence.",
                     "Cite competitor facts only from this segment's allowed source and claim cards; label unsupported ideas as hypotheses.",
                     source_warning,
@@ -5227,6 +5228,7 @@ class WriterAgentMixin:
             if not product_opportunity_errors(
                 markdown[heading.start():end].strip(),
                 output_language=detail.output_language,
+                researched_competitors=detail.plan.competitors,
             ):
                 return markdown
             marker = markdown[start:heading.start()].strip()

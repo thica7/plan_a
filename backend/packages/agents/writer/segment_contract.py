@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -165,6 +165,7 @@ class SegmentContract:
     forbidden_heading_keys: tuple[str, ...] = field(default_factory=tuple)
     allow_h2: bool = True
     essential: bool = True
+    researched_competitors: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -187,6 +188,11 @@ def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
         _validate_section_brief_contract_identity(segment, section_id)
     segment_competitor = _string_value(segment.get("segment_competitor"))
     essential = bool(segment.get("segment_essential", True))
+    competitor_values = segment.get("researched_competitors")
+    researched_competitors = (
+        tuple(name.strip() for name in competitor_values if isinstance(name, str) and name.strip())
+        if isinstance(competitor_values, list | tuple) else ()
+    )
 
     if segment_kind != "evidence_shard" and section_id == "evidence_support":
         segment_kind = "support_fragment"
@@ -230,6 +236,7 @@ def segment_contract_for(segment: Mapping[str, object]) -> SegmentContract:
         forbidden_heading_keys=forbidden_heading_keys,
         allow_h2=True,
         essential=essential,
+        researched_competitors=researched_competitors,
     )
 
 
@@ -345,6 +352,7 @@ def validate_segment_contract(
         opportunity_errors = product_opportunity_errors(
             markdown,
             output_language=contract.output_language,
+            researched_competitors=contract.researched_competitors,
         )
         if opportunity_errors:
             return SegmentValidationResult(
@@ -452,6 +460,7 @@ def product_opportunity_errors(
     markdown: str,
     *,
     output_language: str,
+    researched_competitors: Sequence[str] = (),
 ) -> list[str]:
     nonempty_lines = [line for line in markdown.splitlines() if line.strip()]
     if (
@@ -497,6 +506,18 @@ def product_opportunity_errors(
             if re.search(r"[;；。.!?！？]", opportunity_statement):
                 errors.append(
                     f"product_opportunities bullet {index} cannot contain a second uncited statement before the user task"
+                )
+            if any(
+                re.search(
+                    rf"(?<![A-Za-z0-9]){re.escape(name.strip())}(?![A-Za-z0-9])",
+                    opportunity_statement,
+                    flags=re.IGNORECASE,
+                )
+                for name in researched_competitors
+                if isinstance(name, str) and name.strip()
+            ):
+                errors.append(
+                    f"product_opportunities bullet {index} cannot name a researched competitor before the user task without a citation"
                 )
     return errors
 

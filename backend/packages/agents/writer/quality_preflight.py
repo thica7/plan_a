@@ -133,6 +133,7 @@ def run_writer_quality_preflight(
             if product_opportunity_errors(
                 "\n".join(block_lines),
                 output_language=detail.output_language,
+                researched_competitors=detail.plan.competitors,
             ):
                 failure_reasons.append("invalid_product_opportunities")
             break

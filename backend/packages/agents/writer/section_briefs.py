@@ -5,7 +5,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal
 
 from packages.schema.api_dto import RunDetail
-from packages.schema.decision_brief import decision_brief_fields
+from packages.schema.decision_brief import decision_brief_fields, safe_decision_brief_text
 from packages.schema.models import RawSource
 from packages.schema.report_artifact import ClaimCard, DecisionCard, SectionBrief
 
@@ -301,11 +301,16 @@ def _section_payload_from_brief(
     }
     user_brief = decision_brief_fields(detail.plan.decision_brief)
     if user_brief:
-        payload["user_provided_decision_brief"] = user_brief
+        payload["user_provided_decision_brief"] = {
+            key: safe_decision_brief_text(value)
+            for key, value in user_brief.items()
+        }
     if segment_competitor:
         payload["segment_competitor"] = segment_competitor
     if brief.section_key == "decision_summary":
         payload["require_executive_summary"] = True
+    if brief.section_key == "product_opportunities":
+        payload["researched_competitors"] = list(detail.plan.competitors)
     _refresh_segment_input_chars(payload)
     return payload
 

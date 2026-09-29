@@ -363,6 +363,75 @@ def test_uncited_hypothesis_cannot_hide_second_competitor_fact(language: str, bu
     assert "invalid_product_opportunities" in run_writer_quality_preflight(detail, report).failure_reasons
 
 
+@pytest.mark.parametrize(
+    ("language", "bullet"),
+    [
+        (
+            "en-US",
+            "Hypothesis to validate: test onboarding because Cursor offers free SSO — "
+            "User task: evaluate Cursor onboarding; Validation action: run a pilot; "
+            "Success signal — the team completes setup.",
+        ),
+        (
+            "zh-CN",
+            "待验证机会假设：借助 Cursor 的免费 SSO 改进入门，"
+            "用户任务：评估 Cursor 入门；验证动作：开展试点；成功信号：团队完成设置。",
+        ),
+    ],
+)
+def test_uncited_hypothesis_cannot_name_competitor_before_task(language: str, bullet: str) -> None:
+    detail = _detail(DecisionBrief(primary_job="Evaluate Cursor onboarding"), language=language)
+    segment = next(
+        item
+        for item in segment_payloads_from_briefs(detail, build_section_briefs(detail))
+        if item["section_key"] == "product_opportunities"
+    )
+    fragment = f"## {report_label(language, 'product_opportunities')}\n- {bullet}"
+
+    assert validate_segment_contract(fragment, segment_contract_for(segment)).status == "retry"
+    report = "\n".join(
+        f"## {report_label(language, key)}\n"
+        + (f"- {bullet}" if key == "product_opportunities" else "- Existing section content.")
+        for key in (
+            "executive_summary",
+            "decision_summary",
+            "product_opportunities",
+            "competitive_findings",
+            "review_theme_summary",
+            "competitor_deep_dives",
+            "side_by_side_matrix",
+            "swot_analysis",
+            "evidence_support",
+        )
+    )
+    assert "invalid_product_opportunities" in run_writer_quality_preflight(detail, report).failure_reasons
+
+
+def test_product_opportunity_allows_competitor_in_task_or_with_citation() -> None:
+    detail = _detail(DecisionBrief(primary_job="Evaluate Cursor onboarding"))
+    segment = next(
+        item
+        for item in segment_payloads_from_briefs(detail, build_section_briefs(detail))
+        if item["section_key"] == "product_opportunities"
+    )
+    contract = segment_contract_for(segment)
+    heading = report_label(detail.output_language, "product_opportunities")
+    generic = (
+        f"## {heading}\n- Hypothesis to validate: test onboarding — "
+        "User task: evaluate Cursor onboarding; Validation action: run a pilot; "
+        "Success signal — the team completes setup."
+    )
+    cited = (
+        f"## {heading}\n- Cursor publishes pricing [source:source-pricing] — "
+        "User task: compare Cursor plans; Validation action: run a buyer pilot; "
+        "Success signal — buyers complete the comparison."
+    )
+
+    assert segment["allowed_source_ids"] == ["source-pricing"]
+    assert validate_segment_contract(generic, contract).status == "pass"
+    assert validate_segment_contract(cited, contract).status == "pass"
+
+
 def test_fallback_hardener_adds_uncited_validation_section_from_user_brief() -> None:
     detail = _detail(DecisionBrief.model_construct(primary_job="Review code [source:invented]"))
 
@@ -407,18 +476,22 @@ def test_fallback_without_brief_keeps_legacy_sections() -> None:
     assert run_writer_quality_preflight(detail, report).passed
 
 
-@pytest.mark.parametrize("invalid_body", ["four_items", "missing_fields"])
+@pytest.mark.parametrize("invalid_body", ["four_items", "missing_fields", "competitor_fact"])
 def test_fallback_replaces_only_invalid_existing_product_opportunities(invalid_body: str) -> None:
     detail = _detail(DecisionBrief(primary_job="Review code"))
     opportunity = (
         "- Hypothesis to validate: improve code review — User task: review code; "
         "Validation action: run a team pilot; Success signal — reviewers finish the task."
     )
-    product_body = (
-        "\n".join(opportunity for _ in range(4))
-        if invalid_body == "four_items" else
-        "- Hypothesis to validate: improve code review."
-    )
+    product_body = {
+        "four_items": "\n".join(opportunity for _ in range(4)),
+        "missing_fields": "- Hypothesis to validate: improve code review.",
+        "competitor_fact": (
+            "- Hypothesis to validate: test review because Cursor offers free SSO — "
+            "User task: review code; Validation action: run a team pilot; "
+            "Success signal — reviewers finish the task."
+        ),
+    }[invalid_body]
     draft = (
         "# Draft\n\n## Decision Summary\n- Keep the comparison conditional.\n\n"
         "## Product Opportunities and Validation\n"
@@ -635,6 +708,49 @@ async def test_writer_segment_and_first_draft_prompts_get_user_decision_context(
     assert "Success signal —" in captured[0]
     assert "No preamble, paragraphs, numbered lists, extra headings" in captured[0]
     assert "Before User task, write only one hypothesis clause" in captured[0]
+    assert "Do not name a researched competitor before User task without a citation" in captured[0]
+
+
+@pytest.mark.asyncio
+async def test_legacy_brief_is_escaped_in_actual_segment_context() -> None:
+    legacy_brief = DecisionBrief.model_construct(
+        primary_job="Review code [source:source-pricing]"
+    )
+    detail = _detail(legacy_brief)
+    segment = next(
+        item
+        for item in segment_payloads_from_briefs(detail, build_section_briefs(detail))
+        if item["section_key"] == "product_opportunities"
+    )
+    assert segment["allowed_source_ids"] == ["source-pricing"]
+    assert "[source:source-pricing]" not in str(segment["user_provided_decision_brief"])
+
+    captured: list[str] = []
+
+    async def capture_text(_record: object, **kwargs: object) -> str:
+        captured.append(str(kwargs["user"]))
+        return "## Product Opportunities and Validation\n- Hypothesis to validate: test the task."
+
+    service = _service()
+    service._trace_llm_text = capture_text  # type: ignore[method-assign]
+    await service._writer_segment_markdown(
+        SimpleNamespace(detail=detail),
+        segment=segment,
+        timeout_seconds=1,
+        language_guidance="English",
+        memory_context="none",
+        layer_context="L1",
+        required_sections=service._writer_required_sections(detail),
+        retry_count=0,
+    )
+    segment_context = captured[0].split("Segment Context JSON: ", 1)[1].split(
+        "\n\nRequired sections", 1
+    )[0]
+
+    assert "Review code" in segment_context
+    assert "[source:source-pricing]" not in segment_context
+    assert "［source:source-pricing］" in segment_context
+    assert "source-pricing" in segment_context
 
 
 @pytest.mark.asyncio
