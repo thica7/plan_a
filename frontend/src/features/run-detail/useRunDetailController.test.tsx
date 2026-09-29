@@ -245,30 +245,52 @@ describe("useRunDetailController background refresh", () => {
     expect(result.current.latestInterrupt?.payload.redo_remaining).toBeUndefined();
   });
 
-  it("refreshes after another reviewer resumes the run through HITL", async () => {
-    const evidence = { ...makeDetail(), current_node: "evidence_hitl", updated_at: "2026-06-10T00:00:01Z" };
-    const resumed = { ...evidence, status: "running", updated_at: "2026-06-10T00:00:05Z" };
+  it.each([
+    ["old response first", "running", "evidence_hitl"],
+    ["new response first", "interrupted", "qa_hitl"],
+  ] as const)("keeps another reviewer's HITL progress when %s", async (order, status, currentNode) => {
+    const evidence = {
+      ...makeDetail(), current_node: "evidence_hitl", evidence_repair_rounds: 0,
+      updated_at: "2026-06-10T00:00:01Z",
+    };
+    const resumed = { ...evidence, status, current_node: currentNode, updated_at: "2026-06-10T00:00:05Z" };
     const olderRefresh = deferred<ReturnType<typeof makeDetail>>();
-    mocks.getRun.mockResolvedValueOnce(evidence).mockReturnValueOnce(olderRefresh.promise).mockResolvedValueOnce(resumed);
+    const newerRefresh = deferred<ReturnType<typeof makeDetail>>();
+    mocks.getRun.mockResolvedValueOnce(evidence)
+      .mockReturnValueOnce(olderRefresh.promise)
+      .mockReturnValueOnce(newerRefresh.promise);
     mocks.subscribeRun.mockReturnValue(vi.fn());
     const { result } = renderHook(() => useRunDetailController(), { wrapper });
     await waitFor(() => expect(result.current.detail?.status).toBe("interrupted"));
 
     act(() => useRunStore.getState().addEvent({
       id: 51, run_id: "run-1", type: "interrupt", message: "Evidence review",
-      payload: { stage: "evidence", interrupt_node: "evidence_hitl", evidence_repair_rounds: 0 },
+      payload: {
+        stage: "evidence", interrupt_node: "evidence_hitl", evidence_repair_rounds: 0,
+        sources: [{ id: "old-source" }], qa_findings: [], redo_remaining: 1,
+      },
       created_at: "2026-06-10T00:00:02Z",
     }));
     await waitFor(() => expect(mocks.getRun).toHaveBeenCalledTimes(2));
+    expect(result.current.latestInterrupt?.payload.sources).toEqual([{ id: "old-source" }]);
     act(() => useRunStore.getState().addEvent({
       id: 52, run_id: "run-1", type: "hitl.reviewed", message: "Other reviewer resumed",
       payload: { hitl_lifecycle: { lifecycle_stage: "resumed" } },
       created_at: "2026-06-10T00:00:04Z",
     }));
     await waitFor(() => expect(mocks.getRun).toHaveBeenCalledTimes(3));
-    await waitFor(() => expect(result.current.detail?.status).toBe("running"));
-    await act(async () => { olderRefresh.resolve(resumed); await olderRefresh.promise; });
-    expect(result.current.detail?.status).toBe("running");
+    if (order === "old response first") {
+      await act(async () => { olderRefresh.resolve(evidence); await olderRefresh.promise; });
+      await act(async () => { newerRefresh.resolve(resumed); await newerRefresh.promise; });
+    } else {
+      await act(async () => { newerRefresh.resolve(resumed); await newerRefresh.promise; });
+      expect(result.current.detail?.current_node).toBe("qa_hitl");
+      await act(async () => { olderRefresh.resolve(evidence); await olderRefresh.promise; });
+    }
+    expect(result.current.detail?.status).toBe(status);
+    expect(result.current.detail?.current_node).toBe(currentNode);
+    expect(result.current.latestInterrupt?.payload.sources).toBeUndefined();
+    expect(result.current.latestInterrupt?.payload.stage).not.toBe("evidence");
   });
 
   it("uses the new evidence round when its SSE arrives before its detail refresh", async () => {
