@@ -2038,8 +2038,22 @@ class RunService(
             text = str(value or "")
             return text if len(text) <= limit else f"{text[:limit - 1]}…"
 
+        reviewed_dimensions = set(detail.evidence_review_dimensions)
+        reviewed_competitors = set(detail.evidence_review_competitors)
+        ordered_sources = detail.raw_sources
+        if reviewed_dimensions and reviewed_competitors:
+            ordered_sources = sorted(
+                detail.raw_sources,
+                key=lambda source: not (
+                    source.dimension in reviewed_dimensions
+                    and any(
+                        self._source_matches_competitor(source, competitor)
+                        for competitor in reviewed_competitors
+                    )
+                ),
+            )
         sources: list[dict[str, object]] = []
-        for source in detail.raw_sources[:100]:
+        for source in ordered_sources[:100]:
             metadata = source.metadata
             fetched_at = next(
                 (

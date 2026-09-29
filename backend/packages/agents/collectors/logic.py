@@ -492,6 +492,29 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         enable_search: bool = True,
         enable_repair: bool = True,
     ) -> list[RawSource]:
+        if detail.evidence_refresh_active:
+            refresh_candidates = [
+                SourceCandidate(
+                    title=source.title,
+                    url=str(source.url),
+                    origin="web_search",
+                    competitor=competitor,
+                    dimension=dimension,
+                    rank=index,
+                    confidence=0.45,
+                    reason="Refresh an existing evidence URL after reviewer redo.",
+                    date=str(source.metadata["source_published_at"])
+                    if source.metadata.get("source_published_at") else None,
+                    last_updated=str(source.metadata["source_updated_at"])
+                    if source.metadata.get("source_updated_at") else None,
+                    metadata={"refresh_from_raw_source_id": source.id},
+                )
+                for index, source in enumerate(detail.raw_sources)
+                if source.url is not None
+                and source.dimension == dimension
+                and self._source_matches_competitor(source, competitor)
+            ]
+            seed_candidates = [*refresh_candidates, *(seed_candidates or [])]
         target_candidate = self._target_product_user_candidate(detail, competitor, dimension)
         if target_candidate is not None:
             seed_candidates = [*(seed_candidates or []), target_candidate]

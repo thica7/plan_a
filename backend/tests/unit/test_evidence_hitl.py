@@ -1,13 +1,17 @@
 import asyncio
 import json
 from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
 
+from packages.agents import SubagentContext
+from packages.agents.collectors import logic as collector_logic
 from packages.config import Settings
 from packages.memory import RunJournal
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
+from packages.research.budget import research_depth_budget
 from packages.schema.api_dto import CollectorResearchUsage, HitlResumeRequest, RunCreateRequest
 from packages.schema.models import QCIssue, RawSource, RedoScope
 from packages.search import SearchResult
@@ -20,6 +24,7 @@ def _service(
     journal: RunJournal | None = None,
     real: bool = False,
     checkpointer: GraphCheckpointer | None = None,
+    search_enabled: bool = False,
 ) -> RunService:
     return RunService(
         skill_registry=SkillRegistry.from_default_path(),
@@ -30,6 +35,7 @@ def _service(
             ark_base_url="https://ark.cn-beijing.volces.com/api/v3",
             llm_timeout_seconds=10,
             llm_temperature=0.2,
+            pplx_api_key="pplx-key" if search_enabled else None,
             hitl_enabled=False,
             hitl_timeout_seconds=0,
         ),
@@ -281,6 +287,59 @@ async def test_evidence_payload_bounds_all_untrusted_source_and_issue_text() -> 
 
 
 @pytest.mark.asyncio
+async def test_evidence_payload_prioritizes_scoped_sources_before_truncation() -> None:
+    service = _service()
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Scoped evidence source preview",
+                competitors=["A", "B"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+                collaboration_mode="assisted",
+            )
+        )
+        old = RawSource(
+            id="old-0",
+            competitor="A",
+            covered_competitors=["A"],
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Old pricing source",
+            url="https://example.com/a/pricing",
+            content_hash="old-hash",
+            confidence=0.8,
+        )
+        target = old.model_copy(
+            update={
+                "id": "target-last",
+                "competitor": "B",
+                "covered_competitors": ["B"],
+                "url": "https://example.com/b/pricing",
+            }
+        )
+        detail.raw_sources = [
+            old.model_copy(update={"id": f"old-{index}"}) for index in range(105)
+        ] + [target]
+        detail.evidence_review_dimensions = ["pricing"]
+        detail.evidence_review_competitors = ["B"]
+
+        scoped = service._evidence_review_payload(detail)
+        assert scoped["sources"][0]["id"] == "target-last"
+        assert scoped["source_count"] == 106
+        assert len(scoped["sources"]) == 100
+        assert scoped["sources_truncated"] is True
+
+        detail.evidence_review_competitors = ["A", "B"]
+        global_review = service._evidence_review_payload(detail)
+        assert global_review["sources"][0]["id"] == "old-0"
+        assert global_review["source_count"] == 106
+        assert global_review["sources_truncated"] is True
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_evidence_redo_is_persisted_and_rejected_before_resume_when_exhausted() -> None:
     service = _service()
     collector_calls = 0
@@ -409,6 +468,94 @@ async def test_evidence_refresh_refetches_existing_url_without_removing_old_sour
         assert detail.raw_sources == [old_source]
         assert source is not None
         assert source.content_hash != old_source.content_hash
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_real_refresh_pipeline_refetches_old_url_when_search_budget_is_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _service(real=True, search_enabled=True)
+    old_url = "https://example.com/a/pricing"
+    network_calls: list[str] = []
+    seed_candidates = []
+    original_pipeline = collector_logic.run_research_pipeline
+
+    async def observe_pipeline(brief, **kwargs):  # noqa: ANN001, ANN202
+        seed_candidates.extend(kwargs.get("seed_candidates") or [])
+        return await original_pipeline(brief, **kwargs)
+
+    async def allow_robots(*_args, **_kwargs):  # noqa: ANN002, ANN003, ANN202
+        return SimpleNamespace(allowed=True)
+
+    async def fetch_page(url: str, **_kwargs) -> EvidenceFetchResult:  # noqa: ANN003
+        network_calls.append(url)
+        text = "A pricing offers a Free plan and a Pro plan at $20 per month. " * 8
+        return EvidenceFetchResult(
+            url=url,
+            ok=True,
+            title="Current A pricing",
+            text=text,
+            content_hash="new-pricing-hash",
+            status_code=200,
+            quality_score=0.9,
+            text_length=len(text),
+        )
+
+    monkeypatch.setattr(collector_logic, "run_research_pipeline", observe_pipeline)
+    monkeypatch.setattr(service, "_trace_robots", allow_robots)
+    monkeypatch.setattr("packages.orchestrator.service.fetch_evidence_page", fetch_page)
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Unknown brand refresh",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="real",
+                collaboration_mode="assisted",
+                research_depth="standard",
+            )
+        )
+        old = RawSource(
+            id="old-pricing-source",
+            competitor="A",
+            covered_competitors=["A"],
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="Old A pricing",
+            url=old_url,
+            content_hash="old-pricing-hash",
+            confidence=0.8,
+            metadata={
+                "source_published_at": "2026-09-01",
+                "source_updated_at": "2026-09-15",
+            },
+        )
+        detail.raw_sources = [old]
+        detail.evidence_refresh_active = True
+        detail.plan.homepage_hints = {}
+        budget = research_depth_budget("standard")
+        assert budget is not None
+        context = SubagentContext(detail.id, "collector", "pricing::A")
+        detail.collector_research_usage[context.subagent] = CollectorResearchUsage(
+            search_calls=budget.max_search_queries,
+            fetch_calls=budget.max_fetches - 1,
+        )
+
+        await service._collect_competitor_with_web_search(
+            service._runs[detail.id], "pricing", "A", context,
+            seed_sources=[], include_official=False,
+        )
+
+        assert network_calls == [old_url]
+        assert detail.collector_research_usage[context.subagent].fetch_calls == budget.max_fetches
+        assert detail.collector_research_usage[context.subagent].search_calls == budget.max_search_queries
+        assert detail.raw_sources == [old]
+        assert seed_candidates[0].origin == "web_search"
+        assert seed_candidates[0].confidence <= 0.5
+        assert seed_candidates[0].date == "2026-09-01"
+        assert seed_candidates[0].last_updated == "2026-09-15"
     finally:
         await service._graph_checkpointer.aclose()
 
