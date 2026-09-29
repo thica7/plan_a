@@ -49,6 +49,7 @@ from packages.agents.writer.segment_contract import (
     SUPPORT_HEADING_KEYS,
     SegmentContract,
     heading_key_for,
+    product_opportunity_errors,
     segment_contract_for,
     validate_segment_contract,
 )
@@ -5205,7 +5206,34 @@ class WriterAgentMixin:
                         f"{hardened[:insert_at].rstrip()}\n\n{section_body}\n\n"
                         f"{hardened[insert_at:].lstrip()}"
                     )
+        hardened = self._replace_invalid_product_opportunities_section(detail, hardened)
         return self._normalize_report_section_order(detail, hardened)
+
+    def _replace_invalid_product_opportunities_section(
+        self, detail: RunDetail, markdown: str
+    ) -> str:
+        if not decision_brief_fields(detail.plan.decision_brief):
+            return markdown
+        headings = list(self._iter_report_h2_headings(markdown))
+        for index, heading in enumerate(headings):
+            if heading_key_for(heading.group(1), detail.output_language) != "product_opportunities":
+                continue
+            start = self._report_section_start_with_marker(markdown, heading.start())
+            end = (
+                self._report_section_start_with_marker(markdown, headings[index + 1].start())
+                if index + 1 < len(headings) else len(markdown)
+            )
+            if not product_opportunity_errors(
+                markdown[heading.start():end].strip(),
+                output_language=detail.output_language,
+            ):
+                return markdown
+            marker = markdown[start:heading.start()].strip()
+            replacement = self._section_body(self._backfill_product_opportunities_section(detail))
+            if marker:
+                replacement = f"{marker}\n{replacement}"
+            return f"{markdown[:start].rstrip()}\n\n{replacement}\n\n{markdown[end:].lstrip()}".strip()
+        return markdown
 
     def _backfill_product_opportunities_section(self, detail: RunDetail) -> list[str]:
         brief = decision_brief_fields(detail.plan.decision_brief)
@@ -5224,14 +5252,12 @@ class WriterAgentMixin:
             return [
                 "",
                 f"## {heading}",
-                "用户简报仅作为输入上下文，竞品差异与用户需求仍待验证。",
-                f"- 待验证机会假设：围绕“{task}”探索产品改进；用户任务：{task}；验证动作：让目标用户完成同一任务并记录阻碍；成功信号：{metric}。",
+                f"- 待验证机会假设：用户简报仅作为输入上下文，竞品差异与用户需求仍待验证；围绕“{task}”探索产品改进；用户任务：{task}；验证动作：让目标用户完成同一任务并记录阻碍；成功信号：{metric}。",
             ]
         return [
             "",
             f"## {heading}",
-            "The user-provided brief is context; competitor differences and user demand remain unverified.",
-            f"- Hypothesis to validate: explore a product improvement around “{task}”; User task: {task}; Validation action: have target users complete the same task and record blockers; Success signal — {metric}.",
+            f"- Hypothesis to validate: the user-provided brief is context; competitor differences and user demand remain unverified; explore a product improvement around “{task}”; User task: {task}; Validation action: have target users complete the same task and record blockers; Success signal — {metric}.",
         ]
 
     def _layer_section_heading(self, detail: RunDetail) -> str:

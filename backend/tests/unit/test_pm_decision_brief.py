@@ -271,6 +271,82 @@ def test_fallback_full_hardening_does_not_cite_user_context_or_hypothesis() -> N
     assert "Review code" in section
     assert "[source:" not in section
     assert "Cursor publishes pricing. [source:source-pricing]" in report
+    assert run_writer_quality_preflight(detail, report).passed
+    assert [line for line in section.splitlines() if line.strip()] == [
+        line for line in section.splitlines() if line.startswith("- ")
+    ]
+    assert "user-provided" in section.casefold()
+
+
+def test_fallback_without_brief_keeps_legacy_sections() -> None:
+    detail = _detail()
+
+    report = _service()._harden_report_markdown(detail, "# Draft")
+
+    assert "## Product Opportunities and Validation" not in report
+    assert run_writer_quality_preflight(detail, report).passed
+
+
+@pytest.mark.parametrize("invalid_body", ["four_items", "missing_fields"])
+def test_fallback_replaces_only_invalid_existing_product_opportunities(invalid_body: str) -> None:
+    detail = _detail(DecisionBrief(primary_job="Review code"))
+    opportunity = (
+        "- Hypothesis to validate: improve code review; User task: review code; "
+        "Validation action: run a team pilot; Success signal — reviewers finish the task."
+    )
+    product_body = (
+        "\n".join(opportunity for _ in range(4))
+        if invalid_body == "four_items" else
+        "- Hypothesis to validate: improve code review."
+    )
+    draft = (
+        "# Draft\n\n## Decision Summary\n- Keep the comparison conditional.\n\n"
+        "## Product Opportunities and Validation\n"
+        + product_body
+        + "\n\n## Competitive Findings\n- Cursor publishes pricing. [source:source-pricing]"
+    )
+
+    report = _service()._harden_report_markdown(detail, draft)
+    section = report.split("## Product Opportunities and Validation", 1)[1].split("\n## ", 1)[0]
+
+    assert section.count("- ") == 1
+    assert "user-provided" in section.casefold()
+    assert "[source:" not in section
+    assert "Cursor publishes pricing. [source:source-pricing]" in report
+    assert run_writer_quality_preflight(detail, report).passed
+
+
+def test_fallback_preserves_valid_existing_product_opportunities_and_citation() -> None:
+    detail = _detail(DecisionBrief(primary_job="Review code"))
+    cited_opportunity = (
+        "- Cursor publishes pricing [source:source-pricing]; User task: compare plans; "
+        "Validation action: run a buyer pilot; Success signal — buyers complete the comparison."
+    )
+    draft = (
+        "# Draft\n\n## Product Opportunities and Validation\n"
+        f"{cited_opportunity}\n\n## Competitive Findings\n"
+        "- Cursor publishes pricing. [source:source-pricing]"
+    )
+
+    report = _service()._harden_report_markdown(detail, draft)
+    section = report.split("## Product Opportunities and Validation", 1)[1].split("\n## ", 1)[0]
+
+    assert cited_opportunity in section
+    assert section.count("- ") == 1
+    assert run_writer_quality_preflight(detail, report).passed
+
+
+def test_fallback_without_brief_does_not_replace_existing_product_section() -> None:
+    detail = _detail()
+    draft = (
+        "# Draft\n\n## Product Opportunities and Validation\n"
+        "- Existing legacy text.\n\n## Competitive Findings\n"
+        "- Cursor publishes pricing. [source:source-pricing]"
+    )
+
+    report = _service()._harden_report_markdown(detail, draft)
+
+    assert "- Existing legacy text." in report
 
 
 def test_quality_preflight_requires_product_opportunities_when_brief_exists() -> None:
@@ -496,6 +572,9 @@ def test_demo_opportunity_is_one_complete_uncited_bullet(
     assert "Review code" in bullets[0]
     assert "Pilot completion rate" in bullets[0]
     assert "[source:" not in section
+    assert [line for line in section.splitlines() if line.strip()] == bullets
+    assert ("用户输入" if language == "zh-CN" else "User-provided") in bullets[0]
+    assert run_writer_quality_preflight(detail, report).passed
 
 
 def test_demo_user_brief_cannot_create_source_citation() -> None:
