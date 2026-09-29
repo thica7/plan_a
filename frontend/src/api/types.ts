@@ -20,6 +20,15 @@ export interface TargetProduct {
   market?: string;
 }
 
+export type ResearchDepth = "quick" | "standard" | "deep";
+export type CollaborationMode = "ai" | "assisted";
+
+export interface DecisionBrief {
+  decision_question: string;
+  primary_job: string;
+  success_metric: string;
+}
+
 export interface TargetProductEvidence {
   status: "verified" | "unverified" | "unavailable";
   source_url: string;
@@ -34,6 +43,9 @@ export interface TargetProductEvidence {
 export interface AnalysisPlan {
   topic: string;
   target_product?: TargetProduct | null;
+  research_depth?: ResearchDepth | null;
+  collaboration_mode?: CollaborationMode | null;
+  decision_brief?: DecisionBrief | null;
   target_product_evidence?: TargetProductEvidence | null;
   competitors: string[];
   dimensions: string[];
@@ -372,6 +384,41 @@ export interface HitlResumePayload {
   dimensions?: string[];
   competitors?: string[];
   competitor_edits?: CompetitorEdit[];
+}
+
+export interface EvidenceReviewSource {
+  id: string;
+  title: string;
+  competitor: string;
+  dimension: string;
+  url: string | null;
+  source_type: string;
+  confidence: number;
+  quality_score?: number;
+  fetched_at?: string | null;
+  extracted_at?: string | null;
+  source_published_at?: string | null;
+  source_updated_at?: string | null;
+}
+
+export interface EvidenceReviewFinding {
+  id: string;
+  severity: string;
+  target_agent: string;
+  target_subagent?: string | null;
+  target_competitor?: string | null;
+  field_path?: string;
+  problem: string;
+}
+
+export interface EvidenceReviewPayload {
+  sources?: EvidenceReviewSource[];
+  source_count?: number;
+  sources_truncated?: boolean;
+  qa_findings?: EvidenceReviewFinding[];
+  qa_issue_count?: number;
+  qa_findings_truncated?: boolean;
+  redo_remaining?: number;
 }
 
 export interface RevisionRecord {
@@ -898,6 +945,9 @@ export interface RunCreateRequest {
   idempotency_key?: string | null;
   topic: string;
   target_product?: TargetProduct | null;
+  research_depth?: ResearchDepth;
+  collaboration_mode?: CollaborationMode;
+  decision_brief?: DecisionBrief;
   competitors: string[];
   dimensions: string[];
   competitor_layer?: "L1" | "L2" | "L3" | null;

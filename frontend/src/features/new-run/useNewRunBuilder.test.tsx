@@ -123,7 +123,7 @@ describe("useNewRunBuilder output language", () => {
       result.current.setExecutionMode("real");
       result.current.setCompetitorMode("auto");
       result.current.setAutoRedoWarn(true);
-      result.current.toggleHitl(false);
+      result.current.setCollaborationMode("ai");
     });
     await act(async () => {
       await result.current.submitRun();
@@ -135,5 +135,87 @@ describe("useNewRunBuilder output language", () => {
         hitl_enabled: false,
       }),
     );
+  });
+
+  it("sends separate research depth, collaboration, and trimmed decision brief fields", async () => {
+    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime?.has_web_search_key).toBe(true));
+    act(() => {
+      result.current.setTargetName("示例产品");
+      result.current.setResearchDepth("deep");
+      result.current.setCollaborationMode("assisted");
+      result.current.setDecisionQuestion("  应先改进什么？  ");
+      result.current.setPrimaryJob("  完成清洁  ");
+      result.current.setSuccessMetric("  完成率  ");
+    });
+    await act(async () => { await result.current.submitRun(); });
+
+    expect(mocks.createRun).toHaveBeenCalledWith(expect.objectContaining({
+      research_depth: "deep",
+      collaboration_mode: "assisted",
+      hitl_enabled: true,
+      decision_brief: {
+        decision_question: "应先改进什么？",
+        primary_job: "完成清洁",
+        success_metric: "完成率",
+      },
+    }));
+  });
+
+  it("defaults to standard AI research without human pauses", async () => {
+    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime?.has_web_search_key).toBe(true));
+    act(() => result.current.setTargetName("示例产品"));
+    await act(async () => { await result.current.submitRun(); });
+
+    expect(mocks.createRun).toHaveBeenCalledWith(expect.objectContaining({
+      research_depth: "standard",
+      collaboration_mode: "ai",
+      hitl_enabled: false,
+    }));
+  });
+
+  it("blocks manual scope when target plus competitors exceeds the depth slice limit", async () => {
+    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime?.has_web_search_key).toBe(true));
+    act(() => {
+      result.current.setTargetName("目标产品");
+      result.current.setCompetitorMode("manual");
+      result.current.setCompetitors("竞品甲,竞品乙");
+      result.current.setSelected(["pricing", "feature", "market"]);
+      result.current.setResearchDepth("quick");
+    });
+    await act(async () => { await result.current.submitRun(); });
+
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(result.current.error).toMatch(/9.*6|6.*9/);
+  });
+
+  it("counts repeated manual competitor names only once, as the backend does", async () => {
+    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime?.has_web_search_key).toBe(true));
+    act(() => {
+      result.current.setTargetName("目标产品");
+      result.current.setCompetitorMode("manual");
+      result.current.setCompetitors("竞品甲,竞品甲,竞品甲");
+      result.current.setSelected(["pricing", "feature", "market"]);
+      result.current.setResearchDepth("quick");
+    });
+    await act(async () => { await result.current.submitRun(); });
+    expect(mocks.createRun).toHaveBeenCalledWith(expect.objectContaining({ competitors: ["竞品甲"] }));
+  });
+
+  it("does not count the target twice when its competitor spelling differs by punctuation", async () => {
+    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime?.has_web_search_key).toBe(true));
+    act(() => {
+      result.current.setTargetName("Foo Bar");
+      result.current.setCompetitorMode("manual");
+      result.current.setCompetitors("Foo-Bar");
+      result.current.setSelected(["pricing", "feature", "market", "persona"]);
+      result.current.setResearchDepth("quick");
+    });
+    await act(async () => { await result.current.submitRun(); });
+    expect(mocks.createRun).toHaveBeenCalledTimes(1);
   });
 });

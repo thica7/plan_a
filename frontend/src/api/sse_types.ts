@@ -1,4 +1,4 @@
-import type { RunDetail, QCIssue, ReportArtifactV2 } from "./types";
+import type { RunDetail, RunStatus, QCIssue, ReportArtifactV2 } from "./types";
 
 export type RunEventType =
   | "run_created"
@@ -55,7 +55,7 @@ export interface RunEvent {
   swimlane?: string | null;
   message: string;
   payload: {
-    run?: RunDetail;
+    run?: RunDetail | { id: string; status: RunStatus; current_node?: string | null };
     issue?: QCIssue;
     report_md?: string;
     report_artifact?: ReportArtifactV2 | null;

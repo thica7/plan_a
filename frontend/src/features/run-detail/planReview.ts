@@ -30,16 +30,19 @@ export function canApplyPlanDimensions(value: string, currentDimensions: string[
   return next.some((dimension, index) => dimension !== current[index]);
 }
 
-export type HitlReviewStage = "planner" | "qa";
+export type HitlReviewStage = "planner" | "evidence" | "qa";
 
 export function hitlStageFromCurrentNode(currentNode: string | null | undefined): HitlReviewStage | null {
   if (currentNode === "planner_hitl") return "planner";
+  if (currentNode === "evidence_hitl") return "evidence";
   if (currentNode === "qa_hitl") return "qa";
   return null;
 }
 
 export function fallbackHitlMessage(stage: HitlReviewStage): string {
-  return stage === "planner" ? "Planner is ready for review." : "QA review is ready.";
+  if (stage === "planner") return "Planner is ready for review.";
+  if (stage === "evidence") return "Evidence is ready for review.";
+  return "QA review is ready.";
 }
 
 export interface HitlInterruptEventLike {
@@ -55,14 +58,16 @@ export interface HitlInterruptEventLike {
 export interface VisibleHitlInterrupt {
   message: string;
   payload: {
-    interrupt_node: "planner_hitl" | "qa_hitl";
+    interrupt_node: "planner_hitl" | "evidence_hitl" | "qa_hitl";
     stage: HitlReviewStage;
     [key: string]: unknown;
   };
 }
 
-function interruptNodeForStage(stage: HitlReviewStage): "planner_hitl" | "qa_hitl" {
-  return stage === "planner" ? "planner_hitl" : "qa_hitl";
+function interruptNodeForStage(stage: HitlReviewStage): "planner_hitl" | "evidence_hitl" | "qa_hitl" {
+  if (stage === "planner") return "planner_hitl";
+  if (stage === "evidence") return "evidence_hitl";
+  return "qa_hitl";
 }
 
 function interruptMatchesStage(event: HitlInterruptEventLike, stage: HitlReviewStage): boolean {

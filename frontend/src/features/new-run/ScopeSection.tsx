@@ -17,6 +17,12 @@ interface ScopeSectionProps {
   setProductUseCases: (value: string) => void;
   productMarket: string;
   setProductMarket: (value: string) => void;
+  decisionQuestion: string;
+  setDecisionQuestion: (value: string) => void;
+  primaryJob: string;
+  setPrimaryJob: (value: string) => void;
+  successMetric: string;
+  setSuccessMetric: (value: string) => void;
 }
 
 export function ScopeSection({
@@ -25,6 +31,7 @@ export function ScopeSection({
   targetName, setTargetName, targetUrl, setTargetUrl,
   productCategory, setProductCategory, productAudience, setProductAudience,
   productUseCases, setProductUseCases, productMarket, setProductMarket,
+  decisionQuestion, setDecisionQuestion, primaryJob, setPrimaryJob, successMetric, setSuccessMetric,
 }: ScopeSectionProps) {
   const { t } = useTranslation();
   return (
@@ -59,6 +66,19 @@ export function ScopeSection({
       <label className="field-block">{t('newRun.topic')}
         <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder={t('newRun.topicHint')} />
       </label>
+      <div className="decision-brief-fields">
+        <strong>{t('newRun.decisionBrief')}</strong>
+        <p>{t('newRun.decisionBriefHint')}</p>
+        <label className="field-block">{t('newRun.decisionQuestion')}
+          <input maxLength={500} value={decisionQuestion} onChange={(event) => setDecisionQuestion(event.target.value)} />
+        </label>
+        <label className="field-block">{t('newRun.primaryJob')}
+          <input maxLength={500} value={primaryJob} onChange={(event) => setPrimaryJob(event.target.value)} />
+        </label>
+        <label className="field-block">{t('newRun.successMetric')}
+          <input maxLength={500} value={successMetric} onChange={(event) => setSuccessMetric(event.target.value)} />
+        </label>
+      </div>
     </section>
   );
 }

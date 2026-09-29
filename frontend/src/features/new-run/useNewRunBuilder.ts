@@ -17,15 +17,20 @@ import {
 } from "./dimensions";
 import {
   defaultWorkspaceId,
+  depthBudgets,
   dynamicScenarioId,
+  type CollaborationMode,
   type CompetitorMode,
   type ExecutionMode,
   type LayerSelection,
   type OutputLanguage,
+  type ResearchDepth,
 } from "./types";
+import { useTranslation } from "../../stores/i18n";
 
 export function useNewRunBuilder() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [topic, setTopic] = useState("");
   const [targetName, setTargetName] = useState("");
   const [targetUrl, setTargetUrl] = useState("");
@@ -44,8 +49,12 @@ export function useNewRunBuilder() {
   const [selected, setSelected] = useState<string[]>(coreDimensions);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("demo");
   const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>("zh-CN");
+  const [researchDepth, setResearchDepth] = useState<ResearchDepth>("standard");
+  const [collaborationMode, setCollaborationMode] = useState<CollaborationMode>("ai");
+  const [decisionQuestion, setDecisionQuestion] = useState("");
+  const [primaryJob, setPrimaryJob] = useState("");
+  const [successMetric, setSuccessMetric] = useState("");
   const [autoRedoWarn, setAutoRedoWarn] = useState(false);
-  const [hitlEnabled, setHitlEnabled] = useState(false);
   const [isSubmitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitInFlightRef = useRef(false);
@@ -56,7 +65,6 @@ export function useNewRunBuilder() {
         setRuntime(config);
         setExecutionMode(config.default_execution_mode);
         setAutoRedoWarn(config.auto_redo_warn_enabled);
-        setHitlEnabled(config.hitl_enabled);
       })
       .catch((err: Error) => setError(err.message));
 
@@ -85,10 +93,16 @@ export function useNewRunBuilder() {
     if (competitorMode === "auto") {
       return [];
     }
+    const seen = new Set<string>();
     return competitors
       .split(",")
       .map((item) => item.trim())
-      .filter(Boolean);
+      .filter((item) => {
+        const key = item.toLocaleLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
   }, [competitorMode, competitors]);
   const selectedScenario = useMemo(
     () => scenarioPacks.find((pack) => pack.id === scenarioId) ?? null,
@@ -100,6 +114,24 @@ export function useNewRunBuilder() {
     [selectedScenario],
   );
   const runBlockedByQuota = quotaDecision?.allowed === false;
+  const manualScopeError = useMemo(() => {
+    if (competitorMode !== "manual" || !targetName.trim()) return null;
+    const budget = depthBudgets[researchDepth];
+    if (competitorList.length > budget.competitors) {
+      return t("newRun.competitorLimit")
+        .replace("{requested}", String(competitorList.length))
+        .replace("{limit}", String(budget.competitors));
+    }
+    const scopeKey = (name: string) => name.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+    const includesTarget = competitorList.some((name) => scopeKey(name) === scopeKey(targetName));
+    const slices = Math.max(1, competitorList.length + (includesTarget ? 0 : 1)) * selected.length;
+    if (slices > budget.slices) {
+      return t("newRun.sliceLimit")
+        .replace("{requested}", String(slices))
+        .replace("{limit}", String(budget.slices));
+    }
+    return null;
+  }, [competitorList, competitorMode, researchDepth, selected.length, targetName, t]);
 
   useEffect(() => {
     setSelected((current) => mergeDimensions(current, lockedDimensions, []));
@@ -145,9 +177,9 @@ export function useNewRunBuilder() {
     );
   }
 
-  function toggleHitl(enabled: boolean) {
-    setHitlEnabled(enabled);
-    if (enabled) {
+  function updateCollaborationMode(mode: CollaborationMode) {
+    setCollaborationMode(mode);
+    if (mode === "assisted") {
       setAutoRedoWarn(false);
     }
   }
@@ -158,6 +190,10 @@ export function useNewRunBuilder() {
     }
     if (runBlockedByQuota) {
       setError(quotaDecision?.reason ?? "Workspace quota blocks new runs.");
+      return;
+    }
+    if (manualScopeError) {
+      setError(manualScopeError);
       return;
     }
     const productName = targetName.trim();
@@ -199,8 +235,15 @@ export function useNewRunBuilder() {
         scenario_id: scenarioId || null,
         execution_mode: executionMode,
         output_language: outputLanguage,
-        auto_redo_warn_enabled: autoRedoWarn,
-        hitl_enabled: hitlEnabled,
+        research_depth: researchDepth,
+        collaboration_mode: collaborationMode,
+        decision_brief: {
+          decision_question: decisionQuestion.trim(),
+          primary_job: primaryJob.trim(),
+          success_metric: successMetric.trim(),
+        },
+        auto_redo_warn_enabled: collaborationMode === "ai" && autoRedoWarn,
+        hitl_enabled: collaborationMode === "assisted",
       };
       const run = await createRun(payload);
       navigate(`/runs/${"id" in run ? run.id : run.run_id}`);
@@ -215,16 +258,21 @@ export function useNewRunBuilder() {
   return {
     applyScenario,
     autoRedoWarn,
+    collaborationMode,
     competitorList,
     competitorMode,
     competitors,
     dynamicScenarioSelected,
     error,
     executionMode,
-    hitlEnabled,
+    decisionQuestion,
+    primaryJob,
+    successMetric,
     isSubmitting,
     lockedDimensions,
+    manualScopeError,
     outputLanguage,
+    researchDepth,
     quotaDecision,
     runBlockedByQuota,
     runtime,
@@ -234,11 +282,16 @@ export function useNewRunBuilder() {
     selectedLayer,
     selectedScenario,
     setAutoRedoWarn,
+    setCollaborationMode: updateCollaborationMode,
     setCompetitorMode,
     setCompetitors,
     setError,
     setExecutionMode,
+    setDecisionQuestion,
+    setPrimaryJob,
+    setSuccessMetric,
     setOutputLanguage,
+    setResearchDepth,
     setScenarioId,
     setSelected,
     setTopic,
@@ -257,7 +310,6 @@ export function useNewRunBuilder() {
     skills,
     submitRun,
     toggleDimension,
-    toggleHitl,
     topic,
     updateManualMode,
     updateSelectedLayer,

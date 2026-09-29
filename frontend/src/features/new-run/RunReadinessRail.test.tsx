@@ -33,10 +33,11 @@ function renderRail(props: Partial<ComponentProps<typeof RunReadinessRail>> = {}
         autoRedoWarn={false}
         competitorList={["Competitor A"]}
         competitorMode="manual"
+        collaborationMode="ai"
         dynamicScenarioSelected={false}
         error={null}
         executionMode="real"
-        hitlEnabled={false}
+        manualScopeError={null}
         isSubmitting={false}
         quotaDecision={quotaDecision}
         runBlockedByQuota={false}
@@ -44,9 +45,9 @@ function renderRail(props: Partial<ComponentProps<typeof RunReadinessRail>> = {}
         targetName="示例产品"
         selected={["pricing"]}
         selectedLayer="L1"
+        researchDepth="standard"
         selectedScenario={null}
         setAutoRedoWarn={vi.fn()}
-        toggleHitl={vi.fn()}
         {...props}
       />
     </form>,
@@ -83,15 +84,24 @@ describe("RunReadinessRail", () => {
     expect(button).toHaveAttribute("data-action-state", "loading");
   });
 
-  it("updates real HITL local state", async () => {
-    const user = userEvent.setup();
-    const toggleHitl = vi.fn();
-    renderRail({ toggleHitl });
+  it("shows one collaboration selection and keeps AI auto redo unavailable in assisted mode", async () => {
+    const setAutoRedoWarn = vi.fn();
+    renderRail({ collaborationMode: "assisted", setAutoRedoWarn });
+    expect(screen.queryByRole("checkbox", { name: /human review pauses|人工审核暂停/i })).not.toBeInTheDocument();
+    const autoRedo = screen.getByRole("checkbox", { name: /自动重做警告|auto-redo warnings/i });
+    expect(autoRedo).toBeDisabled();
+    await userEvent.setup().click(autoRedo);
+    expect(setAutoRedoWarn).not.toHaveBeenCalled();
+  });
 
-    await user.click(
-      screen.getByRole("checkbox", { name: /human review pauses|人工审核暂停/i }),
-    );
+  it("never shows AI auto redo as selected during assisted review", () => {
+    renderRail({ collaborationMode: "assisted", autoRedoWarn: true });
+    expect(screen.getByRole("checkbox", { name: /自动重做警告|auto-redo warnings/i })).not.toBeChecked();
+  });
 
-    expect(toggleHitl).toHaveBeenCalledWith(true);
+  it("blocks a manual scope that exceeds its slice budget before submit", () => {
+    renderRail({ manualScopeError: "请求 9 个切片，当前档位最多 6 个切片。" });
+    expect(screen.getByRole("button", { name: /开始运行/i })).toBeDisabled();
+    expect(screen.getByText(/请求 9 个切片/)).toBeInTheDocument();
   });
 });

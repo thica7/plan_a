@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -168,6 +168,16 @@ describe("useRunDetailController background refresh", () => {
       }, 0);
       return vi.fn();
     });
+  });
+
+  it("sends the reviewer's note when resuming evidence collection", async () => {
+    mocks.getRun.mockResolvedValue({ ...makeDetail(), current_node: "evidence_hitl" });
+    mocks.subscribeRun.mockReturnValue(vi.fn());
+    mocks.resumeRun.mockResolvedValue({ ...makeDetail(), current_node: "qa_hitl" });
+    const { result } = renderHook(() => useRunDetailController(), { wrapper });
+    await waitFor(() => expect(result.current.detail?.current_node).toBe("evidence_hitl"));
+    await act(async () => { await result.current.handleHitl("redo", "  核查发布日期  "); });
+    expect(mocks.resumeRun).toHaveBeenCalledWith("run-1", { decision: "redo", note: "核查发布日期" });
   });
 
   it("keeps the loaded detail when an event-triggered refresh fails", async () => {

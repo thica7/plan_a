@@ -33,6 +33,19 @@
   gap: 12px;
 }
 
+.decision-brief-fields {
+  border-top: 1px solid var(--border-soft);
+  display: grid;
+  gap: var(--space-4);
+  padding-top: var(--space-6);
+}
+
+.decision-brief-fields p {
+  color: var(--muted);
+  font-size: var(--font-size-label);
+  margin: 0;
+}
+
 .run-builder-rail {
   gap: var(--space-7);
   position: sticky;
@@ -512,6 +525,51 @@
   display: grid;
   gap: var(--space-4);
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.research-depth-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.collaboration-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.research-depth-card,
+.collaboration-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: var(--space-3);
+  min-height: 98px;
+  padding: var(--space-5);
+  text-align: left;
+}
+
+.research-depth-card.active,
+.collaboration-card.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.research-depth-card:focus-visible,
+.collaboration-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.research-depth-card span,
+.collaboration-card span {
+  color: var(--muted);
+  font-size: var(--font-size-label);
+  line-height: 1.45;
 }
 
 .depth-option-card {

@@ -297,7 +297,7 @@ export function useRunDetailController() {
     }
   }
 
-  async function handleHitl(decision: HitlDecision) {
+  async function handleHitl(decision: HitlDecision, note?: string) {
     if (!runId) return;
     if (activeHitlDecision) return;
     setActiveHitlDecision(decision);
@@ -312,7 +312,7 @@ export function useRunDetailController() {
               dimensions: parsePlanDimensionsInput(planDimensions),
               ...serializeCompetitorReview(competitorRows),
             }
-          : { decision, note: "Reviewed in HITL panel" };
+          : { decision, note: note === undefined ? "Reviewed in HITL panel" : note.trim() };
       if (decision === "modify_plan" && !canApplyPlanReviewChanges) {
         return;
       }

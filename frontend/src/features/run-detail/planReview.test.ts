@@ -64,9 +64,21 @@ describe("plan review dimension helpers", () => {
   it("restores the visible HITL review stage from persisted current_node", () => {
     expect(hitlStageFromCurrentNode("planner_hitl")).toBe("planner");
     expect(hitlStageFromCurrentNode("qa_hitl")).toBe("qa");
+    expect(hitlStageFromCurrentNode("evidence_hitl")).toBe("evidence");
     expect(hitlStageFromCurrentNode("writer")).toBeNull();
     expect(fallbackHitlMessage("planner")).toBe("Planner is ready for review.");
     expect(fallbackHitlMessage("qa")).toBe("QA review is ready.");
+  });
+
+  it("restores the matching evidence review payload", () => {
+    const interrupt = visibleHitlInterruptForRun("interrupted", "evidence_hitl", [{
+      type: "interrupt",
+      message: "Review collected evidence",
+      payload: { stage: "evidence", interrupt_node: "evidence_hitl", sources: [{ id: "s1" }], redo_remaining: 0 },
+    }]);
+    expect(interrupt?.payload.stage).toBe("evidence");
+    expect(interrupt?.payload.sources).toEqual([{ id: "s1" }]);
+    expect(interrupt?.payload.redo_remaining).toBe(0);
   });
 
   it("ignores stale planner interrupts when the persisted node is QA review", () => {

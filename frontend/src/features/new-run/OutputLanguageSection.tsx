@@ -17,7 +17,7 @@ export function OutputLanguageSection({
     <section className="form-section execution-section">
       <SectionHeading
         icon={<Languages size={17} aria-hidden />}
-        index="06"
+        index="07"
         meta={t("newRun.outputLanguageDesc")}
         title={t("newRun.outputLanguage")}
       />

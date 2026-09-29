@@ -18,26 +18,27 @@ import type {
 import { ActionButton } from "../../components/interaction/ActionButton";
 import { useTranslation } from "../../stores/i18n";
 import { RuntimeLine } from "./RuntimeLine";
-import type { CompetitorMode, ExecutionMode, LayerSelection } from "./types";
+import type { CollaborationMode, CompetitorMode, ExecutionMode, LayerSelection, ResearchDepth } from "./types";
 
 interface RunReadinessRailProps {
   targetName: string;
   autoRedoWarn: boolean;
   competitorList: string[];
   competitorMode: CompetitorMode;
+  collaborationMode: CollaborationMode;
   dynamicScenarioSelected: boolean;
   error: string | null;
   executionMode: ExecutionMode;
-  hitlEnabled: boolean;
+  manualScopeError: string | null;
   isSubmitting: boolean;
   quotaDecision: WorkspaceQuotaDecision | null;
   runBlockedByQuota: boolean;
   runtime: RuntimeConfig | null;
   selected: string[];
   selectedLayer: LayerSelection;
+  researchDepth: ResearchDepth;
   selectedScenario: ScenarioPack | null;
   setAutoRedoWarn: (enabled: boolean) => void;
-  toggleHitl: (enabled: boolean) => void;
 }
 
 export function RunReadinessRail({
@@ -45,19 +46,20 @@ export function RunReadinessRail({
   autoRedoWarn,
   competitorList,
   competitorMode,
+  collaborationMode,
   dynamicScenarioSelected,
   error,
   executionMode,
-  hitlEnabled,
+  manualScopeError,
   isSubmitting,
   quotaDecision,
   runBlockedByQuota,
   runtime,
   selected,
   selectedLayer,
+  researchDepth,
   selectedScenario,
   setAutoRedoWarn,
-  toggleHitl,
 }: RunReadinessRailProps) {
   const { t } = useTranslation();
 
@@ -69,6 +71,7 @@ export function RunReadinessRail({
   const temporalReady = Boolean(runtime?.temporal_cutover_ready);
   const pydanticReady = Boolean(runtime?.pydantic_ai_model_backed_ready);
   const complianceReady = Boolean(runtime?.compliance_redaction_enabled);
+  const aiAutoRedoEnabled = collaborationMode === "ai" && autoRedoWarn;
   const readyCount = [
     llmReady,
     searchReady,
@@ -120,8 +123,8 @@ export function RunReadinessRail({
                 ? runtime.backup_llm_model
                 : t('run.credentialsMissing')}
           </ReadinessItem>
-          <ReadinessItem icon={<UserCheck size={15} />} ok={hitlEnabled || autoRedoWarn} title={t('run.qualityControls')}>
-            {hitlEnabled ? t('run.humanReviewEnabled') : autoRedoWarn ? t('run.autoRedoEnabled') : t('run.manualLaunch')}
+          <ReadinessItem icon={<UserCheck size={15} />} ok={collaborationMode === "assisted" || aiAutoRedoEnabled} title={t('run.qualityControls')}>
+            {collaborationMode === "assisted" ? t('run.humanReviewEnabled') : aiAutoRedoEnabled ? t('run.autoRedoEnabled') : t('run.manualLaunch')}
           </ReadinessItem>
         </div>
 
@@ -194,13 +197,13 @@ export function RunReadinessRail({
 
         <div className="readiness-section">
           <header>
-            <h3>{t('run.hitlCheckpoints')}</h3>
-            <span>{hitlEnabled ? t('common.enabled') : t('common.optional')}</span>
+            <h3>{t('run.autoRedoWarnings')}</h3>
+            <span>{collaborationMode === "ai" ? t('common.optional') : t('newRun.collaboration.assisted')}</span>
           </header>
           <label className="toggle-row compact">
             <input
-              checked={autoRedoWarn}
-              disabled={runtime?.auto_redo_enabled === false || hitlEnabled}
+              checked={aiAutoRedoEnabled}
+              disabled={runtime?.auto_redo_enabled === false || collaborationMode === "assisted"}
               onChange={(event) => setAutoRedoWarn(event.target.checked)}
               type="checkbox"
             />
@@ -209,19 +212,9 @@ export function RunReadinessRail({
               <em>{t('run.autoRedoWarningsDesc')}</em>
             </span>
           </label>
-          <label className="toggle-row compact">
-            <input
-              checked={hitlEnabled}
-              onChange={(event) => toggleHitl(event.target.checked)}
-              type="checkbox"
-            />
-            <span>
-              <strong>{t('run.humanReviewPauses')}</strong>
-              <em>{t('run.humanReviewPausesDesc')}</em>
-            </span>
-          </label>
         </div>
 
+        {manualScopeError ? <p className="error-line" role="alert">{manualScopeError}</p> : null}
         {error ? <p className="error-line">{error}</p> : null}
 
         <ActionButton
@@ -232,10 +225,12 @@ export function RunReadinessRail({
             kind: 'submit',
             description: 'submits the new run builder form'
           }}
-          disabled={targetName.trim().length < 2 || selected.length === 0 || runBlockedByQuota || (competitorMode === "auto" && !searchReady)}
+          disabled={Boolean(manualScopeError) || targetName.trim().length < 2 || selected.length === 0 || runBlockedByQuota || (competitorMode === "auto" && !searchReady)}
           disabledReason={
             runBlockedByQuota
               ? quotaDecision?.reason || t('run.disabled.quota')
+              : manualScopeError
+                ? t('run.disabled.scope')
               : targetName.trim().length < 2
                 ? t('run.disabled.targetProduct')
               : competitorMode === "auto" && !searchReady
@@ -258,6 +253,14 @@ export function RunReadinessRail({
           <div>
             <dt>{t('runHeader.layer')}</dt>
             <dd>{selectedLayer}</dd>
+          </div>
+          <div>
+            <dt>{t('newRun.researchDepth')}</dt>
+            <dd>{t(`newRun.researchDepth.${researchDepth}`)}</dd>
+          </div>
+          <div>
+            <dt>{t('newRun.collaboration')}</dt>
+            <dd>{t(`newRun.collaboration.${collaborationMode}`)}</dd>
           </div>
           <div>
             <dt>{t('runHeader.scenario')}</dt>

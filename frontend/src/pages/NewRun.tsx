@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 import { CompetitorsSection } from "../features/new-run/CompetitorsSection";
+import { CollaborationSection } from "../features/new-run/CollaborationSection";
 import { DepthSection } from "../features/new-run/DepthSection";
 import { DimensionsSection } from "../features/new-run/DimensionsSection";
 import { scenarioPacksForProduct } from "../features/new-run/dimensions";
@@ -7,6 +8,7 @@ import { ExecutionModePanel } from "../features/new-run/ExecutionModePanel";
 import { LensSection } from "../features/new-run/LensSection";
 import { OutputLanguageSection } from "../features/new-run/OutputLanguageSection";
 import { RunReadinessRail } from "../features/new-run/RunReadinessRail";
+import { ResearchDepthSection } from "../features/new-run/ResearchDepthSection";
 import { ScopeSection } from "../features/new-run/ScopeSection";
 import { useNewRunBuilder } from "../features/new-run/useNewRunBuilder";
 import { useTranslation } from "../stores/i18n";
@@ -46,6 +48,12 @@ export function NewRun() {
             setProductUseCases={builder.setProductUseCases}
             productMarket={builder.productMarket}
             setProductMarket={builder.setProductMarket}
+            decisionQuestion={builder.decisionQuestion}
+            setDecisionQuestion={builder.setDecisionQuestion}
+            primaryJob={builder.primaryJob}
+            setPrimaryJob={builder.setPrimaryJob}
+            successMetric={builder.successMetric}
+            setSuccessMetric={builder.setSuccessMetric}
           />
           <LensSection
             applyScenario={builder.applyScenario}
@@ -75,6 +83,10 @@ export function NewRun() {
             selectedLayer={builder.selectedLayer}
             updateSelectedLayer={builder.updateSelectedLayer}
           />
+          <ResearchDepthSection
+            researchDepth={builder.researchDepth}
+            setResearchDepth={builder.setResearchDepth}
+          />
           <OutputLanguageSection
             outputLanguage={builder.outputLanguage}
             setOutputLanguage={builder.setOutputLanguage}
@@ -82,6 +94,10 @@ export function NewRun() {
           <ExecutionModePanel
             executionMode={builder.executionMode}
             setExecutionMode={builder.setExecutionMode}
+          />
+          <CollaborationSection
+            collaborationMode={builder.collaborationMode}
+            setCollaborationMode={builder.setCollaborationMode}
           />
           <details className="advanced-options-row">
             <summary>{t('newRun.advancedOptions')}</summary>
@@ -93,10 +109,11 @@ export function NewRun() {
           autoRedoWarn={builder.autoRedoWarn}
           competitorList={builder.competitorList}
           competitorMode={builder.competitorMode}
+          collaborationMode={builder.collaborationMode}
           dynamicScenarioSelected={builder.dynamicScenarioSelected}
           error={builder.error}
           executionMode={builder.executionMode}
-          hitlEnabled={builder.hitlEnabled}
+          manualScopeError={builder.manualScopeError}
           isSubmitting={builder.isSubmitting}
           quotaDecision={builder.quotaDecision}
           runBlockedByQuota={builder.runBlockedByQuota}
@@ -104,9 +121,9 @@ export function NewRun() {
           targetName={builder.targetName}
           selected={builder.selected}
           selectedLayer={builder.selectedLayer}
+          researchDepth={builder.researchDepth}
           selectedScenario={builder.selectedScenario}
           setAutoRedoWarn={builder.setAutoRedoWarn}
-          toggleHitl={builder.toggleHitl}
         />
       </form>
     </section>

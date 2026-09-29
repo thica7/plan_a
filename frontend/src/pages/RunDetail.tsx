@@ -1,5 +1,6 @@
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { PlanReviewModal } from "../features/hitl/PlanReviewModal";
+import { EvidenceReviewModal } from "../features/hitl/EvidenceReviewModal";
 import { QaReviewModal } from "../features/hitl/QaReviewModal";
 import { RunDetailContent } from "../features/run-detail/RunDetailContent";
 import { RunDetailHeader } from "../features/run-detail/RunDetailHeader";
@@ -7,6 +8,7 @@ import { RunDetailTabs } from "../features/run-detail/RunDetailTabs";
 import { RunSummaryStrip } from "../features/run-detail/RunSummaryStrip";
 import { useRunDetailController } from "../features/run-detail/useRunDetailController";
 import { useTranslation } from "../stores/i18n";
+import type { EvidenceReviewPayload } from "../api/types";
 
 export function RunDetail() {
   const { t } = useTranslation();
@@ -100,6 +102,14 @@ export function RunDetail() {
             onCompetitorNoteChange={handleCompetitorNoteChange}
             onDeleteCompetitor={handleDeleteCompetitor}
             onDimensionsChange={setPlanDimensions}
+          />
+        ) : interruptStage === "evidence" ? (
+          <EvidenceReviewModal
+            activeDecision={activeHitlDecision === "accept" || activeHitlDecision === "redo" ? activeHitlDecision : null}
+            isSubmitting={isHitlSubmitting}
+            message={latestInterrupt.message}
+            onDecision={handleHitl}
+            payload={latestInterrupt.payload as EvidenceReviewPayload}
           />
         ) : (
           <QaReviewModal

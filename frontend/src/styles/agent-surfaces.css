@@ -260,6 +260,78 @@
   font-size: 12px;
 }
 
+.evidence-review-panel h3 {
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
+.evidence-review-list {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.evidence-review-source {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.evidence-review-source h4 {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.evidence-review-source a {
+  color: var(--accent);
+}
+
+.evidence-review-source dl {
+  display: grid;
+  gap: 6px 12px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin: 0;
+}
+
+.evidence-review-source dl div {
+  min-width: 0;
+}
+
+.evidence-review-source dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.evidence-review-source dd {
+  font-size: 12px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.evidence-review-findings {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.evidence-review-findings li {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.evidence-review-findings small {
+  color: var(--muted);
+}
+
 .competitor-review-panel {
   background: rgba(255, 255, 255, 0.58);
   border: 1px solid rgba(183, 121, 31, 0.18);
