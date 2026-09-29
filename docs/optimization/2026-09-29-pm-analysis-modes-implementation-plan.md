@@ -51,7 +51,7 @@ assert "4,000-6,000" in first_draft_prompt(quick_detail).user
 
 **Files:** `backend/packages/orchestrator/graph.py`、`backend/packages/orchestrator/service.py`、`backend/packages/agents/qa/logic.py`、`backend/packages/schema/api_dto.py`、`backend/tests/unit/test_evidence_hitl.py`、`backend/tests/unit/test_run_service.py`。
 
-- [ ] 写失败测试：assisted demo 在 `planner_hitl → evidence_hitl → qa_hitl` 依次暂停；AI 模式无暂停；旧 `hitl_enabled=true` 仍只有两处；证据关口载荷列出来源与当前问题；`redo` 最多一次受深度与现有重试预算约束。
+- [x] 写失败测试：assisted demo 在 `planner_hitl → evidence_hitl → qa_hitl` 依次暂停；AI 模式无暂停；旧 `hitl_enabled=true` 仍只有两处；证据关口载荷列出来源与当前问题；`redo` 最多一次受深度与现有重试预算约束。
 
 ```python
 assert detail.current_node == "evidence_hitl"
@@ -59,10 +59,10 @@ assert service.has_pending_interrupt(detail.id)
 await service.resume(detail.id, HitlResumeRequest(decision="accept"))
 ```
 
-- [ ] 运行定向测试观察 `evidence_hitl` 节点缺失。
-- [ ] 在 real/demo/scoped-redo 图的 collect QA 后增加节点；复用 `_maybe_interrupt` 并扩展 current node、恢复路由和生命周期审计。证据页列原文来源、维度、日期、来源质量和 QA 问题；`redo` 在剩余轮次内回 collector，耗尽后保留问题并继续审核，不无限循环。
-- [ ] 修改最终 QA `force_pass`：保留问题和审查理由，最终 release gate 仍独立判断；验证现有审核测试。
-- [ ] 跑 `test_evidence_hitl.py`、`test_hitl_runtime_commands.py` 和相关 `test_run_service.py`。
+- [x] 运行定向测试观察 `evidence_hitl` 节点缺失。
+- [x] 在 real/demo/scoped-redo 图的 collect QA 后增加节点；复用 `_maybe_interrupt` 并扩展 current node、恢复路由和生命周期审计。证据页列原文来源、维度、日期、来源质量和 QA 问题；`redo` 在剩余轮次内回 collector，耗尽后保留问题并继续审核，不无限循环。
+- [x] 修改最终 QA `force_pass`：保留问题和审查理由，最终 release gate 仍独立判断；验证现有审核测试。
+- [x] 跑 `test_evidence_hitl.py`、`test_hitl_runtime_commands.py` 和相关 `test_run_service.py`。
 
 ### Task 4: 决策简报与产品机会输出
 
