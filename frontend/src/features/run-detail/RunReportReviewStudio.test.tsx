@@ -1,13 +1,20 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { exportReportVersion, startReportApprovalWorkflow } from "../../api/client";
 import type { RawSource, RunDetail } from "../../api/types";
+import { useI18n } from "../../stores/i18n";
 import { RunReportReviewStudio } from "./RunReportReviewStudio";
 
 vi.mock("../../api/client", () => ({
   exportReportVersion: vi.fn(),
   startReportApprovalWorkflow: vi.fn(),
 }));
+
+afterEach(() => {
+  useI18n.getState().setLocale("zh-CN");
+  vi.clearAllMocks();
+});
 
 const coreSource: RawSource = {
   id: "core-source",
@@ -133,6 +140,59 @@ function makeDetail(): RunDetail {
 }
 
 describe("RunReportReviewStudio artifact layers", () => {
+  it.each([
+    { button: "MARKDOWN", chinese: "已导出 report.md", english: "Exported report.md" },
+    { button: "请求审批", chinese: "审批流程 运行中: approval-1", english: "Approval workflow Running: approval-1" },
+  ])("updates $button feedback when the UI language changes after completion", async ({ button, chinese, english }) => {
+    vi.mocked(exportReportVersion).mockResolvedValue({ artifact: { filename: "report.md" } } as Awaited<ReturnType<typeof exportReportVersion>>);
+    vi.mocked(startReportApprovalWorkflow).mockResolvedValue({ status: "running", workflow_id: "approval-1" } as unknown as Awaited<ReturnType<typeof startReportApprovalWorkflow>>);
+    const detail = makeDetail();
+    detail.enterprise_projection = {
+      report_version: { id: "report-1", version_number: 1, status: "draft", claim_ids: [] },
+    } as unknown as RunDetail["enterprise_projection"];
+    render(<RunReportReviewStudio detail={detail} reportSources={{ aliases: {}, sources: [coreSource] }} />);
+
+    await userEvent.setup().click(screen.getByRole("button", { name: button }));
+    expect(await screen.findByText(chinese)).toBeInTheDocument();
+    act(() => useI18n.getState().setLocale("en-US"));
+    expect(screen.getByText(english)).toBeInTheDocument();
+    expect(screen.queryByText(chinese)).not.toBeInTheDocument();
+    if (button === "MARKDOWN") {
+      expect(exportReportVersion).toHaveBeenCalledWith("report-1", "markdown");
+    } else {
+      expect(startReportApprovalWorkflow).toHaveBeenCalledWith({ report_version_id: "report-1", requested_by: "frontend-review-studio" });
+    }
+  });
+
+  it.each([
+    { button: "MARKDOWN", pendingChinese: "导出中... MARKDOWN", pendingEnglish: "Exporting... MARKDOWN", errorChinese: "无法导出报告", errorEnglish: "Unable to export report" },
+    { button: "请求审批", pendingChinese: "正在启动审批流程...", pendingEnglish: "Starting approval workflow...", errorChinese: "无法请求审批", errorEnglish: "Unable to request approval" },
+  ])("updates pending and fallback error feedback for $button when the UI language changes", async ({ button, pendingChinese, pendingEnglish, errorChinese, errorEnglish }) => {
+    let rejectRequest!: (reason: unknown) => void;
+    const request = new Promise<never>((_, reject) => { rejectRequest = reject; });
+    if (button === "MARKDOWN") {
+      vi.mocked(exportReportVersion).mockReturnValue(request);
+    } else {
+      vi.mocked(startReportApprovalWorkflow).mockReturnValue(request);
+    }
+    const detail = makeDetail();
+    detail.enterprise_projection = {
+      report_version: { id: "report-1", version_number: 1, status: "draft", claim_ids: [] },
+    } as unknown as RunDetail["enterprise_projection"];
+    render(<RunReportReviewStudio detail={detail} reportSources={{ aliases: {}, sources: [coreSource] }} />);
+
+    await userEvent.setup().click(screen.getByRole("button", { name: button }));
+    expect(screen.getByText(pendingChinese)).toBeInTheDocument();
+    act(() => useI18n.getState().setLocale("en-US"));
+    expect(screen.getByText(pendingEnglish)).toBeInTheDocument();
+    expect(screen.queryByText(pendingChinese)).not.toBeInTheDocument();
+    await act(async () => rejectRequest(null));
+    expect(screen.getByText(errorEnglish)).toBeInTheDocument();
+    act(() => useI18n.getState().setLocale("zh-CN"));
+    expect(screen.getByText(errorChinese)).toBeInTheDocument();
+    expect(screen.queryByText(errorEnglish)).not.toBeInTheDocument();
+  });
+
   it("shows Chinese review labels and counts Chinese text by characters", () => {
     const detail = { ...makeDetail(), report_md: "中文报告", report_artifact: null };
     render(<RunReportReviewStudio detail={detail} reportSources={{ aliases: {}, sources: [coreSource] }} />);

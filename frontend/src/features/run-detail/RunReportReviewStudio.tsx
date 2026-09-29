@@ -25,6 +25,13 @@ interface RunReportReviewStudioProps {
 }
 
 type ReviewActionState = "idle" | "pending" | "success" | "error";
+type ReviewActionFeedback =
+  | { type: "approval-pending" }
+  | { type: "approval-success"; status: string; workflowId: string }
+  | { type: "export-pending"; format: string }
+  | { type: "export-success"; filename: string }
+  | { type: "approval-error" | "export-error" }
+  | { type: "system-error"; message: string };
 
 export function RunReportReviewStudio({ detail, reportSources }: RunReportReviewStudioProps) {
   const { locale, t } = useTranslation();
@@ -40,7 +47,7 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
     : selectedMarkdown.trim() ? selectedMarkdown.trim().split(/\s+/).length : 0;
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [actionState, setActionState] = useState<ReviewActionState>("idle");
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<ReviewActionFeedback | null>(null);
   const reportVersion = detail.enterprise_projection?.report_version ?? null;
 
   const sourceMap = useMemo(
@@ -79,31 +86,51 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
   async function handleRequestApproval() {
     if (!reportVersion) return;
     setActionState("pending");
-    setActionMessage(t('reportStudio.startingApproval'));
+    setActionFeedback({ type: "approval-pending" });
     try {
       const response = await startReportApprovalWorkflow({
         report_version_id: reportVersion.id,
         requested_by: "frontend-review-studio",
       });
       setActionState("success");
-      setActionMessage(`${t('reportStudio.approvalWorkflow')} ${displayLabel(response.status, locale)}: ${response.workflow_id}`);
+      setActionFeedback({ type: "approval-success", status: response.status, workflowId: response.workflow_id });
     } catch (err) {
       setActionState("error");
-      setActionMessage(err instanceof Error ? err.message : t('reportStudio.unableToApprove'));
+      setActionFeedback(err instanceof Error ? { type: "system-error", message: err.message } : { type: "approval-error" });
     }
   }
 
   async function handleExport(format: "markdown" | "html" | "csv") {
     if (!reportVersion) return;
     setActionState("pending");
-    setActionMessage(`${t('common.exporting')} ${format.toUpperCase()}`);
+    setActionFeedback({ type: "export-pending", format });
     try {
       const response = await exportReportVersion(reportVersion.id, format);
       setActionState("success");
-      setActionMessage(`${t('reportStudio.exported')} ${response.artifact.filename}`);
+      setActionFeedback({ type: "export-success", filename: response.artifact.filename });
     } catch (err) {
       setActionState("error");
-      setActionMessage(err instanceof Error ? err.message : t('reportStudio.unableToExport'));
+      setActionFeedback(err instanceof Error ? { type: "system-error", message: err.message } : { type: "export-error" });
+    }
+  }
+
+  function renderActionFeedback() {
+    if (!actionFeedback) return null;
+    switch (actionFeedback.type) {
+      case "approval-pending":
+        return t('reportStudio.startingApproval');
+      case "approval-success":
+        return `${t('reportStudio.approvalWorkflow')} ${displayLabel(actionFeedback.status, locale)}: ${actionFeedback.workflowId}`;
+      case "export-pending":
+        return `${t('common.exporting')} ${actionFeedback.format.toUpperCase()}`;
+      case "export-success":
+        return `${t('reportStudio.exported')} ${actionFeedback.filename}`;
+      case "approval-error":
+        return t('reportStudio.unableToApprove');
+      case "export-error":
+        return t('reportStudio.unableToExport');
+      case "system-error":
+        return <SystemMessage message={actionFeedback.message} />;
     }
   }
 
@@ -171,7 +198,7 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
               ))}
             </div>
             {!reportVersion ? <p className="muted-line">{t('reportStudio.noEnterpriseReport')}</p> : null}
-            {actionMessage ? <p className={`review-action-message ${actionState}`}><SystemMessage message={actionMessage} /></p> : null}
+            {actionFeedback ? <p className={`review-action-message ${actionState}`}>{renderActionFeedback()}</p> : null}
           </Panel>
         </aside>
       </div>
