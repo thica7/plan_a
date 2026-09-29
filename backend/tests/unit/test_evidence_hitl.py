@@ -724,6 +724,87 @@ async def test_duplicate_refresh_keeps_new_fetch_time_and_original_page_date() -
 
 
 @pytest.mark.asyncio
+async def test_kb_refresh_uses_new_web_identity_without_losing_kb_provenance() -> None:
+    service = _service(real=True)
+    old_time = (datetime.utcnow() - timedelta(days=120)).replace(microsecond=0).isoformat()
+    new_time = (datetime.utcnow() - timedelta(days=1)).replace(microsecond=0).isoformat()
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="KB source live refresh",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="real",
+                collaboration_mode="assisted",
+            )
+        )
+        detail.evidence_refresh_active = True
+        old_kb = RawSource(
+            id="kb-pricing-source",
+            competitor="A",
+            covered_competitors=["A"],
+            dimension="pricing",
+            source_type="webpage_verified",
+            title="A pricing",
+            url="https://example.com/a/pricing",
+            content_hash="same-pricing-hash",
+            confidence=0.6,
+            candidate_origin="rag_kb",
+            fetch_method="rag_kb_retrieve",
+            metadata={
+                "kb_retrieved": True,
+                "kb_document_id": "kb-doc-1",
+                "kb_fetched_at": old_time,
+            },
+        )
+        live_web = old_kb.model_copy(
+            update={
+                "id": "web-pricing-source",
+                "confidence": 0.9,
+                "candidate_origin": "web_search",
+                "fetch_method": "basic_httpx",
+                "metadata": {"fetched_at": new_time},
+            }
+        )
+        detail.raw_sources = [old_kb, live_web]
+
+        normalized = service._normalize_collected_sources(detail, ["pricing"])
+
+        assert len(normalized) == 1
+        refreshed = normalized[0]
+        assert refreshed.id == "web-pricing-source"
+        assert refreshed.candidate_origin == "web_search"
+        assert refreshed.fetch_method == "basic_httpx"
+        assert refreshed.metadata["fetched_at"] == new_time
+        assert refreshed.metadata.get("kb_retrieved") is not True
+        assert refreshed.metadata["prior_kb_document_id"] == "kb-doc-1"
+        assert refreshed.metadata["prior_kb_fetched_at"] == old_time
+        assert [item["candidate_origin"] for item in refreshed.metadata["refresh_observations"]] == [
+            "rag_kb", "web_search",
+        ]
+        assert service._source_observed_at(refreshed) == datetime.fromisoformat(new_time)
+        assert service._source_freshness_problem(refreshed) is None
+
+        old_page = old_kb.model_copy(
+            update={"metadata": {**old_kb.metadata, "source_published_at": old_time}}
+        )
+        new_page = live_web.model_copy(
+            update={"metadata": {
+                "fetched_at": new_time,
+                "source_published_at": new_time,
+                "last_verified_at": new_time,
+            }}
+        )
+        detail.raw_sources = [old_page, new_page]
+        published = service._normalize_collected_sources(detail, ["pricing"])[0]
+        assert published.metadata["source_published_at"] == old_time
+        assert service._source_observed_at(published) == datetime.fromisoformat(old_time)
+        assert service._source_freshness_problem(published) is not None
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_quick_evidence_redo_rejects_without_consuming_interrupt() -> None:
     service = _service()
     try:

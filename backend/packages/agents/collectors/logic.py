@@ -2104,22 +2104,61 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         if new_time is None or (old_time is not None and new_time <= old_time):
             return existing
 
-        metadata = dict(existing.metadata)
+        old_kb = bool(
+            existing.candidate_origin == "rag_kb" or existing.metadata.get("kb_retrieved")
+        )
+        live_web = bool(
+            refreshed.candidate_origin != "rag_kb"
+            and not refreshed.metadata.get("kb_retrieved")
+            and refreshed.fetch_method not in {"", "rag_kb_retrieve"}
+            and not refreshed.failure_reason
+        )
+        use_refreshed_identity = old_kb and live_web
+        metadata = dict(refreshed.metadata if use_refreshed_identity else existing.metadata)
         metadata["fetched_at"] = new_fetched
         page_date_keys = ("source_published_at", "source_updated_at")
-        if not any(metadata.get(key) for key in page_date_keys):
+        if any(existing.metadata.get(key) for key in page_date_keys):
+            for key in page_date_keys:
+                if existing.metadata.get(key):
+                    metadata[key] = existing.metadata[key]
+                else:
+                    metadata.pop(key, None)
+            if use_refreshed_identity:
+                metadata.pop("last_verified_at", None)
+        else:
             for key in page_date_keys:
                 if refreshed.metadata.get(key):
                     metadata[key] = refreshed.metadata[key]
+        if use_refreshed_identity:
+            for key, value in existing.metadata.items():
+                if key.startswith("kb_"):
+                    metadata[f"prior_{key}"] = value
+            metadata["prior_kb_source_id"] = existing.id
+            metadata["prior_kb_candidate_origin"] = existing.candidate_origin
+            metadata["prior_kb_fetch_method"] = existing.fetch_method
         history = [
-            item for item in metadata.get("refresh_observations", [])
+            item for item in existing.metadata.get("refresh_observations", [])
             if isinstance(item, dict)
         ]
         if not history:
-            history.append({"source_id": existing.id, "fetched_at": old_fetched})
-        history.append({"source_id": refreshed.id, "fetched_at": new_fetched})
+            history.append({
+                "source_id": existing.id,
+                "fetched_at": old_fetched or existing.metadata.get("kb_fetched_at"),
+                "candidate_origin": existing.candidate_origin,
+                "fetch_method": existing.fetch_method,
+            })
+        history.append({
+            "source_id": refreshed.id,
+            "fetched_at": new_fetched,
+            "candidate_origin": refreshed.candidate_origin,
+            "fetch_method": refreshed.fetch_method,
+        })
         metadata["refresh_observations"] = history[-8:]
-        return existing.model_copy(update={"metadata": metadata})
+        source = refreshed if use_refreshed_identity else existing
+        return source.model_copy(update={
+            "covered_competitors": existing.covered_competitors,
+            "metadata": metadata,
+        })
 
     @staticmethod
     def _parse_refresh_fetch_time(value: object) -> datetime | None:
