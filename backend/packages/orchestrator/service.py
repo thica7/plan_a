@@ -86,7 +86,6 @@ from packages.orchestrator.llm_execution import LLMExecutionMixin
 from packages.quality import FinalQualityResult, build_final_quality_result
 from packages.refs import merge_ordered_refs, normalize_dimension_refs
 from packages.research.budget import (
-    ANALYST_ONE_SHOT_FANOUT_SLICES,
     ResearchDepthBudget,
     research_depth_budget,
 )
@@ -870,6 +869,15 @@ class RunService(
     def _build_task_decomposition(self, plan: AnalysisPlan) -> list[AnalysisPlanTask]:
         tasks: list[AnalysisPlanTask] = []
         depth_budget = research_depth_budget(plan.research_depth)
+        analyst_turn_cap = 6
+        if depth_budget is not None:
+            threshold = depth_budget.analyst_one_shot_threshold(
+                self._settings.run_llm_max_calls
+            )
+            analyst_turn_cap = (
+                1 if len(plan.competitors) * len(plan.dimensions) > threshold
+                else depth_budget.analyst_max_turns
+            )
         for competitor in plan.competitors:
             for dimension in plan.dimensions:
                 priority = self._task_priority(plan, dimension)
@@ -903,12 +911,7 @@ class RunService(
                                 base=self._settings.analyst_react_max_turns,
                                 priority=priority,
                             ),
-                            (
-                                1 if depth_budget is not None
-                                and len(plan.competitors) * len(plan.dimensions)
-                                > ANALYST_ONE_SHOT_FANOUT_SLICES
-                                else depth_budget.analyst_max_turns if depth_budget is not None else 6
-                            ),
+                            analyst_turn_cap,
                         ),
                         reason="Analyze the collected slice with schema-first source support.",
                         depends_on=[collector_id],
@@ -957,7 +960,10 @@ class RunService(
         depth_budget = research_depth_budget(plan.research_depth)
         if depth_budget is None:
             return turns
-        if len(plan.competitors) * len(plan.dimensions) > ANALYST_ONE_SHOT_FANOUT_SLICES:
+        threshold = depth_budget.analyst_one_shot_threshold(
+            self._settings.run_llm_max_calls
+        )
+        if len(plan.competitors) * len(plan.dimensions) > threshold:
             return 1
         return min(turns, depth_budget.analyst_max_turns)
 

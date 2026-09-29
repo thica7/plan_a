@@ -25,17 +25,30 @@ class ResearchDepthBudget:
     analyst_max_turns: int
     writer_reserved_calls: int
 
-    def allowed_slices(self, deployment_llm_max_calls: int) -> int:
-        available_calls = (
+    def _available_calls(self, deployment_llm_max_calls: int) -> int:
+        return (
             min(max(1, deployment_llm_max_calls), self.llm_max_calls)
             - self.writer_reserved_calls
             - PLANNER_LLM_RESERVED_CALLS
             - OTHER_PRE_WRITER_LLM_RESERVED_CALLS
         )
+
+    def analyst_one_shot_threshold(self, deployment_llm_max_calls: int) -> int:
+        full_react_calls_per_slice = (
+            self.collector_max_turns + 1 + self.analyst_max_turns + 1
+        )
+        return min(
+            ANALYST_ONE_SHOT_FANOUT_SLICES,
+            max(0, self._available_calls(deployment_llm_max_calls) // full_react_calls_per_slice),
+        )
+
+    def allowed_slices(self, deployment_llm_max_calls: int) -> int:
+        available_calls = self._available_calls(deployment_llm_max_calls)
+        one_shot_threshold = self.analyst_one_shot_threshold(deployment_llm_max_calls)
         allowed = 0
         for slices in range(1, self.max_slices + 1):
             analyst_turns = (
-                1 if slices > ANALYST_ONE_SHOT_FANOUT_SLICES
+                1 if slices > one_shot_threshold
                 else self.analyst_max_turns + 1
             )
             if slices * (self.collector_max_turns + 1 + analyst_turns) > available_calls:

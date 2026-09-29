@@ -233,14 +233,15 @@ async def test_low_deployment_llm_cap_reduces_allowed_scope_for_writer_reserve()
     )
     with pytest.raises(ValueError, match="quick.*slices"):
         await service.create_run(_request(
-            research_depth="quick", competitors=["Cursor", "Copilot"],
-            dimensions=["pricing", "feature"],
+            research_depth="quick", competitors=["Cursor"],
+            dimensions=["pricing", "feature", "persona", "security", "market"],
         ))
     detail = await service.create_run(_request(
-        research_depth="quick", competitors=["Cursor"],
-        dimensions=["pricing", "feature", "persona"],
+        research_depth="quick", competitors=["Cursor", "Copilot"],
+        dimensions=["pricing", "feature"],
     ))
-    assert len(detail.plan.competitors) * len(detail.plan.dimensions) == 3
+    assert len(detail.plan.competitors) * len(detail.plan.dimensions) == 4
+    assert {task.max_turns for task in detail.plan.task_decomposition if task.stage == "analyst"} == {1}
     assert service._run_llm_budget(service._runs[detail.id]).max_calls == 38
 
 
@@ -248,17 +249,63 @@ async def test_low_deployment_llm_cap_reduces_allowed_scope_for_writer_reserve()
 async def test_slice_limit_is_contiguous_across_analyst_one_shot_transition() -> None:
     from packages.research.budget import research_depth_budget
 
-    assert research_depth_budget("standard").allowed_slices(70) == 6
+    assert research_depth_budget("standard").analyst_one_shot_threshold(70) == 6
+    assert research_depth_budget("standard").allowed_slices(70) == 10
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(demo_mode=True, run_llm_max_calls=70),
         graph_checkpointer=GraphCheckpointer.in_memory(),
     )
-    with pytest.raises(ValueError, match="standard.*6 slices"):
-        await service.create_run(_request(
-            research_depth="standard", competitors=["Cursor", "Copilot"],
-            dimensions=["pricing", "feature", "persona", "security"],
+    detail = await service.create_run(_request(
+        research_depth="standard", competitors=["Cursor", "Copilot"],
+        dimensions=["pricing", "feature", "persona", "security"],
+    ))
+    assert len(detail.plan.competitors) * len(detail.plan.dimensions) == 8
+    assert {task.max_turns for task in detail.plan.task_decomposition if task.stage == "analyst"} == {1}
+
+
+@pytest.mark.asyncio
+async def test_deep_low_llm_budget_admits_seven_eight_nine_slices_with_one_shot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.research.budget import research_depth_budget
+
+    budget = research_depth_budget("deep")
+    assert budget.analyst_one_shot_threshold(88) == 6
+    assert budget.allowed_slices(88) == 10
+    for slices in range(1, budget.allowed_slices(88) + 1):
+        analyst_calls = budget.analyst_max_turns + 1 if slices <= 6 else 1
+        assert slices * (budget.collector_max_turns + 1 + analyst_calls) <= 50
+    names = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta"]
+    monkeypatch.setattr(
+        "packages.orchestrator.service.verify_homepages",
+        lambda competitors: {
+            name: HomepageVerification(competitor=name, verified=False, reason="unknown")
+            for name in competitors
+        },
+    )
+    service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(demo_mode=True, run_llm_max_calls=88, analyst_react_fanout_threshold=100),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    for competitors, dimensions, expected_slices in (
+        (names[:6], ["pricing"], 6),
+        (names[:7], ["pricing"], 7),
+        (names[:8], ["pricing"], 8),
+        (names[:3], ["pricing", "feature", "persona"], 9),
+    ):
+        detail = await service.create_run(_request(
+            research_depth="deep", competitors=competitors, dimensions=dimensions,
         ))
+        assert len(detail.plan.competitors) * len(detail.plan.dimensions) == expected_slices
+        analyst_turns = {task.max_turns for task in detail.plan.task_decomposition if task.stage == "analyst"}
+        assert analyst_turns == ({3} if expected_slices == 6 else {1})
+        assert service._should_use_analyst_react(
+            detail, dimension="pricing", qa_feedback=[{"issue": "gap"}],
+        ) is (expected_slices == 6)
+        if expected_slices > 6:
+            assert expected_slices * (budget.collector_max_turns + 1 + 1) <= 50
 
 
 @pytest.mark.asyncio
