@@ -68,7 +68,7 @@ await service.resume(detail.id, HitlResumeRequest(decision="accept"))
 
 **Files:** `backend/packages/agents/planner/logic.py`、`backend/packages/agents/writer/prompt_builder.py`、`backend/packages/agents/writer/logic.py`、`backend/packages/agents/writer/structured_report.py`、`backend/packages/agents/writer/structured_renderer.py`、`backend/tests/unit/test_pm_decision_brief.py`。
 
-- [ ] 写失败测试：用户的决策问题、任务与成功信号在 Planner/Writer 上下文中可见；demo 和真实报告契约含“产品机会与验证”；无引文的竞品事实只能标为待验证假设。
+- [x] 写失败测试：用户的决策问题、任务与成功信号在 Planner/Writer 上下文中可见；demo 和真实报告契约含“产品机会与验证”；无引文的竞品事实只能标为待验证假设。
 
 ```python
 assert "优先改进哪一段体验" in prompt.user
@@ -76,9 +76,9 @@ assert "产品机会与验证" in report
 assert "待验证" in unsupported_opportunity
 ```
 
-- [ ] 跑目标测试确认决策上下文和章节缺失。
-- [ ] 在报告决策区明确引用 `decision_brief`；使用现有 claim/source tokens 构建机会与验证建议，缺事实依据时写待验证，保持旧报告章节兼容。
-- [ ] 跑目标测试及 writer/report quality 测试。
+- [x] 跑目标测试确认决策上下文和章节缺失。
+- [x] 在报告决策区明确引用 `decision_brief`；使用现有 claim/source tokens 构建机会与验证建议，缺事实依据时写待验证，保持旧报告章节兼容。
+- [x] 跑目标测试及 writer/report quality 测试。
 
 ### Task 5: 前端三轴与证据审核
 
