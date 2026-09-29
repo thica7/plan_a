@@ -278,6 +278,7 @@ class RunRecord:
     structured_report_snapshot: "StructuredReport | None" = None
     previous_structured_report_snapshot: "StructuredReport | None" = None
     llm_budget: RunLLMBudget | None = None
+    resume_task: asyncio.Task[None] | None = None
 
 
 class RunService(
@@ -1057,6 +1058,10 @@ class RunService(
         record = self._runs.get(run_id)
         if record is None:
             return None
+        if any(pending.get("resume_in_progress") for pending in record.pending_interrupts.values()):
+            return record.detail
+        if record.resume_task is not None and not record.resume_task.done():
+            await record.resume_task
         if record.pending_interrupts:
             stage = self._active_pending_interrupt_stage(record) or next(
                 iter(record.pending_interrupts)
@@ -1212,7 +1217,7 @@ class RunService(
                 record.pending_interrupts.setdefault(stage, {})["auto_resume"] = (
                     request.model_dump(mode="json", exclude_none=True)
                 )
-            asyncio.create_task(self._resume_interrupted_graph(run_id, request))
+            record.resume_task = asyncio.create_task(self._resume_interrupted_graph(run_id, request))
             return record.detail
         if request.decision in {"accept", "modify_plan", "force_pass"}:
             return record.detail
