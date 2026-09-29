@@ -123,6 +123,71 @@ async def test_quick_evidence_redo_limit_returns_conflict_through_runtime_and_ap
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("review_request", "expected_status"),
+    [
+        (HitlResumeRequest(decision="modify_plan"), 422),
+        (HitlResumeRequest(decision="force_pass"), 422),
+        (HitlResumeRequest(decision="accept", dimensions=["feature"]), 422),
+        (HitlResumeRequest(decision="redo", dimensions=["feature"]), 422),
+        (
+            HitlResumeRequest(
+                decision="accept",
+                competitor_edits=[{"action": "remove", "name": "A"}],
+            ),
+            409,
+        ),
+    ],
+)
+async def test_evidence_review_invalid_input_returns_4xx_and_keeps_interrupt(
+    review_request: HitlResumeRequest,
+    expected_status: int,
+) -> None:
+    store = EnterpriseMemoryStore()
+    run_service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=_settings(),
+        enterprise_store=store,
+        preference_memory=PreferenceMemoryStore.in_memory(),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    runtime = RuntimeCommandService(
+        settings=_settings(),
+        run_service=run_service,
+        workflow_service=object(),
+        enterprise_store=store,
+        preference_memory=PreferenceMemoryStore.in_memory(),
+    )
+    try:
+        detail = await run_service.create_run(
+            RunCreateRequest(
+                topic="Invalid evidence review input",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+                collaboration_mode="assisted",
+                research_depth="standard",
+            )
+        )
+        detail.status = "interrupted"
+        detail.current_node = "evidence_hitl"
+        record = run_service._runs[detail.id]
+        record.pending_interrupts["evidence"] = {
+            "stage": "evidence", "graph_kind": "demo", "thread_id": detail.id,
+            "interrupt_node": "evidence_hitl",
+        }
+
+        with pytest.raises(HTTPException) as api_error:
+            await resume_run(detail.id, review_request, runtime, _actor())
+        assert api_error.value.status_code == expected_status
+        assert detail.status == "interrupted"
+        assert run_service.has_pending_interrupt(detail.id)
+        assert record.pending_interrupts["evidence"].get("resume_in_progress") is None
+    finally:
+        await run_service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_request_redo_prefers_requested_issue_ids() -> None:
     store = EnterpriseMemoryStore()
     run_service = RunService(

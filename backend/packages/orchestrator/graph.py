@@ -356,7 +356,11 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
         record = service._runs[state["run_id"]]
         if getattr(record.detail.plan, "collaboration_mode", None) != "assisted":
             return {"current_node": "evidence_hitl", "evidence_route": "accept"}
-        route_state = await service._real_evidence_hitl_step(record)
+        route_state = await service._real_evidence_hitl_step(
+            record,
+            list(state.get("dimensions") or record.detail.plan.dimensions),
+            list(state.get("target_competitors") or record.detail.plan.competitors),
+        )
         return {"current_node": "evidence_hitl", **route_state}
 
     async def analyst_qa(state: GraphState) -> GraphState:
@@ -502,7 +506,11 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
         record = service._runs[state["run_id"]]
         if getattr(record.detail.plan, "collaboration_mode", None) != "assisted":
             return {"current_node": "evidence_hitl", "evidence_route": "accept"}
-        route_state = await service._real_evidence_hitl_step(record)
+        route_state = await service._real_evidence_hitl_step(
+            record,
+            list(state.get("dimensions") or record.detail.plan.dimensions),
+            list(state.get("target_competitors") or record.detail.plan.competitors),
+        )
         return {"current_node": "evidence_hitl", **route_state}
 
     async def analyst_dispatch(state: GraphState) -> GraphState:

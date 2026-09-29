@@ -169,6 +169,10 @@ class EvidenceRedoLimitError(ValueError):
     """An evidence review redo exceeds its configured repair budget."""
 
 
+class EvidenceReviewInputError(ValueError):
+    """An evidence review decision is not valid for this checkpoint."""
+
+
 def _aggregate_consistency_votes(validation: ClaimValidationReport) -> dict[str, int]:
     totals = {"text_support": 0, "evidence_quality": 0, "triangulation": 0}
     for result in validation.results:
@@ -1075,13 +1079,17 @@ class RunService(
                 return record.detail
             if stage == "evidence":
                 if request.decision not in {"accept", "redo"}:
-                    raise ValueError("Evidence review only accepts accept or redo decisions.")
+                    raise EvidenceReviewInputError(
+                        "Evidence review only accepts accept or redo decisions."
+                    )
                 if (
                     request.dimensions is not None
                     or request.competitors is not None
                     or request.competitor_edits
                 ):
-                    raise ValueError("Evidence review cannot edit the analysis plan.")
+                    raise EvidenceReviewInputError(
+                        "Evidence review cannot edit the analysis plan."
+                    )
                 if (
                     request.decision == "redo"
                     and record.detail.evidence_repair_rounds
@@ -1089,6 +1097,14 @@ class RunService(
                 ):
                     raise EvidenceRedoLimitError(
                         "Evidence redo limit reached; accept the current evidence."
+                    )
+                if (
+                    request.decision == "redo"
+                    and not self._evidence_fetch_budget_available(record.detail)
+                ):
+                    raise EvidenceRedoLimitError(
+                        "Evidence redo limit reached: collector fetch budget exhausted "
+                        "for all reviewed branches."
                     )
             has_competitor_edits = request.competitors is not None or bool(
                 request.competitor_edits
@@ -1746,13 +1762,32 @@ class RunService(
         detail = record.detail
         branch_id = self._analyst_branch_id(dimension, competitor)
         detail.current_node = "collector"
+        task_payload: dict[str, object] = {
+            "competitor": competitor,
+            "dimension": dimension,
+            "mode": "demo_graph",
+        }
+        if detail.evidence_refresh_active:
+            task_payload["evidence_review_note"] = detail.evidence_review_note[:1000]
+            task_payload["collect_qa_findings"] = [
+                {
+                    "id": issue.id,
+                    "severity": issue.severity,
+                    "field_path": issue.field_path[:240],
+                    "problem": issue.problem[:500],
+                }
+                for issue in detail.collect_qa_findings
+                if issue.target_agent == "collector"
+                and (not issue.target_subagent or issue.target_subagent == dimension)
+                and (not issue.target_competitor or issue.target_competitor == competitor)
+            ][:10]
         task_message = self._append_agent_message(
             record,
             from_agent="collector_dispatch",
             to_agent="collector",
             message_type="collect_task",
             payload_schema="CollectTaskPayload",
-            payload={"competitor": competitor, "dimension": dimension, "mode": "demo_graph"},
+            payload=task_payload,
         )
         self._consume_agent_message(record, task_message, consumer_agent="collector")
         source = self._demo_source(detail, dimension, competitor)
@@ -1996,6 +2031,21 @@ class RunService(
             return detail.max_iterations
         return min(budget.max_repair_rounds, detail.max_iterations)
 
+    def _evidence_fetch_budget_available(self, detail: RunDetail) -> bool:
+        budget = research_depth_budget(detail.plan.research_depth)
+        if detail.execution_mode != "real" or budget is None:
+            return True
+        dimensions = detail.evidence_review_dimensions or detail.plan.dimensions
+        competitors = detail.evidence_review_competitors or detail.plan.competitors
+        for dimension in dimensions:
+            for competitor in competitors:
+                usage = detail.collector_research_usage.get(
+                    self._analyst_branch_id(dimension, competitor)
+                )
+                if usage is None or usage.fetch_calls < budget.max_fetches:
+                    return True
+        return False
+
     def _evidence_review_payload(self, detail: RunDetail) -> dict[str, object]:
         def preview(value: object, limit: int) -> str:
             text = str(value or "")
@@ -2014,12 +2064,12 @@ class RunService(
             )
             sources.append(
                 {
-                    "id": source.id,
-                    "competitor": source.competitor,
-                    "dimension": source.dimension,
+                    "id": preview(source.id, 128),
+                    "competitor": preview(source.competitor, 240),
+                    "dimension": preview(source.dimension, 128),
                     "title": preview(source.title, 240),
-                    "url": str(source.url) if source.url is not None else None,
-                    "source_type": source.source_type,
+                    "url": preview(source.url, 1024) if source.url is not None else None,
+                    "source_type": preview(source.source_type, 128),
                     "confidence": source.confidence,
                     "quality_score": source.quality_score,
                     "fetched_at": preview(fetched_at, 64) if fetched_at else None,
@@ -2030,17 +2080,22 @@ class RunService(
             )
         findings = [
             {
-                "id": issue.id,
+                "id": preview(issue.id, 128),
                 "severity": issue.severity,
-                "target_agent": issue.target_agent,
-                "target_subagent": issue.target_subagent,
-                "target_competitor": issue.target_competitor,
+                "target_agent": preview(issue.target_agent, 128),
+                "target_subagent": preview(issue.target_subagent, 128)
+                if issue.target_subagent else None,
+                "target_competitor": preview(issue.target_competitor, 240)
+                if issue.target_competitor else None,
                 "field_path": preview(issue.field_path, 240),
                 "problem": preview(issue.problem, 500),
             }
             for issue in detail.collect_qa_findings[:50]
         ]
         redo_limit = self._evidence_redo_limit(detail)
+        redo_remaining = max(0, redo_limit - detail.evidence_repair_rounds)
+        if not self._evidence_fetch_budget_available(detail):
+            redo_remaining = 0
         return {
             "sources": sources,
             "source_count": len(detail.raw_sources),
@@ -2050,12 +2105,19 @@ class RunService(
             "qa_findings_truncated": len(detail.collect_qa_findings) > len(findings),
             "evidence_repair_rounds": detail.evidence_repair_rounds,
             "redo_limit": redo_limit,
-            "redo_remaining": max(0, redo_limit - detail.evidence_repair_rounds),
+            "redo_remaining": redo_remaining,
         }
 
-    async def _real_evidence_hitl_step(self, record: RunRecord) -> dict[str, object]:
+    async def _real_evidence_hitl_step(
+        self,
+        record: RunRecord,
+        dimensions: list[str],
+        competitors: list[str],
+    ) -> dict[str, object]:
         detail = record.detail
         detail.current_node = "evidence_hitl"
+        detail.evidence_review_dimensions = dimensions
+        detail.evidence_review_competitors = competitors
         await self.emit(
             detail.id, "node_started", "hitl", "evidence", "Evidence HITL checkpoint reached."
         )

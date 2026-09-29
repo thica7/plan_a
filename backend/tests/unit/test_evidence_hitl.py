@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime
 
 import pytest
@@ -7,14 +8,19 @@ from packages.config import Settings
 from packages.memory import RunJournal
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
-from packages.schema.api_dto import HitlResumeRequest, RunCreateRequest
+from packages.schema.api_dto import CollectorResearchUsage, HitlResumeRequest, RunCreateRequest
 from packages.schema.models import QCIssue, RawSource, RedoScope
 from packages.search import SearchResult
 from packages.skills.registry import SkillRegistry
 from packages.tools.evidence_fetch import EvidenceFetchResult
 
 
-def _service(*, journal: RunJournal | None = None, real: bool = False) -> RunService:
+def _service(
+    *,
+    journal: RunJournal | None = None,
+    real: bool = False,
+    checkpointer: GraphCheckpointer | None = None,
+) -> RunService:
     return RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -28,7 +34,7 @@ def _service(*, journal: RunJournal | None = None, real: bool = False) -> RunSer
             hitl_timeout_seconds=0,
         ),
         journal=journal,
-        graph_checkpointer=GraphCheckpointer.in_memory(),
+        graph_checkpointer=checkpointer or GraphCheckpointer.in_memory(),
     )
 
 
@@ -39,11 +45,12 @@ async def _wait_for(service: RunService, run_id: str, node: str | None, status: 
             if detail is not None and detail.current_node == node and detail.status == status:
                 if status == "interrupted":
                     record = service._runs[run_id]
-                    graph = await (
-                        service._get_demo_graph()
-                        if record.active_graph_kind == "demo"
-                        else service._get_real_graph()
-                    )
+                    if record.active_graph_kind == "demo":
+                        graph = await service._get_demo_graph()
+                    elif record.active_graph_kind == "scoped_redo":
+                        graph = await service._get_scoped_redo_graph()
+                    else:
+                        graph = await service._get_real_graph()
                     snapshot = await graph.aget_state(
                         {"configurable": {"thread_id": record.active_thread_id}}
                     )
@@ -221,6 +228,59 @@ async def test_evidence_interrupt_lists_current_sources_dates_and_collect_qa_sna
 
 
 @pytest.mark.asyncio
+async def test_evidence_payload_bounds_all_untrusted_source_and_issue_text() -> None:
+    service = _service()
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Bounded evidence payload",
+                competitors=["A"],
+                dimensions=["pricing"],
+                execution_mode="demo",
+                collaboration_mode="assisted",
+            )
+        )
+        long_text = "X" * 10_000
+        detail.raw_sources = [
+            RawSource(
+                id=long_text,
+                competitor=long_text,
+                dimension=long_text,
+                source_type=long_text,
+                title=long_text,
+                url="https://example.com/" + "u" * 1500,
+                content_hash="hash",
+                confidence=0.8,
+            )
+        ]
+        issue = _warning(long_text)
+        issue.id = long_text
+        issue.target_agent = long_text
+        issue.target_subagent = long_text
+        issue.target_competitor = long_text
+        issue.field_path = long_text
+        detail.collect_qa_findings = [issue]
+
+        payload = service._evidence_review_payload(detail)
+        source = payload["sources"][0]
+        finding = payload["qa_findings"][0]
+        assert len(source["id"]) <= 128
+        assert len(source["competitor"]) <= 240
+        assert len(source["dimension"]) <= 128
+        assert len(source["source_type"]) <= 128
+        assert len(source["url"]) <= 1024
+        assert len(finding["id"]) <= 128
+        assert len(finding["target_agent"]) <= 128
+        assert len(finding["target_subagent"]) <= 128
+        assert len(finding["target_competitor"]) <= 240
+        assert len(finding["field_path"]) <= 240
+        assert len(finding["problem"]) <= 500
+        assert len(json.dumps(payload)) < 5000
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_evidence_redo_is_persisted_and_rejected_before_resume_when_exhausted() -> None:
     service = _service()
     collector_calls = 0
@@ -270,6 +330,12 @@ async def test_evidence_redo_is_persisted_and_rejected_before_resume_when_exhaus
         assert any(item["problem"] == "Check again" for item in redo_feedback)
         assert any(item["id"] == "qc-evidence-date" for item in redo_feedback)
         assert detail.evidence_refresh_active is False
+        collect_tasks = [
+            message for message in detail.agent_messages
+            if message.message_type == "collect_task"
+        ]
+        assert collect_tasks[1].payload["evidence_review_note"] == "Check again"
+        assert collect_tasks[1].payload["collect_qa_findings"][0]["id"] == "qc-evidence-date"
 
         with pytest.raises(ValueError, match="Evidence redo limit reached"):
             await service.resume(detail.id, HitlResumeRequest(decision="redo"))
@@ -373,6 +439,88 @@ async def test_quick_evidence_redo_rejects_without_consuming_interrupt() -> None
 
 
 @pytest.mark.asyncio
+async def test_real_evidence_redo_rejects_when_all_relevant_fetch_budgets_are_exhausted() -> None:
+    service = _service(real=True)
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Exhausted evidence fetch budget",
+                competitors=["A", "B"],
+                dimensions=["pricing"],
+                execution_mode="real",
+                collaboration_mode="assisted",
+                research_depth="standard",
+            )
+        )
+        detail.status = "interrupted"
+        detail.current_node = "evidence_hitl"
+        detail.collector_research_usage = {
+            "pricing::A": CollectorResearchUsage(search_calls=0, fetch_calls=5),
+            "pricing::B": CollectorResearchUsage(search_calls=0, fetch_calls=5),
+        }
+        record = service._runs[detail.id]
+        record.pending_interrupts["evidence"] = {
+            "stage": "evidence", "graph_kind": "real", "thread_id": detail.id,
+            "interrupt_node": "evidence_hitl",
+        }
+
+        assert service._evidence_review_payload(detail)["redo_remaining"] == 0
+        with pytest.raises(ValueError, match="Evidence redo limit reached.*fetch budget"):
+            await service.resume(detail.id, HitlResumeRequest(decision="redo"))
+        assert detail.status == "interrupted"
+        assert detail.evidence_repair_rounds == 0
+        assert service.has_pending_interrupt(detail.id)
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+async def test_evidence_redo_uses_reviewed_branch_scope_and_fetch_not_search_budget() -> None:
+    service = _service(real=True)
+
+    async def fake_resume_graph(_run_id, _request):  # noqa: ANN001, ANN202
+        return None
+
+    service._resume_interrupted_graph = fake_resume_graph  # type: ignore[method-assign]
+    try:
+        detail = await service.create_run(
+            RunCreateRequest(
+                topic="Scoped evidence fetch budget",
+                competitors=["A", "B"],
+                dimensions=["pricing"],
+                execution_mode="real",
+                collaboration_mode="assisted",
+                research_depth="standard",
+            )
+        )
+        detail.status = "interrupted"
+        detail.current_node = "evidence_hitl"
+        detail.evidence_review_dimensions = ["pricing"]
+        detail.evidence_review_competitors = ["A"]
+        detail.collector_research_usage = {
+            "pricing::A": CollectorResearchUsage(search_calls=0, fetch_calls=5),
+            "pricing::B": CollectorResearchUsage(search_calls=0, fetch_calls=0),
+        }
+        record = service._runs[detail.id]
+        record.pending_interrupts["evidence"] = {
+            "stage": "evidence", "graph_kind": "scoped_redo", "thread_id": "redo-thread",
+            "interrupt_node": "evidence_hitl",
+        }
+
+        assert service._evidence_review_payload(detail)["redo_remaining"] == 0
+        with pytest.raises(ValueError, match="Evidence redo limit reached.*fetch budget"):
+            await service.resume(detail.id, HitlResumeRequest(decision="redo"))
+        assert service.has_pending_interrupt(detail.id)
+
+        detail.collector_research_usage["pricing::A"].fetch_calls = 4
+        assert service._evidence_review_payload(detail)["redo_remaining"] == 1
+        await service.resume(detail.id, HitlResumeRequest(decision="redo"))
+        assert detail.status == "running"
+    finally:
+        await service._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
 async def test_journal_hydrates_evidence_pending_interrupt_and_repair_counter(tmp_path) -> None:
     journal = RunJournal(tmp_path / "evidence-runs.db")
     original = _service(journal=journal)
@@ -414,7 +562,10 @@ async def test_journal_hydrates_evidence_pending_interrupt_and_repair_counter(tm
 @pytest.mark.asyncio
 async def test_scoped_redo_evidence_interrupt_restores_its_graph_thread_from_journal(tmp_path) -> None:
     journal = RunJournal(tmp_path / "scoped-evidence-runs.db")
-    original = _service(journal=journal, real=True)
+    checkpoint_path = tmp_path / "scoped-evidence-checkpoints.db"
+    original = _service(
+        journal=journal, real=True, checkpointer=GraphCheckpointer(checkpoint_path)
+    )
 
     async def no_collect(_record, _dimension, _competitor):  # noqa: ANN001, ANN202
         return None
@@ -439,16 +590,38 @@ async def test_scoped_redo_evidence_interrupt_restores_its_graph_thread_from_jou
         await original.run_scoped_redo(detail.id)
         assert detail.status == "interrupted"
         assert detail.current_node == "evidence_hitl"
+        assert detail.evidence_review_dimensions == ["pricing"]
+        assert detail.evidence_review_competitors == ["A"]
         thread_id = original._runs[detail.id].active_thread_id
         assert original._runs[detail.id].active_graph_kind == "scoped_redo"
     finally:
         await original._graph_checkpointer.aclose()
 
-    reloaded = _service(journal=journal, real=True)
+    reloaded = _service(
+        journal=journal, real=True, checkpointer=GraphCheckpointer(checkpoint_path)
+    )
+
+    async def no_analyst(_record, _dimension, _competitor):  # noqa: ANN001, ANN202
+        return None
+
+    async def no_node(_record):  # noqa: ANN001, ANN202
+        return None
+
+    reloaded._real_analyst_branch_step = no_analyst  # type: ignore[method-assign]
+    reloaded._real_phase_qa_step = passed_qa  # type: ignore[method-assign]
+    reloaded._real_comparator_step = no_node  # type: ignore[method-assign]
+    reloaded._real_reflector_step = no_node  # type: ignore[method-assign]
+    reloaded._real_writer_step = no_node  # type: ignore[method-assign]
+    reloaded._real_qa_step = no_node  # type: ignore[method-assign]
     try:
         assert reloaded.has_pending_interrupt(detail.id)
         assert reloaded._runs[detail.id].active_graph_kind == "scoped_redo"
         assert reloaded._runs[detail.id].active_thread_id == thread_id
+        assert reloaded._runs[detail.id].detail.evidence_review_dimensions == ["pricing"]
+        assert reloaded._runs[detail.id].detail.evidence_review_competitors == ["A"]
+        await reloaded.resume(detail.id, HitlResumeRequest(decision="accept"))
+        await _wait_for(reloaded, detail.id, "qa_hitl", "interrupted")
+        assert reloaded._runs[detail.id].active_graph_kind == "scoped_redo"
     finally:
         await reloaded._graph_checkpointer.aclose()
 

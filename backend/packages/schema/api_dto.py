@@ -263,6 +263,8 @@ class RunDetail(RunSummary):
     qa_findings: list[QCIssue] = Field(default_factory=list)
     collect_qa_findings: list[QCIssue] = Field(default_factory=list)
     evidence_repair_rounds: int = Field(default=0, ge=0)
+    evidence_review_dimensions: list[str] = Field(default_factory=list)
+    evidence_review_competitors: list[str] = Field(default_factory=list)
     evidence_refresh_active: bool = False
     evidence_review_note: str = ""
     interrupt_graph_kind: Literal["real", "demo", "scoped_redo"] | None = None

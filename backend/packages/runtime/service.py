@@ -28,7 +28,11 @@ from packages.governance import (
 from packages.hitl import append_hitl_lifecycle, build_hitl_lifecycle_event, hitl_lifecycle_history
 from packages.identity import new_ui_run_idempotency_key, stable_prefixed_id
 from packages.memory import PreferenceMemoryStore
-from packages.orchestrator.service import EvidenceRedoLimitError, RunService
+from packages.orchestrator.service import (
+    EvidenceRedoLimitError,
+    EvidenceReviewInputError,
+    RunService,
+)
 from packages.runtime.commands import (
     ApproveReportCommand,
     CreateMonitorJobCommand,
@@ -496,6 +500,10 @@ class RuntimeCommandService:
         except EvidenceRedoLimitError as exc:
             raise RuntimeCommandError(
                 409, str(exc), command_type="resume_review"
+            ) from exc
+        except EvidenceReviewInputError as exc:
+            raise RuntimeCommandError(
+                422, str(exc), command_type="resume_review"
             ) from exc
         if updated is None:
             raise RuntimeCommandError(404, "Run not found", command_type="resume_review")

@@ -49,6 +49,8 @@ class CollectTaskMessagePayload(_MessagePayload):
     homepage_hints: dict[str, str] = Field(default_factory=dict)
     required_output_schema: str | None = None
     qa_feedback: list[dict[str, Any]] = Field(default_factory=list)
+    evidence_review_note: str | None = None
+    collect_qa_findings: list[dict[str, Any]] = Field(default_factory=list)
     mode: str | None = None
     task_id: str | None = None
     task_priority: Literal["low", "medium", "high"] | None = None
