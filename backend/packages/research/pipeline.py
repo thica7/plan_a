@@ -119,18 +119,21 @@ async def run_research_pipeline(
     initial_gap_count = len(gaps)
     for round_index in range(brief.max_repair_rounds):
         active_repairs = _same_branch_repairs(brief, planned_repairs)
-        if not active_repairs:
-            break
-        repair_brief = _repair_brief(brief, active_repairs, round_index=round_index + 1)
         carry_candidates: list[SourceCandidate] = []
-        existing_candidate_ids: set[str] | None = None
-        remaining_candidates: int | None = None
         if brief.research_depth is not None:
             captured_candidate_ids = {page.candidate_id for page in captured_pages}
             carry_candidates = [
                 candidate for candidate in candidates
                 if candidate.id not in captured_candidate_ids
             ]
+        if not active_repairs and not (
+            brief.research_depth is not None and not coverage.passed and carry_candidates
+        ):
+            break
+        repair_brief = _repair_brief(brief, active_repairs, round_index=round_index + 1)
+        existing_candidate_ids: set[str] | None = None
+        remaining_candidates: int | None = None
+        if brief.research_depth is not None:
             existing_candidate_ids = {candidate.id for candidate in candidates}
             remaining_candidates = brief.max_candidates - len(candidates)
             remaining_fetches = brief.max_fetches - fetch_calls

@@ -560,6 +560,73 @@ async def test_research_pipeline_backfills_overflow_until_pricing_coverage_passe
 
 
 @pytest.mark.asyncio
+async def test_standard_uses_reserved_fetches_when_coverage_fails_without_quality_gaps() -> None:
+    brief = ResearchBrief(
+        run_id="run-coverage-only-repair",
+        topic="AI coding agent pricing",
+        competitor="Windsurf",
+        dimension="pricing",
+        research_depth="standard",
+        homepage_hint="https://windsurf.com",
+        include_trusted_sources=False,
+        include_homepage_candidates=False,
+        target_source_count=3,
+        max_search_queries=0,
+        max_candidates=5,
+        max_fetches=5,
+        max_repair_rounds=1,
+    )
+    third_party = [
+        SourceCandidate(
+            title=f"Windsurf pricing review {index}",
+            url=f"https://reviews.example.com/windsurf/{index}",
+            origin="web_search",
+            competitor="Windsurf",
+            dimension="pricing",
+            confidence=0.98,
+            rank=index,
+        )
+        for index in range(3)
+    ]
+    official = [
+        SourceCandidate(
+            title=f"Windsurf details {index}",
+            url=f"https://windsurf.com/details-{index}",
+            origin="web_search",
+            competitor="Windsurf",
+            dimension="pricing",
+            confidence=0.6,
+            rank=index + 3,
+        )
+        for index in range(2)
+    ]
+    fetched_urls: list[str] = []
+
+    async def fake_fetch(url: str) -> _FakeFetchResult:
+        fetched_urls.append(url)
+        return _FakeFetchResult(
+            url=url,
+            title="Windsurf Pricing" if "windsurf.com" in url else "Windsurf pricing review",
+            text=(
+                "Windsurf offers Pro and Enterprise options for teams. "
+                "Windsurf pricing costs $20 per user per month with 100 credits monthly. "
+                "Contact sales for a custom procurement review and enterprise access conditions."
+            ),
+        )
+
+    result = await run_research_pipeline(
+        brief, fetch=fake_fetch, seed_candidates=[*third_party, *official],
+    )
+
+    assert result.metrics["initial_gap_count"] == 0, [gap.reason for gap in result.gaps]
+    assert result.metrics["repair_round_count"] == 1
+    assert result.metrics["repair_capture_count"] == 2
+    assert len(fetched_urls) == 5
+    assert all("reviews.example.com" in url for url in fetched_urls[:3])
+    assert result.coverage.passed is True
+
+
+@pytest.mark.asyncio
 async def test_research_pipeline_can_run_seed_only_without_registry_or_homepage() -> None:
     brief = ResearchBrief(
         run_id="run-1",
