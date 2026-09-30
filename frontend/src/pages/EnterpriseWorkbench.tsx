@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { ActionButton } from "../components/interaction/ActionButton";
 import { ActionLink } from "../components/interaction/ActionLink";
 import { useTranslation } from "../stores/i18n";
+import { displayLabel } from '../i18n/display';
+import { SystemMessage } from '../i18n/SystemMessage';
 import { ProjectHeader, WorkspaceLayout } from "../components/product-shell";
 import { EmptyState, LoadingState } from "../components/ui";
 import { ActiveView } from "../features/workbench/ActiveView";
@@ -18,7 +20,7 @@ import type { EnterpriseView } from "../features/workbench/types";
 
 export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?: EnterpriseView }) {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const {
     activeView,
     competitorById,
@@ -72,18 +74,18 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
   }
 
   const projectMeta = selectedProject
-    ? `${selectedProject.topic} / ${selectedProject.competitor_layer.toUpperCase()} / ${data.competitors.length} competitors / updated ${formatDate(selectedProject.updated_at)}`
-    : "Projects, evidence, reports, governance, and review operations.";
+    ? `${selectedProject.topic} / ${displayLabel(selectedProject.competitor_layer.toUpperCase(), locale)} / ${data.competitors.length} ${t('workbench.competitorCount')} / ${t('workbench.updated')} ${formatDate(selectedProject.updated_at)}`
+    : t('workbench.intro');
 
   return (
     <WorkspaceLayout
       className="enterprise-workbench"
-      error={error ? <p className="error-line">{error}</p> : null}
+      error={error ? <p className="error-line"><SystemMessage message={error} /></p> : null}
       header={
         <ProjectHeader
-          title={selectedProject?.name ?? "Enterprise workbench"}
+          title={selectedProject?.name ?? t('workbench.title')}
           meta={projectMeta}
-          status={selectedProject ? "Active" : "No project"}
+          status={selectedProject ? 'active' : t('workbench.noProject')}
           actions={
             <>
               <ActionLink
@@ -157,9 +159,9 @@ export function EnterpriseWorkbench({ initialView = "overview" }: { initialView?
     >
       <ViewSwitcher activeView={activeView} onChange={handleViewChange} />
 
-      {isLoadingProject ? <LoadingState label="Loading project workspace" /> : null}
+      {isLoadingProject ? <LoadingState label={t('workbench.loadingProject')} /> : null}
       {!isLoadingProject && !selectedProject ? (
-        <EmptyState title="No project selected">Run an analysis first, then return to the workbench.</EmptyState>
+        <EmptyState title={t('workbench.noProjectSelected')}>{t('workbench.runFirst')}</EmptyState>
       ) : null}
       {!isLoadingProject && selectedProject ? (
         <ActiveView

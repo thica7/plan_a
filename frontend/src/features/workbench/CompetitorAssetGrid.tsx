@@ -3,6 +3,8 @@ import { ExternalLink, Layers } from "lucide-react";
 import type { CompetitorRecord, CompetitorScoreReport, EvidenceRecord } from "../../api/types";
 import { Panel, StatusPill } from "../../components/ui";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from '../../i18n/display';
+import { SystemMessage } from '../../i18n/SystemMessage';
 
 interface CompetitorAssetGridProps {
   competitors: CompetitorRecord[];
@@ -15,7 +17,7 @@ export function CompetitorAssetGrid({
   evidence,
   scores,
 }: CompetitorAssetGridProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const scoreByCompetitor = new Map(scores?.scores.map((score) => [score.competitor_id, score]) ?? []);
 
   return (
@@ -34,12 +36,12 @@ export function CompetitorAssetGrid({
                   <strong>{competitor.name}</strong>
                   <span>{competitor.normalized_name}</span>
                 </div>
-                <StatusPill>{competitor.layer}</StatusPill>
+                <StatusPill><span title={competitor.layer}>{displayLabel(competitor.layer, locale)}</span></StatusPill>
               </header>
 
               <div className="competitor-asset-metrics">
                 <span>
-                  <strong>{score ? Math.round(score.total_score) : "n/a"}</strong>
+                  <strong>{score ? Math.round(score.total_score) : displayLabel('n/a', locale)}</strong>
                   {t('workbench.score')}
                 </span>
                 <span>
@@ -53,8 +55,8 @@ export function CompetitorAssetGrid({
               </div>
 
               <div className="competitor-dimension-chips">
-                {dimensions.slice(0, 6).map((dimension) => <span key={dimension}>{dimension}</span>)}
-                {dimensions.length === 0 ? <span>no dimensions</span> : null}
+                {dimensions.slice(0, 6).map((dimension) => <span key={dimension} title={dimension}>{displayLabel(dimension, locale)}</span>)}
+                {dimensions.length === 0 ? <span>{t('workbench.noDimensions')}</span> : null}
               </div>
 
               {competitor.homepage_url ? (
@@ -63,7 +65,7 @@ export function CompetitorAssetGrid({
                   {t('workbench.homepage')}
                 </a>
               ) : null}
-              {score?.recommendation ? <p>{score.recommendation}</p> : null}
+              {score?.recommendation ? <p><SystemMessage message={score.recommendation} /></p> : null}
             </article>
           );
         })}

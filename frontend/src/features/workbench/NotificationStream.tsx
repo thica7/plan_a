@@ -2,6 +2,8 @@ import { Bell } from "lucide-react";
 import type { NotificationRecord, ProjectRecord } from "../../api/types";
 import { EmptyState, Panel, StatusPill } from "../../components/ui";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from '../../i18n/display';
+import { SystemMessage } from '../../i18n/SystemMessage';
 import { formatDate } from "./format";
 
 interface NotificationStreamProps {
@@ -10,7 +12,7 @@ interface NotificationStreamProps {
 }
 
 export function NotificationStream({ notifications, project }: NotificationStreamProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   return (
     <Panel className="activity-notification-panel" title={t("workbench.signals")} icon={<Bell size={16} aria-hidden />}>
       <div className="notification-list redesigned">
@@ -20,34 +22,34 @@ export function NotificationStream({ notifications, project }: NotificationStrea
             <article className={`notification-item ${notification.severity}`} key={notification.id}>
               <header>
                 <div>
-                  <strong>{notification.title}</strong>
-                  <span className="notification-type">{notification.notification_type.replace(/_/g, " ")}</span>
+                  <strong><SystemMessage message={notification.title} /></strong>
+                  <span className="notification-type">{displayLabel(notification.notification_type, locale)}</span>
                 </div>
                 <StatusPill tone={notification.severity === "critical" ? "bad" : notification.severity === "warning" ? "warn" : "good"}>
-                  {notification.severity}
+                  {displayLabel(notification.severity, locale)}
                 </StatusPill>
               </header>
 
-              <p className="notification-body">{details.summary}</p>
+              <p className="notification-body" title={notification.body}><SystemMessage message={details.summary} /></p>
 
               {details.chips.length > 0 ? (
                 <div className="notification-detail-grid">
                   {details.chips.map((chip) => (
                     <span className="notification-detail-chip" key={chip}>
-                      {chip}
+                      <SystemMessage message={chip} />
                     </span>
                   ))}
                 </div>
               ) : null}
 
               <footer>
-                <span>{notification.status} / {notification.channel}</span>
+                <span>{displayLabel(notification.status, locale)} / {displayLabel(notification.channel, locale)}</span>
                 <time dateTime={notification.created_at}>{formatDate(notification.created_at)}</time>
               </footer>
             </article>
           );
         })}
-        {notifications.length === 0 ? <EmptyState title={t("workbench.noNotifications")}>No notifications for {project.name}.</EmptyState> : null}
+        {notifications.length === 0 ? <EmptyState title={t("workbench.noNotifications")}>{t('workbench.noNotificationsFor').replace('{project}', project.name)}</EmptyState> : null}
       </div>
     </Panel>
   );

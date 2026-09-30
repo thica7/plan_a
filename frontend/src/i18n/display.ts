@@ -2,6 +2,113 @@ import type { Locale } from "../stores/i18n";
 
 // Display-only vocabulary. Call this only for known UI enums, never report prose or source titles.
 const labels: Record<string, readonly [string, string]> = {
+  uploading: ['上传中', 'Uploading'],
+  parsed: ['已解析', 'Parsed'],
+  embedded: ['已向量化', 'Embedded'],
+  ingested: ['已入库', 'Ingested'],
+  unreviewed: ['待审核', 'Unreviewed'],
+  disputed: ['有争议', 'Disputed'],
+  deprecated: ['已弃用', 'Deprecated'],
+  allowed: ['允许', 'Allowed'],
+  not_required: ['无需审核', 'Not required'],
+  exceeded: ['超出配额', 'Exceeded'],
+  watch: ['需关注', 'Watch'],
+  at_risk: ['存在风险', 'At risk'],
+  in_app: ['应用内', 'In app'],
+  sent: ['已发送', 'Sent'],
+  delivered: ['已送达', 'Delivered'],
+  read: ['已读', 'Read'],
+  homepage: ['官网', 'Homepage'],
+  sitemap: ['站点地图', 'Sitemap'],
+  rss: ['RSS 订阅', 'RSS feed'],
+  web_snapshot: ['网页快照', 'Web snapshot'],
+  screenshot: ['截图', 'Screenshot'],
+  raw_text: ['原始文本', 'Raw text'],
+  text: ['文本', 'Text'],
+  image: ['图片', 'Image'],
+  release_gate_blocked: ['未满足发布条件', 'Release gate blocked'],
+  quota_warning: ['配额预警', 'Quota warning'],
+  report_version: ['报告版本', 'Report version'],
+  workspace_usage: ['工作空间用量', 'Workspace usage'],
+  user: ['用户', 'User'],
+  missing_text: ['缺少正文', 'Missing text'],
+  duplicate_source: ['来源重复', 'Duplicate source'],
+  disallowed_source_type: ['不支持的来源类型', 'Disallowed source type'],
+  coverage_missing: ['覆盖缺失', 'Coverage missing'],
+  missing_evidence: ['缺少证据', 'Missing evidence'],
+  missing_claims: ['缺少结论', 'Missing claims'],
+  missing_verified_source: ['缺少已核验来源', 'Missing verified source'],
+  low_confidence_evidence: ['证据置信度较低', 'Low confidence evidence'],
+  claim_without_usable_evidence: ['结论缺少可用证据', 'Claim without usable evidence'],
+  conflicting_evidence: ['证据冲突', 'Conflicting evidence'],
+  stale_evidence: ['证据过期', 'Stale evidence'],
+  unsupported_claim: ['结论缺少证据支持', 'Unsupported claim'],
+  'Claim issue': ['结论问题', 'Claim issue'],
+  'Conflict evidence': ['冲突证据', 'Conflict evidence'],
+  'Conflict fact': ['冲突事实', 'Conflict fact'],
+  'Freshness gate': ['时效性检查', 'Freshness gate'],
+  'Evidence pair': ['证据对照', 'Evidence pair'],
+  'Evidence': ['证据', 'Evidence'],
+  'KB document': ['知识库文档', 'KB document'],
+  'KB raw source': ['知识库原始来源', 'KB raw source'],
+  'Collector run': ['采集运行', 'Collector run'],
+  'Freshness': ['时效性', 'Freshness'],
+  'Claim review': ['结论审核', 'Claim review'],
+  'Evidence review': ['证据审核', 'Evidence review'],
+  'KB cleanup': ['知识库清理', 'KB cleanup'],
+  'Release review': ['发布审核', 'Release review'],
+  homepage_verification_gate: ['官网核验要求', 'Homepage verification gate'],
+  report_structure_required: ['报告结构要求', 'Report structure required'],
+  report_depth_required: ['报告内容深度要求', 'Report depth required'],
+  readiness_required: ['发布就绪要求', 'Readiness threshold'],
+  business_qa_clean_required: ['业务质检阻塞项清理', 'Business QA blockers must be clean'],
+  report_status_releasable: ['报告状态允许发布', 'Report status releasable'],
+  verified_evidence_rate: ['发布证据质量比例', 'Release-grade evidence rate'],
+  report_citation_resolves: ['报告引用可追溯', 'Report citations resolve'],
+  report_citation_token_format: ['报告引用格式', 'Report citation token format'],
+  report_body_required: ['报告正文要求', 'Report body required'],
+  report_evidence_required: ['报告证据要求', 'Report evidence required'],
+  report_claim_required: ['报告结论要求', 'Report claims required'],
+  claim_evidence_in_report: ['结论证据须关联报告', 'Claim evidence must be in report'],
+  source_policy_review_required: ['来源策略审核要求', 'Source policy review required'],
+  claim_uses_low_confidence_evidence: ['结论证据置信度', 'Claim evidence confidence'],
+  claim_self_consistency_required: ['结论一致性要求', 'Claim self-consistency'],
+  strong_conclusion_uses_weak_source: ['强结论来源质量', 'Strong conclusion source quality'],
+  run_schema_validation_failed: ['运行结构校验', 'Run schema validation'],
+  run_qa_findings_unresolved: ['运行质检问题未解决', 'Run QA finding unresolved'],
+  business_qa_warnings_present: ['业务质检警告', 'Business QA warnings present'],
+  business_qa_info_present: ['业务质检提示', 'Business QA informational findings present'],
+  rag_gap_fill_chain_unclosed: ['检索补证链路未完成', 'RAG gap-fill chain'],
+  'Verified evidence coverage': ['已核验证据覆盖', 'Verified evidence coverage'],
+  'Claim evidence linkage': ['结论证据关联', 'Claim evidence linkage'],
+  'Homepage verification gate': ['官网核验要求', 'Homepage verification gate'],
+  'Source reliability floor': ['来源可靠性要求', 'Source reliability floor'],
+  'Pricing currentness': ['定价时效性', 'Pricing currentness'],
+  'Cross-competitor matrix completeness': ['跨竞品矩阵完整性', 'Cross-competitor matrix completeness'],
+  'Security official-source gate': ['安全信息官方来源要求', 'Security official-source gate'],
+  'Landscape breadth': ['市场覆盖广度', 'Landscape breadth'],
+  'Report structure required': ['报告结构要求', 'Report structure required'],
+  'Report depth required': ['报告内容深度要求', 'Report depth required'],
+  'Report core richness required': ['报告核心内容丰富度', 'Report core richness required'],
+  'Readiness threshold': ['发布就绪要求', 'Readiness threshold'],
+  'Business QA blockers must be clean': ['业务质检阻塞项清理', 'Business QA blockers must be clean'],
+  'Report status releasable': ['报告状态允许发布', 'Report status releasable'],
+  'Release-grade evidence rate': ['发布证据质量比例', 'Release-grade evidence rate'],
+  'Report citations resolve': ['报告引用可追溯', 'Report citations resolve'],
+  'Report citation token format': ['报告引用格式', 'Report citation token format'],
+  'Report body required': ['报告正文要求', 'Report body required'],
+  'Report evidence required': ['报告证据要求', 'Report evidence required'],
+  'Report claims required': ['报告结论要求', 'Report claims required'],
+  'Claim evidence must be in report': ['结论证据须关联报告', 'Claim evidence must be in report'],
+  'Source policy review required': ['来源策略审核要求', 'Source policy review required'],
+  'Claim evidence confidence': ['结论证据置信度', 'Claim evidence confidence'],
+  'Claim self-consistency': ['结论一致性要求', 'Claim self-consistency'],
+  'Strong conclusion source quality': ['强结论来源质量', 'Strong conclusion source quality'],
+  'Run schema validation': ['运行结构校验', 'Run schema validation'],
+  'Run QA finding unresolved': ['运行质检问题未解决', 'Run QA finding unresolved'],
+  'Business QA warnings present': ['业务质检警告', 'Business QA warnings present'],
+  'Business QA informational findings present': ['业务质检提示', 'Business QA informational findings present'],
+  'RAG gap-fill chain': ['检索补证链路', 'RAG gap-fill chain'],
   evidence_count: ["证据数量", "Evidence count"],
   real_source_rate: ["真实来源比例", "Real source rate"],
   report_structure_score: ["报告结构得分", "Report structure score"],
@@ -152,6 +259,12 @@ const labels: Record<string, readonly [string, string]> = {
   feature: ["功能体验", "Feature experience"],
   "KB reused": ["知识库复用", "KB reused"],
   enterprise_projection: ["企业证据同步", "Enterprise projection"],
+  enterprise_evidence: ["企业证据", "Enterprise evidence"],
+  source_age: ["来源年龄", "Source age"],
+  fetched_at: ["抓取时间", "Fetched at"],
+  published_at: ["发布时间", "Published at"],
+  updated_at: ["更新时间", "Updated at"],
+  last_seen_at: ["最近发现时间", "Last seen at"],
   fetched: ["已抓取", "Fetched"],
   research: ["研究资料", "Research"],
   web_search_result: ["搜索结果", "Search result"],
@@ -192,6 +305,10 @@ const labels: Record<string, readonly [string, string]> = {
   security: ["安全合规", "Security and compliance"],
   integrations: ["集成生态", "Integrations"],
   draft: ["草稿", "Draft"],
+  in_review: ["审核中", "In review"],
+  archived: ["已归档", "Archived"],
+  success: ["成功", "Success"],
+  source: ["采集来源", "Source"],
   pending: ["待处理", "Pending"],
   queued: ["排队中", "Queued"],
   running: ["运行中", "Running"],
@@ -347,6 +464,49 @@ export function dimensionDescription(name: string, description: string, locale: 
 }
 
 const diagnostics: Record<string, string> = {
+  'Unsupported file type': '不支持此文件类型。',
+  'Ingest failed': '资料入库失败。',
+  'Unable to read eval file': '无法读取评估文件。',
+  'Report blocked by release gate': '报告未满足发布条件',
+  'Report approval blocked by release gate': '报告审批未满足发布条件',
+  'Report approval is blocked by release gate findings.': '报告审批因发布检查问题而受阻。',
+  'Report is not ready for enterprise approval.': '报告尚未满足企业审批条件。',
+  'Workspace quota needs attention': '请关注工作空间配额',
+  'Review evidence quality before recommending this competitor.': '推荐该竞品前，请先审核证据质量。',
+  'Collect missing required-dimension evidence before final ranking.': '最终排名前，请补齐必需维度的证据。',
+  'Strong evidence-backed competitor profile; suitable for report recommendation.': '竞品资料有充分证据支持，可供报告建议参考。',
+  'Usable competitor profile with remaining review items.': '竞品资料可用，仍有待审核事项。',
+  'Insufficient confidence for stakeholder recommendation.': '置信度不足，暂不适合向相关方推荐。',
+  'Raise golden-set pass rate by fixing the failing quality cases first.': '先修复未通过的质量用例，提高基准用例通过率。',
+  'Improve source recall with more competitor-dimension evidence coverage.': '补充竞品各维度的证据覆盖，提高来源召回率。',
+  'Increase claim citation rate before relying on the report in review.': '审核采纳报告前，请提高结论引用率。',
+  'Repair unresolved report source tokens before publishing or reviewing the report.': '发布或审核报告前，请修复无法解析的来源引用。',
+  'Fix schema validation failures before comparing or publishing the report.': '比较或发布报告前，请修复结构校验错误。',
+  'Add Claim Validation & Evidence Risk to every report before review.': '审核前，请在报告中补充结论核验与证据风险章节。',
+  'Add Scenario QA Checklist to every report so layer, ScenarioPack, QA rules, and evidence requirements are reviewable.': '请补充场景质检清单，供审核研究视角、场景、质检规则与证据要求。',
+  'Add Memory Context to reports that use confirmed MemoryAgent guidance.': '使用已确认研究记忆的报告，请补充记忆上下文章节。',
+  'Complete MemoryAgent recall by carrying candidate IDs, prompt context, and recall score into the run plan or trace.': '请在运行计划或追踪中记录记忆候选 ID、提示上下文与召回评分。',
+  'Add User Research Evidence to reports that rely on survey, interview, or manual-note signals.': '使用调研、访谈或人工笔记的报告，请补充用户研究证据章节。',
+  'Attach survey, interview, or manual-note evidence when persona, buyer, review, or adoption dimensions are requested.': '研究目标用户、购买角色、用户反馈或采用情况时，请关联调研、访谈或人工笔记证据。',
+  'Close collector evidence gaps with RAG gap-fill retrieval context before reviewing the report.': '审核报告前，请通过检索补证上下文补齐采集证据缺口。',
+  'Add RAG Gap Fill report sections for open collector evidence gaps so retrieval queries and grounded context are reviewable.': '请为未补齐的证据缺口添加检索补证章节，供审核检索问题与证据上下文。',
+  'Run more real collection paths so EvalOps is not dominated by demos.': '请增加真实采集运行，减少演示数据对评估的影响。',
+  'Close the real run quality chain: collection, LLM trace, and cited report depth.': '请补齐真实运行质量链路：采集、模型追踪与报告引用深度。',
+  'Capture HITL review, scoped redo, or human correction signals whenever QA intervention is required.': '需要质检干预时，请记录人工审核、定向重做或人工修正信息。',
+  'Capture trace context, agent protocol messages, tool or collection signals, evidence links, and outcome events so decisions can be replayed.': '请记录追踪上下文、代理消息、工具或采集信息、证据关联与结果事件，以便回放决策。',
+  'Fix compliance blockers before treating EvalOps as release-ready.': '评估达到发布条件前，请先修复合规阻塞项。',
+  'Improve judge score by strengthening evidence support, citations, and structure.': '请加强证据支持、引用与结构，提高评审评分。',
+  'Compare regressed runs against the baseline and fix the weakest quality metric.': '请将退步运行与基线比较，修复最弱的质量指标。',
+  'Review recurring human corrections and convert them into rules or memory.': '请审核重复出现的人工修正，并整理为规则或研究记忆。',
+  'Tighten scoped redo routing so repeated revisions reduce QA issues faster.': '请改进定向重做分派，让修订更快减少质检问题。',
+  'Inspect regressions against the selected baseline before publishing.': '发布前，请对照选定基线检查退步项。',
+  'Report body is empty; approval is blocked until a readable report exists.': '报告正文为空；生成可读报告后才能审批。',
+  'Report version has no scoped evidence records.': '此报告版本尚未关联证据。',
+  'Report version has no scoped knowledge claims.': '此报告版本尚未关联知识结论。',
+  'No ReportVersion exists for this project.': '此项目尚无报告版本。',
+  'No ReportVersion exists yet; report benchmark cannot score quality.': '尚无报告版本，基准评估暂时无法评分。',
+  'Resolve evidence, coverage, claim, and QA gaps before approval.': '审批前，请解决证据、覆盖、结论与质检缺口。',
+  'L3 landscape analysis has fewer than four competitors.': '市场全景研究的竞品少于四个。',
   "Evidence is ready for review.": "证据已就绪，请审核。",
   "QA review is ready.": "质检已就绪，请审核。",
   "Collected sources are ready for review.": "资料采集完成，请审核来源。",
@@ -399,6 +559,46 @@ const diagnostics: Record<string, string> = {
 export function runtimeDiagnostic(message: string, locale: Locale): string {
   if (locale !== "zh-CN") return message;
   if (Object.prototype.hasOwnProperty.call(diagnostics, message)) return diagnostics[message];
+  if (Object.prototype.hasOwnProperty.call(labels, message)) return displayLabel(message, locale);
+  // Anchored templates from the backend scorer/evaluator; captured names and facts stay verbatim.
+  if (message === 'Landscape analysis has fewer than four competitors.') return '市场格局分析的竞品数量不足四个。';
+  const requiredEvidence = /^(.+) needs (\d+) (verified )?evidence item\(s\) for (feature|pricing|persona|market|review|security|integrations)\.$/.exec(message);
+  if (requiredEvidence) return `${requiredEvidence[1]} 在${displayLabel(requiredEvidence[4], locale)}维度需要 ${requiredEvidence[2]} 条${requiredEvidence[3] ? '已核验' : ''}证据。`;
+  const reliability = /^Evidence (\S+) has low reliability score\.$/.exec(message);
+  if (reliability) return `证据 ${reliability[1]} 的可靠性评分较低。`;
+  const blockedScore = /^Score (\d+): blocked by (\d+) critical business QA finding\(s\); coverage is (\d+)%\.$/.exec(message);
+  if (blockedScore) return `评分 ${blockedScore[1]}：存在 ${blockedScore[2]} 个关键业务质检阻塞项；覆盖率为 ${blockedScore[3]}%。`;
+  const riskScore = /^Score (\d+): evidence and QA gaps remain material; coverage is (\d+)%\.$/.exec(message);
+  if (riskScore) return `评分 ${riskScore[1]}：仍有明显证据与质检缺口；覆盖率为 ${riskScore[2]}%。`;
+  const watchScore = /^Score (\d+): usable but still worth reviewing warnings before approval\.$/.exec(message);
+  if (watchScore) return `评分 ${watchScore[1]}：当前资料可用，审批前仍需审核警告。`;
+  const readyScore = /^Score (\d+): ready for stakeholder review or report approval\.$/.exec(message);
+  if (readyScore) return `评分 ${readyScore[1]}：已就绪，可供相关方审核或审批报告。`;
+  const homepage = /^(.+) does not have a verified homepage\.$/.exec(message);
+  if (homepage) return `${homepage[1]} 尚无已核验的官网。`;
+  const readiness = /^Readiness is (blocked|at_risk|watch|ready) with score (\d+); approval requires ready and score >= (\d+)\.$/.exec(message);
+  if (readiness) return `就绪状态为${displayLabel(readiness[1], locale)}，评分 ${readiness[2]}；审批要求已就绪且评分不低于 ${readiness[3]}。`;
+  const missingEvidence = /^(.+) has no usable evidence for (feature|pricing|persona|market|review|security|integrations)\.$/.exec(message);
+  if (missingEvidence) return `${missingEvidence[1]} 在${displayLabel(missingEvidence[2], locale)}维度尚无可用证据。`;
+  const unverifiedEvidence = /^(.+) has (feature|pricing|persona|market|review|security|integrations) evidence, but no verified source\.$/.exec(message);
+  if (unverifiedEvidence) return `${unverifiedEvidence[1]} 有${displayLabel(unverifiedEvidence[2], locale)}证据，但尚无已核验来源。`;
+  const fileSize = /^File exceeds (\d+)MB$/.exec(message);
+  if (fileSize) return `文件超过 ${fileSize[1]} MB。`;
+  const freshness = /^(\d+)d old \/ (\d+)d policy \/ (fetched_at|published_at|updated_at|last_seen_at)$/.exec(message);
+  if (freshness) return `来源已过去 ${freshness[1]} 天 / 策略要求 ${freshness[2]} 天 / ${displayLabel(freshness[3], locale)}`;
+  const kbDocuments = /^(\d+) KB documents$/.exec(message);
+  if (kbDocuments) return `${kbDocuments[1]} 份知识库文档`;
+  const selector = /^(raw source|collector run) (\S+)$/.exec(message);
+  if (selector) return `${selector[1] === 'raw source' ? '原始来源' : '采集运行'} ${selector[2]}`;
+  const notificationMetric = /^(score) (\d+)$|^(\d+) (blockers|warnings)$/.exec(message);
+  if (notificationMetric) return notificationMetric[1] ? `评分 ${notificationMetric[2]}` : `${notificationMetric[3]} 个${notificationMetric[4] === 'blockers' ? '阻塞项' : '警告'}`;
+  const notificationLocator = /^(report|KB) (\S+)$/.exec(message);
+  if (notificationLocator) return `${notificationLocator[1] === 'report' ? '报告' : '知识库'} ${notificationLocator[2]}`;
+  const notificationIssue = /^issue ([a-z ]+)$/.exec(message);
+  if (notificationIssue) {
+    const code = notificationIssue[1].replace(/ /g, '_');
+    if (Object.prototype.hasOwnProperty.call(labels, code)) return `问题：${displayLabel(code, locale)}`;
+  }
   const redo = /^Scoped redo started: (collector|analyst|writer_only|comparator|full)\.$/.exec(message);
   if (redo) return `已开始定向重做：${displayLabel(redo[1], locale)}。`;
   const decision = /^Runtime command accepted HITL decision: (accept|modify_plan|force_pass|redo)\.$/.exec(message);

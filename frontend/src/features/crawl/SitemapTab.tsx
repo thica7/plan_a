@@ -2,6 +2,7 @@ import { apiFetch } from "../../api/http";
 import { useState } from 'react';
 import { Search } from 'lucide-react';
 import { useTranslation } from '../../stores/i18n';
+import { SystemMessage } from '../../i18n/SystemMessage';
 
 interface SitemapTabProps {
   competitor?: string;
@@ -78,6 +79,7 @@ export function SitemapTab({ competitor, dimension, priority, onSubmitted }: Sit
           className="input input-bordered flex-1"
           type="url"
           placeholder="https://example.com/sitemap.xml"
+          aria-label={t('crawl.sitemap')}
           value={url}
           onChange={(event) => setUrl(event.target.value)}
         />
@@ -88,18 +90,18 @@ export function SitemapTab({ competitor, dimension, priority, onSubmitted }: Sit
           max={1000}
           value={maxUrls}
           onChange={(event) => setMaxUrls(Number(event.target.value))}
-          aria-label="Maximum URLs"
+          aria-label={t('crawl.maxUrls')}
         />
         <button type="button" className="btn btn-outline btn-sm gap-1" onClick={loadPreview} disabled={loading || !url.trim()}>
           <Search className="h-3.5 w-3.5" />
           {t('common.preview')}
         </button>
       </div>
-      {error && <div className="alert alert-error text-sm">{error}</div>}
+      {error && <div className="alert alert-error text-sm"><SystemMessage message={error} /></div>}
       <div className="rounded-lg border border-base-300 bg-base-100 p-3">
         <div className="mb-2 flex items-center justify-between text-xs">
           <span className="font-semibold">{t('common.preview')}</span>
-          <span className="text-base-content/55">{preview.length} shown</span>
+          <span className="text-base-content/55">{preview.length} {t('crawl.shown')}</span>
         </div>
         <ol className="grid gap-1 text-xs">
           {preview.map((item) => <li key={item} className="truncate">{item}</li>)}

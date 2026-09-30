@@ -1,8 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useI18n } from '../../stores/i18n';
 import type { ReportReleaseGate, ReportVersionRecord } from "../../api/types";
 import { ReleaseGateReviewQueue } from "./ReleaseGateReviewQueue";
 import { buildReleaseGateReviewTasks, buildReleaseIssueRedoTarget } from "./releaseGateReview";
+
+beforeEach(() => useI18n.getState().setLocale('en-US'));
 
 const gateWithKbBlocker = {
   allowed: false,

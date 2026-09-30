@@ -1,6 +1,7 @@
 import { apiFetch } from "../../api/http";
 import { useMemo, useState } from 'react';
 import { useTranslation } from '../../stores/i18n';
+import { SystemMessage } from '../../i18n/SystemMessage';
 
 interface ManualTabProps {
   competitor?: string;
@@ -52,14 +53,15 @@ export function ManualTab({ competitor, dimension, priority, onSubmitted }: Manu
       <textarea
         className="textarea textarea-bordered min-h-28 w-full font-mono text-sm"
         placeholder="https://example.com/pricing&#10;https://example.com/features"
+        aria-label={t('crawl.urlList')}
         value={value}
         onChange={(event) => setValue(event.target.value)}
       />
-      {error && <div className="alert alert-error text-sm">{error}</div>}
+      {error && <div className="alert alert-error text-sm"><SystemMessage message={error} /></div>}
       <div className="rounded-lg border border-base-300 bg-base-100 p-3">
         <div className="mb-2 flex items-center justify-between text-xs">
           <span className="font-semibold">{t('common.preview')}</span>
-          <span className="text-base-content/55">{urls.length} URLs</span>
+          <span className="text-base-content/55">{urls.length} {t('common.urls')}</span>
         </div>
         <ol className="grid gap-1 text-xs">
           {urls.slice(0, 10).map((url) => <li key={url} className="truncate">{url}</li>)}
@@ -72,4 +74,3 @@ export function ManualTab({ competitor, dimension, priority, onSubmitted }: Manu
     </div>
   );
 }
-

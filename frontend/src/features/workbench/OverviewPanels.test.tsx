@@ -1,9 +1,22 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import type { TraceSpan } from "../../api/types";
-import { buildKbWarmStartSummary, TraceTimelinePanel } from "./OverviewPanels";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
+import { useI18n } from '../../stores/i18n';
+import type { BusinessQAEvaluation, TraceSpan } from "../../api/types";
+import { buildKbWarmStartSummary, QaBlockersPanel, TraceTimelinePanel } from "./OverviewPanels";
 
 describe("OverviewPanels KB warm-start diagnostics", () => {
+  beforeEach(() => useI18n.getState().setLocale('en-US'));
+  it("offers Chinese original-text access for an unknown backend rule name", () => {
+    useI18n.getState().setLocale('zh-CN');
+    render(<QaBlockersPanel claimValidation={null} evidenceGaps={null} matrix={null} redTeam={null}
+      qaEvaluation={{ findings: [{ id: 'qa-1', rule_name: 'New backend rule', severity: 'blocker', message: '已知中文提示' }] } as BusinessQAEvaluation} />);
+    expect(screen.queryByText('New backend rule')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '系统提示（查看原文）' }));
+    expect(screen.getByText('New backend rule')).toBeInTheDocument();
+    act(() => useI18n.getState().setLocale('en-US'));
+    expect(screen.getByText('New backend rule')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hide original' })).not.toBeInTheDocument();
+  });
   it("aggregates accepted and rejected KB warm-start hits", () => {
     const summary = buildKbWarmStartSummary([
       traceSpan({
@@ -86,7 +99,7 @@ describe("OverviewPanels KB warm-start diagnostics", () => {
     expect(screen.getByText("KB hits")).toBeInTheDocument();
     expect(screen.getByText("Accepted")).toBeInTheDocument();
     expect(screen.getByText("Rejected")).toBeInTheDocument();
-    expect(screen.getByText("missing_text")).toBeInTheDocument();
+    expect(screen.getByText("Missing text")).toBeInTheDocument();
     expect(screen.getByText("kb-doc-empty")).toBeInTheDocument();
   });
 });

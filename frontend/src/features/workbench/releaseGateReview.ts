@@ -1,5 +1,7 @@
 import type { BusinessQAFinding, ReportReleaseGate } from "../../api/types";
 import type { KnowledgeRollbackRequest } from "../../stores/knowledgeStore";
+import type { Locale } from "../../stores/i18n";
+import { displayLabel } from "../../i18n/display";
 
 export interface ReleaseIssueAuditRow {
   href?: string;
@@ -28,7 +30,7 @@ export interface ReleaseGateReviewTask {
   rollbackTarget: ReleaseIssueRollbackTarget | null;
 }
 
-export function buildReleaseGateReviewTasks(gate: ReportReleaseGate | null): ReleaseGateReviewTask[] {
+export function buildReleaseGateReviewTasks(gate: ReportReleaseGate | null, locale: Locale = 'en-US'): ReleaseGateReviewTask[] {
   if (!gate) return [];
   return gate.issues
     .map((issue) => {
@@ -36,7 +38,7 @@ export function buildReleaseGateReviewTasks(gate: ReportReleaseGate | null): Rel
       return {
         id: issue.id,
         issue,
-        auditRows: buildReleaseIssueAuditRows(issue),
+        auditRows: buildReleaseIssueAuditRows(issue, locale),
         claimCount: issue.claim_ids.length,
         evidenceCount: issue.evidence_ids.length,
         phase: releaseReviewPhase(issue, rollbackTarget),
@@ -46,13 +48,13 @@ export function buildReleaseGateReviewTasks(gate: ReportReleaseGate | null): Rel
     .sort((left, right) => severityRank(right.issue.severity) - severityRank(left.issue.severity));
 }
 
-export function buildReleaseIssueAuditRows(issue: BusinessQAFinding): ReleaseIssueAuditRow[] {
+export function buildReleaseIssueAuditRows(issue: BusinessQAFinding, locale: Locale = 'en-US'): ReleaseIssueAuditRow[] {
   const metadata = issue.metadata ?? {};
   const rows: ReleaseIssueAuditRow[] = [];
   const issueTypes = metadataStringList(metadata["claim_validation_issue_types"]);
   const conflictIds = metadataStringList(metadata["conflicting_evidence_ids"]);
   if (issueTypes.length > 0) {
-    rows.push({ label: "Claim issue", value: issueTypes.join(", ") });
+    rows.push({ label: "Claim issue", value: locale === 'zh-CN' ? issueTypes.map((type) => displayLabel(type, locale)).join('、') : issueTypes.join(', ') });
   }
   if (conflictIds.length > 0) {
     rows.push({ label: "Conflict evidence", value: conflictIds.join(", ") });
@@ -61,12 +63,12 @@ export function buildReleaseIssueAuditRows(issue: BusinessQAFinding): ReleaseIss
   if (claimArea) {
     rows.push({ label: "Conflict fact", value: claimArea });
   }
-  const freshnessRow = buildFreshnessGateRow(metadata);
+  const freshnessRow = buildFreshnessGateRow(metadata, locale);
   if (freshnessRow) {
     rows.push(freshnessRow);
   }
   for (const pair of metadataObjectList(metadata["source_evidence_pairs"]).slice(0, 2)) {
-    const pairRow = buildEvidencePairRow(pair);
+    const pairRow = buildEvidencePairRow(pair, locale);
     if (pairRow) rows.push(pairRow);
   }
 
@@ -87,7 +89,7 @@ export function buildReleaseIssueAuditRows(issue: BusinessQAFinding): ReleaseIss
     if (kbDocumentId) {
       rows.push({
         label: "KB document",
-        value: [kbDocumentId, kbVersion ? `v${kbVersion}` : "", kbStatus].filter(Boolean).join(" / "),
+        value: [kbDocumentId, kbVersion ? `v${kbVersion}` : "", kbStatus && locale === 'zh-CN' ? displayLabel(kbStatus, locale) : kbStatus].filter(Boolean).join(" / "),
         href: knowledgeLocatorHref({
           chunkId: metadataText(item, "kb_chunk_id"),
           documentId: kbDocumentId,
@@ -113,20 +115,20 @@ export function buildReleaseIssueAuditRows(issue: BusinessQAFinding): ReleaseIss
   return rows.slice(0, 10);
 }
 
-function buildFreshnessGateRow(metadata: Record<string, unknown>): ReleaseIssueAuditRow | null {
+function buildFreshnessGateRow(metadata: Record<string, unknown>, locale: Locale): ReleaseIssueAuditRow | null {
   const ageDays = metadataNumber(metadata, "source_age_days");
   const policyDays = metadataNumber(metadata, "freshness_policy_days");
   const basis = metadataText(metadata, "freshness_basis");
   if (ageDays === null && policyDays === null && !basis) return null;
   const parts = [
-    ageDays !== null ? `${ageDays}d old` : "",
-    policyDays !== null ? `${policyDays}d policy` : "",
-    basis ?? "",
+    ageDays !== null ? (locale === 'zh-CN' ? `来源已过去 ${ageDays} 天` : `${ageDays}d old`) : "",
+    policyDays !== null ? (locale === 'zh-CN' ? `策略要求 ${policyDays} 天` : `${policyDays}d policy`) : "",
+    basis && locale === 'zh-CN' ? displayLabel(basis, locale) : basis ?? "",
   ].filter(Boolean);
   return { label: "Freshness gate", value: parts.join(" / ") };
 }
 
-function buildEvidencePairRow(pair: Record<string, unknown>): ReleaseIssueAuditRow | null {
+function buildEvidencePairRow(pair: Record<string, unknown>, locale: Locale): ReleaseIssueAuditRow | null {
   const kbSourceId = metadataText(pair, "kb_source_id");
   const kbPosition = metadataText(pair, "kb_position");
   const kbDocumentId = metadataText(pair, "kb_document_id");
@@ -141,7 +143,7 @@ function buildEvidencePairRow(pair: Record<string, unknown>): ReleaseIssueAuditR
   return {
     href: knowledgeLocatorHref({ chunkId: kbChunkId, documentId: kbDocumentId, rawSourceId: kbSourceId }),
     label: "Evidence pair",
-    value: `${kb || "KB source"} vs ${live || "live source"}`,
+    value: locale === 'zh-CN' ? `${kb || '知识库来源'} 对照 ${live || '实时来源'}` : `${kb || "KB source"} vs ${live || "live source"}`,
   };
 }
 

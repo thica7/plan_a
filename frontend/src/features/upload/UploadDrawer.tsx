@@ -1,6 +1,8 @@
 import { ChangeEvent, DragEvent, useMemo, useState } from 'react';
 import { UploadCloud, RotateCw, X } from 'lucide-react';
 import { useTranslation } from '../../stores/i18n';
+import { displayLabel } from '../../i18n/display';
+import { SystemMessage } from '../../i18n/SystemMessage';
 import {
   createBatch,
   fileToBase64,
@@ -82,7 +84,7 @@ function applyJobProgress(entries: UploadEntry[], job: IngestJob): UploadEntry[]
 }
 
 export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [dragging, setDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -189,9 +191,9 @@ export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
           <div className="flex items-center justify-between border-b border-base-300 p-5">
             <div>
               <h2 className="text-lg font-bold">{t('upload.title')}</h2>
-              <p className="text-xs text-base-content/60">PDF, DOCX, CSV, JSON, Markdown, HTML, and text up to {maxMb}MB each.</p>
+              <p className="text-xs text-base-content/60">{t('upload.formats').replace('XMB', `${maxMb} MB`)}</p>
             </div>
-            <button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={onClose} aria-label="Close upload drawer">
+            <button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={onClose} aria-label={t('upload.close')}>
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -223,11 +225,11 @@ export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
                       <p className="text-xs text-base-content/55">{(entry.file.size / 1024 / 1024).toFixed(2)}MB</p>
                     </div>
                     <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${statusClass(entry.status)}`}>
-                      {entry.status}
+                      {displayLabel(entry.status, locale)}
                     </span>
                   </div>
                   <progress className="progress progress-primary mt-3 h-2 w-full" value={entry.progress} max={100} />
-                  {entry.error && <p className="mt-2 text-xs text-error">{entry.error}</p>}
+                  {entry.error && <p className="mt-2 text-xs text-error"><SystemMessage message={entry.error} /></p>}
                 </div>
               ))}
               {entries.length === 0 && (
@@ -240,7 +242,7 @@ export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
 
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 p-5">
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEntries([])} disabled={submitting || entries.length === 0}>
-              Clear
+              {t('common.clear')}
             </button>
             <div className="flex gap-2">
               <button type="button" className="btn btn-outline btn-sm gap-1" onClick={() => submitEntries(true)} disabled={submitting || !entries.some((entry) => entry.status === 'failed')}>
@@ -248,7 +250,7 @@ export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
                 {t('upload.retryFailed')}
               </button>
               <button type="button" className="btn btn-primary btn-sm" onClick={() => submitEntries(false)} disabled={submitting || !canSubmit}>
-                {submitting ? 'Uploading...' : t('upload.startUpload')}
+                {submitting ? t('upload.uploading') : t('upload.startUpload')}
               </button>
             </div>
           </div>

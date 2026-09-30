@@ -127,7 +127,7 @@ export function ReportStudio({
       </div>
 
       <div className="report-reading-grid">
-        <div className="report-reader-panel" aria-label="Report reader">
+        <div className="report-reader-panel" aria-label={t('reportStatus.reader')}>
           {selectedVersion ? (
             <ReportView
               markdown={selectedVersion.report_md}

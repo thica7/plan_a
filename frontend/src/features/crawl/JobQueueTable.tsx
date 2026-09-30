@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { GripVertical, Pause, Play, RotateCw } from 'lucide-react';
+import { GripVertical, Pause, RotateCw } from 'lucide-react';
 import { useTranslation } from '../../stores/i18n';
 import type { CrawlJob } from '../../api/crawl';
+import { displayLabel } from '../../i18n/display';
 
 export interface CrawlSource {
   id: string;
@@ -19,6 +20,7 @@ interface JobQueueTableProps {
 
 interface QueueRow {
   id: string;
+  originalId: string;
   label: string;
   sourceType: string;
   status: string;
@@ -46,13 +48,13 @@ function sourceProgress(source: CrawlSource) {
 export function JobQueueTable({ jobs, sources, onRetryJob, onRetrySource }: JobQueueTableProps) {
   const { t, locale } = useTranslation();
   const [order, setOrder] = useState<string[]>([]);
-  const [paused, setPaused] = useState<Set<string>>(() => new Set());
 
   const rows = useMemo<QueueRow[]>(() => {
     const jobRows = jobs.map((job) => ({
       id: `job:${job.id}`,
+      originalId: job.id,
       label: job.url,
-      sourceType: job.run_id ? t('source job') : t('manual job'),
+      sourceType: job.run_id ? t('crawl.sourceJob') : t('crawl.manualJob'),
       status: job.status,
       priority: 100,
       progress: job.status === 'completed' || job.status === 'success' ? 100 : job.status === 'running' ? 60 : job.status === 'failed' ? 100 : 10,
@@ -61,6 +63,7 @@ export function JobQueueTable({ jobs, sources, onRetryJob, onRetrySource }: JobQ
     }));
     const sourceRows = sources.map((source) => ({
       id: `source:${source.id}`,
+      originalId: source.id,
       label: sourceLabel(source, t),
       sourceType: source.type,
       status: 'source',
@@ -88,56 +91,35 @@ export function JobQueueTable({ jobs, sources, onRetryJob, onRetrySource }: JobQ
     setOrder(next);
   };
 
-  const togglePaused = (id: string) => {
-    setPaused((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'completed': return t('common.completed');
-      case 'success': return t('common.success');
-      case 'running': return t('common.running');
-      case 'failed': return t('common.failed');
-      case 'source': return t('knowledge.source');
-      default: return status;
-    }
-  };
-
   return (
     <div className="overflow-x-auto rounded-lg border border-base-300 bg-base-100">
+      <p className="px-4 pt-3 text-xs text-base-content/60"><span>{t('crawl.displaySortHelp')}</span> <span>{t('crawl.pauseUnavailable')}</span></p>
       <table className="table w-full">
         <thead>
           <tr>
-            <th>{t('Queue')}</th>
-            <th>{t('Target')}</th>
+            <th>{t('crawl.displaySort')}</th>
+            <th>{t('crawl.target')}</th>
             <th>{t('history.status')}</th>
-            <th>{t('Priority')}</th>
-            <th>{t('Progress')}</th>
+            <th>{t('crawl.priority')}</th>
+            <th>{t('crawl.progress')}</th>
             <th>{t('knowledge.source')}</th>
-            <th>{t('Actions')}</th>
+            <th>{t('common.actions')}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, index) => {
-            const isPaused = paused.has(row.id);
-            const rawId = row.id.split(':')[1];
             return (
-              <tr key={row.id} className={isPaused ? 'opacity-55' : ''}>
+              <tr key={row.id}>
                 <td>
                   <div className="flex items-center gap-1">
                     <GripVertical className="h-4 w-4 text-base-content/40" />
-                    <button type="button" className="btn btn-ghost btn-xs" onClick={() => move(row.id, -1)} disabled={index === 0}>{t('Up')}</button>
-                    <button type="button" className="btn btn-ghost btn-xs" onClick={() => move(row.id, 1)} disabled={index === rows.length - 1}>{t('Down')}</button>
+                    <button type="button" className="btn btn-ghost btn-xs" onClick={() => move(row.id, -1)} disabled={index === 0}>{t('crawl.up')}</button>
+                    <button type="button" className="btn btn-ghost btn-xs" onClick={() => move(row.id, 1)} disabled={index === rows.length - 1}>{t('crawl.down')}</button>
                   </div>
                 </td>
                 <td className="max-w-md truncate text-sm">{row.label}</td>
                 <td>
-                  <span className="badge badge-sm">{isPaused ? t('paused') : getStatusLabel(row.status)}</span>
+                  <span className="badge badge-sm" title={row.status}>{displayLabel(row.status, locale)}</span>
                 </td>
                 <td>{row.priority}</td>
                 <td>
@@ -146,17 +128,17 @@ export function JobQueueTable({ jobs, sources, onRetryJob, onRetrySource }: JobQ
                     <span className="text-xs">{row.progress}%</span>
                   </div>
                 </td>
-                <td>{row.sourceType}</td>
+                <td>{displayLabel(row.sourceType, locale)}</td>
                 <td>
                   <div className="flex flex-wrap gap-1">
-                    <button type="button" className="btn btn-ghost btn-xs gap-1" onClick={() => togglePaused(row.id)}>
-                      {isPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
-                      {isPaused ? t('Resume') : t('Pause')}
+                    <button type="button" className="btn btn-ghost btn-xs gap-1" disabled title={t('crawl.pauseUnavailable')}>
+                      <Pause className="h-3 w-3" />
+                      {t('crawl.pause')}
                     </button>
                     <button
                       type="button"
                       className="btn btn-outline btn-xs gap-1"
-                      onClick={() => row.kind === 'source' ? onRetrySource(rawId) : onRetryJob(rawId)}
+                      onClick={() => row.kind === 'source' ? onRetrySource(row.originalId) : onRetryJob(row.originalId)}
                       disabled={row.kind === 'job' && !['failed', 'completed', 'success'].includes(row.status)}
                     >
                       <RotateCw className="h-3 w-3" />
@@ -169,7 +151,7 @@ export function JobQueueTable({ jobs, sources, onRetryJob, onRetrySource }: JobQ
           })}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={7} className="py-8 text-center text-sm text-base-content/50">{t('No queued jobs or sources.')}</td>
+              <td colSpan={7} className="py-8 text-center text-sm text-base-content/50">{t('crawl.emptyQueue')}</td>
             </tr>
           )}
         </tbody>

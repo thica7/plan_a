@@ -8,6 +8,8 @@ import { SourceCard } from '../components/SourceCard';
 import { UploadDrawer } from '../features/upload/UploadDrawer';
 import { VersionDrawer } from '../features/version/VersionDrawer';
 import { useTranslation } from '../stores/i18n';
+import { displayLabel } from '../i18n/display';
+import { SystemMessage } from '../i18n/SystemMessage';
 
 type SortKey = 'fetched_at' | 'title' | 'source_type';
 type DetailTab = 'content' | 'versions';
@@ -27,7 +29,7 @@ const EMPTY_ROLLBACK_FORM: RollbackFormState = {
 };
 
 export default function KnowledgePage() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [searchParams] = useSearchParams();
   const focusDocumentId = searchParams.get('document_id')?.trim() || '';
   const focusChunkId = searchParams.get('chunk_id')?.trim() || '';
@@ -236,7 +238,7 @@ export default function KnowledgePage() {
       <section className="rounded-lg border border-base-300 bg-base-100 p-4 shadow-sm">
         <form className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]" onSubmit={handleRollbackBySelector}>
           <label className="form-control">
-            <span className="label-text">Run ID</span>
+            <span className="label-text">{t('knowledge.runId')}</span>
             <input
               className="input input-bordered input-sm"
               value={rollbackForm.run_id}
@@ -244,7 +246,7 @@ export default function KnowledgePage() {
             />
           </label>
           <label className="form-control">
-            <span className="label-text">Raw source ID</span>
+            <span className="label-text">{t('knowledge.rawSourceId')}</span>
             <input
               className="input input-bordered input-sm"
               value={rollbackForm.raw_source_id}
@@ -252,7 +254,7 @@ export default function KnowledgePage() {
             />
           </label>
           <label className="form-control">
-            <span className="label-text">Crawl run ID</span>
+            <span className="label-text">{t('knowledge.crawlRunId')}</span>
             <input
               className="input input-bordered input-sm"
               value={rollbackForm.crawl_run_id}
@@ -267,21 +269,21 @@ export default function KnowledgePage() {
                 type="checkbox"
                 onChange={(event) => updateRollbackField('restore_previous', event.target.checked)}
               />
-              <span className="label-text">Restore previous</span>
+              <span className="label-text">{t('knowledge.restorePrevious')}</span>
             </label>
             <button
               className="btn btn-warning btn-sm"
               disabled={!canRollbackBySelector || rollbackLoading}
               type="submit"
             >
-              {rollbackLoading ? 'Rolling back...' : 'Rollback'}
+              {rollbackLoading ? t('workbench.rollingBack') : t('workbench.rollback')}
             </button>
           </div>
         </form>
         {rollbackResult ? <RollbackResult result={rollbackResult} /> : null}
       </section>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error"><SystemMessage message={error} /></div>}
 
       {loading ? (
         <div className="flex justify-center py-12">
@@ -358,8 +360,8 @@ export default function KnowledgePage() {
                   <h3 className="font-bold text-lg">{selectedDoc.title}</h3>
                   <div className="flex flex-wrap gap-2 mt-2 text-xs">
                     {selectedDoc.competitor && <span className="badge badge-sm">{selectedDoc.competitor}</span>}
-                    {selectedDoc.dimension && <span className="badge badge-sm badge-accent">{selectedDoc.dimension}</span>}
-                    <span className="badge badge-sm badge-ghost">{selectedDoc.source_type}</span>
+                    {selectedDoc.dimension && <span className="badge badge-sm badge-accent" title={selectedDoc.dimension}>{displayLabel(selectedDoc.dimension, locale)}</span>}
+                    <span className="badge badge-sm badge-ghost" title={selectedDoc.source_type}>{displayLabel(selectedDoc.source_type, locale)}</span>
                     {selectedDoc.url && (
                       <a href={selectedDoc.url} target="_blank" rel="noopener noreferrer" className="link link-primary text-xs">
                         {t('knowledge.openSource')}
@@ -373,7 +375,7 @@ export default function KnowledgePage() {
                   onClick={() => handleRollbackDocument(selectedDoc.id)}
                   type="button"
                 >
-                  {rollbackLoading ? 'Rolling back...' : 'Rollback document'}
+                  {rollbackLoading ? t('workbench.rollingBack') : t('knowledge.rollbackDocument')}
                 </button>
               </div>
               <div className="divider" />
@@ -452,37 +454,38 @@ function FocusedLocatorPanel({
   chunksLoading: boolean;
   rawSourceId: string;
 }) {
+  const { t, locale } = useTranslation();
   return (
-    <section className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm" aria-label="Focused KB locator">
+    <section className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm" aria-label={t('knowledge.focusedLocator')}>
       <div className="mb-2 flex flex-wrap gap-2">
-        {chunkId ? <span className="badge badge-primary badge-outline">chunk {chunkId}</span> : null}
-        {rawSourceId ? <span className="badge badge-ghost">raw source {rawSourceId}</span> : null}
+        {chunkId ? <span className="badge badge-primary badge-outline">{t('knowledge.chunk')} {chunkId}</span> : null}
+        {rawSourceId ? <span className="badge badge-ghost">{t('knowledge.rawSource')} {rawSourceId}</span> : null}
       </div>
       {chunkId ? (
         chunksLoading ? (
-          <p className="text-base-content/60">Loading focused chunk...</p>
+          <p className="text-base-content/60">{t('knowledge.loadingChunk')}</p>
         ) : chunk ? (
           <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-base-100 p-3 text-xs">
             {chunk.text}
           </pre>
         ) : (
-          <p className="text-base-content/60">Focused chunk was not found in this document.</p>
+          <p className="text-base-content/60">{t('knowledge.chunkNotFound')}</p>
         )
       ) : (
-        <p className="text-base-content/60">Use the raw source selector above to rollback or inspect related evidence.</p>
+        <p className="text-base-content/60">{t('knowledge.rawSourceHint')}</p>
       )}
       {rawSourceId ? (
         <div className="mt-3 border-t border-primary/20 pt-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="font-medium">Source snapshot</span>
-            {artifact ? <span className="badge badge-outline badge-sm">{artifact.artifact_type}</span> : null}
+            <span className="font-medium">{t('knowledge.sourceSnapshot')}</span>
+            {artifact ? <span className="badge badge-outline badge-sm" title={artifact.artifact_type}>{displayLabel(artifact.artifact_type, locale)}</span> : null}
             {artifact ? <span className="badge badge-ghost badge-sm">{artifact.filename}</span> : null}
           </div>
           {artifactLoading ? (
-            <p className="text-base-content/60">Loading source snapshot...</p>
+            <p className="text-base-content/60">{t('knowledge.loadingSnapshot')}</p>
           ) : artifactPreview?.preview_available && artifactPreview.preview_type === 'image' && artifactPreview.data_url ? (
             <img
-              alt={`Source snapshot ${artifactPreview.artifact.filename}`}
+              alt={`${t('knowledge.sourceSnapshot')} ${artifactPreview.artifact.filename}`}
               className="max-h-64 w-full rounded bg-base-100 object-contain"
               src={artifactPreview.data_url}
             />
@@ -490,7 +493,7 @@ function FocusedLocatorPanel({
             <iframe
               className="h-64 w-full rounded bg-base-100"
               src={artifactPreview.data_url}
-              title={`Source snapshot ${artifactPreview.artifact.filename}`}
+              title={`${t('knowledge.sourceSnapshot')} ${artifactPreview.artifact.filename}`}
             />
           ) : artifactPreview?.preview_available && artifactPreview.preview_type === 'text' ? (
             <>
@@ -498,19 +501,19 @@ function FocusedLocatorPanel({
                 {artifactPreview.content_text}
               </pre>
               {artifactPreview.truncated ? (
-                <p className="mt-2 text-xs text-base-content/60">Preview truncated.</p>
+                <p className="mt-2 text-xs text-base-content/60">{t('knowledge.previewTruncated')}</p>
               ) : null}
             </>
           ) : artifactPreview?.truncated ? (
-            <p className="text-base-content/60">Source snapshot is too large for inline preview.</p>
+            <p className="text-base-content/60">{t('knowledge.snapshotTooLarge')}</p>
           ) : artifactPreview?.external_uri ? (
             <code className="block overflow-x-auto rounded bg-base-100 p-2 text-xs">
               {artifactPreview.external_uri}
             </code>
           ) : artifact ? (
-            <p className="text-base-content/60">No readable local preview is available for this artifact.</p>
+            <p className="text-base-content/60">{t('knowledge.noReadablePreview')}</p>
           ) : (
-            <p className="text-base-content/60">No source snapshot artifact is linked to this raw source.</p>
+            <p className="text-base-content/60">{t('knowledge.noSnapshot')}</p>
           )}
         </div>
       ) : null}
@@ -582,24 +585,25 @@ function metadataStringList(metadata: Record<string, unknown>, key: string) {
 }
 
 function RollbackResult({ result }: { result: KnowledgeRollbackResult }) {
+  const { t } = useTranslation();
   return (
     <div className="mt-3 grid gap-2 text-sm">
       <div className="flex flex-wrap gap-2">
-        <span className="badge badge-outline">Matched {result.matched_count}</span>
-        <span className="badge badge-warning">Archived {result.rolled_back_count}</span>
-        <span className="badge badge-success">Restored {result.restored_count}</span>
+        <span className="badge badge-outline">{t('knowledge.matched')} {result.matched_count}</span>
+        <span className="badge badge-warning">{t('knowledge.archived')} {result.rolled_back_count}</span>
+        <span className="badge badge-success">{t('knowledge.restored')} {result.restored_count}</span>
         {result.skipped_document_ids.length > 0 ? (
-          <span className="badge badge-ghost">Skipped {result.skipped_document_ids.length}</span>
+          <span className="badge badge-ghost">{t('knowledge.skipped')} {result.skipped_document_ids.length}</span>
         ) : null}
       </div>
       {result.archived_document_ids.length > 0 ? (
-        <code>archived: {result.archived_document_ids.join(', ')}</code>
+        <code>{t('knowledge.archived')}: {result.archived_document_ids.join(', ')}</code>
       ) : null}
       {result.restored_document_ids.length > 0 ? (
-        <code>restored: {result.restored_document_ids.join(', ')}</code>
+        <code>{t('knowledge.restored')}: {result.restored_document_ids.join(', ')}</code>
       ) : null}
       {result.vector_cleanup_error ? (
-        <div className="alert alert-warning py-2">vector cleanup: {result.vector_cleanup_error}</div>
+        <div className="alert alert-warning py-2">{t('knowledge.vectorCleanup')}: <SystemMessage message={result.vector_cleanup_error} /></div>
       ) : null}
     </div>
   );

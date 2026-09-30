@@ -1,8 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReportReleaseGate } from "../../api/types";
 import { useI18n } from "../../stores/i18n";
 import { ReportReviewDesk, buildReleaseIssueAuditRows, buildReleaseIssueRollbackTarget } from "./ReportReviewDesk";
+
+beforeEach(() => useI18n.getState().setLocale('en-US'));
 
 const claimConflictGate = {
   allowed: false,
@@ -188,7 +190,7 @@ describe("ReportReviewDesk release gate audit metadata", () => {
       />,
     );
 
-    expect(screen.getByText("Scoped redo started for run-123; current status running.")).toBeInTheDocument();
+    expect(screen.getByText("Scoped redo started for run-123; current status Running.")).toBeInTheDocument();
   });
   it("builds compact audit rows from release gate metadata", () => {
     const rows = buildReleaseIssueAuditRows(claimConflictGate.issues[0]);

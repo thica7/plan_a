@@ -1,5 +1,6 @@
 import { useState, MouseEvent } from 'react';
 import { useTranslation } from '../stores/i18n';
+import { displayLabel } from '../i18n/display';
 
 
 /** Reusable source card for displaying a knowledge document or retrieval hit. */
@@ -29,7 +30,7 @@ export function SourceCard({
   rerank_score,
   onClick,
 }: SourceCardProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async (e: MouseEvent) => {
@@ -117,10 +118,10 @@ export function SourceCard({
 
       <div className="flex flex-wrap gap-1.5 text-xs">
         {competitor && <span className="badge badge-sm">{competitor}</span>}
-        {dimension && <span className="badge badge-sm badge-accent">{dimension}</span>}
-        <span className="badge badge-sm badge-ghost">{source_type}</span>
+        {dimension && <span className="badge badge-sm badge-accent" title={dimension}>{displayLabel(dimension, locale)}</span>}
+        <span className="badge badge-sm badge-ghost" title={source_type}>{displayLabel(source_type, locale)}</span>
         {rerank_score != null && (
-          <span className="badge badge-sm badge-primary">rerank: {(rerank_score * 100).toFixed(0)}</span>
+          <span className="badge badge-sm badge-primary">{t('retrieval.rerank')}: {(rerank_score * 100).toFixed(0)}</span>
         )}
       </div>
 
@@ -128,10 +129,9 @@ export function SourceCard({
 
       {fetched_at && (
         <time className="text-xs text-base-content/40">
-          {new Date(fetched_at).toLocaleDateString()}
+          {new Date(fetched_at).toLocaleDateString(locale)}
         </time>
       )}
     </div>
   );
 }
-

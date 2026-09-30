@@ -9,6 +9,8 @@ import {
   type RetrievalParams,
 } from '../features/retrieval/RetrievalParamsDrawer';
 import { useTranslation } from '../stores/i18n';
+import { displayLabel } from '../i18n/display';
+import { SystemMessage } from '../i18n/SystemMessage';
 
 const PARAMS_STORAGE_KEY = 'retrieval_params';
 
@@ -78,6 +80,7 @@ function retrievalMode(params: RetrievalParams) {
 }
 
 function Sparkline({ values }: { values: number[] }) {
+  const { t } = useTranslation();
   const points = values.length > 0 ? values : [0];
   const path = points
     .map((value, index) => {
@@ -87,7 +90,7 @@ function Sparkline({ values }: { values: number[] }) {
     })
     .join(' ');
   return (
-    <svg className="h-8 w-28" viewBox="0 0 100 32" role="img" aria-label="Metric trend">
+    <svg className="h-8 w-28" viewBox="0 0 100 32" role="img" aria-label={t('search.metricTrend')}>
       <path d={path} fill="none" stroke="currentColor" strokeWidth="2" className="text-primary" />
     </svg>
   );
@@ -103,7 +106,7 @@ async function fileText(file: File): Promise<string> {
 }
 
 export default function SearchPage() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const {
     query,
     competitors,
@@ -298,7 +301,7 @@ export default function SearchPage() {
             {competitors.map((c) => (
               <span key={c} className="badge badge-primary gap-1">
                 {c}
-                <button onClick={() => setCompetitors(competitors.filter((x) => x !== c))}>x</button>
+                <button aria-label={`${t('common.remove')} ${c}`} onClick={() => setCompetitors(competitors.filter((x) => x !== c))}>×</button>
               </span>
             ))}
           </div>
@@ -315,8 +318,8 @@ export default function SearchPage() {
           <div className="flex flex-wrap gap-1">
             {dimensions.map((d) => (
               <span key={d} className="badge badge-accent gap-1">
-                {d}
-                <button onClick={() => setDimensions(dimensions.filter((x) => x !== d))}>x</button>
+                {displayLabel(d, locale)}
+                <button aria-label={`${t('common.remove')} ${displayLabel(d, locale)}`} onClick={() => setDimensions(dimensions.filter((x) => x !== d))}>×</button>
               </span>
             ))}
           </div>
@@ -338,7 +341,7 @@ export default function SearchPage() {
         </div>
       )}
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error"><SystemMessage message={error} /></div>}
 
       <section className="rounded-lg border border-base-300 bg-base-100 p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -349,7 +352,7 @@ export default function SearchPage() {
           <div className="flex flex-wrap gap-2">
             <label className="btn btn-outline btn-sm gap-1">
               <Upload className="h-3.5 w-3.5" />
-              JSONL
+              {t('search.uploadLabels')}
               <input className="hidden" type="file" accept=".jsonl,.json" onChange={handleEvalFile} />
             </label>
             <button type="button" className="btn btn-primary btn-sm" disabled={evalLoading || evalLabels.length === 0} onClick={runEval}>
@@ -357,22 +360,22 @@ export default function SearchPage() {
             </button>
           </div>
         </div>
-        {evalError && <div className="alert alert-error mb-3 text-sm">{evalError}</div>}
+        {evalError && <div className="alert alert-error mb-3 text-sm"><SystemMessage message={evalError} /></div>}
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="rounded-lg bg-base-200 p-3">
             <span className="text-xs text-base-content/55">{t('search.labels')}</span>
             <strong className="block text-lg">{evalLabels.length}</strong>
           </div>
           <div className="rounded-lg bg-base-200 p-3">
-            <span className="text-xs text-base-content/55">Recall@k</span>
+            <span className="text-xs text-base-content/55">{t('search.recall')}</span>
             <strong className="block text-lg">{metricValue(activeMetrics, ['recall@k', 'recall_at_k', `recall@${evalResult?.top_k ?? evalRuns[0]?.top_k ?? params.final_top_k}`]).toFixed(3)}</strong>
           </div>
           <div className="rounded-lg bg-base-200 p-3">
-            <span className="text-xs text-base-content/55">MRR</span>
+            <span className="text-xs text-base-content/55">{t('search.mrr')}</span>
             <strong className="block text-lg">{metricValue(activeMetrics, ['mrr', 'MRR']).toFixed(3)}</strong>
           </div>
           <div className="rounded-lg bg-base-200 p-3">
-            <span className="text-xs text-base-content/55">nDCG@k</span>
+            <span className="text-xs text-base-content/55">{t('search.ndcg')}</span>
             <strong className="block text-lg">{metricValue(activeMetrics, ['ndcg@k', 'ndcg_at_k', `ndcg@${evalResult?.top_k ?? evalRuns[0]?.top_k ?? params.final_top_k}`]).toFixed(3)}</strong>
           </div>
         </div>
@@ -381,7 +384,7 @@ export default function SearchPage() {
           <span>{evalRuns.length} {t('search.recentEvalRuns')}</span>
           {evalRuns.slice(0, 3).map((run) => (
             <code key={run.id} className="rounded bg-base-200 px-2 py-1">
-              {new Date(run.created_at).toLocaleString()} k={run.top_k}
+              {new Date(run.created_at).toLocaleString(locale)} {t('retrieval.finalTopK')}={run.top_k}
             </code>
           ))}
         </div>

@@ -1,4 +1,5 @@
 import type { ReportVersionRecord } from "../../api/types";
+import { useI18n } from '../../stores/i18n';
 
 export function reportStatusTone(status: ReportVersionRecord["status"]) {
   if (status === "published" || status === "approved") return "good";
@@ -29,7 +30,7 @@ export function parseUTC(value: string): Date {
 export function formatDate(value: string) {
   const date = parseUTC(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(useI18n.getState().locale, {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);

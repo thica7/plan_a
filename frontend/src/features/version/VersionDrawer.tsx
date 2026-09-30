@@ -2,6 +2,7 @@ import { apiFetch } from "../../api/http";
 import { useEffect, useMemo, useState } from 'react';
 import { GitMerge, RefreshCw } from 'lucide-react';
 import { useTranslation } from '../../stores/i18n';
+import { SystemMessage } from '../../i18n/SystemMessage';
 
 
 interface VersionDocument {
@@ -71,7 +72,7 @@ function splitDiff(lines: string[]) {
 }
 
 export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [versions, setVersions] = useState<VersionDocument[]>([]);
   const [baseId, setBaseId] = useState('');
   const [targetId, setTargetId] = useState('');
@@ -141,7 +142,7 @@ export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h4 className="font-bold">{t('version.title')}</h4>
-          <p className="text-xs text-base-content/60">{versions.length} stored versions for this document lineage.</p>
+          <p className="text-xs text-base-content/60">{versions.length} {t('version.storedVersions')}</p>
         </div>
         <button type="button" className="btn btn-ghost btn-sm gap-1" onClick={loadVersions} disabled={loading}>
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -149,7 +150,7 @@ export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
         </button>
       </div>
 
-      {error && <div className="alert alert-error text-sm">{error}</div>}
+      {error && <div className="alert alert-error text-sm"><SystemMessage message={error} /></div>}
 
       <div className="grid gap-2">
         {versions.map((version) => (
@@ -160,12 +161,12 @@ export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
             onClick={() => setTargetId(version.id)}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-semibold">Version {version.version ?? '-'}</span>
+              <span className="text-sm font-semibold">{t('version.version')} {version.version ?? '-'}</span>
               <span className={version.is_active ? 'badge badge-success badge-sm' : 'badge badge-ghost badge-sm'}>
-                {version.is_active ? 'active' : 'inactive'}
+                {version.is_active ? t('version.active') : t('version.inactive')}
               </span>
             </div>
-            <time className="mt-1 block text-xs text-base-content/55">{new Date(version.fetched_at).toLocaleString()}</time>
+            <time className="mt-1 block text-xs text-base-content/55">{new Date(version.fetched_at).toLocaleString(locale)}</time>
             <code className="mt-2 block truncate text-[11px] text-base-content/55">{version.content_hash}</code>
           </button>
         ))}
@@ -175,7 +176,7 @@ export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
         <div className="grid gap-3 rounded-lg border border-base-300 bg-base-200/60 p-3">
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="text-xs font-semibold">
-              Compare from
+              {t('version.compareFrom')}
               <select className="select select-bordered select-sm mt-1 w-full" value={baseId} onChange={(event) => setBaseId(event.target.value)}>
                 {versions.map((version) => (
                   <option key={version.id} value={version.id}>v{version.version ?? '-'} {version.id.slice(0, 8)}</option>
@@ -183,7 +184,7 @@ export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
               </select>
             </label>
             <label className="text-xs font-semibold">
-              Compare to
+              {t('version.compareTo')}
               <select className="select select-bordered select-sm mt-1 w-full" value={targetId} onChange={(event) => setTargetId(event.target.value)}>
                 {versions.map((version) => (
                   <option key={version.id} value={version.id}>v{version.version ?? '-'} {version.id.slice(0, 8)}</option>
@@ -203,7 +204,7 @@ export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
 
           <button type="button" className="btn btn-primary btn-sm w-fit gap-1" onClick={handleMerge} disabled={merging || !targetId}>
             <GitMerge className="h-3.5 w-3.5" />
-            {merging ? 'Merging...' : t('version.mergeSelected')}
+            {merging ? t('version.merging') : t('version.mergeSelected')}
           </button>
         </div>
       )}

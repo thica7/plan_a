@@ -3,6 +3,8 @@ import { BarChart3 } from "lucide-react";
 import type { CompetitorRecord, CompetitorScoreReport, EvidenceRecord } from "../../api/types";
 import { MetricCard, Panel, StatusPill } from "../../components/ui";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from '../../i18n/display';
+import { SystemMessage } from '../../i18n/SystemMessage';
 
 interface CompetitorScoreBoardProps {
   competitors: CompetitorRecord[];
@@ -15,7 +17,7 @@ export function CompetitorScoreBoard({
   evidence,
   scores,
 }: CompetitorScoreBoardProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const dimensions = Array.from(new Set(evidence.map((item) => item.dimension).filter(Boolean))).slice(0, 6);
   const topScore = scores?.scores.find((score) => score.competitor_id === scores.top_competitor_id) ?? scores?.scores[0] ?? null;
   const verifiedEvidenceCount = evidence.filter((item) => item.source_type.includes("verified") || item.reliability_score >= 0.72).length;
@@ -29,7 +31,7 @@ export function CompetitorScoreBoard({
         <MetricCard label={t('workbench.competitors')} value={competitors.length} />
         <MetricCard label={t('workbench.verifiedEvidence')} value={verifiedEvidenceCount} tone={verifiedEvidenceCount ? "good" : "warn"} />
         <MetricCard label={t('workbench.avgCoverage')} value={formatScorePercent(averageCoverage)} tone={averageCoverage >= 0.7 ? "good" : "warn"} />
-        <MetricCard label={t('workbench.currentLeader')} value={topScore?.competitor_name ?? "n/a"} />
+        <MetricCard label={t('workbench.currentLeader')} value={topScore?.competitor_name ?? displayLabel('n/a', locale)} />
       </div>
 
       <div className="competitor-rank-list" role="list">
@@ -39,15 +41,15 @@ export function CompetitorScoreBoard({
             <StatusPill tone={score.total_score >= 80 ? "good" : score.total_score >= 60 ? "warn" : "neutral"}>
               {Math.round(score.total_score)}
             </StatusPill>
-            <span>{score.recommendation}</span>
+            <span><SystemMessage message={score.recommendation} /></span>
           </article>
         ))}
       </div>
 
-      <div className="competitor-coverage-matrix" aria-label="Competitor evidence coverage">
+      <div className="competitor-coverage-matrix" aria-label={t('workbench.coverageHeatmap')}>
         <div className="competitor-coverage-head">
           <span>{t('workbench.competitors')}</span>
-          {dimensions.map((dimension) => <span key={dimension}>{dimension}</span>)}
+          {dimensions.map((dimension) => <span key={dimension} title={dimension}>{displayLabel(dimension, locale)}</span>)}
         </div>
         {competitors.map((competitor) => (
           <div className="competitor-coverage-row" key={competitor.id}>

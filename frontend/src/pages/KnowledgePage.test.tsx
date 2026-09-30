@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useI18n } from '../stores/i18n';
 import { MemoryRouter } from "react-router-dom";
 import KnowledgePage from "./KnowledgePage";
 import { useKnowledgeStore, type KnowledgeDocument } from "../stores/knowledgeStore";
@@ -38,6 +39,7 @@ const linkedDocument: KnowledgeDocument = {
 };
 
 describe("KnowledgePage deep links", () => {
+  beforeEach(() => useI18n.getState().setLocale('en-US'));
   afterEach(() => {
     const { debounceTimer, errorTimer } = useKnowledgeStore.getState();
     if (debounceTimer) clearTimeout(debounceTimer);

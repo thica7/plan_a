@@ -1,6 +1,7 @@
 import type { ClaimRecord, EvidenceRecord, ReportVersionRecord } from "../../api/types";
 import { EmptyState, StatusPill } from "../../components/ui";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from '../../i18n/display';
 import { formatPercent, reportStatusTone } from "./format";
 
 export type InspectorTab = "source" | "claim" | "report";
@@ -47,11 +48,11 @@ export function ContextInspector({
 }
 
 function SourceInspector({ evidence }: { evidence: EvidenceRecord | null }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   if (!evidence) return <EmptyState title={t('workbench.noSourceSelected')} />;
   return (
     <div className="inspector-body">
-      <StatusPill tone={evidence.quality_label === "accepted" ? "good" : "warn"}>{evidence.quality_label}</StatusPill>
+      <StatusPill tone={evidence.quality_label === "accepted" ? "good" : "warn"}>{displayLabel(evidence.quality_label, locale)}</StatusPill>
       <h3>{evidence.title}</h3>
       {evidence.url ? (
         <a href={evidence.url} target="_blank" rel="noreferrer">
@@ -60,8 +61,8 @@ function SourceInspector({ evidence }: { evidence: EvidenceRecord | null }) {
       ) : null}
       <code>{evidence.raw_source_id}</code>
       <div className="inspector-meta-grid">
-        <span>{t('workbench.type')} <strong>{evidence.source_type}</strong></span>
-        <span>{t('newRun.dimensions')} <strong>{evidence.dimension}</strong></span>
+        <span>{t('workbench.type')} <strong>{displayLabel(evidence.source_type, locale)}</strong></span>
+        <span>{t('newRun.dimensions')} <strong>{displayLabel(evidence.dimension, locale)}</strong></span>
         <span>{t('workbench.reliability')} <strong>{formatPercent(evidence.reliability_score)}</strong></span>
         <span>{t('workbench.freshness')} <strong>{formatPercent(evidence.freshness_score)}</strong></span>
       </div>
@@ -74,19 +75,19 @@ function SourceInspector({ evidence }: { evidence: EvidenceRecord | null }) {
 }
 
 function ClaimInspector({ claim }: { claim: ClaimRecord | null }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   if (!claim) return <EmptyState title={t('workbench.noClaimSelected')} />;
   return (
     <div className="inspector-body">
       <StatusPill tone={claim.status === "accepted" ? "good" : claim.status === "rejected" ? "bad" : "neutral"}>
-        {claim.status}
+        {displayLabel(claim.status, locale)}
       </StatusPill>
-      <h3>{claim.claim_type}</h3>
+      <h3>{displayLabel(claim.claim_type, locale)}</h3>
       <p>{claim.claim_text}</p>
       <div className="inspector-meta-grid">
         <span>{t('workbench.confidence')} <strong>{formatPercent(claim.confidence)}</strong></span>
         <span>{t('workbench.evidence')} <strong>{claim.evidence_ids.length}</strong></span>
-        <span>{t('workbench.agent')} <strong>{claim.created_by_agent ?? "unknown"}</strong></span>
+        <span>{t('workbench.agent')} <strong>{displayLabel(claim.created_by_agent ?? "unknown", locale)}</strong></span>
       </div>
       <div className="linked-chip-list">
         {claim.evidence_ids.slice(0, 6).map((id) => (
@@ -98,12 +99,12 @@ function ClaimInspector({ claim }: { claim: ClaimRecord | null }) {
 }
 
 function ReportInspector({ report }: { report: ReportVersionRecord | null }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   if (!report) return <EmptyState title={t('workbench.noReportSelected')} />;
   return (
     <div className="inspector-body">
-      <StatusPill tone={reportStatusTone(report.status)}>{report.status}</StatusPill>
-      <h3>Report v{report.version_number}</h3>
+      <StatusPill tone={reportStatusTone(report.status)}>{displayLabel(report.status, locale)}</StatusPill>
+      <h3>{t('workbench.reportVersion')} {report.version_number}</h3>
       <div className="inspector-meta-grid">
         <span>{t('workbench.claims')} <strong>{report.claim_ids.length}</strong></span>
         <span>{t('workbench.evidence')} <strong>{report.evidence_ids.length}</strong></span>

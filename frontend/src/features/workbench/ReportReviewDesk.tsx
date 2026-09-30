@@ -9,6 +9,8 @@ import type {
 } from "../../api/types";
 import { EmptyState, LoadingState, MetricCard, Panel, StatusPill } from "../../components/ui";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel, runtimeDiagnostic } from '../../i18n/display';
+import { SystemMessage } from '../../i18n/SystemMessage';
 import type { KnowledgeRollbackRequest, KnowledgeRollbackResult } from "../../stores/knowledgeStore";
 import {
   buildReleaseIssueAuditRows,
@@ -90,16 +92,16 @@ function DiffPanel({
   const { t } = useTranslation();
   return (
     <Panel title={t("workbench.versionDiff")} icon={<GitCompareArrows size={16} aria-hidden />}>
-      {isLoading ? <LoadingState label="Loading diff" /> : null}
+      {isLoading ? <LoadingState label={t('workbench.loadingDiff')} /> : null}
       {!isLoading && diff ? (
         <div className="report-diff-panel">
           <div className="metric-grid compact">
-            <MetricCard label="added" value={diff.added_lines} tone="good" />
-            <MetricCard label="removed" value={diff.removed_lines} tone="warn" />
-            <MetricCard label="same" value={diff.unchanged_lines} />
+            <MetricCard label={t('workbench.added')} value={diff.added_lines} tone="good" />
+            <MetricCard label={t('workbench.removed')} value={diff.removed_lines} tone="warn" />
+            <MetricCard label={t('workbench.same')} value={diff.unchanged_lines} />
           </div>
           <p className="muted-line">
-            {previousVersion ? `Compared with v${previousVersion.version_number}` : "No previous version available."}
+            {previousVersion ? `${t('workbench.comparedWith')} v${previousVersion.version_number}` : t('workbench.noPrevVersion')}
           </p>
           <div className="report-diff-lines">
             {diff.lines
@@ -114,7 +116,7 @@ function DiffPanel({
           </div>
         </div>
       ) : null}
-      {!isLoading && !diff ? <EmptyState title="No diff available" /> : null}
+      {!isLoading && !diff ? <EmptyState title={t('workbench.noDiffAvailable')} /> : null}
     </Panel>
   );
 }
@@ -136,13 +138,13 @@ function ReleaseIssuesPanel({
   onRollbackKbIssue?: (issueId: string, request: KnowledgeRollbackRequest) => void | Promise<void>;
   releaseGate: ReportReleaseGate | null;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   return (
     <Panel title={t("workbench.gateIssues")} icon={<MessageSquareWarning size={16} aria-hidden />}>
       {releaseGate ? (
         <div className="recommendation-list compact">
           {releaseGate.issues.slice(0, 5).map((issue) => {
-            const auditRows = buildReleaseIssueAuditRows(issue);
+            const auditRows = buildReleaseIssueAuditRows(issue, locale);
             const rollbackTarget = buildReleaseIssueRollbackTarget(issue);
             const redoResult = gateRedoResult?.issueId === issue.id ? gateRedoResult : null;
             const isRedoing = gateRedoIssueId === issue.id;
@@ -150,14 +152,14 @@ function ReleaseIssuesPanel({
             const isRollingBack = kbRollbackIssueId === issue.id;
             return (
               <article className={`recommendation-card ${issue.severity}`} key={issue.id}>
-                <strong>{issue.rule_name}</strong>
-                <p>{issue.message}</p>
+                <strong><SystemMessage message={issue.rule_name} /></strong>
+                <p><SystemMessage message={issue.message} /></p>
                 {auditRows.length > 0 ? (
-                  <dl className="release-issue-audit-grid" aria-label={`Audit trail for ${issue.id}`}>
+                  <dl className="release-issue-audit-grid" aria-label={`${t('workbench.auditFor')} ${issue.id}`}>
                     {auditRows.map((row) => (
                       <div key={`${row.label}-${row.value}`}>
-                        <dt>{row.label}</dt>
-                        <dd>{row.href ? <a className="link link-primary" href={row.href}>{row.value}</a> : row.value}</dd>
+                        <dt>{displayLabel(row.label, locale)}</dt>
+                        <dd title={row.value}>{row.href ? <a className="link link-primary" href={row.href}>{row.value}</a> : row.value}</dd>
                       </div>
                     ))}
                   </dl>
@@ -169,11 +171,11 @@ function ReleaseIssuesPanel({
                         className="table-action-button"
                         disabled={Boolean(kbRollbackIssueId)}
                         onClick={() => void onRollbackKbIssue(rollbackTarget.issueId, rollbackTarget.request)}
-                        title={`Rollback ${rollbackTarget.selectorSummary}`}
+                        title={`${t('workbench.rollback')} ${runtimeDiagnostic(rollbackTarget.selectorSummary, locale)}`}
                         type="button"
                       >
                         <RotateCcw size={14} aria-hidden />
-                        {isRollingBack ? "Rolling back" : "Rollback KB evidence"}
+                        {isRollingBack ? t('workbench.rollingBack') : t('workbench.rollbackKbEvidence')}
                       </button>
                     ) : null}
                     {onRedoGateIssue ? (
@@ -181,33 +183,32 @@ function ReleaseIssuesPanel({
                         className="table-action-button"
                         disabled={Boolean(gateRedoIssueId)}
                         onClick={() => void onRedoGateIssue(issue.id)}
-                        title="Run scoped redo for the affected branch"
+                        title={t('workbench.redoBranchHint')}
                         type="button"
                       >
-                        {isRedoing ? "Redoing" : "Redo affected branch"}
+                        {isRedoing ? t('workbench.redoing') : t('workbench.redoAffectedBranch')}
                       </button>
                     ) : null}
-                    {rollbackTarget ? <span>{rollbackTarget.selectorSummary}</span> : null}
+                    {rollbackTarget ? <span title={rollbackTarget.selectorSummary}>{runtimeDiagnostic(rollbackTarget.selectorSummary, locale)}</span> : null}
                   </div>
                 ) : null}
                 {redoResult ? (
                   <p className="release-issue-feedback">
-                    Scoped redo started for {redoResult.runId}; current status {redoResult.status}.
+                    {t('workbench.redoStarted').replace('{run}', redoResult.runId).replace('{status}', displayLabel(redoResult.status, locale))}
                   </p>
                 ) : null}
                 {rollbackResult ? (
                   <p className="release-issue-feedback">
-                    Rollback matched {rollbackResult.matched_count}, archived {rollbackResult.rolled_back_count},
-                    restored {rollbackResult.restored_count}.
+                    {t('workbench.rollbackFeedback').replace('{matched}', String(rollbackResult.matched_count)).replace('{archived}', String(rollbackResult.rolled_back_count)).replace('{restored}', String(rollbackResult.restored_count))}
                   </p>
                 ) : null}
               </article>
             );
           })}
-          {releaseGate.issues.length === 0 ? <p className="muted-line">No active release gate issues.</p> : null}
+          {releaseGate.issues.length === 0 ? <p className="muted-line">{t('workbench.noGateIssues')}</p> : null}
         </div>
       ) : (
-        <LoadingState label="Loading gate issues" />
+        <LoadingState label={t('workbench.loadingGateIssues')} />
       )}
     </Panel>
   );
@@ -231,21 +232,21 @@ function ClaimReviewPanel({
   onSelectClaim: (claim: ClaimRecord) => void;
   scopedClaims: ClaimRecord[];
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   return (
     <Panel title={t("workbench.claimReview")} icon={<GitCompareArrows size={16} aria-hidden />}>
       <div className="review-claim-list">
         {scopedClaims.map((claim) => (
           <button className="review-claim-item" key={claim.id} type="button" onClick={() => onSelectClaim(claim)}>
             <StatusPill tone={claim.status === "accepted" ? "good" : claim.status === "rejected" ? "bad" : "warn"}>
-              {claim.status}
+              {displayLabel(claim.status, locale)}
             </StatusPill>
-            <strong>{claim.claim_type}</strong>
+            <strong>{displayLabel(claim.claim_type, locale)}</strong>
             <span>{claim.claim_text}</span>
-            <em>{Math.round(claim.confidence * 100)}% confidence / {claim.evidence_ids.length} evidence</em>
+            <em>{Math.round(claim.confidence * 100)}% {t('workbench.confidence')} / {claim.evidence_ids.length} {t('workbench.evidence')}</em>
           </button>
         ))}
-        {scopedClaims.length === 0 ? <EmptyState title="No scoped claims" /> : null}
+        {scopedClaims.length === 0 ? <EmptyState title={t('workbench.noScopedClaims')} /> : null}
       </div>
     </Panel>
   );
@@ -262,9 +263,9 @@ function EvidenceScopePanel({
   onSelectEvidence: (evidence: EvidenceRecord) => void;
   selectedVersion: ReportVersionRecord | null;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   return (
-    <Panel title="Evidence scope" icon={<Database size={16} aria-hidden />}>
+    <Panel title={t('summary.evidenceScope')} icon={<Database size={16} aria-hidden />}>
       {selectedVersion ? (
         <div className="source-scope-list">
           {selectedVersion.evidence_ids.slice(0, 8).map((id) => {
@@ -272,21 +273,21 @@ function EvidenceScopePanel({
             return (
               <article className="source-scope-item" key={id}>
                 <strong>{evidence?.title ?? id}</strong>
-                <span>{evidence?.dimension ?? "unknown"}</span>
+                <span>{displayLabel(evidence?.dimension ?? "unknown", locale)}</span>
                 {evidence ? (
                   <div className="scope-review-actions">
                     <button className="table-action-button" type="button" onClick={() => onSelectEvidence(evidence)}>
-                      Inspect
+                      {t('workbench.inspect')}
                     </button>
                     <select
-                      aria-label={`Quality for ${evidence.title}`}
+                      aria-label={`${t('workbench.runQuality')} ${evidence.title}`}
                       value={evidence.quality_label}
                       onChange={(event) => onEvidenceQuality(evidence.id, event.target.value as EvidenceQualityLabel)}
                     >
-                      <option value="unreviewed">unreviewed</option>
-                      <option value="accepted">accepted</option>
-                      <option value="rejected">rejected</option>
-                      <option value="stale">stale</option>
+                      <option value="unreviewed">{displayLabel('unreviewed', locale)}</option>
+                      <option value="accepted">{displayLabel('accepted', locale)}</option>
+                      <option value="rejected">{displayLabel('rejected', locale)}</option>
+                      <option value="stale">{displayLabel('stale', locale)}</option>
                     </select>
                   </div>
                 ) : null}

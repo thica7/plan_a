@@ -3,6 +3,8 @@ import { GitCompare, RefreshCw } from "lucide-react";
 import type { EvidenceGapFillResult, EvidenceGapReport } from "../../api/types";
 import { EmptyState, MetricCard, Panel, StatusPill } from "../../components/ui";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from '../../i18n/display';
+import { SystemMessage } from '../../i18n/SystemMessage';
 import { formatPercent } from "./format";
 
 interface GapRepairPanelProps {
@@ -18,7 +20,7 @@ export function GapRepairPanel({
   isFillingGaps,
   onFillGaps,
 }: GapRepairPanelProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const gaps = evidenceGaps?.gaps ?? [];
 
   return (
@@ -49,17 +51,17 @@ export function GapRepairPanel({
       ) : null}
 
       {gaps.length === 0 ? (
-        <EmptyState title={t('workbench.noOpenGaps')}>The current project has no typed gap repair tasks.</EmptyState>
+        <EmptyState title={t('workbench.noOpenGaps')}>{t('workbench.noGapTasks')}</EmptyState>
       ) : (
         <div className="gap-card-list" role="list">
           {gaps.slice(0, 8).map((gap) => (
             <article className={`gap-card ${gap.severity}`} key={gap.id} role="listitem">
               <header>
-                <StatusPill tone={gapTone(gap.severity)}>{gap.severity}</StatusPill>
-                <strong>{gap.dimension ?? gap.gap_type}</strong>
+                <StatusPill tone={gapTone(gap.severity)}>{displayLabel(gap.severity, locale)}</StatusPill>
+                <strong>{displayLabel(gap.dimension ?? gap.gap_type, locale)}</strong>
               </header>
-              <span>{gap.competitor_name ?? "project"} / {gap.gap_type}</span>
-              <p>{gap.message}</p>
+              <span>{gap.competitor_name ?? t('workbench.projects')} / {displayLabel(gap.gap_type, locale)}</span>
+              <p><SystemMessage message={gap.message} /></p>
               {gap.recommended_query ? <em>{gap.recommended_query}</em> : null}
             </article>
           ))}

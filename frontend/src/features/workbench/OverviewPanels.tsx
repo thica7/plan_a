@@ -18,7 +18,9 @@ import type {
 } from "../../api/types";
 import { Panel, StatusPill } from "../../components/ui";
 import { formatDate } from "./format";
-import { useTranslation } from "../../stores/i18n";
+import { useTranslation, type Locale } from "../../stores/i18n";
+import { displayLabel, displayScope } from '../../i18n/display';
+import { SystemMessage } from '../../i18n/SystemMessage';
 
 export function QaBlockersPanel({
   claimValidation,
@@ -33,21 +35,21 @@ export function QaBlockersPanel({
   qaEvaluation: BusinessQAEvaluation | null;
   redTeam: RedTeamReport | null;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const rows = [
     ...(qaEvaluation?.findings ?? []).map((finding) => ({
       id: finding.id,
       severity: finding.severity,
       type: finding.rule_name,
       description: finding.message,
-      scope: `${finding.competitor_name ?? "project"}${finding.dimension ? ` / ${finding.dimension}` : ""}`,
+      scope: `${finding.competitor_name ?? t('workbench.projects')}${finding.dimension ? ` / ${displayLabel(finding.dimension, locale)}` : ""}`,
     })),
     ...(evidenceGaps?.gaps ?? []).slice(0, 4).map((gap) => ({
       id: gap.id,
       severity: gap.severity,
       type: gap.gap_type,
       description: gap.message,
-      scope: `${gap.competitor_name ?? "project"}${gap.dimension ? ` / ${gap.dimension}` : ""}`,
+      scope: `${gap.competitor_name ?? t('workbench.projects')}${gap.dimension ? ` / ${displayLabel(gap.dimension, locale)}` : ""}`,
     })),
   ].slice(0, 7);
   return (
@@ -60,27 +62,27 @@ export function QaBlockersPanel({
       <div className="qa-blocker-table">
         <div className="qa-blocker-head">
           <span>{t("workbench.severity")}</span>
-          <span>Type</span>
+          <span>{t('workbench.type')}</span>
           <span>{t("workbench.description")}</span>
           <span>{t("workbench.scope")}</span>
         </div>
         {rows.map((row) => (
           <article className="qa-blocker-row" key={row.id}>
             <StatusPill tone={row.severity === "blocker" || row.severity === "critical" || row.severity === "high" ? "bad" : "warn"}>
-              {row.severity}
+              {displayLabel(row.severity, locale)}
             </StatusPill>
-            <span>{row.type}</span>
-            <strong>{row.description}</strong>
+            <SystemMessage message={row.type} />
+            <strong><SystemMessage message={row.description} /></strong>
             <em>{row.scope}</em>
           </article>
         ))}
       </div>
       {rows.length === 0 ? <p className="muted-line">{t("workbench.noActiveBlockers")}</p> : null}
       <div className="auto-redo-strip">
-        <span>Auto-redo suggestions</span>
+        <span>{t('workbench.autoRedoSuggestions')}</span>
         <strong>{matrix?.entries.reduce((total, entry) => total + entry.suggested_redos.length, 0) ?? 0}</strong>
-        <span>RedTeam {redTeam?.finding_count ?? 0}</span>
-        <span>Claim issues {claimValidation?.issue_count ?? 0}</span>
+        <span>{t('workbench.redTeam')} {redTeam?.finding_count ?? 0}</span>
+        <span>{t('workbench.claimIssues')} {claimValidation?.issue_count ?? 0}</span>
       </div>
     </Panel>
   );
@@ -99,18 +101,18 @@ export function TraceTimelinePanel({
   selectedVersion: ReportVersionRecord | null;
   traceSpans: TraceSpan[];
 }) {
-  const { t } = useTranslation();
-  const rows = buildTimelineRows({ auditLogs, decisionReplay, evalOps, selectedVersion, traceSpans });
+  const { t, locale } = useTranslation();
+  const rows = buildTimelineRows({ auditLogs, decisionReplay, evalOps, selectedVersion, traceSpans }, locale, t);
   const kbWarmStart = buildKbWarmStartSummary(traceSpans);
   const stages = [
-    "Planning",
-    "Discovery",
-    "Capture",
-    "Extraction",
-    "Analysis",
-    "Quality gate",
-    "Report",
-    "Review",
+    t('workbench.planning'),
+    t('workbench.discovery'),
+    t('workbench.capture'),
+    t('workbench.extraction'),
+    t('workbench.analysis'),
+    t('workbench.qualityGate'),
+    t('workbench.reportTab'),
+    t('workbench.review'),
   ];
   const completedStages = selectedVersion ? 7 : Math.min(6, Math.max(1, Math.ceil(rows.length / 2)));
   return (
@@ -130,39 +132,39 @@ export function TraceTimelinePanel({
       </div>
       <div className="trace-metric-row">
         <span>
-          Events <strong>{decisionReplay?.events.length ?? rows.length}</strong>
+          {t('workbench.events')} <strong>{decisionReplay?.events.length ?? rows.length}</strong>
         </span>
         <span>
-          Spans <strong>{traceSpans.length}</strong>
+          {t('workbench.spans')} <strong>{traceSpans.length}</strong>
         </span>
         <span>
-          Cost <strong>{evalOps ? `$${evalOps.cost_per_report_usd.toFixed(2)}` : "n/a"}</strong>
+          {t('workbench.cost')} <strong>{evalOps ? `$${evalOps.cost_per_report_usd.toFixed(2)}` : displayLabel('n/a', locale)}</strong>
         </span>
         <span>
-          Gate <strong>{evalOps?.regression_gate_status ?? "n/a"}</strong>
+          {t('runQuality.gate')} <strong>{displayLabel(evalOps?.regression_gate_status ?? "n/a", locale)}</strong>
         </span>
       </div>
       {kbWarmStart.spanCount > 0 ? (
-        <div className="kb-warm-start-strip" aria-label="KB warm-start diagnostics">
+        <div className="kb-warm-start-strip" aria-label={t('workbench.kbDiagnostics')}>
           <div className="kb-warm-start-metrics">
             <span>
-              KB hits <strong>{kbWarmStart.hitCount}</strong>
+              {t('workbench.kbHits')} <strong>{kbWarmStart.hitCount}</strong>
             </span>
             <span>
-              Accepted <strong>{kbWarmStart.acceptedCount}</strong>
+              {t('workbench.acceptedCol')} <strong>{kbWarmStart.acceptedCount}</strong>
             </span>
             <span>
-              Rejected <strong>{kbWarmStart.rejectedCount}</strong>
+              {t('workbench.rejected')} <strong>{kbWarmStart.rejectedCount}</strong>
             </span>
             <span>
-              Spans <strong>{kbWarmStart.spanCount}</strong>
+              {t('workbench.spans')} <strong>{kbWarmStart.spanCount}</strong>
             </span>
           </div>
           {kbWarmStart.topRejections.length > 0 ? (
             <div className="kb-warm-start-rejections">
               {kbWarmStart.topRejections.map((item) => (
-                <span key={item.reason} title={item.examples.join(", ")}>
-                  <strong>{item.reason}</strong>
+                <span key={item.reason} title={`${item.reason}: ${item.examples.join(", ")}`}>
+                  <strong>{displayLabel(item.reason, locale)}</strong>
                   <em>{item.count}</em>
                   {item.examples[0] ? <code>{item.examples[0]}</code> : null}
                 </span>
@@ -176,7 +178,7 @@ export function TraceTimelinePanel({
           <article key={row.id}>
             <div>
               <strong>{row.title}</strong>
-              <span>{row.meta}</span>
+              <span>{row.meta}{row.message ? <> / <SystemMessage message={row.message} /></> : null}</span>
             </div>
             <time dateTime={row.time}>{formatDate(row.time)}</time>
           </article>
@@ -240,6 +242,14 @@ export function buildKbWarmStartSummary(traceSpans: TraceSpan[]): KbWarmStartSum
   return summary;
 }
 
+interface TimelineRow {
+  id: string;
+  title: string;
+  meta: string;
+  time: string;
+  message?: string;
+}
+
 function buildTimelineRows({
   auditLogs,
   decisionReplay,
@@ -252,12 +262,13 @@ function buildTimelineRows({
   evalOps: EvalOpsReport | null;
   selectedVersion: ReportVersionRecord | null;
   traceSpans: TraceSpan[];
-}) {
+}, locale: Locale, t: (key: string) => string): TimelineRow[] {
   if (decisionReplay?.events.length) {
     return decisionReplay.events.slice(-7).reverse().map((event) => ({
       id: event.id,
-      title: event.event_type,
-      meta: `${event.agent ?? "system"}${event.subagent ? `/${event.subagent}` : ""} / ${event.message}`,
+      title: displayLabel(event.event_type, locale),
+      meta: `${displayLabel(event.agent ?? "system", locale)}${event.subagent ? `/${displayScope(event.subagent, locale)}` : ""}`,
+      message: event.message,
       time: event.created_at,
     }));
   }
@@ -265,8 +276,8 @@ function buildTimelineRows({
   if (traceSpans.length) {
     return traceSpans.slice(-7).reverse().map((span) => ({
       id: span.id,
-      title: `${span.kind} / ${span.name}`,
-      meta: `${span.agent}${span.subagent ? `/${span.subagent}` : ""} / ${span.status} / ${span.duration_ms}ms`,
+      title: `${displayLabel(span.kind, locale)} / ${displayLabel(span.name, locale)}`,
+      meta: `${displayLabel(span.agent, locale)}${span.subagent ? `/${displayScope(span.subagent, locale)}` : ""} / ${displayLabel(span.status, locale)} / ${span.duration_ms} ${t('common.milliseconds')}`,
       time: span.created_at,
     }));
   }
@@ -275,23 +286,23 @@ function buildTimelineRows({
     selectedVersion
       ? {
           id: `report-${selectedVersion.id}`,
-          title: `Report v${selectedVersion.version_number} ${selectedVersion.status}`,
-          meta: `${selectedVersion.claim_ids.length} claims / ${selectedVersion.evidence_ids.length} evidence`,
+          title: `${t('workbench.reportVersion')} ${selectedVersion.version_number} ${displayLabel(selectedVersion.status, locale)}`,
+          meta: `${selectedVersion.claim_ids.length} ${t('workbench.claims')} / ${selectedVersion.evidence_ids.length} ${t('workbench.evidence')}`,
           time: selectedVersion.created_at,
         }
       : null,
     evalOps
       ? {
           id: "evalops",
-          title: `EvalOps gate ${evalOps.regression_gate_status}`,
-          meta: `${evalOps.run_count} runs / quality ${evalOps.report_quality_score}`,
+          title: `${t('workbench.benchmark')} ${displayLabel(evalOps.regression_gate_status, locale)}`,
+          meta: `${evalOps.run_count} ${t('workbench.runUsage')} / ${t('runQuality.reportQuality')} ${evalOps.report_quality_score}`,
           time: evalOps.generated_at,
         }
       : null,
     ...auditLogs.slice(0, 5).map((log) => ({
       id: log.id,
-      title: log.action,
-      meta: `${log.resource_type} / ${log.actor_type}${log.actor_id ? `:${log.actor_id}` : ""}`,
+      title: displayLabel(log.action, locale),
+      meta: `${displayLabel(log.resource_type, locale)} / ${displayLabel(log.actor_type, locale)}${log.actor_id ? `:${log.actor_id}` : ""}`,
       time: log.created_at,
     })),
   ].filter((row): row is { id: string; title: string; meta: string; time: string } => Boolean(row));
@@ -358,7 +369,7 @@ export function CompetitorsOverviewTable({
   competitors: CompetitorRecord[];
   evidence: EvidenceRecord[];
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const evidenceCounts = new Map<string, number>();
   evidence.forEach((item) => evidenceCounts.set(item.competitor_id, (evidenceCounts.get(item.competitor_id) ?? 0) + 1));
   const scoreByCompetitor = new Map(competitorScores?.scores.map((score) => [score.competitor_id, score]) ?? []);
@@ -366,23 +377,23 @@ export function CompetitorsOverviewTable({
     <Panel className="competitor-overview-table" title={t("workbench.competitors")} icon={<Layers size={16} aria-hidden />}>
       <div className="compact-data-table">
         <div className="compact-data-head">
-          <span>Competitor</span>
-          <span>Layer</span>
-          <span>Coverage</span>
-          <span>Evidence</span>
-          <span>Score</span>
+          <span>{t('newRun.competitors')}</span>
+          <span>{t('runHeader.layer')}</span>
+          <span>{t('summary.coverage')}</span>
+          <span>{t('workbench.evidence')}</span>
+          <span>{t('workbench.score')}</span>
         </div>
         {competitors.slice(0, 8).map((competitor) => {
           const score = scoreByCompetitor.get(competitor.id);
           return (
             <article className="compact-data-row" key={competitor.id}>
               <strong>{competitor.name}</strong>
-              <span>{competitor.layer}</span>
+              <span>{displayLabel(competitor.layer, locale)}</span>
               <span>
                 <ProgressBar value={score?.coverage_score ?? 0} />
               </span>
               <span>{evidenceCounts.get(competitor.id) ?? 0}</span>
-              <span>{score?.total_score ?? "n/a"}</span>
+              <span>{score?.total_score ?? displayLabel('n/a', locale)}</span>
             </article>
           );
         })}

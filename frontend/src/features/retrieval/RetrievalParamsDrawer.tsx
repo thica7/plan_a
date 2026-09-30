@@ -101,9 +101,9 @@ export function RetrievalParamsDrawer({ open, params, onChange, onClose }: Retri
           <div className="flex items-center justify-between border-b border-base-300 p-5">
             <div>
               <h2 className="text-lg font-bold">{t('retrieval.title')}</h2>
-              <p className="text-xs text-base-content/60">Changes re-run the current search automatically.</p>
+              <p className="text-xs text-base-content/60">{t('retrieval.autoRerun')}</p>
             </div>
-            <button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={onClose} aria-label="Close retrieval parameters">
+            <button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={onClose} aria-label={t('retrieval.close')}>
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -112,13 +112,13 @@ export function RetrievalParamsDrawer({ open, params, onChange, onClose }: Retri
             <SliderRow label={t('retrieval.denseWeight')} value={params.dense_weight} min={0} max={1} step={0.1} onChange={(value) => update({ dense_weight: value })} />
             <SliderRow label={t('retrieval.sparseWeight')} value={params.sparse_weight} min={0} max={1} step={0.1} onChange={(value) => update({ sparse_weight: value })} />
             <SliderRow label={t('retrieval.rerankTopK')} value={params.rerank_top_k} min={1} max={50} step={1} onChange={(value) => update({ rerank_top_k: value })} />
-            <SliderRow label="Final top K" value={params.final_top_k} min={1} max={30} step={1} onChange={(value) => update({ final_top_k: value })} />
-            <SliderRow label="MMR lambda" value={params.mmr_lambda} min={0} max={1} step={0.05} onChange={(value) => update({ mmr_lambda: value })} />
+            <SliderRow label={t('retrieval.finalTopK')} value={params.final_top_k} min={1} max={30} step={1} onChange={(value) => update({ final_top_k: value })} />
+            <SliderRow label={t('retrieval.mmrLambda')} value={params.mmr_lambda} min={0} max={1} step={0.05} onChange={(value) => update({ mmr_lambda: value })} />
 
             <div className="grid gap-2">
-              <ToggleRow label="Query rewrite" checked={params.enable_query_rewrite} onChange={(checked) => update({ enable_query_rewrite: checked })} />
-              <ToggleRow label="Rerank" checked={params.enable_rerank} onChange={(checked) => update({ enable_rerank: checked })} />
-              <ToggleRow label="MMR" checked={params.enable_mmr} onChange={(checked) => update({ enable_mmr: checked, mmr_lambda: checked ? params.mmr_lambda || 0.4 : 0 })} />
+              <ToggleRow label={t('retrieval.queryRewrite')} checked={params.enable_query_rewrite} onChange={(checked) => update({ enable_query_rewrite: checked })} />
+              <ToggleRow label={t('retrieval.rerank')} checked={params.enable_rerank} onChange={(checked) => update({ enable_rerank: checked })} />
+              <ToggleRow label={t('retrieval.mmr')} checked={params.enable_mmr} onChange={(checked) => update({ enable_mmr: checked, mmr_lambda: checked ? params.mmr_lambda || 0.4 : 0 })} />
             </div>
           </div>
         </div>

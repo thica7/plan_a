@@ -8,6 +8,7 @@ import { RssTab } from '../features/crawl/RssTab';
 import { JobQueueTable, type CrawlSource } from '../features/crawl/JobQueueTable';
 import { FailedUrlsPanel } from '../features/crawl/FailedUrlsPanel';
 import { useTranslation } from '../stores/i18n';
+import { SystemMessage } from '../i18n/SystemMessage';
 
 type SourceTab = 'manual' | 'sitemap' | 'rss';
 
@@ -162,7 +163,7 @@ export default function CrawlPage() {
               className={`tab capitalize ${activeTab === tab ? 'tab-active' : ''}`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab === 'manual' ? t('crawl.urlList') : tab}
+              {tab === 'manual' ? t('crawl.urlList') : t(`crawl.${tab}`)}
             </button>
           ))}
         </div>
@@ -177,7 +178,7 @@ export default function CrawlPage() {
           <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
           <div className="text-sm">
             <h3 className="font-bold">{t('crawl.executionError')}</h3>
-            <p className="opacity-90">{error || sourceError}</p>
+            <p className="opacity-90"><SystemMessage message={error || sourceError || ''} /></p>
           </div>
         </div>
       )}

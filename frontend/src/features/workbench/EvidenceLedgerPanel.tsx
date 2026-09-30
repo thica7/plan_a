@@ -7,6 +7,7 @@ import type {
 } from "../../api/types";
 import { EmptyState, MetricCard, Panel, StatusPill } from "../../components/ui";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from '../../i18n/display';
 import { formatPercent } from "./format";
 
 interface EvidenceLedgerPanelProps {
@@ -28,7 +29,7 @@ export function EvidenceLedgerPanel({
   selectedEvidenceId,
   setQuery,
 }: EvidenceLedgerPanelProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const verifiedCount = evidence.filter(isVerifiedLikeEvidence).length;
   const acceptedCount = evidence.filter((item) => item.quality_label === "accepted").length;
 
@@ -71,7 +72,7 @@ export function EvidenceLedgerPanel({
               role="listitem"
             >
               <button className="evidence-ledger-open" type="button" onClick={() => onSelectEvidence(item)}>
-                <span>{normalizeSourceType(item.source_type)}</span>
+                <span>{displayLabel(item.source_type, locale)}</span>
                 <strong>{item.title}</strong>
                 <em>{item.url ?? item.raw_source_id}</em>
               </button>
@@ -83,7 +84,7 @@ export function EvidenceLedgerPanel({
                 </span>
                 <span>
                   <strong>{t("kb.dimension")}</strong>
-                  <em>{item.dimension}</em>
+                  <em>{displayLabel(item.dimension, locale)}</em>
                 </span>
                 <span>
                   <strong>{t("workbench.freshness")}</strong>
@@ -121,8 +122,4 @@ function evidenceTone(item: EvidenceRecord): "good" | "neutral" | "warn" | "bad"
   if (isVerifiedLikeEvidence(item)) return "good";
   if (item.reliability_score >= 0.5) return "warn";
   return "neutral";
-}
-
-function normalizeSourceType(sourceType: string) {
-  return sourceType.split("_").join(" ");
 }

@@ -3,7 +3,21 @@ import { dimensionDescription, displayLabel, displayScope, runtimeDiagnostic } f
 
 describe("display labels", () => {
   it.each([
+    ['Score 67: blocked by 2 critical business QA finding(s); coverage is 75%.', '评分 67：存在 2 个关键业务质检阻塞项；覆盖率为 75%。'],
+    ['Cursor does not have a verified homepage.', 'Cursor 尚无已核验的官网。'],
+    ['Readiness is blocked with score 67; approval requires ready and score >= 85.', '就绪状态为已阻塞，评分 67；审批要求已就绪且评分不低于 85。'],
+    ['Acme needs 1 verified evidence item(s) for pricing.', 'Acme 在价格与成本维度需要 1 条已核验证据。'],
+    ['Acme needs 2 evidence item(s) for feature.', 'Acme 在功能体验维度需要 2 条证据。'],
+    ['Evidence ev-1 has low reliability score.', '证据 ev-1 的可靠性评分较低。'],
+    ['Landscape analysis has fewer than four competitors.', '市场格局分析的竞品数量不足四个。'],
+  ])('localizes a complete known workbench diagnostic without changing its facts', (original, chinese) => {
+    expect(runtimeDiagnostic(original, 'zh-CN')).toBe(chinese);
+    expect(runtimeDiagnostic(original, 'en-US')).toBe(original);
+    expect(runtimeDiagnostic(`${original} Extra user text.`, 'zh-CN')).toBe(`${original} Extra user text.`);
+  });
+  it.each([
     ["evidence_count", "证据数量", "Evidence count"],
+    ["enterprise_evidence", "企业证据", "Enterprise evidence"],
     ["real_source_rate", "真实来源比例", "Real source rate"],
     ["report_structure_score", "报告结构得分", "Report structure score"],
     ["report_length_score", "报告长度得分", "Report length score"],

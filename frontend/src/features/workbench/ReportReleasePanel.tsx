@@ -3,6 +3,7 @@ import type { ArtifactRecord, ReportReleaseGate, ReportVersionRecord } from "../
 import { ActionButton } from "../../components/interaction/ActionButton";
 import { MetricCard, Panel, StatusPill } from "../../components/ui";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from "../../i18n/display";
 import type { ReportAction, ReportExportFormat } from "./reportOperations";
 
 interface ReportReleasePanelProps {
@@ -22,15 +23,15 @@ export function ReportReleasePanel({
   releaseGate,
   selectedVersion,
 }: ReportReleasePanelProps) {
-  const { t } = useTranslation();
-  const pendingReason = "Another report action is already in progress.";
-  const noVersionReason = "Select a report version before using report release actions.";
-  const inReviewReason = "Move this report version into review before approving or rejecting it.";
+  const { t, locale } = useTranslation();
+  const pendingReason = t('workbench.reportActionPending');
+  const noVersionReason = t('workbench.reportActionNeedsVersion');
+  const inReviewReason = t('workbench.reportActionNeedsReview');
   const approvedReason = releaseGate?.blocker_count
-    ? `Publish is blocked by ${releaseGate.blocker_count} release gate blocker(s).`
-    : "Approve this report version before publishing it.";
+    ? t('workbench.publishBlocked').replace('{count}', String(releaseGate.blocker_count))
+    : t('workbench.reportActionNeedsApproval');
   const exportReason = !selectedVersion
-    ? "Select a report version before exporting."
+    ? t('workbench.exportNeedsVersion')
     : isPending
       ? pendingReason
       : undefined;
@@ -58,7 +59,7 @@ export function ReportReleasePanel({
     <Panel className="report-release-panel" title={t('workbench.reviewGate')} icon={<ShieldCheck size={16} aria-hidden />}>
       {releaseGate ? (
         <div className="report-gate-summary">
-          <StatusPill tone={releaseGate.allowed ? "good" : "bad"}>{releaseGate.status}</StatusPill>
+          <StatusPill tone={releaseGate.allowed ? "good" : "bad"}><span title={releaseGate.status}>{releaseGate.status === 'blocked' ? t('workbench.releaseConditionsBlocked') : displayLabel(releaseGate.status, locale)}</span></StatusPill>
           <strong>{releaseGate.readiness.score} {t('workbench.readiness')}</strong>
           <div className="metric-grid compact">
             <MetricCard label={t('workbench.blockers')} value={releaseGate.blocker_count} tone={releaseGate.blocker_count ? "warn" : "good"} />
@@ -70,7 +71,7 @@ export function ReportReleasePanel({
           <StatusPill tone="neutral">{t('workbench.notChecked')}</StatusPill>
           <strong>{selectedVersion ? t('workbench.gateResultUnavailable') : t('workbench.selectReportVersion')}</strong>
           <div className="metric-grid compact">
-            <MetricCard label={t('compliance.status')} value={selectedVersion?.status ?? "n/a"} />
+            <MetricCard label={t('compliance.status')} value={displayLabel(selectedVersion?.status ?? "n/a", locale)} />
             <MetricCard label={t('summary.evidenceScope')} value={selectedVersion?.evidence_ids.length ?? 0} />
           </div>
         </div>

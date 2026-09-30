@@ -15,6 +15,8 @@ import type {
 import { EmptyState, Panel, StatusPill } from "../../components/ui";
 import { formatDate, formatPercent, reportStatusTone } from "./format";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from "../../i18n/display";
+import { SystemMessage } from '../../i18n/SystemMessage';
 
 
 export function RunQualityPanel({
@@ -36,7 +38,7 @@ export function RunQualityPanel({
   redTeam: RedTeamReport | null;
   verifiedRate: number;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const score = readiness?.score ?? Math.round(verifiedRate * 100);
   const blockerCount =
     (qaEvaluation?.blocker_count ?? 0) +
@@ -44,11 +46,11 @@ export function RunQualityPanel({
     (evidenceGaps?.critical_count ?? 0) +
     (redTeam?.high_severity_count ?? 0);
   const qualityRows = [
-    { label: "Source quality", value: verifiedRate },
+    { label: t('workbench.sourceQuality'), value: verifiedRate },
     { label: t("summary.coverage"), value: readiness?.coverage_score ?? null },
-    { label: "Schema fit", value: readiness?.claim_score ?? null },
-    { label: "Citation rate", value: acceptedRate },
-    { label: "Consistency", value: claimValidation?.self_consistency_score ?? null },
+    { label: t('workbench.schemaFit'), value: readiness?.claim_score ?? null },
+    { label: t('workbench.citationRate'), value: acceptedRate },
+    { label: t('workbench.consistency'), value: claimValidation?.self_consistency_score ?? null },
   ];
 
   return (
@@ -56,14 +58,14 @@ export function RunQualityPanel({
       className="workbench-card run-quality-panel"
       title={t("workbench.runQuality")}
       icon={<Gauge size={16} aria-hidden />}
-      actions={<StatusPill tone={blockerCount > 0 ? "warn" : "good"}>{blockerCount ? `${blockerCount} blockers` : t("workbench.good")}</StatusPill>}
+      actions={<StatusPill tone={blockerCount > 0 ? "warn" : "good"}>{blockerCount ? `${blockerCount} ${t('workbench.blockers')}` : t("workbench.good")}</StatusPill>}
     >
       <div className="run-quality-body">
         <div
           className="quality-score-ring"
           style={{ "--quality-score-angle": `${Math.max(0, Math.min(100, score)) * 3.6}deg` } as CSSProperties}
         >
-          <strong>{score || "n/a"}</strong>
+          <strong>{score || displayLabel('n/a', locale)}</strong>
           <span>/100</span>
         </div>
         <div className="quality-breakdown">
@@ -73,10 +75,10 @@ export function RunQualityPanel({
         </div>
       </div>
       <p className="quality-summary">
-        {readiness?.summary ??
+        {readiness?.summary ? <SystemMessage message={readiness.summary} /> :
           (evidence.length
-            ? `${evidence.length} evidence records projected into the current workspace.`
-            : "Run analysis to produce quality and coverage signals.")}
+            ? `${evidence.length} ${t('workbench.evidenceProjected')}`
+            : t('workbench.runAnalysisHint'))}
       </p>
     </Panel>
   );
@@ -89,6 +91,7 @@ export function CoverageHeatmap({
   competitors: CompetitorRecord[];
   evidence: EvidenceRecord[];
 }) {
+  const { t, locale } = useTranslation();
   const dimensions = [...new Set(evidence.map((item) => item.dimension).filter(Boolean))].slice(0, 6);
   const visibleCompetitors = competitors.slice(0, 7);
   const coverage = new Map<string, number>();
@@ -100,16 +103,16 @@ export function CoverageHeatmap({
   return (
     <Panel
       className="workbench-card coverage-heatmap-panel"
-      title="Coverage heatmap"
+      title={t('workbench.coverageHeatmap')}
       icon={<ShieldCheck size={16} aria-hidden />}
       actions={<HeatmapLegend />}
     >
       {dimensions.length > 0 && visibleCompetitors.length > 0 ? (
         <div className="coverage-table" style={{ "--coverage-cols": dimensions.length } as CSSProperties}>
-          <span className="coverage-corner">Competitors</span>
+          <span className="coverage-corner">{t('workbench.competitors')}</span>
           {dimensions.map((dimension) => (
             <strong key={dimension} title={dimension}>
-              {formatDimension(dimension)}
+              {displayLabel(dimension, locale)}
             </strong>
           ))}
           {visibleCompetitors.map((competitor) => (
@@ -117,7 +120,7 @@ export function CoverageHeatmap({
           ))}
         </div>
       ) : (
-        <SummaryEmpty title="No coverage matrix" description="Coverage appears after evidence is mapped to competitors and dimensions." />
+        <SummaryEmpty title={t('workbench.noCoverageMatrix')} description={t('workbench.coverageHint')} />
       )}
     </Panel>
   );
@@ -130,15 +133,15 @@ export function ReportReviewStudioPanel({
   releaseGate: ReportReleaseGate | null;
   selectedVersion: ReportVersionRecord | null;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   return (
     <Panel
       className="workbench-card report-review-studio-panel"
-      title="Report review studio"
+      title={t('workbench.reportReviewStudio')}
       icon={<FileText size={16} aria-hidden />}
       actions={
         selectedVersion ? (
-          <StatusPill tone={reportStatusTone(selectedVersion.status)}>{selectedVersion.status}</StatusPill>
+          <StatusPill tone={reportStatusTone(selectedVersion.status)}>{displayLabel(selectedVersion.status, locale)}</StatusPill>
         ) : null
       }
     >
@@ -150,18 +153,18 @@ export function ReportReviewStudioPanel({
             <em>v{selectedVersion.version_number}</em>
           </div>
           <div className="report-review-facts">
-            <strong>Report v{selectedVersion.version_number}</strong>
-            <span>Generated {formatDate(selectedVersion.created_at)}</span>
-            <span>{selectedVersion.claim_ids.length} claims</span>
-            <span>{selectedVersion.evidence_ids.length} evidence links</span>
-            <span>{selectedVersion.report_md.length.toLocaleString()} characters</span>
+            <strong>{t('workbench.reportVersion')} {selectedVersion.version_number}</strong>
+            <span>{t('workbench.generated')} {formatDate(selectedVersion.created_at)}</span>
+            <span>{selectedVersion.claim_ids.length} {t('workbench.claims')}</span>
+            <span>{selectedVersion.evidence_ids.length} {t('workbench.evidenceLinks')}</span>
+            <span>{selectedVersion.report_md.length.toLocaleString(locale)} {t('common.characters')}</span>
             <em className={releaseGate?.allowed ? "ready" : "hold"}>
-              {releaseGate ? `${releaseGate.status} / ${releaseGate.blocker_count} blockers` : "Release gate pending"}
+              {releaseGate ? `${releaseGate.status === 'blocked' ? t('workbench.releaseConditionsBlocked') : displayLabel(releaseGate.status, locale)} / ${releaseGate.blocker_count} ${t('workbench.blockers')}` : t('workbench.releaseGatePending')}
             </em>
           </div>
         </div>
       ) : (
-        <EmptyState title="No report version yet" />
+        <EmptyState title={t('workbench.noReportVersion')} />
       )}
     </Panel>
   );
@@ -176,6 +179,7 @@ function CoverageRow({
   coverage: Map<string, number>;
   dimensions: string[];
 }) {
+  const { t, locale } = useTranslation();
   return (
     <>
       <em title={competitor.name}>{competitor.name}</em>
@@ -187,7 +191,7 @@ function CoverageRow({
           <span
             className={`coverage-cell ${level}`}
             key={`${competitor.id}-${dimension}`}
-            title={`${competitor.name} / ${dimension}: ${count} source(s)`}
+            title={`${competitor.name} / ${displayLabel(dimension, locale)}: ${count} ${t('workbench.source')}`}
           >
             {score ? `${score}%` : "-"}
           </span>
@@ -204,14 +208,15 @@ function HeatmapLegend() {
       <i className="good" />
       {t("workbench.good")}
       <i className="mid" />
-      Medium
+      {t('workbench.medium')}
       <i className="low" />
-      Low
+      {t('workbench.low')}
     </span>
   );
 }
 
 function QualityLine({ label, value }: { label: string; value: number | null }) {
+  const { locale } = useTranslation();
   const normalized = normalizeScore(value);
   return (
     <span className={normalized === null ? "empty" : undefined}>
@@ -219,7 +224,7 @@ function QualityLine({ label, value }: { label: string; value: number | null }) 
       <b>
         <i style={{ width: `${Math.round((normalized ?? 0) * 100)}%` }} />
       </b>
-      <strong>{normalized === null ? "n/a" : formatPercent(normalized)}</strong>
+      <strong>{normalized === null ? displayLabel('n/a', locale) : formatPercent(normalized)}</strong>
     </span>
   );
 }
@@ -239,11 +244,6 @@ function coverageScore(count: number) {
   if (count === 2) return 68;
   if (count === 1) return 46;
   return 0;
-}
-
-function formatDimension(value: string) {
-  const text = value.replace(/[_-]+/g, " ");
-  return text.length > 12 ? `${text.slice(0, 11)}...` : text;
 }
 
 function normalizeScore(value: number | null) {

@@ -3,6 +3,7 @@ import type { ReportVersionRecord } from "../../api/types";
 import { EmptyState, Panel, StatusPill } from "../../components/ui";
 import { formatDate, reportStatusTone } from "./format";
 import { useTranslation } from '../../stores/i18n';
+import { displayLabel } from '../../i18n/display';
 
 interface ReportVersionPanelProps {
   onSelectReport: (report: ReportVersionRecord) => void;
@@ -17,7 +18,7 @@ export function ReportVersionPanel({
   setSelectedVersionId,
   versions,
 }: ReportVersionPanelProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   return (
     <Panel className="report-version-panel" title={t('workbench.versionHistory')} icon={<GitCompareArrows size={16} aria-hidden />}>
       <div className="report-version-strip">
@@ -32,7 +33,7 @@ export function ReportVersionPanel({
             }}
           >
             <strong>v{version.version_number}</strong>
-            <StatusPill tone={reportStatusTone(version.status)}>{version.status}</StatusPill>
+            <StatusPill tone={reportStatusTone(version.status)}><span title={version.status}>{displayLabel(version.status, locale)}</span></StatusPill>
             <em>{formatDate(version.created_at)}</em>
           </button>
         ))}

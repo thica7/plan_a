@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { useI18n } from '../../stores/i18n';
 import type { NotificationRecord, ProjectRecord } from "../../api/types";
 import { NotificationStream, summarizeNotification } from "./NotificationStream";
 
@@ -45,6 +46,7 @@ const releaseGateNotification = {
 } as NotificationRecord;
 
 describe("NotificationStream", () => {
+  beforeEach(() => useI18n.getState().setLocale('en-US'));
   it("summarizes release gate metadata into review chips", () => {
     const details = summarizeNotification(releaseGateNotification);
 

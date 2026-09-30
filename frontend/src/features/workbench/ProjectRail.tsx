@@ -2,6 +2,8 @@ import { Bell, Briefcase } from "lucide-react";
 import type { NotificationRecord, ProjectRecord } from "../../api/types";
 import { EmptyState, LoadingState, Panel } from "../../components/ui";
 import { useTranslation } from "../../stores/i18n";
+import { displayLabel } from '../../i18n/display';
+import { SystemMessage } from '../../i18n/SystemMessage';
 import { formatDate } from "./format";
 
 export function ProjectRail({
@@ -17,7 +19,7 @@ export function ProjectRail({
   projects: ProjectRecord[];
   selectedProjectId: string | null;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   return (
     <aside className="project-rail redesigned-rail">
       <Panel title={t('workbench.projects')} icon={<Briefcase size={16} aria-hidden />}>
@@ -32,7 +34,7 @@ export function ProjectRail({
               onClick={() => onSelect(project.id)}
             >
               <strong>{project.name}</strong>
-              <span>{project.competitor_layer} / {project.scenario_id ?? t('workbench.scenarioAuto')}</span>
+              <span>{displayLabel(project.competitor_layer, locale)} / {project.scenario_id ? displayLabel(project.scenario_id, locale) : t('workbench.scenarioAuto')}</span>
               <em>{formatDate(project.updated_at)}</em>
             </button>
           ))}
@@ -43,8 +45,8 @@ export function ProjectRail({
         <div className="notification-list compact">
           {notifications.slice(0, 5).map((notification) => (
             <article className={`notification-item ${notification.severity}`} key={notification.id}>
-              <strong>{notification.title}</strong>
-              <span>{notification.status} / {formatDate(notification.created_at)}</span>
+              <strong><SystemMessage message={notification.title} /></strong>
+              <span>{displayLabel(notification.status, locale)} / {formatDate(notification.created_at)}</span>
             </article>
           ))}
         </div>
