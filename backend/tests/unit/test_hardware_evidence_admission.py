@@ -1,4 +1,6 @@
-from packages.research.evidence.admission import source_quality_problem
+import pytest
+
+from packages.research.evidence.admission import admit_evidence_items, source_quality_problem
 from packages.research.extraction.feature import extract_generic_capabilities
 from packages.research.models import CapturedPage, ResearchBrief
 from packages.schema.models import RawSource
@@ -92,3 +94,57 @@ def test_navigation_product_title_does_not_hide_later_product_fact():
     quote = result.quotes[0]
     assert quote.text == fact
     assert page.text[quote.start_offset:quote.end_offset] == quote.text
+
+
+def test_hardware_spec_table_is_extracted_and_admitted_without_capability_verbs():
+    brief = ResearchBrief(run_id='specs', topic='掌机功能', competitor='Nintendo Switch 2',
+                          dimension='feature', product_category='游戏掌机')
+    page = CapturedPage(candidate_id='specs',
+        requested_url='https://www.nintendo.com/us/gaming-systems/switch-2/tech-specs/',
+        final_url='https://www.nintendo.com/us/gaming-systems/switch-2/tech-specs/',
+        title='Nintendo Switch 2 Tech Specs', status='ok', quality_score=0.8,
+        content_hash='specs', text='Nintendo Switch 2 Technical Specs\n'
+        'Screen Capacitive touch screen 7.9-inch wide color gamut LCD screen 1920x1080 pixels\n'
+        'Storage 256 GB (UFS). A portion of storage is reserved for the system.')
+    result = extract_generic_capabilities(brief, page)
+    assert any('7.9-inch' in quote.text for quote in result.quotes)
+    assert any('256 GB' in quote.text for quote in result.quotes)
+    assert all(page.text[q.start_offset:q.end_offset] == q.text for q in result.quotes)
+    admitted = admit_evidence_items([result], captured_pages=[page])
+    assert admitted
+    assert all(item.status == 'accepted' for item in admitted)
+
+
+def test_hardware_specs_with_unrelated_page_identity_are_not_extracted():
+    brief = ResearchBrief(run_id='specs', topic='掌机功能', competitor='Nintendo Switch 2',
+                          dimension='feature', product_category='游戏掌机')
+    page = CapturedPage(candidate_id='specs', requested_url='https://example.com/specs',
+        final_url='https://example.com/specs', title='Other console specifications',
+        status='ok', quality_score=0.8, content_hash='other',
+        text='Screen Capacitive touch screen 7.9-inch wide color gamut LCD screen. '
+             'Storage 256 GB (UFS). A portion of storage is reserved for the system.')
+    assert extract_generic_capabilities(brief, page).fields == {}
+
+
+@pytest.mark.parametrize(('title', 'text'), [
+    ('Nintendo Switch 2 versus Steam Deck OLED', 'Steam Deck OLED specifications\n'
+     'Screen 7.4-inch OLED touch screen with HDR and wide color gamut.\n'
+     'Storage 1 TB NVMe SSD for games and operating system.'),
+    ('Nintendo Switch 2 technical specifications',
+     'Storage 256 GB external expansion is not available on Nintendo Switch 2.'),
+    ('Nintendo Switch 2 technical specifications',
+     'Storage 256 GB external expansion is not supported on Nintendo Switch 2.'),
+    ('Nintendo Switch 2 technical specifications',
+     'Storage 256 GB external expansion is unsupported on Nintendo Switch 2.'),
+    ('Nintendo Switch 2 launch',
+     'Storage promotion: win a 256 GB memory card when you register for our launch giveaway.'),
+    ('Nintendo Switch 2 technical specifications',
+     'Storage promotion: win a 256 GB memory card in our giveaway.'),
+])
+def test_hardware_spec_fallback_rejects_comparison_negation_and_marketing(title, text):
+    brief = ResearchBrief(run_id='invalid', topic='掌机功能', competitor='Nintendo Switch 2',
+                          dimension='feature', product_category='游戏掌机')
+    page = CapturedPage(candidate_id='invalid', requested_url='https://example.com/specs',
+        final_url='https://example.com/specs', title=title, status='ok', quality_score=0.8,
+        content_hash='invalid', text=text)
+    assert extract_generic_capabilities(brief, page).fields == {}

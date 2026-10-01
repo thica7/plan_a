@@ -3,7 +3,11 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from packages.research.extraction.quality import quote_window_from_match
+from packages.research.extraction.quality import (
+    HARDWARE_SPEC_RE,
+    quote_quality_problem,
+    quote_window_from_match,
+)
 from packages.research.models import (
     CapturedPage,
     EvidenceQuote,
@@ -29,7 +33,7 @@ _GENERIC_CAPABILITY_VERBS = re.compile(
 )
 _GENERIC_NEGATION = re.compile(
     r"不支持|无法|不提供|不具备|不能|没有|does not support|doesn't support|"
-    r"does not have|doesn't have|has no|without|not available",
+    r"does not have|doesn't have|has no|without|not available|\bnot supported\b|\bunsupported\b",
     flags=re.IGNORECASE,
 )
 
@@ -92,6 +96,35 @@ def extract_generic_capabilities(brief: ResearchBrief, page: CapturedPage) -> Ex
         ))
         if index >= 6:
             break
+    if (
+        brief.competitor.casefold() in page.title.casefold()
+        and re.search(r"\b(?:specs|specifications)\b|技术参数|规格", page.title, re.I)
+        and not re.search(r"\b(?:versus|vs|comparison)\b|对比|比较", page.title, re.I)
+    ):
+        for label in re.finditer(
+            r"\b(?:screen|display|storage|ram|battery)\b|屏幕|存储|内存|电池", text, re.I,
+        ):
+            if len(fields) >= 6:
+                break
+            line_end = text.find("\n", label.start())
+            end = min(len(text), label.start() + 180)
+            if line_end >= 0:
+                end = min(end, line_end)
+            quote = text[label.start():end].rstrip()
+            if (
+                not HARDWARE_SPEC_RE.search(quote)
+                or quote_quality_problem(quote, dimension=brief.dimension)
+                or _GENERIC_NEGATION.search(quote)
+                or re.search(r"\b(?:promotion|giveaway|win|prize)\b|促销|抽奖|赠品", quote, re.I)
+                or any(quote in existing.text for existing in quotes)
+            ):
+                continue
+            key = f"capability_{len(fields) + 1}"
+            fields[key] = {"status": "supported", "evidence_terms": [quote]}
+            quotes.append(EvidenceQuote(
+                text=quote, source_url=page.final_url, field=key,
+                start_offset=label.start(), end_offset=label.start() + len(quote),
+            ))
     return ExtractionResult(
         competitor=brief.competitor, dimension=brief.dimension,
         source_candidate_id=page.candidate_id, captured_page_id=page.id,

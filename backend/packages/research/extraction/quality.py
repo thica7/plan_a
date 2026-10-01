@@ -4,6 +4,12 @@ import re
 
 _MAX_QUOTE_CHARS = 420
 
+HARDWARE_SPEC_RE = re.compile(
+    r"(?:\b\d+(?:\.\d+)?[\s-]*(?:gb|tb|mhz|ghz|hz|mah|watts?|inches?|inch)\b|"
+    r"\b\d{3,4}p\b|\d+(?:\.\d+)?\s*(?:英寸|毫米|厘米|毫安时|像素))",
+    re.IGNORECASE,
+)
+
 _NAVIGATION_MARKERS = (
     "skip to content",
     "skip to main content",
@@ -287,6 +293,9 @@ def _has_dimension_signal(dimension: str, normalized_text: str) -> bool:
         signals = _DIMENSION_SIGNALS["feature"]
     if any(signal in normalized_text for signal in signals):
         return True
+    if "pricing" not in key and "persona" not in key and "user" not in key:
+        if HARDWARE_SPEC_RE.search(normalized_text):
+            return True
     if "pricing" in key:
         return bool(
             re.search(

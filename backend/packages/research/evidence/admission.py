@@ -17,7 +17,7 @@ from packages.research.evidence.normalization import (
     normalized_fields_from_evidence_items,
 )
 from packages.research.evidence.store import accepted_evidence_by_page
-from packages.research.extraction.quality import quote_quality_problem
+from packages.research.extraction.quality import HARDWARE_SPEC_RE, quote_quality_problem
 from packages.research.models import (
     CapturedPage,
     EvidenceItem,
@@ -43,11 +43,6 @@ USER_RESEARCH_SOURCE_TYPES = {
     "manual_note",
     "manual",
 }
-HARDWARE_SPEC_RE = re.compile(
-    r"(?:\b\d+(?:\.\d+)?[\s-]*(?:gb|tb|mhz|ghz|hz|mah|watts?|inches?|inch)\b|"
-    r"\b\d{3,4}p\b|\d+(?:\.\d+)?\s*(?:英寸|毫米|厘米|毫安时|像素))",
-    re.IGNORECASE,
-)
 
 
 def admit_evidence_items(
