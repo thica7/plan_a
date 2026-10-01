@@ -178,7 +178,7 @@ def test_research_depth_budget_table_is_exact_and_monotonic() -> None:
     from packages.research.budget import research_depth_budget
 
     expected = {
-        "quick": (2, 2, 1, 6, 3, 1, 0, 60, "4,000-6,000", 6, 1, 1),
+        "quick": (2, 2, 1, 6, 3, 1, 0, 60, "1,200-2,000", 6, 1, 1),
         "standard": (5, 3, 2, 10, 5, 2, 1, 120, "8,000-12,000", 12, 2, 2),
         "deep": (8, 5, 3, 16, 8, 3, 2, 160, "16,000-20,000", 24, 3, 3),
     }
@@ -867,7 +867,7 @@ async def test_clean_pipeline_counts_advanced_attempt_even_after_basic_fallback(
 async def test_writer_first_draft_prompt_uses_depth_target() -> None:
     service = _service()
     for depth, target in (
-        ("quick", "4,000-6,000"),
+        ("quick", "1,200-2,000"),
         ("standard", "8,000-12,000"),
         ("deep", "16,000-20,000"),
         (None, "16,000-20,000"),
@@ -918,7 +918,7 @@ async def test_writer_legacy_markdown_path_uses_depth_target(
         )
         assert result.startswith("## Decision Summary")
     assert [
-        "Target 4,000-6,000 characters" in captured[0],
+        "Target 1,200-2,000 characters" in captured[0],
         "Target 8,000-12,000 characters" in captured[1],
         "Target 16,000-20,000 characters" in captured[2],
         "Target 16,000-20,000 characters" in captured[3],
@@ -953,7 +953,7 @@ async def test_default_segment_writer_prompt_includes_depth_length(
             layer_context="L1", required_sections="Decision Summary", retry_count=0,
         )
     for prompt, target in zip(
-        captured[:3], ("4,000-6,000", "8,000-12,000", "16,000-20,000"), strict=True
+        captured[:3], ("1,200-2,000", "8,000-12,000", "16,000-20,000"), strict=True
     ):
         assert f"Full report target: {target} characters" in prompt
     assert "Full report target" not in captured[3]

@@ -191,6 +191,8 @@ def _report_analysis_plan(
 ) -> AnalysisPlan:
     stored = report_version.quality_metadata.get("analysis_plan")
     payload = dict(stored) if isinstance(stored, dict) else {}
+    if payload.get("research_depth") not in ("quick", "standard", "deep"):
+        payload["research_depth"] = None
     return AnalysisPlan.model_validate({
         "topic": report_version.topic_normalized,
         "competitors": [item.name for item in competitors],

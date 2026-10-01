@@ -239,6 +239,9 @@ def test_manual_revision_revalidates_current_claims_instead_of_inheriting_old_qa
         EnterpriseUserContext(user_id="reviewer", role="owner", workspace_id="workspace-1"),
     )
     assert revision.claim_ids != source.claim_ids
+    assert revision.status == "draft"
+    assert store.get_report_version(revision.id) is not None
+    assert store.claim_records[claim.id] == claim
     assert revision.quality_metadata["release_gate"]["allowed"] is False
     assert revision.quality_metadata["manual_revision"]["validation_status"] == "blocked"
     assert any(
@@ -431,3 +434,125 @@ def test_release_gate_repair_gap_preserves_known_product_category():
     gaps = quality_gaps_from_release_gate(_gate(report, purpose="internal"))
     assert gaps
     assert all(gap.metadata["product_category"] == "手机" for gap in gaps)
+
+
+@pytest.mark.parametrize("tail", [
+    "it lasts forever.", "2 batteries last forever.", "它永久续航。",
+])
+@pytest.mark.parametrize("separator", [" ", ""])
+def test_manual_citation_does_not_bind_lowercase_or_numeric_following_fact(tail, separator):
+    _, _, evidence, _, report = _records()
+    report.report_md = f"Phone costs $499. [source:evidence-1]{separator}{tail}"
+    claims, metadata = validate_manual_revision(report, [evidence])
+    assert [claim.claim_text for claim in claims] == ["Phone costs $499."]
+    assert metadata["run_qa_blocker_count"] == 1
+    assert metadata["unresolved_manual_claims"][0]["claim_text"] == tail
+
+
+@pytest.mark.parametrize("row", [
+    "| Phone costs $499. [source:evidence-1] it lasts forever. |",
+    "| Phone costs $499. it lasts forever. | [source:evidence-1] |",
+    "| Phone costs $499. [source:evidence-1] | it lasts forever. |",
+])
+def test_manual_table_facts_require_individual_citation_binding(row):
+    _, _, evidence, _, report = _records()
+    report.report_md = row
+    _, metadata = validate_manual_revision(report, [evidence])
+    assert metadata["run_qa_blocker_count"] >= 1
+    assert metadata["unresolved_manual_claims"]
+
+
+@pytest.mark.parametrize("body", [
+    "Run five customer interviews.", "因此建议比较便携性。",
+    "- [Phone official pricing](https://example.com/price)",
+])
+def test_manual_suggestions_and_source_links_are_not_factual_claims(body):
+    _, _, evidence, _, report = _records()
+    report.report_md += "\n" + body
+    claims, metadata = validate_manual_revision(report, [evidence])
+    assert len(claims) == 1
+    assert metadata["unresolved_manual_claims"] == []
+    assert metadata["run_qa_blocker_count"] == 0
+
+
+@pytest.mark.parametrize("body", [
+    "[Phone costs $999](https://example.com/price)",
+    "Recommend Phone because it lasts forever.",
+])
+def test_manual_suggestion_or_link_label_cannot_hide_an_unsupported_fact(body):
+    _, _, evidence, _, report = _records()
+    report.report_md += "\n" + body
+    _, metadata = validate_manual_revision(report, [evidence])
+    assert metadata["run_qa_blocker_count"] == 1
+
+
+def test_manual_inline_citation_before_terminal_punctuation_stays_with_fact():
+    _, _, evidence, _, report = _records()
+    report.report_md = "Phone costs $499 [source:evidence-1]."
+    claims, metadata = validate_manual_revision(report, [evidence])
+    assert len(claims) == 1
+    assert metadata["run_qa_blocker_count"] == 0
+
+
+@pytest.mark.parametrize("category", ["developer tools", "开发者硬件"])
+@pytest.mark.parametrize("strategy", [
+    "pricing_model_repair", "feature_slot_repair", "persona_schema_repair",
+])
+def test_developer_category_alone_does_not_identify_an_api_product(category, strategy):
+    gap = QualityGap(
+        severity="warn", dimension="pricing", competitor="Phone", reason="missing",
+        suggested_action=strategy, acceptance_rule="source required",
+        metadata={"product_category": category},
+    )
+    queries = " ".join(query_hints_for_gap(gap, [])).casefold()
+    assert all(word not in queries for word in ("api", "token", "developer"))
+
+
+def test_unknown_research_depth_uses_compatible_strict_internal_gate():
+    *_, report = _records()
+    report.quality_metadata["analysis_plan"]["research_depth"] = "unknown"
+    gate = _gate(report, purpose="internal")
+    assert gate.allowed is False
+    assert any(issue.rule_id == "report_depth_required" and issue.severity == "blocker"
+               for issue in gate.issues)
+
+
+def test_repair_acceptance_tracks_unchanged_semantic_issue_after_id_changes():
+    service, record, projection = _repair_service()
+    record.detail.qa_findings = [_redo_issue("new-id")]
+    record.detail.revisions = [RevisionRecord(
+        id="revision-1", iteration=1, stage="writer_only", issue_ids=["old-id"],
+        qa_issue_ids_before=["old-id"], issue_count_before=1, issue_count_after=1,
+        metadata={"repair_issue_keys_by_id": {
+            "old-id": "report_md.line[2]|||writer_only",
+        }},
+    )]
+    gate = _gate(projection.report_version, purpose="internal").model_copy(update={
+        "issues": [], "issue_count": 0, "blocker_count": 0, "warn_count": 0,
+    })
+    service._attach_release_gate_quality_metadata(projection, gate)
+    acceptance = projection.report_version.quality_metadata["repair_acceptance"][-1]
+    assert acceptance["resolved_issue_ids"] == []
+    assert acceptance["remaining_issue_ids"] == ["new-id"]
+    assert acceptance["no_progress"] is True
+
+
+@pytest.mark.asyncio
+async def test_revision_preserves_semantic_issue_identity_from_redo_request():
+    service, record, _ = _repair_service()
+    record.detail.qa_findings = [_redo_issue("new-id")]
+    record.detail.agent_messages = [AgentMessage(
+        id="redo-request", run_id=record.detail.id, from_agent="orchestrator", to_agent="writer",
+        message_type="redo_request", payload_schema="RedoRequest", payload={
+            "issues": [_redo_issue("old-id").model_dump(mode="json")],
+        },
+    )]
+    await service._record_revision(
+        record, iteration=1, stage="writer_only",
+        redo_scope=RedoScope(kind="writer_only", rationale="fix"), redo_scopes=[],
+        before_md="Old body", issue_ids=["old-id"], qa_issue_ids_before=["old-id"],
+        issue_count_before=1,
+    )
+    acceptance = record.detail.revisions[-1].metadata["repair_acceptance"]
+    assert acceptance["resolved_issue_ids"] == []
+    assert acceptance["remaining_issue_ids"] == ["new-id"]

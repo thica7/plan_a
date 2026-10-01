@@ -33,7 +33,7 @@ def query_hints_for_gap(gap: QualityGap, fields: list[str]) -> list[str]:
     field_phrase = " ".join(fields).replace("_", " ").strip()
     dimension_phrase = gap.dimension.replace("_", " ")
     category = str(gap.metadata.get("product_category") or "").casefold()
-    api_software = bool(re.search(r"\bapi\b|developer|开发者|接口服务", category))
+    api_software = bool(re.search(r"\bapi\b|接口服务", category))
     if gap.suggested_action == "pricing_model_repair":
         intents = [
             "official pricing plans billing",

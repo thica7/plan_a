@@ -95,7 +95,11 @@ from packages.research.repair import (
     repair_tasks_from_gaps,
     repair_tasks_to_redo_scopes,
 )
-from packages.research.repair.acceptance import repair_acceptance, repeated_no_progress
+from packages.research.repair.acceptance import (
+    repair_acceptance,
+    repair_issue_key,
+    repeated_no_progress,
+)
 from packages.schema.api_dto import (
     CollectorResearchUsage,
     HitlResumeRequest,
@@ -3364,6 +3368,21 @@ class RunService(
                 stable_prefixed_id("qc-release-gate", record.detail.id, task.id, length=16)
                 for task in tasks
             )
+            after_keys = {
+                issue.id: repair_issue_key(issue) for issue in record.detail.qa_findings
+                if not issue.field_path.startswith("release_gate.")
+            }
+            for task in tasks:
+                scope = repair_task_to_redo_scope(task)
+                task_id = stable_prefixed_id(
+                    "qc-release-gate", record.detail.id, task.id, length=16,
+                )
+                after_keys[task_id] = repair_issue_key({
+                    "field_path": f"release_gate.{task.metadata.get('rule_id', 'unknown')}",
+                    "target_competitor": scope.target_competitor,
+                    "target_subagent": scope.target_subagent,
+                    "redo_scope": scope.model_dump(mode="json"),
+                })
             writer_metadata = next((
                 message.payload for message in reversed(record.detail.agent_messages)
                 if message.from_agent == "writer" and message.message_type == "report_ready"
@@ -3378,6 +3397,7 @@ class RunService(
                 before_report_version_id=before_version,
                 after_report_version_id=projection.report_version.id,
                 writer_metadata=writer_metadata,
+                after_issue_keys=after_keys,
             )
             history = [
                 revision.metadata["repair_acceptance"]
@@ -3386,7 +3406,8 @@ class RunService(
             ]
             metadata["repair_acceptance"] = [*history, acceptance]
             record.detail.revisions[-1] = latest.model_copy(update={"metadata": {
-                **latest.metadata, "qa_issue_ids_after": after_ids, "repair_acceptance": acceptance,
+                **latest.metadata, "qa_issue_ids_after": after_ids,
+                "qa_issue_keys_after": after_keys, "repair_acceptance": acceptance,
             }})
             if repeated_no_progress(record.detail.revisions):
                 metadata["auto_redo"] = {"stopped": True, "reason": "no_progress"}
@@ -3863,12 +3884,15 @@ class RunService(
             item for message in detail.agent_messages if message.message_type == "redo_request"
             for item in message.payload.get("issues", []) if item.get("id") in set(issue_ids)
         ]
+        revision_metadata["repair_issue_keys_by_id"] = {
+            item["id"]: repair_issue_key(item) for item in targeted
+        }
         revision_metadata["repair_issue_keys"] = sorted({
-            "|".join(str(value or "") for value in (
-                item.get("field_path"), item.get("target_competitor"), item.get("target_subagent"),
-                item.get("redo_scope", {}).get("kind"),
-            )) for item in targeted
+            repair_issue_key(item) for item in targeted
         })
+        revision_metadata["qa_issue_keys_after"] = {
+            issue.id: repair_issue_key(issue) for issue in detail.qa_findings
+        }
         writer_metadata = next((
             message.payload for message in reversed(detail.agent_messages)
             if message.from_agent == "writer" and message.message_type == "report_ready"

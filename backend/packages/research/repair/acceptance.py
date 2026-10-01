@@ -1,4 +1,13 @@
-from packages.schema.models import RevisionRecord
+from packages.schema.models import QCIssue, RevisionRecord
+
+
+def repair_issue_key(issue: QCIssue | dict) -> str:
+    payload = issue.model_dump(mode="json") if isinstance(issue, QCIssue) else issue
+    scope = payload.get("redo_scope") or {}
+    return "|".join(str(value or "") for value in (
+        payload.get("field_path"), payload.get("target_competitor"),
+        payload.get("target_subagent"), scope.get("kind"),
+    ))
 
 
 def repair_acceptance(
@@ -8,13 +17,20 @@ def repair_acceptance(
     after_report_version_id: str | None,
     before_report_version_id: str | None = None,
     writer_metadata: dict | None = None,
+    after_issue_keys: dict[str, str] | None = None,
 ) -> dict[str, object]:
     before_ids = revision.qa_issue_ids_before or revision.issue_ids
     selected = revision.issue_ids or before_ids
-    after_set = set(after_issue_ids)
-    resolved = [item for item in selected if item not in after_set]
-    remaining = [item for item in selected if item in after_set]
-    improved = len(after_issue_ids) < revision.issue_count_before
+    before_keys = revision.metadata.get("repair_issue_keys_by_id") or {}
+    after_keys = after_issue_keys or revision.metadata.get("qa_issue_keys_after") or {}
+    before_keys = {**after_keys, **before_keys}
+    selected_keys = {before_keys.get(item, item) for item in selected}
+    after_set = {after_keys.get(item, item) for item in after_issue_ids}
+    resolved = [item for item in selected if before_keys.get(item, item) not in after_set]
+    remaining = [item for item in after_issue_ids if after_keys.get(item, item) in selected_keys]
+    before_count = len({before_keys.get(item, item) for item in before_ids})
+    before_count += max(0, revision.issue_count_before - len(before_ids))
+    improved = len(after_set) < before_count
     writer = {**(writer_metadata or {}), **revision.metadata}
     return {
         "revision_id": revision.id, "iteration": revision.iteration,

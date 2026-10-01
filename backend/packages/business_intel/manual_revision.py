@@ -7,6 +7,92 @@ from packages.business_intel.source_reconciliation import evidence_by_source_tok
 from packages.identity import stable_prefixed_id
 from packages.schema.enterprise import ClaimRecord, EvidenceRecord, ReportVersionRecord
 
+_CITATION = r"\[\s*(?:source|来源)\s*[:：][^\]]*\]"
+_MARKDOWN_LINK = r"\[[^\]]*\]\([^\s)]+\)"
+
+
+def _sentence_parts(text: str) -> list[str]:
+    """Bind trailing citations to the preceding sentence, never the next one."""
+    parts: list[str] = []
+    pending = ""
+    offset = 0
+    for token in re.finditer(
+        rf"{_CITATION}|{_MARKDOWN_LINK}|[.!?。！？]", text, re.IGNORECASE,
+    ):
+        pending += text[offset:token.start()]
+        value = token.group()
+        offset = token.end()
+        if re.fullmatch(_CITATION, value, flags=re.IGNORECASE):
+            if pending.strip():
+                parts.append(pending.strip() + " " + value)
+                pending = ""
+            elif parts:
+                parts[-1] += " " + value
+            else:
+                parts.append(value)
+            continue
+        if value in ".!?。！？" and not pending.strip() and parts and source_tokens(parts[-1]):
+            parts[-1] += value
+            pending = ""
+            continue
+        pending += value
+        if value.startswith("["):
+            continue
+        if value == "." and (
+            token.start() > 0 and token.end() < len(text)
+            and text[token.start() - 1].isdigit() and text[token.end()].isdigit()
+        ):
+            continue
+        if pending.strip():
+            parts.append(pending.strip())
+            pending = ""
+    pending += text[offset:]
+    if pending.strip():
+        parts.append(pending.strip())
+    return parts
+
+
+def _is_fact_candidate(text: str) -> bool:
+    text = text.strip(" |-*")
+    if not text:
+        return False
+    link_only = bool(re.fullmatch(rf"(?:{_MARKDOWN_LINK}\s*)+", text))
+    if link_only:
+        text = " ".join(re.findall(r"\[([^\]]*)\]\(", text))
+    suggestion = re.match(
+        r"(?i)^(?:(?:therefore|thus)[, ]*)?"
+        r"(?:we (?:recommend|suggest)|recommend(?:ation)?|suggest|consider|run|conduct|"
+        r"compare|test|validate|interview|prioriti[sz]e|evaluate|investigate)\b"
+        r"|^(?:因此|所以)?(?:建议|推荐|请|应当)",
+        text,
+    )
+    # A recommendation that also asserts a product fact still needs evidence.
+    factual_clause = re.search(
+        r"(?i)\b(?:is|are|was|were|has|have|costs?|lasts?|supports?|offers?|"
+        r"includes?|charges?)\b|售价|价格为|支持|具备|拥有|包含|续航为",
+        text,
+    )
+    if link_only:
+        return bool(factual_clause or re.search(r"[$€£¥￥]\s*\d", text))
+    return not suggestion or bool(factual_clause)
+
+
+def _line_parts(text: str) -> list[str]:
+    if not text.startswith("|"):
+        return _sentence_parts(text)
+    cells = [cell.strip() for cell in text.strip("|").split("|")]
+    parts = [part for cell in cells for part in _sentence_parts(cell)]
+    citation_cells = [part for part in parts if not re.sub(
+        _CITATION, "", part, flags=re.IGNORECASE,
+    ).strip()]
+    facts = [part for part in parts if _is_fact_candidate(re.sub(
+        _CITATION, "", part, flags=re.IGNORECASE,
+    ))]
+    # An evidence column can support a single fact; multi-fact rows bind citations inline.
+    if len(facts) == 1 and citation_cells:
+        return [facts[0] + " " + " ".join(citation_cells)]
+    return parts
+
 
 def validate_manual_revision(
     version: ReportVersionRecord,
@@ -26,9 +112,7 @@ def validate_manual_revision(
             and re.fullmatch(r"[|:\s-]+", lines[line_number])
         ):
             continue
-        parts = [text] if text.startswith("|") else re.split(
-            r"(?<=[.!?])\s+(?!\[)|(?<=\])\s+(?=[A-Z\u4e00-\u9fff])|(?<=[。！？])(?!\s*\[)", text,
-        )
+        parts = _line_parts(text)
         body_parts.extend((line_number, index, part) for index, part in enumerate(parts))
     for line_number, part_index, text in body_parts:
         cited = {
@@ -36,9 +120,9 @@ def validate_manual_revision(
             if (item := by_token.get(token)) is not None
         }
         claim_text = re.sub(
-            r"\[\s*(?:source|来源)\s*[:：][^\]]*\]", "", text, flags=re.IGNORECASE,
+            _CITATION, "", text, flags=re.IGNORECASE,
         ).strip(" |-*")
-        if not claim_text:
+        if not _is_fact_candidate(claim_text):
             continue
         if not cited:
             unbound.append({"line_number": line_number, "claim_text": claim_text})
