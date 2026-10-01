@@ -13,6 +13,8 @@ export function ReportReaderWorkspace({
   onActiveSourceChange,
   reportArtifact,
   reportSources,
+  detailsOpen = false,
+  onDetailsToggle,
 }: {
   activeSourceId: string | null;
   activeLayer?: ReportViewLayer;
@@ -21,6 +23,8 @@ export function ReportReaderWorkspace({
   onActiveSourceChange: (sourceId: string | null) => void;
   reportArtifact?: ReportArtifactV2 | null;
   reportSources: ReportSourceBundle;
+  detailsOpen?: boolean;
+  onDetailsToggle?: () => void;
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -35,11 +39,11 @@ export function ReportReaderWorkspace({
     <div className="report-reader-workspace">
       <div className="report-review-toolbar">
         <div className="report-mode-toggle" aria-label={t('reportDetail.readerMode')}>
-          <button className="active" type="button">
+          <button className={detailsOpen ? 'active' : undefined} type="button" aria-expanded={detailsOpen} onClick={onDetailsToggle} data-action-id="report.details.toggle" data-action-audit="local">
             <PanelRight size={14} aria-hidden />
-            {t('reportDetail.threePane')}
+            {t('reportDetail.outlineAndSources')}
           </button>
-          <button type="button">
+          <button type="button" disabled title={t('reportDetail.compareUnavailable')}>
             <GitCompareArrows size={14} aria-hidden />
             {t('reportDetail.compare')}
           </button>

@@ -40,3 +40,13 @@ it('links a verified homepage instead of labeling a review page as official', ()
   render(<RunDetailHeader detail={detail} recommendedDimensions={[]} />);
   expect(screen.getByRole('link', { name: '官网已核验' })).toHaveAttribute('href', 'https://notion.so');
 });
+
+it('shows research depth, collaboration and demo provenance in a compact report header', () => {
+  const detail = { topic: '报告主题', status: 'completed', execution_mode: 'demo', hitl_enabled: true,
+    plan: { competitors: [], dimensions: [], research_depth: 'quick', collaboration_mode: 'assisted', competitor_layer: 'L1', qa_rule_ids: ['rule-id'], task_decomposition: [] } } as unknown as RunDetail;
+  render(<RunDetailHeader detail={detail} recommendedDimensions={[]} compact />);
+  expect(screen.getByText('极简研究')).toBeInTheDocument();
+  expect(screen.getByText('半人工协作')).toBeInTheDocument();
+  expect(screen.getByText('演示数据')).toBeInTheDocument();
+  expect(screen.getByText('研究范围与规则')).toBeInTheDocument();
+});

@@ -44,12 +44,15 @@ export function CompetitorsSection({
         </button>
       </div>
       {competitorMode === "manual" ? (
-        <textarea
-          aria-label={t('newRun.competitors')}
-          value={competitors}
-          onChange={(event) => setCompetitors(event.target.value)}
-          rows={3}
-        />
+        <>
+          <textarea
+            aria-label={t('newRun.competitors')}
+            value={competitors}
+            onChange={(event) => setCompetitors(event.target.value)}
+            rows={3}
+          />
+          <p className="scope-note">{t('newRun.competitorsCommaHint')}</p>
+        </>
       ) : (
         <p className="scope-note">
           {t('newRun.competitorsPlanner')}

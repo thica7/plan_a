@@ -80,13 +80,15 @@ export function RunDetail() {
 
   return (
     <section className="run-detail">
-      <RunDetailHeader detail={detail} recommendedDimensions={recommendedDimensions} />
-      <RunSummaryStrip
-        citedClaimRate={citedClaimRate}
-        detail={detail}
-        sourceCoverageRate={sourceCoverageRate}
-        verifiedSourceRate={verifiedSourceRate}
-      />
+      <RunDetailHeader detail={detail} recommendedDimensions={recommendedDimensions} compact={activeView === 'report'} />
+      {activeView !== 'report' ? (
+        <RunSummaryStrip
+          citedClaimRate={citedClaimRate}
+          detail={detail}
+          sourceCoverageRate={sourceCoverageRate}
+          verifiedSourceRate={verifiedSourceRate}
+        />
+      ) : null}
 
       {detail.status === "interrupted" && latestInterrupt ? (
         interruptStage === "planner" ? (
@@ -157,6 +159,7 @@ export function RunDetail() {
         agentMessages={agentMessages}
         toolCallMessages={toolCallMessages}
       />
+      {activeView === 'report' ? <RunSummaryStrip compact citedClaimRate={citedClaimRate} detail={detail} sourceCoverageRate={sourceCoverageRate} verifiedSourceRate={verifiedSourceRate} /> : null}
     </section>
   );
 }

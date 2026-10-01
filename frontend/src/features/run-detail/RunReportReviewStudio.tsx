@@ -1,5 +1,6 @@
 import { Download, Send, ShieldCheck } from "lucide-react";
 import { useMemo, useState, type MouseEvent } from "react";
+import { useReportAnchorJump } from '../report/reportAnchors';
 import { useTranslation } from '../../stores/i18n';
 import { exportReportVersion, startReportApprovalWorkflow } from "../../api/client";
 import type { RunDetail as RunDetailRecord } from "../../api/types";
@@ -35,6 +36,8 @@ type ReviewActionFeedback =
 
 export function RunReportReviewStudio({ detail, reportSources }: RunReportReviewStudioProps) {
   const { locale, t } = useTranslation();
+  const jump = useReportAnchorJump();
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const markdown = detail.report_md ?? "";
   const [activeLayer, setActiveLayer] = useState<ReportViewLayer>("report");
   const selectedMarkdown = selectReportLayerMarkdown(detail.report_artifact, markdown, activeLayer, {
@@ -75,12 +78,12 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
       : anchorId.startsWith("missing-source-")
         ? anchorId.slice("missing-source-".length)
         : null;
+    jump(event, href, () => handleActiveSourceChange(sourceId));
+  }
+
+  function handleActiveSourceChange(sourceId: string | null) {
     setActiveSourceId(sourceId);
-    const target = document.getElementById(anchorId);
-    if (!target) return;
-    event.preventDefault();
-    window.history.replaceState(null, "", `#${anchorId}`);
-    target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (sourceId) setDetailsOpen(true);
   }
 
   async function handleRequestApproval() {
@@ -140,20 +143,23 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
     <div className="run-report-review-studio">
       <ReportStatusStrip detail={detail} reportSources={reportSources} wordCount={wordCount} />
 
-      <div className="report-review-workspace">
-        <ReportOutline markdown={selectedMarkdown} />
+      <div className={`report-review-workspace${detailsOpen ? ' details-open' : ''}`}>
+        <ReportOutline markdown={selectedMarkdown} hidden={!detailsOpen} />
 
         <ReportReaderWorkspace
           activeSourceId={activeSourceId}
           activeLayer={activeLayer}
           markdown={markdown}
           onActiveLayerChange={setActiveLayer}
-          onActiveSourceChange={setActiveSourceId}
+          onActiveSourceChange={handleActiveSourceChange}
+          detailsOpen={detailsOpen}
+          onDetailsToggle={() => setDetailsOpen(open => !open)}
           reportArtifact={detail.report_artifact ?? null}
           reportSources={reportSources}
         />
 
         <aside className="report-review-inspector">
+          <div hidden={!detailsOpen}>
           <Panel
             className="report-review-source-panel"
             title={t('reportStudio.sourceTrace')}
@@ -177,6 +183,7 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
           </Panel>
 
           <RevisionDiff compact revisions={detail.revisions} />
+          </div>
 
           <Panel className="report-review-actions-panel" title={t('reportStudio.reviewActions')}>
             <button className="primary-action" disabled={actionDisabled} onClick={handleRequestApproval} type="button">

@@ -8,6 +8,7 @@ interface RunSummaryStripProps {
   detail: RunDetailRecord;
   sourceCoverageRate: number;
   verifiedSourceRate: number;
+  compact?: boolean;
 }
 
 export function RunSummaryStrip({
@@ -15,9 +16,10 @@ export function RunSummaryStrip({
   detail,
   sourceCoverageRate,
   verifiedSourceRate,
+  compact = false,
 }: RunSummaryStripProps) {
   const { t } = useTranslation();
-  return (
+  const content = (
     <section className="run-command-grid">
       <article className="panel run-summary-panel">
         <div className="panel-heading-row">
@@ -58,4 +60,5 @@ export function RunSummaryStrip({
       </article>
     </section>
   );
+  return compact ? <details className="run-metrics-details"><summary>{t('summary.details')}</summary>{content}</details> : content;
 }

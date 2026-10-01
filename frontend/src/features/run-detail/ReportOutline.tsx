@@ -1,6 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { slugReportHeading } from "../report/ReportView";
 import { useTranslation } from "../../stores/i18n";
+import { useReportAnchorJump } from '../report/reportAnchors';
 
 export interface ReportOutlineItem {
   id: string;
@@ -8,12 +9,13 @@ export interface ReportOutlineItem {
   title: string;
 }
 
-export function ReportOutline({ markdown }: { markdown: string }) {
+export function ReportOutline({ markdown, hidden = false }: { markdown: string; hidden?: boolean }) {
   const { t } = useTranslation();
+  const jump = useReportAnchorJump();
   const items = buildReportOutline(markdown);
 
   return (
-    <aside className="report-outline-panel">
+    <aside className="report-outline-panel" hidden={hidden}>
       <div className="report-outline-heading">
         <strong>{t('reportDetail.outline')}</strong>
         <span>{items.length} {t('reportDetail.sections')}</span>
@@ -21,7 +23,7 @@ export function ReportOutline({ markdown }: { markdown: string }) {
       {items.length > 0 ? (
         <nav aria-label={t('reportDetail.outline')}>
           {items.map((item) => (
-            <a className={`level-${item.level}`} href={`#${item.id}`} key={`${item.id}-${item.title}`}>
+            <a className={`level-${item.level}`} href={`#${item.id}`} key={`${item.id}-${item.title}`} onClick={event => jump(event, `#${item.id}`)}>
               <ChevronRight size={13} aria-hidden />
               <span>{item.title}</span>
             </a>

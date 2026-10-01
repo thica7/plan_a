@@ -8,6 +8,7 @@ import SearchPage from '../../pages/SearchPage';
 import CrawlPage from '../../pages/CrawlPage';
 import { DesktopSettings } from './DesktopSettings';
 import { FilesApp } from './FilesApp';
+import { translate, type Locale } from '../../stores/i18n';
 
 export const desktopApps = [
   { href: '/', title: '研究任务', icon: 'research', subtitle: '从问题开始研究' },
@@ -21,10 +22,14 @@ export const desktopApps = [
   { href: '/activity', title: '活动中心', icon: 'bell', subtitle: '通知与运行活动' },
   { href: '/settings', title: '系统设置', icon: 'settings', subtitle: '主题、语言与状态' },
 ];
-export function appForHref(href: string) {
-  const path = href.split('?')[0];
-  if (path.startsWith('/runs/')) return { ...desktopApps[0], title: `分析 · ${path.slice(6).slice(0, 16)}` };
-  return desktopApps.find(a => a.href === path) ?? { ...desktopApps[0], title: '工作台' };
+export function localizedDesktopApps(locale: Locale) {
+  return desktopApps.map(app => ({ ...app, title: translate(`desktop.app.${app.icon}.title`, locale), subtitle: translate(`desktop.app.${app.icon}.subtitle`, locale) }));
+}
+export function appForHref(href: string, locale: Locale = 'zh-CN') {
+  const path = new URL(href, 'https://desktop.local').pathname;
+  const apps = localizedDesktopApps(locale);
+  if (path.startsWith('/runs/')) return { ...apps[0], title: `${translate('desktop.analysis', locale)} · ${path.slice(6).slice(0, 16)}` };
+  return apps.find(a => a.href === path) ?? { ...apps[0], title: translate('desktop.workbench', locale) };
 }
 export function BusinessRoutes() {
   return <Routes>

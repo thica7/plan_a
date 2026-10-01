@@ -5,6 +5,7 @@ import { exportReportVersion, startReportApprovalWorkflow } from "../../api/clie
 import type { RawSource, RunDetail } from "../../api/types";
 import { useI18n } from "../../stores/i18n";
 import { RunReportReviewStudio } from "./RunReportReviewStudio";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 vi.mock("../../api/client", () => ({
   exportReportVersion: vi.fn(),
@@ -140,6 +141,31 @@ function makeDetail(): RunDetail {
 }
 
 describe("RunReportReviewStudio artifact layers", () => {
+  it('keeps outline and source jumps inside their report and preserves the run query', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const Path = () => { const l = useLocation(); return <output>{l.pathname + l.search + l.hash}</output>; };
+    const { container } = render(<><MemoryRouter initialEntries={['/runs/a?view=report']}><RunReportReviewStudio detail={makeDetail()} reportSources={{ aliases: {}, sources: [coreSource] }} /></MemoryRouter><MemoryRouter initialEntries={['/runs/b?view=report']}><Path /><RunReportReviewStudio detail={makeDetail()} reportSources={{ aliases: {}, sources: [coreSource] }} /></MemoryRouter></>);
+    const reports = container.querySelectorAll('.run-report-review-studio');
+    const heading = reports[1].querySelector('[id="report-section-core-outline"]');
+    expect(heading).not.toBeNull();
+    await userEvent.click(within(reports[1] as HTMLElement).getByRole('button', { name: '目录与来源' }));
+    await userEvent.click(within(reports[1] as HTMLElement).getByRole('link', { name: 'Core Outline' }));
+    expect(scroll.mock.instances[scroll.mock.instances.length - 1]).toBe(reports[1].querySelector('[id="report-section-core-outline"]'));
+    expect(screen.getByText('/runs/b?view=report#report-section-core-outline')).toBeInTheDocument();
+    await userEvent.click(reports[1].querySelector('.source-token-link')!);
+    expect(scroll.mock.instances[scroll.mock.instances.length - 1]).toBe(reports[1].querySelector('[id="source-core-source"]'));
+    expect(screen.getByText('/runs/b?view=report#source-core-source')).toBeInTheDocument();
+  });
+  it('makes unavailable compare explicit and offers a real details toggle', async () => {
+    render(<RunReportReviewStudio detail={makeDetail()} reportSources={{ aliases: {}, sources: [coreSource] }} />);
+    expect(screen.getByRole('button', { name: '比较' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '比较' })).toHaveAttribute('title', '报告比较尚未开放');
+    const toggle = screen.getByRole('button', { name: '目录与来源' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
   it.each([
     { button: "MARKDOWN", chinese: "已导出 report.md", english: "Exported report.md" },
     { button: "请求审批", chinese: "审批流程 运行中: approval-1", english: "Approval workflow Running: approval-1" },
@@ -208,6 +234,8 @@ describe("RunReportReviewStudio artifact layers", () => {
         reportSources={{ aliases: {}, sources: [coreSource] }}
       />,
     );
+
+    await userEvent.click(screen.getByRole('button', { name: '目录与来源' }));
 
     const outline = screen.getByRole("navigation", { name: /outline|大纲/i });
     expect(within(outline).getByText("Core Outline")).toBeInTheDocument();

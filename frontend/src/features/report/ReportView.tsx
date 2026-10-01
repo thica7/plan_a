@@ -4,6 +4,7 @@ import type { Locale } from "../../stores/i18n";
 import { useTranslation } from '../../stores/i18n';
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useReportAnchorJump } from './reportAnchors';
 import type { RawSource, ReportArtifactV2 } from "../../api/types";
 import { ReportSourceTrace } from "./ReportSourceTrace";
 import {
@@ -60,6 +61,7 @@ export function ReportView({
   sourceAliases = EMPTY_SOURCE_ALIASES,
 }: Props) {
   const { locale, t } = useTranslation();
+  const jump = useReportAnchorJump();
   const [internalActiveSourceId, setInternalActiveSourceId] = useState<string | null>(null);
   const [internalActiveLayer, setInternalActiveLayer] = useState<ReportViewLayer>("report");
   const activeSourceId =
@@ -91,18 +93,15 @@ export function ReportView({
   function handleSourceJump(event: MouseEvent<HTMLAnchorElement>, href: string | undefined) {
     const anchorId = href?.startsWith("#") ? href.slice(1) : "";
     if (!anchorId) return;
-    const target = document.getElementById(anchorId);
-    if (!target) return;
-    event.preventDefault();
     const sourceId = anchorId.startsWith("source-")
       ? anchorId.slice("source-".length)
       : anchorId.startsWith("missing-source-")
         ? anchorId.slice("missing-source-".length)
         : null;
-    setInternalActiveSourceId(sourceId);
-    onActiveSourceChange?.(sourceId);
-    window.history.replaceState(null, "", `#${anchorId}`);
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    jump(event, href, () => {
+      setInternalActiveSourceId(sourceId);
+      onActiveSourceChange?.(sourceId);
+    });
   }
 
   function handleLayerChange(layer: ReportViewLayer) {
@@ -113,7 +112,7 @@ export function ReportView({
   }
 
   const reportBody = (
-    <section className={`panel report-panel${layout === "reader" ? " report-reader-panel" : ""}`}>
+    <section data-report-scope={!showSourceTrace ? '' : undefined} className={`panel report-panel${layout === "reader" ? " report-reader-panel" : ""}`}>
       <div className="panel-heading-row">
         <h2>{readerTitle ?? t('runTabs.report')}</h2>
         {totalCitationCount ? <span className="report-citation-count">{totalCitationCount} {t('report.citations')}</span> : null}
@@ -224,7 +223,7 @@ export function ReportView({
 
   if (layout === "reader") {
     return (
-      <div className="report-reader-layout">
+      <div className="report-reader-layout" data-report-scope="">
         {reportBody}
         <aside className="report-source-rail">{sourceTrace}</aside>
       </div>
@@ -232,10 +231,10 @@ export function ReportView({
   }
 
   return (
-    <>
+    <div data-report-scope="">
       {reportBody}
       {sourceTrace}
-    </>
+    </div>
   );
 }
 

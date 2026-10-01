@@ -6,18 +6,35 @@ import type { RunDetail as RunDetailRecord } from "../../api/types";
 interface RunDetailHeaderProps {
   detail: RunDetailRecord;
   recommendedDimensions: string[];
+  compact?: boolean;
 }
 
-export function RunDetailHeader({ detail, recommendedDimensions }: RunDetailHeaderProps) {
+export function RunDetailHeader({ detail, recommendedDimensions, compact = false }: RunDetailHeaderProps) {
   const { locale, t } = useTranslation();
   const targetName = detail.plan.target_product?.name;
   const verifiedHomepage = targetName && detail.plan.homepage_verified?.[targetName]
     ? detail.plan.homepage_hints?.[targetName]
     : null;
+  const scope = <>
+    <p>{detail.plan.competitors.join(` ${t('runHeader.versus')} `)} / {detail.plan.dimensions.map(dimension => displayLabel(dimension, locale)).join(', ')}</p>
+    <div className="run-meta-row">
+      <span>{t('runHeader.layer')} {displayLabel(detail.plan.competitor_layer, locale)}</span>
+      <span>{t('runHeader.scenario')} {displayLabel(detail.plan.scenario_id ?? 'auto', locale)}</span>
+      <span>{t('runHeader.qaRules')} {detail.plan.qa_rule_ids.length}</span>
+      <span>{t('runHeader.tasks')} {detail.plan.task_decomposition.length}</span>
+      {detail.plan.qa_rule_ids.slice(0, 4).map(ruleId => <span key={ruleId} title={ruleId}>{displayLabel(ruleId, locale)}</span>)}
+      {recommendedDimensions.length > 0 ? <span>{t('runHeader.recommended')} {recommendedDimensions.map(dimension => displayLabel(dimension, locale)).join(', ')}</span> : null}
+    </div>
+  </>;
   return (
-    <header className="page-header page-header-split">
+    <header className={`page-header page-header-split${compact ? ' run-report-header' : ''}`}>
       <div>
         <h1>{detail.topic}</h1>
+        <div className="run-reading-badges">
+          <span className="status-pill">{t(`newRun.researchDepth.${detail.plan.research_depth ?? (detail.plan.complexity === 'low' ? 'quick' : detail.plan.complexity === 'high' ? 'deep' : 'standard')}`)}</span>
+          <span className="status-pill">{t(`newRun.collaboration.${detail.plan.collaboration_mode ?? (detail.hitl_enabled ? 'assisted' : 'ai')}`)}</span>
+          <span className={`status-pill ${detail.execution_mode === 'demo' ? 'warn' : 'neutral'}`}>{displayLabel(detail.execution_mode, locale)}</span>
+        </div>
         {detail.plan.target_product ? (
           <div className="target-product-context">
             <strong>{detail.plan.target_product.name}</strong>
@@ -33,22 +50,7 @@ export function RunDetailHeader({ detail, recommendedDimensions }: RunDetailHead
             ) : <span>{t('runHeader.homepagePending')}</span>}
           </div>
         ) : null}
-        <p>
-          {detail.plan.competitors.join(` ${t('runHeader.versus')} `)} / {detail.plan.dimensions.map((dimension) => displayLabel(dimension, locale)).join(", ")} /{" "}
-          {displayLabel(detail.execution_mode, locale)}
-        </p>
-        <div className="run-meta-row">
-          <span>{t('runHeader.layer')} {displayLabel(detail.plan.competitor_layer, locale)}</span>
-          <span>{t('runHeader.scenario')} {displayLabel(detail.plan.scenario_id ?? "auto", locale)}</span>
-          <span>{t('runHeader.qaRules')} {detail.plan.qa_rule_ids.length}</span>
-          <span>{t('runHeader.tasks')} {detail.plan.task_decomposition.length}</span>
-          {detail.plan.qa_rule_ids.slice(0, 4).map((ruleId) => (
-            <span key={ruleId} title={ruleId}>{displayLabel(ruleId, locale)}</span>
-          ))}
-          {recommendedDimensions.length > 0 ? (
-            <span>{t('runHeader.recommended')} {recommendedDimensions.map((dimension) => displayLabel(dimension, locale)).join(", ")}</span>
-          ) : null}
-        </div>
+        {compact ? <details className="run-scope-details"><summary>{t('runHeader.scopeDetails')}</summary>{scope}</details> : scope}
       </div>
       <div className={`status-chip ${detail.status}`}>
         {detail.status === "completed" ? (

@@ -11,5 +11,7 @@ const shapes: Record<string, string[]> = {
   research: ['..####..','.#....#.','#..##..#','#.####.#','#.####.#','#..##..#','.#....#.','..####..'],
 };
 export function PixelIcon({ name }: { name: string }) {
-  return <svg aria-hidden="true" viewBox="0 0 8 8" className="pixel-icon" shapeRendering="crispEdges">{(shapes[name] ?? shapes.research).flatMap((row, y) => [...row].map((cell, x) => cell === '#' ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="currentColor" /> : null))}</svg>;
+  const palettes: Record<string, string[]> = { folder: ['#c4873d', '#f3c86b', '#ffe8a6'], book: ['#596f9c', '#90add0', '#fff1cb'], report: ['#9b7455', '#fff1cb', '#b9cd90'], search: ['#47786d', '#82b4aa', '#ffe8a6'], tasks: ['#786698', '#b0a1cc', '#fff1cb'], grid: ['#bc7253', '#efb88b', '#f5d86e'], download: ['#537d58', '#a4cb78', '#fff1cb'], bell: ['#bc8339', '#f1c563', '#ffe5a3'], settings: ['#607d8a', '#aac2c8', '#f7e0b3'], research: ['#5f8560', '#add187', '#ffe39b'] };
+  const colors = palettes[name] ?? palettes.research;
+  return <svg aria-hidden="true" viewBox="0 0 8 8" className="pixel-icon" shapeRendering="crispEdges">{(shapes[name] ?? shapes.research).flatMap((row, y) => [...row].map((cell, x) => cell === '#' ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill={colors[y < 2 ? 2 : (x + y) % 3 === 0 ? 1 : 0]} /> : null))}</svg>;
 }

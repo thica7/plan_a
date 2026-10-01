@@ -22,10 +22,15 @@ export function ReportStatusStrip({
       formatRateValue(detail.metrics.schema_pass_rate)) /
       3,
   );
-  const blockerCount = detail.qa_findings.filter((finding) => finding.severity === "blocker").length;
+  const blockerCount = Math.max(detail.qa_findings.filter((finding) => finding.severity === "blocker").length, detail.report_artifact?.quality.blockers.length ?? 0);
+  const blocked = blockerCount > 0 || detail.status === 'completed_with_blockers';
 
   return (
-    <section className="report-review-status-strip" aria-label={t('reportStatus.label')}>
+    <section className="report-status-summary" aria-label={t('reportStatus.label')}>
+      {blocked ? <p className="report-release-blocker" role="alert">{t('reportStatus.blocked')}{blockerCount ? ` · ${blockerCount} ${t('report.layers.qaBlockers')}` : ''}</p> : null}
+      <details className="report-status-details">
+      <summary>{t('reportStatus.details')} <span>{wordCount.toLocaleString()} {t('reportStatus.words')} · {reportSources.sources.length} {t('reportStatus.sources')}</span></summary>
+      <div className="report-review-status-strip">
       <ReportStatusMetric
         icon={<Gauge size={16} aria-hidden />}
         label={t('reportStatus.quality')}
@@ -51,6 +56,8 @@ export function ReportStatusStrip({
         value={`${wordCount.toLocaleString()} ${t('reportStatus.words')}`}
         detail={detail.enterprise_projection ? `v${detail.enterprise_projection.report_version.version_number}` : t('reportStatus.runDraft')}
       />
+      </div>
+      </details>
     </section>
   );
 }
