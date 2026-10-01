@@ -4547,6 +4547,10 @@ class RunService(
             metadata["completion_tokens"] = int(completion_tokens)
         if total_tokens is not None:
             metadata["total_tokens"] = int(total_tokens)
+        for usage_field in ("prompt_cache_hit_tokens", "prompt_cache_miss_tokens"):
+            value = getattr(usage, usage_field, None)
+            if value is not None:
+                metadata[usage_field] = int(value)
         return metadata
 
     def _last_llm_finish_reason(self) -> str | None:
@@ -4625,10 +4629,12 @@ class RunService(
         duration_ms = max(0, int((time.perf_counter() - started) * 1000))
         input_chars = len(input_text)
         output_chars = len(output_text)
-        input_tokens = self._usage_prompt_tokens(token_usage) or self._estimate_tokens(input_text)
-        output_tokens = self._usage_completion_tokens(token_usage) or self._estimate_tokens(
-            output_text
-        )
+        input_tokens = self._usage_prompt_tokens(token_usage)
+        output_tokens = self._usage_completion_tokens(token_usage)
+        if input_tokens is None:
+            input_tokens = self._estimate_tokens(input_text)
+        if output_tokens is None:
+            output_tokens = self._estimate_tokens(output_text)
         if kind == "llm" and (metadata or {}).get("llm_request_attempts") == 0:
             input_tokens = output_tokens = 0
         redacted_input_text, redacted_output_text, redaction_metadata = self._redact_trace_texts(
@@ -4660,8 +4666,8 @@ class RunService(
             subagent=subagent,
             name=name,
             status=status,
-            model=self._last_llm_model() if kind == "llm" else None,
-            provider=self._last_llm_provider()
+            model=span_metadata.get("llm_model", self._last_llm_model()) if kind == "llm" else None,
+            provider=span_metadata.get("llm_provider", self._last_llm_provider())
             if kind == "llm"
             else self._settings.web_search_provider
             if kind == "search"
@@ -4671,7 +4677,9 @@ class RunService(
             output_chars=output_chars,
             input_tokens_estimate=input_tokens,
             output_tokens_estimate=output_tokens,
-            cost_estimate_usd=self._estimate_span_cost_usd(kind, input_tokens, output_tokens),
+            cost_estimate_usd=round(float(span_metadata["llm_cost_charged_usd"]), 8)
+            if kind == "llm" and "llm_cost_charged_usd" in span_metadata
+            else self._estimate_span_cost_usd(kind, input_tokens, output_tokens),
             input_preview=self._preview(redacted_input_text),
             output_preview=self._preview(redacted_output_text),
             full_input=redacted_input_text,
@@ -4836,7 +4844,7 @@ class RunService(
             if isinstance(value, str) and value:
                 return value
         if self._settings.has_primary_llm_credentials:
-            return "doubao"
+            return self._settings.llm_provider_name or "doubao"
         if self._settings.has_backup_llm_credentials:
             return "backup"
         return None
