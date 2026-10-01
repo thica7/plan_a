@@ -1,5 +1,6 @@
 import { Download, Send, ShieldCheck } from "lucide-react";
-import { useMemo, useState, type MouseEvent } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { UNSAFE_LocationContext } from "react-router-dom";
 import { useReportAnchorJump } from '../report/reportAnchors';
 import { useTranslation } from '../../stores/i18n';
 import { exportReportVersion, startReportApprovalWorkflow } from "../../api/client";
@@ -37,6 +38,14 @@ type ReviewActionFeedback =
 export function RunReportReviewStudio({ detail, reportSources }: RunReportReviewStudioProps) {
   const { locale, t } = useTranslation();
   const jump = useReportAnchorJump();
+  const scope = useRef<HTMLDivElement>(null);
+  const hash = useContext(UNSAFE_LocationContext)?.location.hash ?? '';
+  const sourceAnchorId = useMemo(() => {
+    try {
+      const id = decodeURIComponent(hash.slice(1));
+      return id.startsWith('source-') || id.startsWith('missing-source-') ? id : null;
+    } catch { return null; }
+  }, [hash]);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const markdown = detail.report_md ?? "";
   const [activeLayer, setActiveLayer] = useState<ReportViewLayer>("report");
@@ -52,6 +61,17 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
   const [actionState, setActionState] = useState<ReviewActionState>("idle");
   const [actionFeedback, setActionFeedback] = useState<ReviewActionFeedback | null>(null);
   const reportVersion = detail.enterprise_projection?.report_version ?? null;
+
+  useEffect(() => {
+    if (!sourceAnchorId) return;
+    setActiveSourceId(sourceAnchorId.replace(/^(?:missing-)?source-/, ''));
+    setDetailsOpen(true);
+  }, [sourceAnchorId, detail.id]);
+  useEffect(() => {
+    if (!sourceAnchorId || !detailsOpen || activeSourceId !== sourceAnchorId.replace(/^(?:missing-)?source-/, '')) return;
+    const target = Array.from(scope.current?.querySelectorAll<HTMLElement>('[id]') ?? []).find(element => element.id === sourceAnchorId);
+    target?.scrollIntoView({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
+  }, [sourceAnchorId, detailsOpen, activeSourceId, detail.id]);
 
   const sourceMap = useMemo(
     () => new Map(reportSources.sources.map((source) => [source.id, source])),
@@ -140,7 +160,7 @@ export function RunReportReviewStudio({ detail, reportSources }: RunReportReview
   const actionDisabled = !reportVersion || actionState === "pending";
 
   return (
-    <div className="run-report-review-studio">
+    <div className="run-report-review-studio" ref={scope}>
       <ReportStatusStrip detail={detail} reportSources={reportSources} wordCount={wordCount} />
 
       <div className={`report-review-workspace${detailsOpen ? ' details-open' : ''}`}>

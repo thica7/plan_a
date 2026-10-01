@@ -7,7 +7,7 @@ export interface DesktopWindowState {
   zOrder?: number; navigationVersion?: number;
 }
 
-function resourceKey(href: string) {
+export function resourceKey(href: string) {
   const url = new URL(href, 'https://desktop.local');
   return /^\/runs\/[^/]+\/?$/.test(url.pathname) ? url.pathname.replace(/\/$/, '') : url.pathname + url.search;
 }
@@ -46,7 +46,20 @@ export const useDesktopStore = create<DesktopState>()(persist((set, get) => ({
   minimize(id) { set(s => ({ windows: s.windows.map(w => w.id === id ? { ...w, minimized: true } : w), activeId: s.activeId === id ? topWindow(s.windows.filter(w => w.id !== id)) : s.activeId })); },
   maximize(id) { set(s => ({ windows: s.windows.map(w => w.id === id ? { ...w, maximized: !w.maximized } : w) })); },
   move(id, bounds) { set(s => ({ windows: s.windows.map(w => w.id === id ? { ...w, bounds: { ...w.bounds, ...bounds } } : w) })); },
-  route(id, href) { set(s => ({ windows: s.windows.map(w => w.id === id ? { ...w, href } : w) })); },
+  route(id, href) {
+    set(s => {
+      if (!s.windows.some(w => w.id === id)) return s;
+      const target = s.windows.find(w => w.id !== id && resourceKey(w.href) === resourceKey(href));
+      if (!target) return { windows: s.windows.map(w => w.id === id ? { ...w, href } : w) };
+      return {
+        activeId: target.id,
+        windows: s.windows.map(w => w.id === target.id
+          ? { ...w, href, minimized: false, zOrder: nextOrder(s.windows), navigationVersion: (w.navigationVersion ?? 0) + 1 }
+          // Restore programmatic navigation in the source router without replacing its resource.
+          : w.id === id ? { ...w, navigationVersion: (w.navigationVersion ?? 0) + 1 } : w),
+      };
+    });
+  },
 }), {
   name: 'competiscope.desktop.v1',
   partialize: s => ({ windows: s.windows, activeId: s.activeId }),

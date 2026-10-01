@@ -1,7 +1,7 @@
-import { useRef, type ReactNode, type PointerEvent, type KeyboardEvent } from 'react';
+import { useRef, type ReactNode, type PointerEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import { appForHref } from './apps';
 import { PixelIcon } from './PixelIcon';
-import { useDesktopStore, type DesktopWindowState } from './windowStore';
+import { resourceKey, useDesktopStore, type DesktopWindowState } from './windowStore';
 import { useTranslation } from '../../stores/i18n';
 
 export function DesktopWindow({ state, index, children }: { state: DesktopWindowState; index: number; children: ReactNode }) {
@@ -25,8 +25,22 @@ export function DesktopWindow({ state, index, children }: { state: DesktopWindow
     const delta = ({ ArrowLeft: [-16, 0], ArrowRight: [16, 0], ArrowUp: [0, -16], ArrowDown: [0, 16] } as Record<string, number[]>)[event.key];
     if (delta && !state.maximized && window.innerWidth > 760) { event.preventDefault(); move(state.id, { x: Math.max(0, Math.min(window.innerWidth - 180, state.bounds.x + delta[0])), y: Math.max(0, Math.min(window.innerHeight - 110, state.bounds.y + delta[1])) }); }
   }
+  function followExistingResource(event: MouseEvent) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
+    if (!link || link.hasAttribute('download') || (link.target && link.target !== '_self') || link.getAttribute('href')?.startsWith('#')) return;
+    const url = new URL(link.href, window.location.href);
+    if (url.origin !== window.location.origin) return;
+    const href = url.pathname + url.search + url.hash;
+    const desktop = useDesktopStore.getState();
+    if (!desktop.windows.some(w => w.id !== state.id && resourceKey(w.href) === resourceKey(href))) return;
+    // Intercept before a Router Link unmounts the source page and loses its local state.
+    event.preventDefault();
+    desktop.route(state.id, href);
+  }
   return <section aria-label={app.title} className={`desktop-window ${activeId === state.id ? 'focused' : ''} ${state.maximized ? 'maximized' : ''}`} hidden={state.minimized}
     onPointerDownCapture={() => { if (activeId !== state.id) focus(state.id); }}
+    onClickCapture={followExistingResource}
     style={{ left: state.bounds.x, top: state.bounds.y, width: state.bounds.width, height: state.bounds.height, zIndex: index + 10 }}>
     <header className="pixel-titlebar" onPointerDown={e => start(e)} onPointerMove={drag} onPointerUp={() => { gesture.current = null; }} onPointerCancel={() => { gesture.current = null; }} onDoubleClick={e => { if (window.innerWidth > 760 && !(e.target as HTMLElement).closest('button')) maximize(state.id); }}>
       <button type="button" data-action-id="desktop.window.focus" data-action-audit="local" className="window-title" aria-label={window.innerWidth > 760 ? t('desktop.moveWindow').replace('{title}', app.title) : app.title} onKeyDown={moveByKey} onClick={() => focus(state.id)}><PixelIcon name={app.icon} /><span>{app.title}</span></button>

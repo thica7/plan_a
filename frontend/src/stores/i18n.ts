@@ -794,6 +794,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'kb.personaSegments': '画像细分',
     'kb.schema': '结构化知识',
     'kb.unknownSource': '未知来源',
+    'kb.sourceUrlMissing': '未提供来源链接',
 
     // ─── Retrieval Params ───
     'retrieval.title': '检索参数',
@@ -1971,6 +1972,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'kb.personaSegments': 'Persona segments',
     'kb.schema': 'schema',
     'kb.unknownSource': 'Unknown source',
+    'kb.sourceUrlMissing': 'Source URL unavailable',
 
     // ─── Retrieval Params ───
     'retrieval.title': 'Retrieval parameters',

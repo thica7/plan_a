@@ -1,4 +1,6 @@
 import { AlertTriangle, ArrowRight, Database, FileText, GitBranch, RefreshCw, ShieldCheck } from "lucide-react";
+import { useContext } from "react";
+import { Link, UNSAFE_LocationContext, UNSAFE_NavigationContext } from "react-router-dom";
 
 import type { DecisionReplayReport, RunDetail as RunDetailRecord, RunQualityComparison } from "../../api/types";
 import type { RunEvent } from "../../api/sse_types";
@@ -38,6 +40,10 @@ export function RunReviewOverview({
   reportSources,
 }: RunReviewOverviewProps) {
   const { locale, t } = useTranslation();
+  const routing = useContext(UNSAFE_NavigationContext);
+  const location = useContext(UNSAFE_LocationContext)?.location;
+  const reportQuery = new URLSearchParams(location?.search);
+  reportQuery.set('view', 'report');
   const verifiedRate = Math.round(detail.metrics.verified_source_rate * 100);
   const sourceCoverage = Math.round(detail.metrics.source_coverage_rate * 100);
   const citedClaimRate = Math.round(detail.metrics.claim_citation_rate * 100);
@@ -173,12 +179,11 @@ export function RunReviewOverview({
 
         <Panel title={t('reviewOverview.citedSources')} icon={<Database size={16} aria-hidden />}>
           <div className="run-source-list">
-            {reportSources.sources.slice(0, 8).map((source) => (
-              <a href={`#source-${source.id}`} key={source.id}>
-                <strong>{source.title}</strong>
-                <span>{displayLabel(source.dimension, locale)} / {Math.round(source.confidence * 100)}%</span>
-              </a>
-            ))}
+            {reportSources.sources.slice(0, 8).map((source) => {
+              const href = `/runs/${encodeURIComponent(detail.id)}?${reportQuery.toString()}#source-${encodeURIComponent(source.id)}`;
+              const content = <><strong>{source.title}</strong><span>{displayLabel(source.dimension, locale)} / {Math.round(source.confidence * 100)}%</span></>;
+              return routing ? <Link to={href} key={source.id}>{content}</Link> : <a href={href} key={source.id}>{content}</a>;
+            })}
           </div>
         </Panel>
       </aside>

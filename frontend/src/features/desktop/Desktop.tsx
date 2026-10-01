@@ -22,7 +22,7 @@ function RouteSync({ id }: { id: string }) {
     }
     const state = useDesktopStore.getState();
     if (state.windows.find(w => w.id === id)?.href !== href) state.route(id, href);
-    if (state.activeId === id) window.history.replaceState(null, '', href);
+    if (useDesktopStore.getState().activeId === id) window.history.replaceState(null, '', href);
   }, [id, location.pathname, location.search, location.hash, current?.navigationVersion, navigate]);
   return null;
 }

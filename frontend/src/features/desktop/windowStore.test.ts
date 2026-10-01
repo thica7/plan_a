@@ -17,6 +17,19 @@ describe('desktop windows', () => {
     expect(useDesktopStore.getState().open('/runs/b')).not.toBe(first);
     expect(useDesktopStore.getState().open('/knowledge?document=a')).not.toBe(useDesktopStore.getState().open('/knowledge?document=b'));
   });
+  it('routes an internal resource collision to the existing window and keeps its source', () => {
+    const target = useDesktopStore.getState().open('/runs/a?view=report');
+    const source = useDesktopStore.getState().open('/history');
+    useDesktopStore.getState().minimize(target);
+    const before = useDesktopStore.getState().windows;
+    useDesktopStore.getState().route(source, '/runs/a?view=quality#issue');
+    const state = useDesktopStore.getState();
+    expect(state.windows.map(w => w.id)).toEqual(before.map(w => w.id));
+    expect(state.windows.find(w => w.id === source)?.href).toBe('/history');
+    expect(state.windows.find(w => w.id === target)).toMatchObject({ href: '/runs/a?view=quality#issue', minimized: false, bounds: before[0].bounds });
+    expect(state.activeId).toBe(target);
+    expect(state.windows.every(w => w.navigationVersion === 1)).toBe(true);
+  });
   it('deduplicates legacy run windows keeping active bounds and other resources', async () => {
     const bounds = { x: 10, y: 20, width: 500, height: 400 };
     const make = (id: string, href: string) => ({ id, href, bounds, minimized: false, maximized: false });

@@ -177,13 +177,14 @@ function SourceIds({ ids, sourceMap }: { ids: string[]; sourceMap: Map<string, R
     <span className="source-id-links">
       {ids.map((id) => {
         const source = sourceMap.get(id);
+        if (!source?.url) return <span key={id}>{id} · {t('kb.sourceUrlMissing')}</span>;
         return (
           <a
-            href={source?.url || `#source-${id}`}
+            href={source.url}
             key={id}
-            rel={source?.url ? "noreferrer" : undefined}
-            target={source?.url ? "_blank" : undefined}
-            title={source ? `${source.title} / ${displayLabel(source.dimension, locale)}` : t('kb.unknownSource')}
+            rel="noreferrer"
+            target="_blank"
+            title={`${source.title} / ${displayLabel(source.dimension, locale)}`}
           >
             {id}
           </a>
