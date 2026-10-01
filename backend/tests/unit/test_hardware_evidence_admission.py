@@ -161,4 +161,5 @@ def test_capability_sentence_split_preserves_decimal_specifications():
     result = extract_generic_capabilities(brief, page)
     assert result.quotes
     assert '1.6 TFlops' in result.quotes[0].text
-    assert page.text[result.quotes[0].start_offset:result.quotes[0].end_offset] == result.quotes[0].text
+    quote = result.quotes[0]
+    assert page.text[quote.start_offset:quote.end_offset] == quote.text

@@ -81,7 +81,10 @@ def extract_generic_capabilities(brief: ResearchBrief, page: CapturedPage) -> Ex
             continue
         if brief.competitor.casefold() not in clause[:verb.start()].casefold():
             continue
-        if brief.product_name and brief.product_name != brief.competitor and brief.product_name.casefold() in clause.casefold():
+        if (
+            brief.product_name and brief.product_name != brief.competitor
+            and brief.product_name.casefold() in clause.casefold()
+        ):
             continue
         if re.search(r"[和与及、]|\band\b", clause[:verb.start()], re.I):
             continue
