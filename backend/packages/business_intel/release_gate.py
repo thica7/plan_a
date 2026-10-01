@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from typing import Literal
 from urllib.parse import urlparse
 
 from packages.business_intel.claim_validator import validate_project_claims
@@ -75,8 +76,14 @@ def evaluate_report_release_gate(
     evidence: list[EvidenceRecord],
     claims: list[ClaimRecord],
     source_registry: list[SourceRegistryRecord] | None = None,
+    purpose: Literal["publication", "internal"] = "publication",
 ) -> ReportReleaseGate:
-    """Strict enterprise gate for approving or publishing a report version."""
+    """Validate facts for every report; require publication depth only for release."""
+
+    if purpose not in {"publication", "internal"}:
+        raise ValueError(f"Unknown report gate purpose: {purpose}")
+    analysis_plan = _report_analysis_plan(report_version, competitors, [])
+    internal = purpose == "internal" and analysis_plan.research_depth is not None
 
     scoped_competitors = _apply_report_competitor_metadata(report_version, competitors)
     report_scoped_evidence = _scope_evidence(report_version, evidence)
@@ -95,6 +102,7 @@ def evaluate_report_release_gate(
         dimensions=dimensions,
         requested_layer=project.competitor_layer if project.competitor_layer != "unknown" else None,
         requested_scenario_id=project.scenario_id,
+        target_product=analysis_plan.target_product,
     )
     qa_evaluation = evaluate_business_qa(
         project_id=project.id,
@@ -103,6 +111,18 @@ def evaluate_report_release_gate(
         evidence=scoped_evidence,
         claims=scoped_claims,
     )
+    if internal:
+        findings = [
+            item.model_copy(update={"severity": "warn"})
+            if item.rule_id not in {"claim_has_evidence", "source_reliability_min"}
+            and item.severity == "blocker" else item
+            for item in qa_evaluation.findings
+        ]
+        qa_evaluation = qa_evaluation.model_copy(update={
+            "findings": findings,
+            "blocker_count": sum(item.severity == "blocker" for item in findings),
+            "warn_count": sum(item.severity == "warn" for item in findings),
+        })
     competitor_names_by_id = {item.id: item.name for item in scoped_competitors}
     readiness = score_project_readiness(
         project_id=project.id,
@@ -115,14 +135,16 @@ def evaluate_report_release_gate(
     issues = [
         *_report_status_issues(report_version),
         *_report_integrity_issues(report_version, scoped_evidence, scoped_claims),
-        *_report_structure_issues(report_version),
-        *_report_depth_issues(report_version),
-        *_report_richness_issues(
+        *(_internal_analysis_issues(report_version, analysis_plan) if internal else [
+            *_report_structure_issues(report_version),
+            *_report_depth_issues(report_version),
+        ]),
+        *([] if internal and analysis_plan.research_depth == "quick" else _report_richness_issues(
             report_version,
             competitors=scoped_competitors,
             evidence=report_scoped_evidence,
             dimensions=dimensions,
-        ),
+        )),
         *_source_quality_issues(scoped_evidence, competitor_names_by_id),
         *_claim_evidence_quality_issues(scoped_claims, scoped_evidence, competitor_names_by_id),
         *_claim_validation_issues(scoped_claims, scoped_evidence, competitor_names_by_id),
@@ -132,6 +154,18 @@ def evaluate_report_release_gate(
         *_readiness_issues(readiness),
         *_strict_qa_issues(qa_evaluation.findings),
     ]
+    if internal:
+        issues = [item.model_copy(update={"severity": "warn"})
+                  if item.rule_id in {
+                      "report_structure_required", "report_depth_required", "readiness_required",
+                  }
+                  else item for item in issues]
+    if analysis_plan.target_product is not None:
+        issues = [item.model_copy(update={"metadata": {
+            **item.metadata,
+            "product_category": analysis_plan.target_product.category,
+            "product_name": analysis_plan.target_product.name,
+        }}) for item in issues]
     blocker_count = len([item for item in issues if item.severity == "blocker"])
     warn_count = len([item for item in issues if item.severity == "warn"])
     allowed = blocker_count == 0 and qa_evaluation.blocker_count == 0
@@ -148,6 +182,64 @@ def evaluate_report_release_gate(
         warn_count=warn_count,
         issues=issues,
     )
+
+
+def _report_analysis_plan(
+    report_version: ReportVersionRecord,
+    competitors: list[CompetitorRecord],
+    dimensions: list[str],
+) -> AnalysisPlan:
+    stored = report_version.quality_metadata.get("analysis_plan")
+    payload = dict(stored) if isinstance(stored, dict) else {}
+    return AnalysisPlan.model_validate({
+        "topic": report_version.topic_normalized,
+        "competitors": [item.name for item in competitors],
+        "dimensions": dimensions or ["pricing", "feature", "persona"],
+        "competitor_layer": report_version.competitor_layer,
+        **payload,
+    })
+
+
+def _internal_analysis_issues(
+    report_version: ReportVersionRecord, plan: AnalysisPlan,
+) -> list[BusinessQAFinding]:
+    depth = plan.research_depth
+    if depth != "quick":
+        minimum = 1800 if depth == "deep" else 900
+        issues = _report_structure_issues(report_version)
+        body_chars = len(report_version.report_md.strip())
+        if body_chars < minimum:
+            issues.append(_gate_issue(
+                "report_depth_required", "Analysis sufficiency",
+                f"{depth} draft has {body_chars} character(s); "
+                f"analysis sufficiency target is {minimum}.",
+                severity="warn",
+                recommendation="Expand the evidence-backed comparison and limitations.",
+                metadata={"research_depth": depth, "purpose": "internal"},
+            ))
+        return issues
+    checks = [
+        ("core summary", ("summary", "takeaway", "摘要", "概览", "结论")),
+        ("product or competitor comparison", (
+            "product", "competitive", "comparison", "产品", "竞品", "对比",
+        )),
+        ("evidence", ("evidence", "source", "证据", "来源")),
+        ("limitations", ("confidence", "limitations", "置信", "限制")),
+    ]
+    missing = [
+        label for label, headings in checks
+        if not _has_heading(report_version.report_md, headings)
+    ]
+    if not missing and len(report_version.report_md.strip()) >= 250:
+        return []
+    return [_gate_issue(
+        "report_depth_required", "Quick analysis sufficiency",
+        "Quick draft needs a concise core summary, product comparison, evidence and limitations; "
+        f"missing={', '.join(missing) or 'analysis detail'}.",
+        severity="warn",
+        recommendation="Add the missing concise analysis and disclose evidence limitations.",
+        metadata={"research_depth": depth, "purpose": "internal"},
+    )]
 
 
 def _scope_evidence(
@@ -704,15 +796,10 @@ def _release_report_quality_detail(
         project_id=report_version.project_id,
         topic=report_version.topic_normalized,
         status="completed",
-        execution_mode="real",
+        execution_mode=report_version.quality_metadata.get("execution_mode", "real"),
         created_at=report_version.created_at or now,
         updated_at=report_version.created_at or now,
-        plan=AnalysisPlan(
-            topic=report_version.topic_normalized,
-            competitors=[item.name for item in competitors],
-            dimensions=dimensions or ["pricing", "feature", "persona"],
-            competitor_layer=report_version.competitor_layer,
-        ),
+        plan=_report_analysis_plan(report_version, competitors, dimensions),
         raw_sources=raw_sources,
         metrics=RunMetrics(
             llm_calls=3,

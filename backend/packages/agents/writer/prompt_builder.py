@@ -31,8 +31,8 @@ class WriterPromptBuilder:
         depth_budget = research_depth_budget(detail.plan.research_depth)
         report_chars = depth_budget.report_chars if depth_budget is not None else "16,000-20,000"
         core_depth_instruction = (
-            "Cover every required core section and every competitor concisely, "
-            "including all SWOT quadrants. "
+            "Summarize the target product, core competitor comparison, evidence, "
+            "limitations and next validation step concisely. "
             if detail.plan.research_depth == "quick" else
             "Core section minimums: Decision Summary 800+ characters; "
             "Competitive Findings 1,200+; User Review Themes 1,000+ when "
@@ -41,6 +41,20 @@ class WriterPromptBuilder:
             "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
             "Threats for every competitor; Matrix Interpretation 900+; "
             "Layer-specific Battlecard/Workflow/Market section 1,200+. "
+        )
+        allocation_instruction = (
+            "Focus on the core summary, product comparison, evidence and limitations. "
+            if detail.plan.research_depth == "quick" else
+            "Use about 70-80% of the report on the Core analysis layer: decision summary, "
+            "competitive findings, user review themes, competitor deep dives, SWOT, "
+            "matrix interpretation, and layer-specific implications. "
+        )
+        layer_instruction = (
+            "For quick research, use only the requested compact sections and disclose limitations."
+            if detail.plan.research_depth == "quick" else
+            "Use the requested competitive layer to choose the report shape: L1 "
+            "is a direct battlecard, L2 is adjacent workflow and enterprise-risk "
+            "analysis, and L3 is market landscape and category strategy."
         )
         return WriterPrompt(
             system=(
@@ -66,9 +80,7 @@ class WriterPromptBuilder:
                 f"{user_research_policy} "
                 "Honor confirmed memory guidance when it does not conflict with "
                 "evidence, schema requirements, or compliance policy. "
-                "Use the requested competitive layer to choose the report shape: L1 "
-                "is a direct battlecard, L2 is adjacent workflow and enterprise-risk "
-                "analysis, and L3 is market landscape and category strategy."
+                f"{layer_instruction}"
             ),
             user=(
                 f"Topic: {detail.topic}\n"
@@ -86,10 +98,8 @@ class WriterPromptBuilder:
                 f"{community_policy_text}\n"
                 f"Writer Report Brief JSON: {writer_context_json}\n\n"
                 f"Required sections:\n{required_sections}\n"
-                f"Target {report_chars} characters for the first draft. Use about "
-                "70-80% of the report on the Core analysis layer: decision summary, "
-                "competitive findings, user review themes, competitor deep dives, "
-                "SWOT, matrix interpretation, and layer-specific implications. "
+                f"Target {report_chars} characters for the first draft. "
+                f"{allocation_instruction}"
                 f"{core_depth_instruction}Keep "
                 "the Support/audit layer concise and complete; it is the audit trail, "
                 "not the main readout. Prefer deeper cited analysis and decision "

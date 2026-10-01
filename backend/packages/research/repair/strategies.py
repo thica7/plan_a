@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import cast
 
 from packages.research.models import QualityGap, RepairRequiredAction, RepairTask
@@ -31,23 +32,28 @@ def query_hints_for_gap(gap: QualityGap, fields: list[str]) -> list[str]:
     competitor = gap.competitor or ""
     field_phrase = " ".join(fields).replace("_", " ").strip()
     dimension_phrase = gap.dimension.replace("_", " ")
+    category = str(gap.metadata.get("product_category") or "").casefold()
+    api_software = bool(re.search(r"\bapi\b|developer|开发者|接口服务", category))
     if gap.suggested_action == "pricing_model_repair":
         intents = [
             "official pricing plans billing",
-            "API pricing token usage limits",
+            "API pricing token usage limits" if api_software
+            else "product purchase price cost official",
             "enterprise pricing official",
         ]
     elif gap.suggested_action == "feature_slot_repair":
         intents = [
             f"official docs {field_phrase}",
-            "product features developer documentation",
+            "product features developer documentation" if api_software
+            else "product features specifications official",
             "enterprise features official docs",
         ]
     elif gap.suggested_action == "persona_schema_repair":
         intents = [
             "customer story use case official",
             "case study enterprise customers",
-            "solutions teams developers use cases",
+            "solutions teams developers use cases" if api_software
+            else "product users use cases reviews",
         ]
     elif gap.suggested_action == "mark_not_applicable":
         intents = [

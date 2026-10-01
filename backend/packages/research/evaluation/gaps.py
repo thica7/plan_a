@@ -24,7 +24,7 @@ def quality_gaps_from_extractions(
         if extraction.competitor == brief.competitor and extraction.dimension == brief.dimension
     ]
     if not relevant:
-        return [
+        return _with_product_context(brief, [
             QualityGap(
                 severity="blocker",
                 dimension=brief.dimension,
@@ -33,7 +33,7 @@ def quality_gaps_from_extractions(
                 suggested_action="targeted_discovery",
                 acceptance_rule="At least one captured source must produce a non-empty extraction.",
             )
-        ]
+        ])
 
     merged_fields = _merge_fields(relevant)
     missing_fields = _merged_missing_fields(relevant)
@@ -44,10 +44,25 @@ def quality_gaps_from_extractions(
         gaps = _persona_gaps(brief, merged_fields, missing_fields, relevant)
     else:
         gaps = _feature_gaps(brief, merged_fields, relevant)
-    return _dedupe_gaps(gaps)
+    return _with_product_context(brief, _dedupe_gaps(gaps))
 
 
 def quality_gaps_from_admitted_evidence(
+    brief: ResearchBrief,
+    extractions: list[ExtractionResult],
+    evidence_items: list[EvidenceItem],
+) -> list[QualityGap]:
+    return _with_product_context(brief, _admission_gaps(brief, extractions, evidence_items))
+
+
+def _with_product_context(brief: ResearchBrief, gaps: list[QualityGap]) -> list[QualityGap]:
+    return [gap.model_copy(update={"metadata": {
+        **gap.metadata, "product_category": brief.product_category,
+        "product_name": brief.product_name, "research_depth": brief.research_depth,
+    }}) for gap in gaps]
+
+
+def _admission_gaps(
     brief: ResearchBrief,
     extractions: list[ExtractionResult],
     evidence_items: list[EvidenceItem],

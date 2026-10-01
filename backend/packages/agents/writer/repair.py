@@ -458,6 +458,8 @@ def _user_research_source_regression_problem(
 def _previous_report_is_protectable(detail: RunDetail) -> bool:
     if not detail.report_md.strip():
         return False
+    if detail.plan.research_depth == "quick":
+        return run_writer_quality_preflight(detail, detail.report_md).passed
 
     comparison = compare_run_quality(detail)
     if comparison.report_quality_signal:

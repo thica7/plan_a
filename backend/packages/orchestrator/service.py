@@ -95,6 +95,7 @@ from packages.research.repair import (
     repair_tasks_from_gaps,
     repair_tasks_to_redo_scopes,
 )
+from packages.research.repair.acceptance import repair_acceptance, repeated_no_progress
 from packages.schema.api_dto import (
     CollectorResearchUsage,
     HitlResumeRequest,
@@ -2027,6 +2028,14 @@ class RunService(
         ]
         if not redo_issues or self._redo_limit_reached(detail):
             return False
+        if repeated_no_progress(detail.revisions):
+            await self.emit(
+                detail.id, "node_completed", "orchestrator", "auto_redo",
+                "Automatic repair stopped after repeated attempts without quality improvement.",
+                {"reason": "no_progress", "issue_ids": [issue.id for issue in redo_issues],
+                 "max_iterations": detail.max_iterations},
+            )
+            return False
         issue_label = "QA" if detail.auto_redo_warn_enabled else "blocker QA"
         await self.emit(
             detail.id,
@@ -3200,15 +3209,24 @@ class RunService(
             store=self._enterprise_store,
             projection=projection,
         )
+        report_version = projection.report_version
+        record = self._runs.get(projection.run_id)
+        if record is not None:
+            report_version = report_version.model_copy(update={"quality_metadata": {
+                **report_version.quality_metadata,
+                "analysis_plan": record.detail.plan.model_dump(mode="json"),
+                "execution_mode": record.detail.execution_mode,
+            }})
         return evaluate_report_release_gate(
             project=project,
-            report_version=projection.report_version,
+            report_version=report_version,
             competitors=competitors,
             evidence=evidence,
             claims=claims,
             source_registry=self._enterprise_store.list_source_registry(
                 workspace_id=project.workspace_id
             ),
+            purpose="internal",
         )
 
     def _release_gate_payload(self, projection: EnterpriseRunProjection) -> dict[str, Any]:
@@ -3244,6 +3262,10 @@ class RunService(
         if gate is None:
             return False
         metadata = dict(projection.report_version.quality_metadata)
+        record = self._runs.get(projection.run_id)
+        if record is not None:
+            metadata["analysis_plan"] = record.detail.plan.model_dump(mode="json")
+            metadata["execution_mode"] = record.detail.execution_mode
         initial_gaps = quality_gaps_from_release_gate(gate)
         initial_tasks = repair_tasks_from_gaps(initial_gaps)
         gate_for_metadata = gate
@@ -3285,6 +3307,8 @@ class RunService(
         gaps = quality_gaps_from_release_gate(gate_for_metadata)
         tasks = repair_tasks_from_gaps(gaps)
         release_gate_metadata = {
+            "purpose": "internal",
+            "research_depth": metadata.get("analysis_plan", {}).get("research_depth"),
             "allowed": gate_for_metadata.allowed,
             "status": gate_for_metadata.status,
             "readiness_score": gate_for_metadata.readiness.score,
@@ -3332,9 +3356,43 @@ class RunService(
                     store=self._enterprise_store,
                     projection=projection,
                 )
-        if metadata.get("release_gate") == release_gate_metadata:
-            return False
+        if record is not None and record.detail.revisions and record.pending_graph_redo is None:
+            latest = record.detail.revisions[-1]
+            after_ids = [issue.id for issue in record.detail.qa_findings
+                         if not issue.field_path.startswith("release_gate.")]
+            after_ids.extend(
+                stable_prefixed_id("qc-release-gate", record.detail.id, task.id, length=16)
+                for task in tasks
+            )
+            writer_metadata = next((
+                message.payload for message in reversed(record.detail.agent_messages)
+                if message.from_agent == "writer" and message.message_type == "report_ready"
+            ), {})
+            versions = (self._enterprise_store.list_report_versions(project_id=projection.project_id)
+                        if self._enterprise_store is not None else [])
+            before_version = next((version.id for version in versions
+                                   if version.report_md == latest.before_md
+                                   and version.id != projection.report_version.id), None)
+            acceptance = repair_acceptance(
+                latest, after_issue_ids=after_ids,
+                before_report_version_id=before_version,
+                after_report_version_id=projection.report_version.id,
+                writer_metadata=writer_metadata,
+            )
+            history = [
+                revision.metadata["repair_acceptance"]
+                for revision in record.detail.revisions[:-1]
+                if isinstance(revision.metadata.get("repair_acceptance"), dict)
+            ]
+            metadata["repair_acceptance"] = [*history, acceptance]
+            record.detail.revisions[-1] = latest.model_copy(update={"metadata": {
+                **latest.metadata, "qa_issue_ids_after": after_ids, "repair_acceptance": acceptance,
+            }})
+            if repeated_no_progress(record.detail.revisions):
+                metadata["auto_redo"] = {"stopped": True, "reason": "no_progress"}
         metadata["release_gate"] = release_gate_metadata
+        if projection.report_version.quality_metadata == metadata:
+            return False
         projection.report_version = projection.report_version.model_copy(
             update={"quality_metadata": metadata}
         )
@@ -3800,6 +3858,24 @@ class RunService(
     ) -> None:
         detail = record.detail
         revision_metadata = dict(metadata or {})
+        revision_metadata["qa_issue_ids_after"] = [issue.id for issue in detail.qa_findings]
+        targeted = [
+            item for message in detail.agent_messages if message.message_type == "redo_request"
+            for item in message.payload.get("issues", []) if item.get("id") in set(issue_ids)
+        ]
+        revision_metadata["repair_issue_keys"] = sorted({
+            "|".join(str(value or "") for value in (
+                item.get("field_path"), item.get("target_competitor"), item.get("target_subagent"),
+                item.get("redo_scope", {}).get("kind"),
+            )) for item in targeted
+        })
+        writer_metadata = next((
+            message.payload for message in reversed(detail.agent_messages)
+            if message.from_agent == "writer" and message.message_type == "report_ready"
+        ), {})
+        for key in ("writer_repair_mode", "writer_repair_sections"):
+            if key in writer_metadata:
+                revision_metadata[key] = writer_metadata[key]
         if "structured_targets" not in revision_metadata:
             selected_issue_ids = set(issue_ids)
             selected_issues = [
@@ -3819,6 +3895,20 @@ class RunService(
             qa_issue_ids_before=qa_issue_ids_before,
             issue_count_before=issue_count_before,
             metadata=revision_metadata,
+        )
+        projection = detail.enterprise_projection
+        versions = (self._enterprise_store.list_report_versions(project_id=projection.project_id)
+                    if self._enterprise_store is not None and projection is not None else [])
+        before_version = next((
+            version.id for version in versions if version.report_md == before_md
+            and (projection is None or version.id != projection.report_version.id)
+        ), None)
+        revision.metadata["repair_acceptance"] = repair_acceptance(
+            revision, after_issue_ids=revision_metadata["qa_issue_ids_after"],
+            before_report_version_id=before_version,
+            after_report_version_id=(
+                projection.report_version.id if projection is not None else None
+            ),
         )
         detail.revisions.append(revision)
         detail.updated_at = datetime.utcnow()

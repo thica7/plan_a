@@ -7,6 +7,7 @@ from typing import Any
 
 from packages.auth import EnterpriseUserContext, evaluate_access_policy
 from packages.business_intel import evaluate_report_release_gate
+from packages.business_intel.manual_revision import validate_manual_revision
 from packages.compliance import compliance_policy_from_settings
 from packages.config import Settings
 from packages.enterprise import (
@@ -64,6 +65,7 @@ from packages.schema.api_dto import (
     WorkflowStartResponse,
 )
 from packages.schema.enterprise import (
+    EnterpriseRunProjection,
     ManualReportRevisionRequest,
     MonitorJobRecord,
     MonitorJobUpdateRequest,
@@ -896,6 +898,11 @@ class RuntimeCommandService:
             length=16,
         )
         metadata = dict(source.quality_metadata)
+        for key in (
+            "release_gate", "run_qa_findings", "run_qa_blocker_count", "run_qa_warning_count",
+            "release_claim_admission", "manual_claim_validation", "repair_acceptance",
+        ):
+            metadata.pop(key, None)
         metadata["manual_revision"] = {
             "source_report_version_id": source.id,
             "edited_by": actor.user_id,
@@ -941,7 +948,36 @@ class RuntimeCommandService:
                 "published_at": None,
             }
         )
-        updated = self._store.upsert_report_version(revision)
+        evidence = [item for item in self._store.list_evidence(project_id=source.project_id)
+                    if item.id in set(source.evidence_ids)]
+        claims, validation_metadata = validate_manual_revision(revision, evidence)
+        revision = revision.model_copy(update={
+            "claim_ids": [claim.id for claim in claims],
+            "quality_metadata": {**metadata, **validation_metadata},
+        })
+        self._store.save_projection(EnterpriseRunProjection(
+            workspace_id=revision.workspace_id, project_id=revision.project_id,
+            run_id=revision.run_id or revision.id, evidence_records=[],
+            claim_records=claims, report_version=revision,
+        ))
+        project = self._store.get_project(revision.project_id)
+        if project is not None:
+            gate = self._release_gate_for_version(revision, actor, "report:write")
+            gate_metadata = gate.model_dump(mode="json")
+        else:
+            gate_metadata = {
+                "allowed": False, "status": "blocked", "reason": "validation_context_missing",
+            }
+        current_metadata = dict(revision.quality_metadata)
+        current_metadata["release_gate"] = gate_metadata
+        current_metadata["manual_revision"] = {
+            **current_metadata["manual_revision"],
+            "validation_status": "validated" if gate_metadata["allowed"] else "blocked",
+            "claim_count": len(claims),
+        }
+        updated = self._store.upsert_report_version(
+            revision.model_copy(update={"quality_metadata": current_metadata})
+        )
         diff = build_report_version_diff(updated, base_version=source)
         command_id = _command_id("revise_report", actor, updated.id)
         self._store.audit_report_version_transition(

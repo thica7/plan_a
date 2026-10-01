@@ -21,6 +21,7 @@ def _quality_gap_from_release_issue(issue: BusinessQAFinding) -> QualityGap:
         acceptance_rule=issue.recommendation or _default_acceptance_rule(issue.rule_id),
         source_ids=issue.evidence_ids,
         metadata={
+            **issue.metadata,
             "source": "release_gate",
             "release_gate_issue_id": issue.id,
             "rule_id": issue.rule_id,

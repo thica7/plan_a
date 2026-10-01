@@ -103,7 +103,10 @@ def run_writer_quality_preflight(
         after_support_keys = h2_keys[first_support_index + 1 :]
 
     duplicate_section_count = _duplicate_identity_count(h2_identities)
-    required_core_keys = [*REQUIRED_CORE_KEYS]
+    required_core_keys = (
+        ["executive_summary", "competitive_findings"]
+        if detail.plan.research_depth == "quick" else [*REQUIRED_CORE_KEYS]
+    )
     if decision_brief_fields(detail.plan.decision_brief):
         required_core_keys.append("product_opportunities")
     missing_core_sections = [
