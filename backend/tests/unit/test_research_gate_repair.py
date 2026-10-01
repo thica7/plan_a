@@ -494,6 +494,46 @@ def test_manual_inline_citation_before_terminal_punctuation_stays_with_fact():
     assert metadata["run_qa_blocker_count"] == 0
 
 
+@pytest.mark.parametrize("body", [
+    "[Phone — the fastest smartphone](https://example.com)",
+    "[Phone beats every competitor](https://example.com)",
+    "[Phone: 100% buyer satisfaction](https://example.com)",
+    "[Phone dominates rivals in reviews](https://example.com)",
+    "[Recommend Phone because it beats every competitor](https://example.com)",
+    "Recommend Phone because it beats every competitor.",
+    "建议选择 Phone，因为它永久续航。",
+])
+def test_manual_performance_comparison_or_promise_cannot_hide_in_links_or_reasons(body):
+    _, _, evidence, _, report = _records()
+    report.report_md += "\n" + body
+    _, metadata = validate_manual_revision(report, [evidence])
+    assert metadata["run_qa_blocker_count"] == 1
+    assert len(metadata["unresolved_manual_claims"]) == 1
+
+
+def test_manual_consideration_action_does_not_assert_what_users_say():
+    _, _, evidence, _, report = _records()
+    report.report_md += "\nConsider what users have to say."
+    _, metadata = validate_manual_revision(report, [evidence])
+    assert metadata["run_qa_blocker_count"] == 0
+
+
+def test_manual_recommendation_reason_extracts_and_validates_only_its_current_fact():
+    _, _, evidence, _, report = _records()
+    report.report_md = "Recommend Phone because Phone costs $499. [source:evidence-1]"
+    claims, metadata = validate_manual_revision(report, [evidence])
+    assert [claim.claim_text for claim in claims] == ["Phone costs $499."]
+    assert metadata["run_qa_blocker_count"] == 0
+
+
+def test_manual_reason_cannot_inherit_citation_from_recommendation_action():
+    _, _, evidence, _, report = _records()
+    report.report_md = "Recommend Phone [source:evidence-1] because it beats every competitor."
+    _, metadata = validate_manual_revision(report, [evidence])
+    assert metadata["run_qa_blocker_count"] == 1
+    assert metadata["unresolved_manual_claims"][0]["claim_text"] == "it beats every competitor."
+
+
 @pytest.mark.parametrize("category", ["developer tools", "开发者硬件"])
 @pytest.mark.parametrize("strategy", [
     "pricing_model_repair", "feature_slot_repair", "persona_schema_repair",
