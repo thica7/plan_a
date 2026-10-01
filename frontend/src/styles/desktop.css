@@ -72,6 +72,7 @@
 .pixel-desktop .release-issue-audit-grid dt { color:var(--muted); }
 .pixel-desktop .release-issue-audit-grid dd { color:var(--text); }
 .pixel-desktop :is(.release-issue-actions span,.release-issue-feedback,.release-review-task header span,.release-review-task p,.release-review-task-metrics) { color:var(--text-soft); }
+.pixel-desktop :is(.data-table-head,.module-tabs button:hover,.benchmark-score,.competitor-asset-metrics span) { background:var(--surface-muted); color:var(--text); }
 .pixel-desktop :is(.panel,.card,.form-section,.report-outline-panel,.table-shell,.review-modal,.hitl-panel) { border:1px solid var(--border); box-shadow:3px 3px 0 #80533422; }
 .pixel-desktop :is(.report-mode-toggle button.active,.preset-tile.active,.skill-tile.active,.project-card.active,.segmented-control button.active,.module-tabs button.active,.tab-active) { background:var(--accent-soft); color:var(--accent-strong); border-color:var(--accent); }
 .pixel-desktop :is(input:not([type=checkbox]):not([type=radio]),textarea,select) { background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:0; min-width:0; }.pixel-desktop :is(input,textarea,select)::placeholder { color:var(--muted); opacity:.8; }.pixel-desktop :is(button,a,input,textarea,select,summary):focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
