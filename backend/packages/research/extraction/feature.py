@@ -43,7 +43,7 @@ def extract_generic_capabilities(brief: ResearchBrief, page: CapturedPage) -> Ex
     text = _text(page)
     fields: dict[str, object] = {}
     quotes: list[EvidenceQuote] = []
-    for clause_match in re.finditer(r"[^。！？.!?;\n]+", text):
+    for clause_match in re.finditer(r"(?:[^。！？.!?;\n]|(?<=\d)\.(?=\d))+", text):
         clause = clause_match.group().strip()
         clause_start = clause_match.start() + len(clause_match.group()) - len(
             clause_match.group().lstrip()

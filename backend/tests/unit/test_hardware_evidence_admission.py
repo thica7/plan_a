@@ -148,3 +148,17 @@ def test_hardware_spec_fallback_rejects_comparison_negation_and_marketing(title,
         final_url='https://example.com/specs', title=title, status='ok', quality_score=0.8,
         content_hash='invalid', text=text)
     assert extract_generic_capabilities(brief, page).fields == {}
+
+
+def test_capability_sentence_split_preserves_decimal_specifications():
+    brief = ResearchBrief(run_id='decimal', topic='掌机功能', competitor='Steam Deck',
+                          dimension='feature', product_category='游戏掌机')
+    page = CapturedPage(candidate_id='decimal', requested_url='https://www.steamdeck.com/en/tech',
+        final_url='https://www.steamdeck.com/en/tech', title='Steam Deck :: Tech Specs',
+        status='ok', quality_score=0.8, content_hash='decimal',
+        text='CPU 2.4-3.5GHz GPU 1.6 TFlops FP32) Storage Steam Deck 512GB NVMe SSD '
+             'Both include a high-speed microSD card slot.')
+    result = extract_generic_capabilities(brief, page)
+    assert result.quotes
+    assert '1.6 TFlops' in result.quotes[0].text
+    assert page.text[result.quotes[0].start_offset:result.quotes[0].end_offset] == result.quotes[0].text
