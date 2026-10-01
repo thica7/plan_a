@@ -66,11 +66,11 @@ Task 1、Task 2 两阶段审查通过；Task 3 规格审查通过，质量问题
 
 ### 截图
 
-- [明亮像素桌面](screenshots/pastoral-desktop.png)
-- [桌面报告首屏](screenshots/pastoral-report-desktop.png)
-- [手机报告首屏](screenshots/pastoral-report-mobile.png)
-- [手机报告表格](screenshots/pastoral-report-mobile-table.png)
-- [深色报告与操作](screenshots/pastoral-report-dark.png)
+- [明亮像素桌面](screenshots/pastoral-desktop.jpg)
+- [桌面报告首屏](screenshots/pastoral-report-desktop.jpg)
+- [手机报告首屏](screenshots/pastoral-report-mobile.jpg)
+- [手机报告表格](screenshots/pastoral-report-mobile-table.jpg)
+- [深色报告与操作](screenshots/pastoral-report-dark.jpg)
 
 ## 演示流程验收
 
