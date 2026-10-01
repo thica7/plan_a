@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
@@ -27,6 +28,8 @@ class LLMUsage:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+    prompt_cache_hit_tokens: int | None = None
+    prompt_cache_miss_tokens: int | None = None
 
 
 @dataclass(frozen=True)
@@ -41,11 +44,11 @@ class LLMProviderConfig:
 class DoubaoClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._last_usage: LLMUsage | None = None
-        self._last_provider: str | None = None
-        self._last_model: str | None = None
-        self._last_finish_reason: str | None = None
         self._last_route_decision: ModelRouteDecision | None = None
+        self._usage_context: ContextVar[LLMUsage | None] = ContextVar(
+            f"usage-{id(self)}", default=None)
+        self._response_context: ContextVar[tuple[str, str, str | None] | None] = ContextVar(
+            f"response-{id(self)}", default=None)
 
     async def complete_json(
         self,
@@ -54,6 +57,8 @@ class DoubaoClient:
         user: str,
         schema_hint: str,
     ) -> dict[str, Any]:
+        self._response_context.set(None)
+        self._usage_context.set(None)
         json_system = (
             f"{system}\n\n"
             "Return only valid JSON. Do not wrap it in markdown fences. "
@@ -75,14 +80,14 @@ class DoubaoClient:
             except LLMExecutionLimitError:
                 raise
             except Exception as exc:
-                errors.append(f"{provider.name}: {exc}")
-                self._last_usage = None
-                self._last_provider = None
-                self._last_model = None
-                self._last_finish_reason = None
+                safe_error = str(exc).replace(provider.api_key, "[REDACTED]")
+                errors.append(f"{provider.name}: {safe_error}")
+                self._usage_context.set(None)
         raise LLMError("LLM JSON request failed for all providers: " + " | ".join(errors))
 
     async def complete_text(self, *, system: str, user: str) -> str:
+        self._response_context.set(None)
+        self._usage_context.set(None)
         providers = self._provider_configs()
         if not providers:
             raise LLMError(self._route_error_message())
@@ -98,11 +103,9 @@ class DoubaoClient:
             except LLMExecutionLimitError:
                 raise
             except LLMError as exc:
-                errors.append(f"{provider.name}: {exc}")
-                self._last_usage = None
-                self._last_provider = None
-                self._last_model = None
-                self._last_finish_reason = None
+                safe_error = str(exc).replace(provider.api_key, "[REDACTED]")
+                errors.append(f"{provider.name}: {safe_error}")
+                self._usage_context.set(None)
         raise LLMError("LLM request failed for all providers: " + " | ".join(errors))
 
     async def _complete_text_with_provider(
@@ -120,6 +123,16 @@ class DoubaoClient:
             ],
             "temperature": self._settings.llm_temperature,
         }
+        self._usage_context.set(None)
+        self._response_context.set(None)
+        output_limit = self._settings.llm_max_output_tokens
+        budget_enabled = self._settings.run_llm_max_tokens or self._settings.run_llm_max_cost_usd
+        if not output_limit and budget_enabled:
+            output_limit = 4096
+        if output_limit:
+            payload["max_tokens"] = output_limit
+        if provider.name == "deepseek":
+            payload["thinking"] = {"type": "disabled"}
         headers = {
             "Authorization": f"Bearer {provider.api_key}",
             "X-Title": "Competiscope",
@@ -129,6 +142,7 @@ class DoubaoClient:
         attempts = max(1, self._settings.llm_max_retries + 1)
         for attempt in range(attempts):
             try:
+                self._response_context.set((provider.name, provider.model, None))
                 execution = current_llm_execution.get()
                 if execution is not None:
                     execution.reserve_transport()
@@ -136,7 +150,7 @@ class DoubaoClient:
                 if response.status_code >= 400:
                     message = (
                         f"LLM request failed with {response.status_code}: "
-                        f"{response.text[:500]}"
+                        f"{response.text.replace(provider.api_key, '[REDACTED]')[:500]}"
                     )
                     if response.status_code not in _RETRYABLE_STATUS_CODES:
                         raise LLMError(message)
@@ -176,21 +190,28 @@ class DoubaoClient:
         try:
             data = response.json()
         except json.JSONDecodeError as exc:
-            preview = response.text[:500]
+            preview = response.text.replace(provider.api_key, "[REDACTED]")[:500]
             raise _RetryableLLMError(
                 f"LLM response was not valid JSON: {preview}"
             ) from exc
-        self._last_usage = self._parse_usage(data.get("usage"))
-        self._last_provider = provider.name
-        self._last_model = provider.model
+        usage = self._parse_usage(data.get("usage"))
+        self._usage_context.set(usage)
+        execution = current_llm_execution.get()
+        if execution is not None and usage is not None:
+            if usage.prompt_tokens is not None and usage.completion_tokens is not None:
+                execution.settle_attempt(prompt_tokens=usage.prompt_tokens,
+                                         completion_tokens=usage.completion_tokens,
+                                         cache_hit_tokens=usage.prompt_cache_hit_tokens or 0)
+                execution.provider_accounted = True
         try:
             choice = data["choices"][0]
             content = choice["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMError("LLM response did not contain choices[0].message.content.") from exc
         finish_reason = choice.get("finish_reason") if isinstance(choice, dict) else None
-        self._last_finish_reason = str(finish_reason) if finish_reason is not None else None
-        if self._last_finish_reason == "length":
+        finish_reason = str(finish_reason) if finish_reason is not None else None
+        self._response_context.set((provider.name, provider.model, finish_reason))
+        if finish_reason == "length":
             raise _RetryableLLMError(
                 "LLM response stopped because the output length limit was reached."
             )
@@ -199,24 +220,31 @@ class DoubaoClient:
         return content
 
     def consume_last_usage(self) -> LLMUsage | None:
-        usage = self._last_usage
-        self._last_usage = None
+        usage = self._usage_context.get()
+        self._usage_context.set(None)
         return usage
 
     def last_provider(self) -> str | None:
-        if self._last_provider:
-            return self._last_provider
+        response = self._response_context.get()
+        if response is not None:
+            return response[0]
         if self._settings.has_primary_llm_credentials:
-            return "doubao"
+            return self._settings.llm_provider_name or "doubao"
         if self._settings.has_backup_llm_credentials:
             return "backup"
         return None
 
     def last_model(self) -> str | None:
-        return self._last_model or self._settings.ark_model or self._settings.backup_llm_model
+        response = self._response_context.get()
+        if response is not None:
+            return response[1]
+        return self._settings.ark_model or self._settings.backup_llm_model
 
     def last_finish_reason(self) -> str | None:
-        return self._last_finish_reason
+        response = self._response_context.get()
+        if response is not None:
+            return response[2]
+        return None
 
     def last_route_decision(self) -> ModelRouteDecision | None:
         return self._last_route_decision
@@ -228,7 +256,7 @@ class DoubaoClient:
         if self._settings.ark_api_key and self._settings.ark_model:
             providers_by_kind["primary"] = (
                 LLMProviderConfig(
-                    name="doubao",
+                    name=self._settings.llm_provider_name or "doubao",
                     provider_kind="primary",
                     api_key=self._settings.ark_api_key,
                     base_url=self._settings.ark_base_url,
@@ -277,11 +305,14 @@ class DoubaoClient:
             prompt_tokens=self._optional_int(usage.get("prompt_tokens")),
             completion_tokens=self._optional_int(usage.get("completion_tokens")),
             total_tokens=self._optional_int(usage.get("total_tokens")),
+            prompt_cache_hit_tokens=self._optional_int(usage.get("prompt_cache_hit_tokens")),
+            prompt_cache_miss_tokens=self._optional_int(usage.get("prompt_cache_miss_tokens")),
         )
 
     def _optional_int(self, value: object) -> int | None:
         try:
-            return int(value)
+            parsed = int(value)
+            return parsed if parsed >= 0 else None
         except (TypeError, ValueError):
             return None
 

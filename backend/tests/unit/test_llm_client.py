@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 import pytest
 
@@ -38,6 +40,61 @@ def test_parse_usage_records_provider_tokens() -> None:
     usage = client._parse_usage({"prompt_tokens": 11, "completion_tokens": "7", "total_tokens": 18})
 
     assert usage == LLMUsage(prompt_tokens=11, completion_tokens=7, total_tokens=18)
+
+
+def test_deepseek_cache_usage_is_preserved():
+    usage = DoubaoClient(_settings())._parse_usage({
+        'prompt_tokens': 100, 'completion_tokens': 10, 'total_tokens': 110,
+        'prompt_cache_hit_tokens': 80, 'prompt_cache_miss_tokens': 20,
+    })
+    assert usage.prompt_cache_hit_tokens == 80
+    assert usage.prompt_cache_miss_tokens == 20
+
+
+@pytest.mark.asyncio
+async def test_deepseek_payload_provider_and_safe_error(monkeypatch):
+    client = DoubaoClient(_settings(llm_provider_name='deepseek',
+                                    ark_model='deepseek-flash', llm_max_output_tokens=512))
+    async def post(url, payload, headers):
+        assert payload['thinking'] == {'type': 'disabled'}
+        assert payload['max_tokens'] == 512
+        return httpx.Response(200, json={'choices': [{'message': {'content': 'ok'}}]})
+    monkeypatch.setattr(client, '_post_chat_completion', post)
+    assert await client.complete_text(system='system', user='user') == 'ok'
+    assert client.last_provider() == 'deepseek'
+    assert client.last_route_decision().selected.provider_name == 'deepseek'
+    async def fail(url, payload, headers):
+        return httpx.Response(401, text='bad credential primary-key')
+    monkeypatch.setattr(client, '_post_chat_completion', fail)
+    with pytest.raises(LLMError) as error:
+        await client.complete_text(system='system', user='user')
+    assert 'primary-key' not in str(error.value)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_calls_keep_usage_and_provider_in_their_own_task(monkeypatch):
+    client = DoubaoClient(_settings(backup_llm_api_key='backup-key', backup_llm_model='backup-model'))
+    first_done, second_done = asyncio.Event(), asyncio.Event()
+    async def post(url, payload, headers):
+        text = payload['messages'][1]['content']
+        if text == 'second' and 'ark.example' in url:
+            return httpx.Response(401, text='primary unavailable')
+        tokens = 10 if text == 'first' else 20
+        return httpx.Response(200, json={'choices': [{'message': {'content': text}}],
+                                       'usage': {'prompt_tokens': tokens, 'completion_tokens': 1}})
+    monkeypatch.setattr(client, '_post_chat_completion', post)
+    async def first():
+        await client.complete_text(system='system', user='first')
+        first_done.set()
+        await second_done.wait()
+        return client.consume_last_usage().prompt_tokens, client.last_provider(), client.last_model()
+    async def second():
+        await first_done.wait()
+        await client.complete_text(system='system', user='second')
+        second_done.set()
+        return client.consume_last_usage().prompt_tokens, client.last_provider(), client.last_model()
+    assert await asyncio.gather(first(), second()) == [
+        (10, 'doubao', 'primary-model'), (20, 'backup', 'backup-model')]
 
 
 @pytest.mark.asyncio

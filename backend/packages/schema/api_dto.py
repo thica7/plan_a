@@ -294,6 +294,7 @@ class RunDetail(RunSummary):
     agent_messages: list[AgentMessage] = Field(default_factory=list)
     tool_call_messages: list[ToolCallMessage] = Field(default_factory=list)
     trace_spans: list[TraceSpan] = Field(default_factory=list)
+    llm_budget_checkpoint: dict[str, int | float] = Field(default_factory=dict)
     collector_research_usage: dict[str, CollectorResearchUsage] = Field(default_factory=dict)
     metrics: RunMetrics = Field(default_factory=RunMetrics)
     current_node: str | None = None

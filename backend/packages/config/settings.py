@@ -92,6 +92,13 @@ class Settings:
     ark_api_key: str | None = None
     ark_model: str | None = None
     ark_base_url: str = "https://ark.cn-beijing.volces.com/api/v3"
+    llm_provider_name: str = ""
+    llm_max_output_tokens: int = 0
+    run_llm_max_tokens: int = 0
+    run_llm_max_cost_usd: float = 0.0
+    llm_input_usd_per_million: float = 0.3
+    llm_cache_usd_per_million: float = 0.006
+    llm_output_usd_per_million: float = 1.2
     llm_timeout_seconds: float = 90.0
     llm_temperature: float = 0.2
     llm_max_retries: int = 2
@@ -211,6 +218,16 @@ def get_settings() -> Settings:
             "BACKUP_LLM_BASE_URL", "https://openrouter.ai/api/v1"
         ).rstrip("/"),
         backup_llm_model=os.getenv("BACKUP_LLM_MODEL") or None,
+        llm_provider_name=os.getenv("LLM_PROVIDER_NAME", "").strip().lower(),
+        llm_max_output_tokens=_env_int("LLM_MAX_OUTPUT_TOKENS", 0, minimum=0, maximum=393216),
+        run_llm_max_tokens=_env_int("RUN_LLM_MAX_TOKENS", 0, minimum=0, maximum=100000000),
+        run_llm_max_cost_usd=_env_float("RUN_LLM_MAX_COST_USD", 0.0, minimum=0.0, maximum=1000.0),
+        llm_input_usd_per_million=_env_float(
+            "LLM_INPUT_USD_PER_MILLION", 0.3, minimum=0.0, maximum=1000.0),
+        llm_cache_usd_per_million=_env_float(
+            "LLM_CACHE_USD_PER_MILLION", 0.006, minimum=0.0, maximum=1000.0),
+        llm_output_usd_per_million=_env_float(
+            "LLM_OUTPUT_USD_PER_MILLION", 1.2, minimum=0.0, maximum=1000.0),
         llm_timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "90")),
         llm_temperature=float(os.getenv("LLM_TEMPERATURE", "0.2")),
         llm_max_retries=_env_int("LLM_MAX_RETRIES", 2, minimum=0, maximum=5),

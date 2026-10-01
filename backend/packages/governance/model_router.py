@@ -90,7 +90,7 @@ def _primary_candidate(
     )
     return ModelRouteCandidate(
         provider_kind="primary",
-        provider_name="ark",
+        provider_name=str(getattr(settings, "llm_provider_name", "") or "ark"),
         model_name=str(getattr(settings, "ark_model", "") or ""),
         configured=configured,
         quality_score=88 if configured else 0,
