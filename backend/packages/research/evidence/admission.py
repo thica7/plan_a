@@ -43,6 +43,11 @@ USER_RESEARCH_SOURCE_TYPES = {
     "manual_note",
     "manual",
 }
+HARDWARE_SPEC_RE = re.compile(
+    r"(?:\b\d+(?:\.\d+)?[\s-]*(?:gb|tb|mhz|ghz|hz|mah|watts?|inches?|inch)\b|"
+    r"\b\d{3,4}p\b|\d+(?:\.\d+)?\s*(?:英寸|毫米|厘米|毫安时|像素))",
+    re.IGNORECASE,
+)
 
 
 def admit_evidence_items(
@@ -452,7 +457,7 @@ def has_concrete_source_signal(dimension: str, normalized_text: str) -> bool:
             term in normalized_text
             for term in ("developer", "customer", "enterprise", "team", "user", "家庭", "适合", "面向")
         )
-    return any(
+    return bool(HARDWARE_SPEC_RE.search(normalized_text)) or any(
         term in normalized_text for term in (
             "model", "api", "feature", "coding", "reasoning",
             "具备", "支持", "提供", "可更换", "包含", "supports", "provides", "offers",
@@ -550,7 +555,7 @@ def has_dimension_specific_fact(dimension: str, normalized_text: str) -> bool:
                 normalized_text,
             )
         )
-    return bool(
+    return bool(HARDWARE_SPEC_RE.search(normalized_text)) or bool(
         re.search(
             r"(?:supports|provides|includes|offers|can\s+(?:write|generate|explain|run)|"
             r"context window|context awareness|tool calls?|code completion|"
@@ -616,6 +621,11 @@ def competitor_identity_problem(source: RawSource) -> str | None:
                 f"{source.competitor}."
             )
     hints = identity_terms_for_competitor(source.competitor)
+    if not hints and len(key) >= 4 and key not in normalize_competitor_key(haystack):
+        return (
+            f"Source {source.id} does not expose a recognizable {source.competitor} "
+            "product identity signal."
+        )
     if hints and not any(term in haystack for term in hints):
         if key == "windsurf" and is_windsurf_devin_redirect_source(source, haystack):
             return None
@@ -706,6 +716,8 @@ def dimension_terms_present(dimension: str, normalized_text: str) -> bool:
             "pain point",
         )
     else:
+        if HARDWARE_SPEC_RE.search(normalized_text):
+            return True
         terms = (
             "feature",
             "capability",

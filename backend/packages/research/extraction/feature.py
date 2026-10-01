@@ -41,8 +41,39 @@ def extract_generic_capabilities(brief: ResearchBrief, page: CapturedPage) -> Ex
     quotes: list[EvidenceQuote] = []
     for clause_match in re.finditer(r"[^。！？.!?;\n]+", text):
         clause = clause_match.group().strip()
+        clause_start = clause_match.start() + len(clause_match.group()) - len(
+            clause_match.group().lstrip()
+        )
+        navigation_labels = (
+            "skip to main content", "privacy policy", "order details", "shipping info",
+            "refunds and returns", "community guidelines", "search loading", "how to buy",
+        )
+        navigation_matches = list(re.finditer(
+            "|".join(re.escape(label) for label in navigation_labels), clause, re.I,
+        ))
+        if len(navigation_matches) >= 3:
+            segment_start = 0
+            fact_segment = None
+            for segment_end, next_start in [
+                *((match.start(), match.end()) for match in navigation_matches),
+                (len(clause), len(clause)),
+            ]:
+                segment = clause[segment_start:segment_end]
+                segment_verb = _GENERIC_CAPABILITY_VERBS.search(segment)
+                if (
+                    segment_verb is not None
+                    and brief.competitor.casefold() in segment[:segment_verb.start()].casefold()
+                    and segment[segment_verb.end():].strip()
+                ):
+                    fact_segment = segment.strip()
+                    clause_start += segment_start + len(segment) - len(segment.lstrip())
+                    break
+                segment_start = next_start
+            if fact_segment is None:
+                continue
+            clause = fact_segment
         verb = _GENERIC_CAPABILITY_VERBS.search(clause)
-        if not clause or verb is None:
+        if not clause or verb is None or not clause[verb.end():].strip():
             continue
         if brief.competitor.casefold() not in clause[:verb.start()].casefold():
             continue
@@ -57,7 +88,7 @@ def extract_generic_capabilities(brief: ResearchBrief, page: CapturedPage) -> Ex
         fields[key] = {"status": "supported", "evidence_terms": [clause[:180]]}
         quotes.append(EvidenceQuote(
             text=clause, source_url=page.final_url, field=key,
-            start_offset=clause_match.start(), end_offset=clause_match.end(),
+            start_offset=clause_start, end_offset=clause_start + len(clause),
         ))
         if index >= 6:
             break
