@@ -534,6 +534,37 @@ def test_manual_reason_cannot_inherit_citation_from_recommendation_action():
     assert metadata["unresolved_manual_claims"][0]["claim_text"] == "it beats every competitor."
 
 
+@pytest.mark.parametrize("body", [
+    "建议选择 Phone，Phone 支持卫星通信。",
+    "Recommend Phone, which is the fastest smartphone.",
+    "[Recommend Phone, which is the fastest smartphone](https://example.com)",
+])
+def test_manual_recommendation_does_not_exempt_an_independent_product_fact(body):
+    _, _, evidence, _, report = _records()
+    report.report_md += "\n" + body
+    _, metadata = validate_manual_revision(report, [evidence])
+    assert metadata["run_qa_blocker_count"] == 1
+    assert len(metadata["unresolved_manual_claims"]) == 1
+
+
+def test_manual_independent_recommendation_fact_keeps_its_own_citation():
+    _, _, evidence, _, report = _records()
+    report.report_md = "Recommend Phone, Phone costs $499. [source:evidence-1]"
+    claims, metadata = validate_manual_revision(report, [evidence])
+    assert [claim.claim_text for claim in claims] == ["Phone costs $499."]
+    assert metadata["run_qa_blocker_count"] == 0
+
+
+def test_manual_independent_fact_cannot_inherit_citation_from_recommendation():
+    _, _, evidence, _, report = _records()
+    report.report_md = "Recommend Phone [source:evidence-1], which is the fastest smartphone."
+    _, metadata = validate_manual_revision(report, [evidence])
+    assert metadata["run_qa_blocker_count"] == 1
+    assert metadata["unresolved_manual_claims"][0]["claim_text"] == (
+        "which is the fastest smartphone."
+    )
+
+
 @pytest.mark.parametrize("category", ["developer tools", "开发者硬件"])
 @pytest.mark.parametrize("strategy", [
     "pricing_model_repair", "feature_slot_repair", "persona_schema_repair",

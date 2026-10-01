@@ -60,11 +60,17 @@ def _sentence_parts(text: str) -> list[str]:
     return parts
 
 
-def _statement_parts(text: str) -> list[str]:
+def _statement_parts(text: str, product_names: list[str]) -> list[str]:
+    subjects = [r"(?:it|they|which|that)\b", "它", "其", "该产品"]
+    subjects.extend(rf"{re.escape(name)}(?:\b|(?=[\u4e00-\u9fff]))" for name in product_names)
+    continuation = rf"{_REASON}|[,，;；]\s*(?={'|'.join(subjects)})"
     parts = []
     for sentence in _sentence_parts(text):
+        link = re.match(r"^\[([^\]]*)\]\([^\s)]+\)(.*)$", sentence.strip(" |-*"))
+        if link and _SUGGESTION.match(link[1]):
+            sentence = link[1] + link[2]
         if _SUGGESTION.match(sentence.strip(" |-*")):
-            clauses = re.split(_REASON, sentence, maxsplit=1, flags=re.IGNORECASE)
+            clauses = re.split(continuation, sentence, flags=re.IGNORECASE)
         else:
             clauses = [re.sub(rf"^{_REASON}", "", sentence, flags=re.IGNORECASE)]
         parts.extend(clause.strip(" ,，") for clause in clauses if clause.strip(" ,，"))
@@ -114,9 +120,9 @@ def _is_fact_candidate(text: str, product_names: list[str]) -> bool:
 
 def _line_parts(text: str, product_names: list[str]) -> list[str]:
     if not text.startswith("|"):
-        return _statement_parts(text)
+        return _statement_parts(text, product_names)
     cells = [cell.strip() for cell in text.strip("|").split("|")]
-    parts = [part for cell in cells for part in _statement_parts(cell)]
+    parts = [part for cell in cells for part in _statement_parts(cell, product_names)]
     citation_cells = [part for part in parts if not re.sub(
         _CITATION, "", part, flags=re.IGNORECASE,
     ).strip()]
