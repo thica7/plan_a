@@ -12795,6 +12795,9 @@
             "title": "Memory Recall Score",
             "default": 0
           },
+          "report_reuse_context": {
+            "$ref": "#/components/schemas/ReportReuseContext"
+          },
           "homepage_hints": {
             "additionalProperties": {
               "type": "string"
@@ -18496,6 +18499,170 @@
         ],
         "title": "HealthStatus"
       },
+      "HistoricalReportSelection": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "advisory_facts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Advisory Facts"
+          },
+          "advisory_only": {
+            "type": "boolean",
+            "title": "Advisory Only",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report_id",
+          "project_id",
+          "reason"
+        ],
+        "title": "HistoricalReportSelection"
+      },
+      "HistoricalReportSkip": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report_id",
+          "reason"
+        ],
+        "title": "HistoricalReportSkip"
+      },
+      "HistoricalSourceLineage": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "captured_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Captured At"
+          },
+          "source_published_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Published At"
+          },
+          "source_updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Updated At"
+          },
+          "freshness": {
+            "type": "string",
+            "enum": [
+              "fresh",
+              "stale",
+              "unreviewed"
+            ],
+            "title": "Freshness"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "requires_refresh": {
+            "type": "boolean",
+            "title": "Requires Refresh",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report_id",
+          "evidence_id",
+          "competitor",
+          "dimension",
+          "url",
+          "captured_at",
+          "freshness",
+          "reason"
+        ],
+        "title": "HistoricalSourceLineage"
+      },
       "HitlResumeRequest": {
         "properties": {
           "decision": {
@@ -23121,6 +23288,34 @@
         ],
         "title": "ReportReleaseGate"
       },
+      "ReportReuseContext": {
+        "properties": {
+          "selected": {
+            "items": {
+              "$ref": "#/components/schemas/HistoricalReportSelection"
+            },
+            "type": "array",
+            "title": "Selected"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/HistoricalReportSkip"
+            },
+            "type": "array",
+            "title": "Skipped"
+          },
+          "refresh_required": {
+            "items": {
+              "$ref": "#/components/schemas/HistoricalSourceLineage"
+            },
+            "type": "array",
+            "title": "Refresh Required"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReportReuseContext"
+      },
       "ReportVersionDiff": {
         "properties": {
           "base_version": {
@@ -24615,6 +24810,20 @@
             },
             "type": "array",
             "title": "Trace Spans"
+          },
+          "llm_budget_checkpoint": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Llm Budget Checkpoint"
           },
           "collector_research_usage": {
             "additionalProperties": {

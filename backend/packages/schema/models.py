@@ -115,6 +115,50 @@ class TargetProductEvidence(BaseModel):
     reason: str = ""
 
 
+class HistoricalReportSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report_id: str
+    run_id: str | None = None
+    project_id: str
+    reason: str
+    advisory_facts: list[str] = Field(default_factory=list)
+    advisory_only: bool = True
+
+
+class HistoricalReportSkip(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report_id: str
+    evidence_id: str | None = None
+    reason: str
+
+
+class HistoricalSourceLineage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    report_id: str
+    evidence_id: str
+    competitor: str
+    dimension: str
+    url: str
+    title: str = ""
+    captured_at: datetime
+    source_published_at: str | None = None
+    source_updated_at: str | None = None
+    freshness: Literal["fresh", "stale", "unreviewed"]
+    reason: str
+    requires_refresh: bool = True
+
+
+class ReportReuseContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    selected: list[HistoricalReportSelection] = Field(default_factory=list)
+    skipped: list[HistoricalReportSkip] = Field(default_factory=list)
+    refresh_required: list[HistoricalSourceLineage] = Field(default_factory=list)
+
+
 class AnalysisPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -134,6 +178,7 @@ class AnalysisPlan(BaseModel):
     memory_candidate_ids: list[str] = Field(default_factory=list)
     memory_prompt_context: list[str] = Field(default_factory=list)
     memory_recall_score: int = Field(default=0, ge=0, le=100)
+    report_reuse_context: ReportReuseContext = Field(default_factory=ReportReuseContext)
     homepage_hints: dict[str, str] = Field(default_factory=dict)
     homepage_verified: dict[str, bool] = Field(default_factory=dict)
     task_decomposition: list[AnalysisPlanTask] = Field(default_factory=list)

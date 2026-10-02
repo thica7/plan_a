@@ -41,6 +41,8 @@ export function AgentHandoffSummary({ detail, messages, mode = "full" }: AgentHa
     .filter(Boolean)
     .slice(0, 3);
   const compact = mode === "compact";
+  const history = detail.plan.report_reuse_context;
+  const historyReasons = [...new Set(history?.skipped.map((item) => item.reason) ?? [])];
 
   return (
     <Panel
@@ -68,6 +70,30 @@ export function AgentHandoffSummary({ detail, messages, mode = "full" }: AgentHa
           detail={displayLabel(writerMode, locale)}
         />
       </div>
+
+      {history && (history.selected.length > 0 || history.skipped.length > 0) ? (
+        <div className="handoff-constraint-list">
+          <strong>{t('handoff.historyTitle')}</strong>
+          <span>{history.refresh_required.length} {t('handoff.historyLinks')} / {history.selected.length} {t('handoff.historyReports')}</span>
+          <span>{t('handoff.historyRefresh')}</span>
+          {historyReasons.map((reason) => <span key={reason}>{t('handoff.historySkipped')}: {historyReasonLabel(reason, locale)}</span>)}
+          {history.refresh_required.length > 0 ? (
+            <details>
+              <summary>{t('handoff.historyDetails')}</summary>
+              {history.refresh_required.map((link) => (
+                <p key={`${link.report_id}-${link.evidence_id}`}>
+                  <a href={link.url} target="_blank" rel="noreferrer">{link.title || link.url}</a>
+                  {" / "}{link.competitor}{" / "}{displayLabel(link.dimension, locale)}
+                  <br />{t('handoff.historyCaptured')}: {link.captured_at}
+                  {link.source_published_at ? <> / {t('handoff.historyPublished')}: {link.source_published_at}</> : null}
+                  {link.source_updated_at ? <> / {t('handoff.historyUpdated')}: {link.source_updated_at}</> : null}
+                  {" / "}{historyReasonLabel(link.reason, locale)}
+                </p>
+              ))}
+            </details>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="agent-workload-grid">
         <article>
@@ -130,6 +156,35 @@ export function AgentHandoffSummary({ detail, messages, mode = "full" }: AgentHa
       </div>
     </Panel>
   );
+}
+
+function historyReasonLabel(reason: string, locale: string) {
+  const labels: Record<string, [string, string]> = {
+    expired: ["事实已过期", "Historical fact expired"],
+    stale: ["来源已标记过期", "Source marked stale"],
+    unreviewed: ["历史来源尚未审查", "Historical source unreviewed"],
+    current_fetch_required: ["原始链接待重新核验", "Original URL needs verification"],
+    future_capture: ["采集时间异常", "Capture time invalid"],
+    market_conflict: ["市场不一致", "Market conflict"],
+    version_conflict: ["产品版本不一致", "Product version conflict"],
+    category_conflict: ["产品品类不一致", "Product category conflict"],
+    category_unconfirmed: ["产品品类关系未确认", "Category relation unconfirmed"],
+    product_identity_missing: ["缺少匹配的产品身份", "Matching product identity missing"],
+    dimension_mismatch: ["研究维度不匹配", "Research dimensions differ"],
+    not_explicit_real: ["未明确来自真实研究", "Real research provenance unconfirmed"],
+    simulated_source: ["来源为模拟资料", "Simulated source"],
+    non_fetched_source: ["来源没有真实采集证明", "Source has no real capture proof"],
+    provenance_unknown: ["历史采集来源未确认", "Historical capture provenance unconfirmed"],
+    scope_mismatch: ["工作区或项目范围不一致", "Workspace or project scope mismatch"],
+    rejected: ["历史资料已被拒绝", "Historical material rejected"],
+    missing_url: ["缺少原始链接", "Original URL missing"],
+    unsafe_url: ["原始链接不可采集", "Original URL cannot be collected"],
+    duplicate_url: ["原始链接重复", "Duplicate original URL"],
+    superseded_report: ["已有更新的报告版本", "Newer report version exists"],
+    report_limit: ["已达历史报告数量上限", "Historical report limit reached"],
+    context_limit: ["已达历史线索容量上限", "Historical context limit reached"],
+  };
+  return labels[reason]?.[locale === "zh-CN" ? 0 : 1] ?? (locale === "zh-CN" ? "历史线索不可复用" : "Historical context unavailable");
 }
 
 function SignalBlock({

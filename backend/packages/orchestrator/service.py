@@ -66,6 +66,7 @@ from packages.identity import (
 from packages.llm import DoubaoClient
 from packages.llm.execution_budget import RunLLMBudget
 from packages.memory import KBCache, PreferenceMemoryStore, RunJournal
+from packages.memory.report_reuse import build_report_reuse_context
 from packages.observability import (
     LangfuseAdapter,
     LangfuseConfig,
@@ -542,6 +543,16 @@ class RunService(
             )
             detail.workspace_id = context.workspace_id
             detail.project_id = context.project_id
+            detail.plan.report_reuse_context = build_report_reuse_context(
+                self._enterprise_store,
+                workspace_id=detail.workspace_id,
+                project_id=detail.project_id,
+                plan=detail.plan,
+                historical_runs=[
+                    record.detail for record in self._runs.values() if record.detail.id != run_id
+                ],
+                now=now,
+            )
         self._persist_run(run_id)
         await self.emit(
             run_id,

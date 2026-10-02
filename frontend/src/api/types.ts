@@ -54,10 +54,37 @@ export interface AnalysisPlan {
   scenario_id?: string | null;
   scenario_recommended_dimensions: string[];
   qa_rule_ids: string[];
+  report_reuse_context?: ReportReuseContext;
   homepage_hints: Record<string, string>;
   homepage_verified?: Record<string, boolean>;
   task_decomposition: AnalysisPlanTask[];
   created_at: string;
+}
+
+export interface ReportReuseContext {
+  selected: {
+    report_id: string;
+    run_id?: string | null;
+    project_id: string;
+    reason: string;
+    advisory_facts: string[];
+    advisory_only: boolean;
+  }[];
+  skipped: { report_id: string; evidence_id?: string | null; reason: string }[];
+  refresh_required: {
+    report_id: string;
+    evidence_id: string;
+    competitor: string;
+    dimension: string;
+    url: string;
+    title: string;
+    captured_at: string;
+    source_published_at?: string | null;
+    source_updated_at?: string | null;
+    freshness: "fresh" | "stale" | "unreviewed";
+    reason: string;
+    requires_refresh: boolean;
+  }[];
 }
 
 export interface AnalysisPlanTask {

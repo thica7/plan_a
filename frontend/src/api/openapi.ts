@@ -2448,6 +2448,7 @@ export interface components {
              * @default 0
              */
             memory_recall_score: number;
+            report_reuse_context?: components["schemas"]["ReportReuseContext"];
             /** Homepage Hints */
             homepage_hints?: {
                 [key: string]: string;
@@ -4961,6 +4962,72 @@ export interface components {
             /** Checks */
             checks?: components["schemas"]["HealthCheck"][];
         };
+        /** HistoricalReportSelection */
+        HistoricalReportSelection: {
+            /** Report Id */
+            report_id: string;
+            /** Run Id */
+            run_id?: string | null;
+            /** Project Id */
+            project_id: string;
+            /** Reason */
+            reason: string;
+            /** Advisory Facts */
+            advisory_facts?: string[];
+            /**
+             * Advisory Only
+             * @default true
+             */
+            advisory_only: boolean;
+        };
+        /** HistoricalReportSkip */
+        HistoricalReportSkip: {
+            /** Report Id */
+            report_id: string;
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Reason */
+            reason: string;
+        };
+        /** HistoricalSourceLineage */
+        HistoricalSourceLineage: {
+            /** Report Id */
+            report_id: string;
+            /** Evidence Id */
+            evidence_id: string;
+            /** Competitor */
+            competitor: string;
+            /** Dimension */
+            dimension: string;
+            /** Url */
+            url: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Source Published At */
+            source_published_at?: string | null;
+            /** Source Updated At */
+            source_updated_at?: string | null;
+            /**
+             * Freshness
+             * @enum {string}
+             */
+            freshness: "fresh" | "stale" | "unreviewed";
+            /** Reason */
+            reason: string;
+            /**
+             * Requires Refresh
+             * @default true
+             */
+            requires_refresh: boolean;
+        };
         /** HitlResumeRequest */
         HitlResumeRequest: {
             /**
@@ -6953,6 +7020,15 @@ export interface components {
              */
             generated_at?: string;
         };
+        /** ReportReuseContext */
+        ReportReuseContext: {
+            /** Selected */
+            selected?: components["schemas"]["HistoricalReportSelection"][];
+            /** Skipped */
+            skipped?: components["schemas"]["HistoricalReportSkip"][];
+            /** Refresh Required */
+            refresh_required?: components["schemas"]["HistoricalSourceLineage"][];
+        };
         /** ReportVersionDiff */
         ReportVersionDiff: {
             base_version?: components["schemas"]["ReportVersionRecord"] | null;
@@ -7580,6 +7656,10 @@ export interface components {
             tool_call_messages?: components["schemas"]["ToolCallMessage"][];
             /** Trace Spans */
             trace_spans?: components["schemas"]["TraceSpan"][];
+            /** Llm Budget Checkpoint */
+            llm_budget_checkpoint?: {
+                [key: string]: number;
+            };
             /** Collector Research Usage */
             collector_research_usage?: {
                 [key: string]: components["schemas"]["CollectorResearchUsage"];

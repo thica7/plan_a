@@ -26,6 +26,7 @@ from packages.community import (
 )
 from packages.community.source_classifier import classify_community_source
 from packages.identity import compute_raw_source_id
+from packages.memory.report_reuse import report_reuse_candidates
 from packages.refs import merge_ordered_refs
 from packages.research.budget import research_depth_budget
 from packages.research.discovery import (
@@ -493,6 +494,11 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         enable_repair: bool = True,
     ) -> list[RawSource]:
         refresh_candidates: list[SourceCandidate] = []
+        if not detail.evidence_refresh_active:
+            seed_candidates = [
+                *report_reuse_candidates(detail.plan, competitor, dimension),
+                *(seed_candidates or []),
+            ]
         if detail.evidence_refresh_active:
             refresh_candidates = [
                 SourceCandidate(
@@ -668,7 +674,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         target_source_count: int,
         rejection_diagnostics: list[dict[str, object]] | None = None,
     ) -> list[RawSource]:
-        return raw_sources_from_research_result(
+        sources = raw_sources_from_research_result(
             brief,
             result,
             batch_sources=batch_sources,
@@ -703,6 +709,24 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             source_is_usable=self._research_source_is_usable,
             rejection_diagnostics=rejection_diagnostics,
         )
+        history_by_url = {
+            candidate.url: candidate.metadata
+            for candidate in result.candidates
+            if candidate.origin == "manual" and candidate.metadata.get("history_report_id")
+        }
+        for source in sources:
+            requested_url = str(source.metadata.get("requested_url") or source.url or "")
+            lineage = history_by_url.get(requested_url, {})
+            source.metadata.update({
+                key: lineage[key]
+                for key in (
+                    "history_report_id", "history_evidence_id", "history_captured_at",
+                    "history_source_published_at", "history_source_updated_at",
+                    "history_refresh_reason",
+                )
+                if key in lineage
+            })
+        return sources
 
     async def _collect_official_sources(
         self,

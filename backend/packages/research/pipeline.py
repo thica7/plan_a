@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from packages.identity import normalize_url
 from packages.research.assembly import assemble_research_summary
 from packages.research.budget import research_depth_budget
 from packages.research.capture import CaptureCache, capture_candidate, select_capture_candidates
@@ -20,6 +21,7 @@ from packages.research.evidence import (
     admit_evidence_items,
     dedupe_by_id,
     normalized_fields_from_evidence_items,
+    raw_sources_from_research_result,
 )
 from packages.research.extraction import extract_page
 from packages.research.models import (
@@ -256,24 +258,101 @@ async def _run_research_pass(
     existing_candidate_ids: set[str] | None = None,
     max_new_candidates: int | None = None,
 ) -> ResearchPass:
+    history_candidates = [
+        candidate
+        for candidate in seed_candidates
+        if candidate.origin == "manual"
+        and candidate.metadata.get("history_report_id")
+        and candidate.metadata.get("history_evidence_id")
+        and candidate.competitor == brief.competitor
+        and candidate.dimension == brief.dimension
+    ][: min(2, brief.max_candidates)]
+    history_pages: list[CapturedPage] = []
+    history_metrics: dict[str, Any] = {}
+    if history_candidates and not repair_tasks:
+        history_pages, history_metrics, _ = await _capture_candidates(
+            brief,
+            history_candidates,
+            fetch,
+            capture_cache=capture_cache,
+        )
+        extractions, evidence_items, gaps, _, coverage = _evaluate_capture_set(
+            brief,
+            candidates=history_candidates,
+            pages=history_pages,
+            capture_metrics=history_metrics,
+        )
+        # Saving discovery requires both coverage and the usual current-source
+        # identity/quality admission. Historical assertions never enter this check.
+        admitted_history = raw_sources_from_research_result(
+            brief,
+            ResearchResult(
+                brief=brief,
+                candidates=history_candidates,
+                captured_pages=history_pages,
+                evidence_items=evidence_items,
+            ),
+            batch_sources=[],
+            target_source_count=brief.target_source_count,
+            requires_accepted_evidence=True,
+            source_exists=lambda *_: False,
+            confidence_for_source=lambda candidate, page, snippet, items: max(
+                candidate.confidence, max((item.confidence for item in items), default=0.0)
+            ),
+            fallback_snippet=lambda page: page.snippet,
+        )
+        if coverage.passed and len(admitted_history) >= brief.target_source_count:
+            return ResearchPass(
+                history_candidates,
+                history_pages,
+                extractions,
+                evidence_items,
+                gaps,
+                coverage,
+                history_metrics,
+            )
+
     candidates = await _discover_candidates(
         brief,
         search=search,
         seed_candidates=seed_candidates,
         repair_tasks=repair_tasks,
     )
+    if history_pages:
+        history_urls = {normalize_url(candidate.url) for candidate in history_candidates}
+        candidates = [
+            *history_candidates,
+            *[
+                candidate
+                for candidate in candidates
+                if normalize_url(candidate.url) not in history_urls
+            ],
+        ][: brief.max_candidates]
     if existing_candidate_ids is not None and max_new_candidates is not None:
         new_candidates = [
-            candidate for candidate in candidates
-            if candidate.id not in existing_candidate_ids
+            candidate for candidate in candidates if candidate.id not in existing_candidate_ids
         ][:max_new_candidates]
         candidates = dedupe_by_id([*seed_candidates, *new_candidates])
-    captured_pages, capture_metrics, overflow_queue = await _capture_candidates(
-        brief,
-        candidates,
+    history_ids = {page.candidate_id for page in history_pages}
+    remaining_brief = (
+        brief.model_copy(
+            update={
+                "max_fetches": max(
+                    0, brief.max_fetches - history_metrics.get("capture_fetch_count", 0)
+                ),
+            }
+        )
+        if history_pages
+        else brief
+    )
+    new_pages, capture_metrics, overflow_queue = await _capture_candidates(
+        remaining_brief,
+        [candidate for candidate in candidates if candidate.id not in history_ids],
         fetch,
         capture_cache=capture_cache,
     )
+    captured_pages = [*history_pages, *new_pages]
+    capture_metrics = _merge_numeric_metrics(history_metrics, capture_metrics)
     extractions, evidence_items, gaps, ledger, coverage = _evaluate_capture_set(
         brief,
         candidates=candidates,
