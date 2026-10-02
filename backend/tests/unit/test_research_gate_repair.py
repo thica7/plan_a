@@ -565,6 +565,42 @@ def test_manual_independent_fact_cannot_inherit_citation_from_recommendation():
     )
 
 
+@pytest.mark.parametrize("prefix", ["1. ", "2) "])
+def test_manual_numbered_action_does_not_turn_list_number_into_fact(prefix):
+    _, _, evidence, _, report = _records()
+    report.report_md += f"\n{prefix}Consider testing Phone."
+    _, metadata = validate_manual_revision(report, [evidence])
+    assert metadata["run_qa_blocker_count"] == 0
+
+
+def test_manual_numbered_fact_retains_its_citation_without_an_extra_number_claim():
+    _, _, evidence, _, report = _records()
+    report.report_md = "1. Phone costs $499. [source:evidence-1]"
+    claims, metadata = validate_manual_revision(report, [evidence])
+    assert [claim.claim_text for claim in claims] == ["Phone costs $499."]
+    assert metadata["run_qa_blocker_count"] == 0
+
+
+def test_manual_decimal_fact_is_not_stripped_as_a_numbered_list_prefix():
+    _, _, evidence, _, report = _records()
+    report.report_md = "1.6 Ah battery capacity."
+    _, metadata = validate_manual_revision(report, [evidence])
+    assert metadata["unresolved_manual_claims"] == [{
+        "line_number": 1, "claim_text": "1.6 Ah battery capacity.",
+    }]
+
+
+def test_manual_table_product_label_is_not_an_unsupported_fact():
+    _, _, evidence, _, report = _records()
+    report.report_md = (
+        "| Phone | Phone costs $499. [source:evidence-1] | "
+        "[Phone official pricing](https://example.com/price) |"
+    )
+    claims, metadata = validate_manual_revision(report, [evidence])
+    assert [claim.claim_text for claim in claims] == ["Phone costs $499."]
+    assert metadata["run_qa_blocker_count"] == 0
+
+
 @pytest.mark.parametrize("category", ["developer tools", "开发者硬件"])
 @pytest.mark.parametrize("strategy", [
     "pricing_model_repair", "feature_slot_repair", "persona_schema_repair",

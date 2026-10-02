@@ -21,6 +21,7 @@ _REASON = r"(?:\b(?:because|since)\b|因为|由于|因而)\s*"
 
 def _sentence_parts(text: str) -> list[str]:
     """Bind trailing citations to the preceding sentence, never the next one."""
+    text = re.sub(r"^\s*\d+[.)]\s+", "", text)
     parts: list[str] = []
     pending = ""
     offset = 0
@@ -79,7 +80,7 @@ def _statement_parts(text: str, product_names: list[str]) -> list[str]:
 
 def _is_fact_candidate(text: str, product_names: list[str]) -> bool:
     text = text.strip(" |-*")
-    if not text:
+    if not text or text.casefold() in {name.casefold() for name in product_names}:
         return False
     link_only = bool(re.fullmatch(rf"(?:{_MARKDOWN_LINK}\s*)+", text))
     if link_only:
