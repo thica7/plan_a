@@ -46,7 +46,7 @@ _SECRET_ASSIGNMENT = re.compile(
     r"|authorization)|token|key)[\"']?\s*[:=]\s*(?:(?:bearer|basic)\s+)?"
     r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s,;&]+)"
 )
-_ENCODED_COMPONENT = re.compile(r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s?&;\"'])+")
+_ENCODED_COMPONENT = re.compile(r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^?&;\"'])+")
 _BEARER = re.compile(r"(?i)(?<![A-Za-z0-9_])bearer\s+[^\s,;&]+")
 _URL_CREDENTIALS = re.compile(r"(?i)(https?://)[^/\s?#]+@")
 _CREDENTIAL_FRAGMENT = re.compile(
@@ -97,7 +97,8 @@ def _redact_encoded_assignment(match: re.Match[str]) -> str:
     decoded = raw
     while (next_value := unquote(decoded)) != decoded:
         decoded = next_value
-    # Detect the encoded name/equal using the whole ORIGINAL parameter, before
+    # Whitespace is assignment syntax, not a parameter boundary. Detect the
+    # encoded name/equal using the whole ORIGINAL parameter, before
     # decoding an encoded '&' can turn the value into apparent extra parameters.
     return "[redacted:secret]" if _SECRET_ASSIGNMENT.search(decoded) else raw
 

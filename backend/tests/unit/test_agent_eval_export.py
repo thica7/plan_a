@@ -503,6 +503,23 @@ def test_encoded_query_marker_does_not_hide_credential_behind_url_prefix(tmp_pat
     assert "&public=ok" in action["output_summary"]
 
 
+@pytest.mark.parametrize("whitespace", [" ", "\t", "\n"])
+@pytest.mark.parametrize("lhs", ["pass%77ord", "password%3D"])
+def test_encoded_assignment_preserves_value_across_supported_whitespace(tmp_path, whitespace, lhs):
+    separator = whitespace + "=" + whitespace if lhs == "pass%77ord" else whitespace
+    text = lhs + separator + "abc%26verysecret&public=ok"
+    journal = _journal(
+        tmp_path / "runs.db",
+        [_run(trace_spans=[_span(full_output=text, output_preview=text)])],
+    )
+
+    action = export_agent_eval(journal, "ws-a")["tasks"][0]["actions"][0]
+
+    assert "verysecret" not in action["output_summary"]
+    assert "[redacted:secret]" in action["output_summary"]
+    assert "&public=ok" in action["output_summary"]
+
+
 @pytest.mark.parametrize("direction", ["input", "output"])
 def test_complete_text_is_redacted_before_replacing_an_unsafe_legacy_preview(tmp_path, direction):
     complete = "context " * 50 + " " + FAKE_KEY + " end" + " safe context" * 100
