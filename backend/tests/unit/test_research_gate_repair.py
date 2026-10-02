@@ -43,6 +43,12 @@ from packages.schema.models import (
     RedoScope,
     RevisionRecord,
 )
+from packages.schema.report_artifact import (
+    ReportArtifactLegacyInfo,
+    ReportArtifactRenderCache,
+    ReportArtifactV2,
+    ReportLayer,
+)
 from packages.skills.registry import SkillRegistry
 
 
@@ -790,6 +796,59 @@ async def test_revision_before_version_resolves_current_run_in_shared_project():
     )
     persisted = second.report_version.quality_metadata["repair_acceptance"][-1]
     assert persisted["before_report_version_id"] == first.report_version.id
+
+
+@pytest.mark.parametrize("body, expected_blocked", [
+    ("Phone is the best phone. [source:pricing-1]", True),
+    ("Phone costs $499.", True),
+    ("Phone costs $499. [source:pricing-1]", False),
+])
+@pytest.mark.parametrize("writer_artifact", [False, True])
+def test_unchanged_sync_preserves_current_manual_version_claims_and_validation(
+    body, expected_blocked, writer_artifact,
+):
+    service, record, store = _fresh_projection_service()
+    if writer_artifact:
+        record.detail.report_artifact = ReportArtifactV2(
+            artifact_version=2, run_id=record.detail.id,
+            core_report=ReportLayer(layer="core", markdown=record.detail.report_md),
+            render_cache=ReportArtifactRenderCache(
+                core_markdown=record.detail.report_md, full_markdown=record.detail.report_md,
+            ),
+            legacy=ReportArtifactLegacyInfo(source="report_artifact_v2", report_md_alias=True),
+        )
+    writer = service._sync_enterprise_projection(record)
+    runtime = RuntimeCommandService(
+        settings=Settings(), run_service=service, workflow_service=object(), enterprise_store=store,
+        preference_memory=PreferenceMemoryStore.in_memory(),
+    )
+    manual, _ = runtime._create_manual_report_revision(
+        writer.report_version,
+        ManualReportRevisionRequest(report_md="## Executive Summary\n" + body),
+        EnterpriseUserContext(user_id="reviewer", role="owner", workspace_id=writer.workspace_id),
+    )
+    manual_claims = [claim.model_copy(deep=True) for claim in store.list_claims(manual.project_id)
+                     if claim.id in manual.claim_ids]
+    validation = dict(manual.quality_metadata["manual_claim_validation"])
+    findings = list(manual.quality_metadata["run_qa_findings"])
+    service._with_enterprise_projection(record.detail)
+    assert record.detail.report_md == manual.report_md
+    assert record.detail.report_artifact is None
+    synced = service._sync_enterprise_projection(record)
+    assert synced.report_version.id == manual.id
+    assert synced.report_version.claim_ids == manual.claim_ids
+    assert synced.claim_records == manual_claims
+    assert synced.report_version.report_md == manual.report_md
+    assert synced.report_version.parent_version_id == writer.report_version.id
+    assert synced.report_version.quality_metadata["manual_claim_validation"] == validation
+    assert synced.report_version.quality_metadata["run_qa_findings"] == findings
+    assert (synced.report_version.quality_metadata["run_qa_blocker_count"] > 0) is expected_blocked
+    assert service._evaluate_report_release_gate(synced).allowed is not expected_blocked
+    assert len(store.list_report_versions(manual.project_id)) == 2
+    repeated = service._sync_enterprise_projection(record)
+    assert repeated.report_version.id == manual.id
+    assert repeated.claim_records == manual_claims
+    assert len(store.list_report_versions(manual.project_id)) == 2
 
 
 @pytest.mark.parametrize("category", ["developer tools", "开发者硬件"])

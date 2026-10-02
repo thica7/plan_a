@@ -3168,8 +3168,14 @@ class RunService(
                     ),
                     "version_number": version_number, "parent_version_id": previous.id,
                 })
+            elif (
+                previous.quality_metadata.get("manual_revision")
+                or previous.id != projection.report_version.id
+            ):
+                projection = existing_projection.model_copy(deep=True)
             else:
                 projection.report_version = projection.report_version.model_copy(update={
+                    "id": previous.id,
                     "parent_version_id": previous.parent_version_id,
                     "created_at": previous.created_at, "status": previous.status,
                     "published_at": previous.published_at,
@@ -3224,6 +3230,7 @@ class RunService(
             return detail
         detail.enterprise_projection = projection
         detail.report_md = projection.report_version.report_md
+        detail.report_artifact = projection.report_version.report_artifact
         if self._refresh_report_source_qa_findings(detail):
             self._refresh_quality_metrics(detail)
         return detail
