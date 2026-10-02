@@ -216,6 +216,8 @@ def raw_source_from_capture(
     if candidate.last_updated:
         source_metadata["source_updated_at"] = candidate.last_updated
     source_metadata.update(metadata or {})
+    # Preserve capture identity separately from hashes derived from snippet fallbacks.
+    source_metadata["capture_content_hash"] = capture.content_hash.strip()
     return RawSource(
         id=compute_raw_source_id(
             source_type=source_type,
@@ -313,7 +315,7 @@ def raw_sources_from_research_result(
         content_hash = page.content_hash.strip()
         if source_exists(page.final_url, current_sources) or any(
             (source.url and normalize_url(str(source.url)) == url_key)
-            or (content_hash and source.content_hash.strip() == content_hash)
+            or (content_hash and source.metadata.get("capture_content_hash") == content_hash)
             for source in branch_sources
         ):
             record_raw_source_rejection(

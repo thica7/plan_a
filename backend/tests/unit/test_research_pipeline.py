@@ -303,6 +303,78 @@ def test_raw_source_selection_deduplicates_before_applying_source_limit(
     assert len(sources) == 2
 
 
+@pytest.mark.parametrize("first_source_location", ["current_result", "batch", "legacy_batch"])
+def test_raw_source_selection_keeps_unknown_capture_hash_separate_from_known_hash(
+    first_source_location: str,
+) -> None:
+    brief = ResearchBrief(
+        run_id="selection", topic="AI coding", competitor="Cursor", dimension="feature"
+    )
+    candidates = [
+        SourceCandidate(
+            title="Cursor features",
+            url=f"https://cursor.com/docs/{name}",
+            origin="web_search",
+            competitor="Cursor",
+            dimension="feature",
+        )
+        for name in ("unknown-hash", "known-hash")
+    ]
+    shared = "Cursor supports code completion, repository indexing and multi-file agent workflows."
+    known_hash = compute_content_hash(shared)[:16]
+    pages = [
+        CapturedPage(
+            candidate_id=candidates[0].id,
+            requested_url=candidates[0].url,
+            final_url=candidates[0].url,
+            status="ok",
+            title=candidates[0].title,
+            text=f"{shared} Cursor also supports extra independent repository editing features.",
+            snippet=shared,
+            content_hash="",
+            quality_score=0.99,
+        ),
+        CapturedPage(
+            candidate_id=candidates[1].id,
+            requested_url=candidates[1].url,
+            final_url=candidates[1].url,
+            status="ok",
+            title=candidates[1].title,
+            text=shared,
+            content_hash=known_hash,
+            quality_score=0.95,
+        ),
+    ]
+    first_source = raw_source_from_capture(
+        brief,
+        candidates[0],
+        pages[0],
+        confidence=0.95,
+        metadata={"capture_content_hash": known_hash},
+    )
+    assert first_source.content_hash == known_hash
+    batch_sources = [] if first_source_location == "current_result" else [first_source]
+    if first_source_location == "legacy_batch":
+        first_source.metadata.pop("capture_content_hash", None)
+    selected_pages = pages if first_source_location == "current_result" else pages[1:]
+    sources = raw_sources_from_research_result(
+        brief,
+        ResearchResult(brief=brief, candidates=candidates, captured_pages=selected_pages),
+        batch_sources=batch_sources,
+        target_source_count=2,
+        requires_accepted_evidence=False,
+        source_exists=lambda _url, _sources: False,
+        confidence_for_source=lambda _candidate, _page, _snippet, _items: 0.95,
+        fallback_snippet=lambda page: page.snippet,
+    )
+
+    assert [str(source.url) for source in [*batch_sources, *sources]] == [
+        candidate.url for candidate in candidates
+    ]
+    if first_source_location != "legacy_batch":
+        assert [*batch_sources, *sources][0].metadata["capture_content_hash"] == ""
+
+
 @pytest.mark.parametrize(
     "competitor,dimension,covered_competitors,duplicate",
     [
@@ -352,6 +424,7 @@ def test_raw_source_selection_keeps_deduplication_within_current_branch(
         snippet=text,
         content_hash=content_hash,
         confidence=0.95,
+        metadata={"capture_content_hash": content_hash},
     )
     sources = raw_sources_from_research_result(
         brief,
