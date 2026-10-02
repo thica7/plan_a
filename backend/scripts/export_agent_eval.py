@@ -46,7 +46,7 @@ _SECRET_ASSIGNMENT = re.compile(
     r"|authorization)|token|key)[\"']?\s*[:=]\s*(?:(?:bearer|basic)\s+)?"
     r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s,;&]+)"
 )
-_ENCODED_COMPONENT = re.compile(r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^?&;\"'])+")
+_ASSIGNMENT_COMPONENT = re.compile(r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^&\"'])+")
 _BEARER = re.compile(r"(?i)(?<![A-Za-z0-9_])bearer\s+[^\s,;&]+")
 _URL_CREDENTIALS = re.compile(r"(?i)(https?://)[^/\s?#]+@")
 _CREDENTIAL_FRAGMENT = re.compile(
@@ -90,16 +90,15 @@ class ExportError(ValueError):
     """A safe, fixed diagnostic that never includes a raw record or exception."""
 
 
-def _redact_encoded_assignment(match: re.Match[str]) -> str:
+def _redact_assignment_component(match: re.Match[str]) -> str:
     raw = match.group()
-    if "%" not in raw:
-        return raw
     decoded = raw
     while (next_value := unquote(decoded)) != decoded:
         decoded = next_value
-    # Whitespace is assignment syntax, not a parameter boundary. Detect the
-    # encoded name/equal using the whole ORIGINAL parameter, before
-    # decoding an encoded '&' can turn the value into apparent extra parameters.
+    # Only a raw '&' separates query parameters. The component may include its
+    # URL prefix; discard that context with the credential rather than guessing.
+    # Detect literal or encoded assignments in the whole ORIGINAL parameter,
+    # before decoding or a partial generic match can lose the value's boundary.
     return "[redacted:secret]" if _SECRET_ASSIGNMENT.search(decoded) else raw
 
 
@@ -109,8 +108,8 @@ def _redact(value: str) -> str:
     text = value
     while True:
         text = _URL_CREDENTIALS.sub(r"\1[redacted:credentials]@", text)
+        text = _ASSIGNMENT_COMPONENT.sub(_redact_assignment_component, text)
         text = _SECRET_ASSIGNMENT.sub("[redacted:secret]", text)
-        text = _ENCODED_COMPONENT.sub(_redact_encoded_assignment, text)
         text = _BEARER.sub("[redacted:bearer_token]", text)
         decoded = unquote(text)
         if decoded == text:

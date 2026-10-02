@@ -9,7 +9,7 @@ import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qsl, quote, urlsplit
 
 import pytest
 
@@ -485,7 +485,8 @@ def test_encoded_credential_name_or_equals_keeps_original_parameter_boundary(
 
     assert "verysecret" not in json.dumps(action)
     assert "[redacted:secret]" in action[f"{direction}_summary"]
-    assert action[f"{direction}_summary"].startswith("https://example.com?")
+    # The entire sensitive raw component may include the URL prefix. Credential
+    # safety and preserving the separate public parameter are the requirements.
     assert "&public=ok" in action[f"{direction}_summary"]
 
 
@@ -518,6 +519,34 @@ def test_encoded_assignment_preserves_value_across_supported_whitespace(tmp_path
     assert "verysecret" not in action["output_summary"]
     assert "[redacted:secret]" in action["output_summary"]
     assert "&public=ok" in action["output_summary"]
+
+
+@pytest.mark.parametrize("text_source", ["full", "preview"])
+@pytest.mark.parametrize(
+    "credential_name,value_separator",
+    [("%70assword", "?"), ("%70assword", ";"), ("password", ";")],
+)
+def test_cli_redacts_password_values_using_actual_query_parameter_boundaries(
+    tmp_path,
+    text_source,
+    credential_name,
+    value_separator,
+):
+    password = "abc" + value_separator + "verysecret"
+    url = "https://example.com?" + credential_name + "=" + password + "&public=ok"
+    assert dict(parse_qsl(urlsplit(url).query))["password"] == password
+    span = _span(full_output=url if text_source == "full" else "", output_preview=url)
+    journal = _journal(tmp_path / "runs.db", [_run(trace_spans=[span])])
+    output = tmp_path / "export.json"
+
+    completed = _cli("--journal", journal, "--workspace", "ws-a", "--output", output)
+
+    assert completed.returncode == 0, completed.stderr
+    exported = json.loads(output.read_text())
+    summary = exported["tasks"][0]["actions"][0]["output_summary"]
+    assert "verysecret" not in summary
+    assert "[redacted:secret]" in summary
+    assert "&public=ok" in summary
 
 
 @pytest.mark.parametrize("direction", ["input", "output"])

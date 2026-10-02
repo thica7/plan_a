@@ -34,7 +34,8 @@ Demo、模拟和 fixture 标记会过滤，包括实际 survey producer 的 `sou
 脱敏覆盖中文直接相邻的已知密钥、邮箱和电话；明确 credential assignment 的完整值在 URL 解码前处理，
 并识别 quoted 值中的 escaped quote，避免编码分隔符或转义引号造成凭据后缀残留。
 编码字段名、等号及重复编码会按原始参数边界识别，凭据值中的编码分隔符不会变成新参数边界。
-assignment 中的空格/tab/换行保留在同一原始参数内；包含敏感 assignment 的参数可整段省略，`&` 后的公开参数保留。
+原始未编码的 `&` 划定 query 参数边界；包含敏感 assignment 的 component 可连 URL 前缀一起省略，
+其内部空白和其他 query 值字符不拆分参数，`&` 后的公开参数保留。
 每个 run 最多 100 个动作、50 条反馈；scope 每个列表最多 20 项，并给出相应省略计数。
 未知失败和取消动作不因缺少 usage 被过滤；超过动作上限的内容仍受同一省略规则约束。
 
