@@ -9,6 +9,7 @@ import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 
@@ -448,6 +449,58 @@ def test_encoded_or_escaped_password_suffix_is_fully_redacted(tmp_path, directio
 
     assert "verysecret" not in json.dumps(action)
     assert "[redacted:secret]" in action[f"{direction}_summary"]
+
+
+@pytest.mark.parametrize("direction", ["input", "output"])
+@pytest.mark.parametrize(
+    "assignment", ["%70assword=abc%26verysecret", "password%3Dabc%26verysecret"]
+)
+@pytest.mark.parametrize("extra_encoding_rounds", [0, 1, 2])
+def test_encoded_credential_name_or_equals_keeps_original_parameter_boundary(
+    tmp_path,
+    direction,
+    assignment,
+    extra_encoding_rounds,
+):
+    for _ in range(extra_encoding_rounds):
+        assignment = quote(assignment, safe="")
+    url = "https://example.com?" + assignment + "&public=ok"
+    journal = _journal(
+        tmp_path / "runs.db",
+        [
+            _run(
+                trace_spans=[
+                    _span(
+                        **{
+                            f"full_{direction}": url,
+                            f"{direction}_preview": url,
+                        }
+                    )
+                ]
+            )
+        ],
+    )
+
+    action = export_agent_eval(journal, "ws-a")["tasks"][0]["actions"][0]
+
+    assert "verysecret" not in json.dumps(action)
+    assert "[redacted:secret]" in action[f"{direction}_summary"]
+    assert action[f"{direction}_summary"].startswith("https://example.com?")
+    assert "&public=ok" in action[f"{direction}_summary"]
+
+
+def test_encoded_query_marker_does_not_hide_credential_behind_url_prefix(tmp_path):
+    url = "https://example.com%3F%70assword=abc%26verysecret&public=ok"
+    journal = _journal(
+        tmp_path / "runs.db",
+        [_run(trace_spans=[_span(full_output=url, output_preview=url)])],
+    )
+
+    action = export_agent_eval(journal, "ws-a")["tasks"][0]["actions"][0]
+
+    assert "verysecret" not in action["output_summary"]
+    assert "[redacted:secret]" in action["output_summary"]
+    assert "&public=ok" in action["output_summary"]
 
 
 @pytest.mark.parametrize("direction", ["input", "output"])

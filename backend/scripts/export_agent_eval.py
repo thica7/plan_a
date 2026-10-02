@@ -46,6 +46,7 @@ _SECRET_ASSIGNMENT = re.compile(
     r"|authorization)|token|key)[\"']?\s*[:=]\s*(?:(?:bearer|basic)\s+)?"
     r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s,;&]+)"
 )
+_ENCODED_COMPONENT = re.compile(r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s?&;\"'])+")
 _BEARER = re.compile(r"(?i)(?<![A-Za-z0-9_])bearer\s+[^\s,;&]+")
 _URL_CREDENTIALS = re.compile(r"(?i)(https?://)[^/\s?#]+@")
 _CREDENTIAL_FRAGMENT = re.compile(
@@ -89,6 +90,18 @@ class ExportError(ValueError):
     """A safe, fixed diagnostic that never includes a raw record or exception."""
 
 
+def _redact_encoded_assignment(match: re.Match[str]) -> str:
+    raw = match.group()
+    if "%" not in raw:
+        return raw
+    decoded = raw
+    while (next_value := unquote(decoded)) != decoded:
+        decoded = next_value
+    # Detect the encoded name/equal using the whole ORIGINAL parameter, before
+    # decoding an encoded '&' can turn the value into apparent extra parameters.
+    return "[redacted:secret]" if _SECRET_ASSIGNMENT.search(decoded) else raw
+
+
 def _redact(value: str) -> str:
     # Remove complete credential values before decoding: an encoded '&' is part
     # of a password, not a query boundary. Escaped quoted values stay together.
@@ -96,6 +109,7 @@ def _redact(value: str) -> str:
     while True:
         text = _URL_CREDENTIALS.sub(r"\1[redacted:credentials]@", text)
         text = _SECRET_ASSIGNMENT.sub("[redacted:secret]", text)
+        text = _ENCODED_COMPONENT.sub(_redact_encoded_assignment, text)
         text = _BEARER.sub("[redacted:bearer_token]", text)
         decoded = unquote(text)
         if decoded == text:
