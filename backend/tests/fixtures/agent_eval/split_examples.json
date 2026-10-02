@@ -1,0 +1,351 @@
+{
+  "schema_version": 1,
+  "dataset_kind": "synthetic_fixture",
+  "workspace_id": "synthetic-fixture-workspace",
+  "split_policy": {
+    "algorithm": "sha256_task_group_v1",
+    "ratios": {
+      "train": 70,
+      "validation": 15,
+      "holdout": 15
+    },
+    "identity_fields": [
+      "workspace_id",
+      "topic",
+      "target_product.name",
+      "decision_brief"
+    ]
+  },
+  "limits": {
+    "text_chars": 600,
+    "actions_per_run": 100,
+    "feedback_per_run": 50,
+    "scope_items": 20
+  },
+  "tasks": [
+    {
+      "run_id": "synthetic-run-1",
+      "project_id": "synthetic-project",
+      "execution_mode": "synthetic",
+      "synthetic": true,
+      "fixture_only": true,
+      "task_group_id": "4f199ec7cd3a300fc5516527f4c562a38e28ff292d98933a6849c87aa39dc295",
+      "split": "train",
+      "scope": {
+        "topic": "合成评测任务 1 v2",
+        "target_product": {
+          "name": "Synthetic Product 1",
+          "official_url": "https://example.invalid"
+        },
+        "research_depth": "quick",
+        "competitors": [
+          "Synthetic Candidate A"
+        ],
+        "dimensions": [
+          "feature"
+        ],
+        "decision_brief": {
+          "decision_question": "合成团队如何比较方案？",
+          "primary_job": null,
+          "success_metric": null
+        }
+      },
+      "actions": [
+        {
+          "id": "synthetic-span-1",
+          "kind": "tool",
+          "agent": "synthetic-agent",
+          "name": "synthetic_comparison",
+          "status": "ok",
+          "duration_ms": 1,
+          "provider": "synthetic_fixture",
+          "model": null,
+          "input_summary": "合成比较输入，仅用于格式评测",
+          "output_summary": "合成结果，不代表事实正确性",
+          "usage_source": "estimate",
+          "provider_usage": {
+            "prompt_tokens": null,
+            "completion_tokens": null,
+            "total_tokens": null,
+            "prompt_cache_hit_tokens": null,
+            "prompt_cache_miss_tokens": null
+          },
+          "provider_usage_scope": "last_attempt_only",
+          "token_estimates": {
+            "input_tokens_estimate": null,
+            "output_tokens_estimate": null
+          },
+          "attempts": null,
+          "budget_charge": {
+            "tokens": null,
+            "cost_usd": null,
+            "basis": "conservative_budget"
+          },
+          "cost_estimate_usd": null,
+          "price_basis": null
+        }
+      ],
+      "actions_omitted": 0,
+      "actions_filtered": 0,
+      "feedback": [],
+      "feedback_omitted": 0,
+      "result": {
+        "status": "synthetic_example"
+      },
+      "reward": {
+        "correctness": null,
+        "source": null
+      },
+      "budget_checkpoint": {
+        "calls": null,
+        "repairs": null,
+        "tokens_charged": null,
+        "cost_charged_usd": null,
+        "basis": "conservative_budget_including_pending_reservations"
+      }
+    },
+    {
+      "run_id": "synthetic-run-2",
+      "project_id": "synthetic-project",
+      "execution_mode": "synthetic",
+      "synthetic": true,
+      "fixture_only": true,
+      "task_group_id": "4f199ec7cd3a300fc5516527f4c562a38e28ff292d98933a6849c87aa39dc295",
+      "split": "train",
+      "scope": {
+        "topic": "合成评测任务 1 v2",
+        "target_product": {
+          "name": "Synthetic Product 1",
+          "official_url": "https://example.invalid"
+        },
+        "research_depth": "deep",
+        "competitors": [
+          "Synthetic Candidate B"
+        ],
+        "dimensions": [
+          "feature"
+        ],
+        "decision_brief": {
+          "decision_question": "合成团队如何比较方案？",
+          "primary_job": null,
+          "success_metric": null
+        }
+      },
+      "actions": [
+        {
+          "id": "synthetic-span-1",
+          "kind": "tool",
+          "agent": "synthetic-agent",
+          "name": "synthetic_comparison",
+          "status": "ok",
+          "duration_ms": 1,
+          "provider": "synthetic_fixture",
+          "model": null,
+          "input_summary": "合成比较输入，仅用于格式评测",
+          "output_summary": "合成结果，不代表事实正确性",
+          "usage_source": "estimate",
+          "provider_usage": {
+            "prompt_tokens": null,
+            "completion_tokens": null,
+            "total_tokens": null,
+            "prompt_cache_hit_tokens": null,
+            "prompt_cache_miss_tokens": null
+          },
+          "provider_usage_scope": "last_attempt_only",
+          "token_estimates": {
+            "input_tokens_estimate": null,
+            "output_tokens_estimate": null
+          },
+          "attempts": null,
+          "budget_charge": {
+            "tokens": null,
+            "cost_usd": null,
+            "basis": "conservative_budget"
+          },
+          "cost_estimate_usd": null,
+          "price_basis": null
+        }
+      ],
+      "actions_omitted": 0,
+      "actions_filtered": 0,
+      "feedback": [],
+      "feedback_omitted": 0,
+      "result": {
+        "status": "synthetic_example"
+      },
+      "reward": {
+        "correctness": null,
+        "source": null
+      },
+      "budget_checkpoint": {
+        "calls": null,
+        "repairs": null,
+        "tokens_charged": null,
+        "cost_charged_usd": null,
+        "basis": "conservative_budget_including_pending_reservations"
+      }
+    },
+    {
+      "run_id": "synthetic-run-3",
+      "project_id": "synthetic-project",
+      "execution_mode": "synthetic",
+      "synthetic": true,
+      "fixture_only": true,
+      "task_group_id": "5e4cc591022a398f11477c52ec2cd7930ac8f5c176f7de498a59f7e1946af34f",
+      "split": "validation",
+      "scope": {
+        "topic": "合成评测任务 22 v2",
+        "target_product": {
+          "name": "Synthetic Product 22",
+          "official_url": "https://example.invalid"
+        },
+        "research_depth": "standard",
+        "competitors": [
+          "Synthetic Candidate C"
+        ],
+        "dimensions": [
+          "feature"
+        ],
+        "decision_brief": {
+          "decision_question": "合成团队如何比较方案？",
+          "primary_job": null,
+          "success_metric": null
+        }
+      },
+      "actions": [
+        {
+          "id": "synthetic-span-1",
+          "kind": "tool",
+          "agent": "synthetic-agent",
+          "name": "synthetic_comparison",
+          "status": "ok",
+          "duration_ms": 1,
+          "provider": "synthetic_fixture",
+          "model": null,
+          "input_summary": "合成比较输入，仅用于格式评测",
+          "output_summary": "合成结果，不代表事实正确性",
+          "usage_source": "estimate",
+          "provider_usage": {
+            "prompt_tokens": null,
+            "completion_tokens": null,
+            "total_tokens": null,
+            "prompt_cache_hit_tokens": null,
+            "prompt_cache_miss_tokens": null
+          },
+          "provider_usage_scope": "last_attempt_only",
+          "token_estimates": {
+            "input_tokens_estimate": null,
+            "output_tokens_estimate": null
+          },
+          "attempts": null,
+          "budget_charge": {
+            "tokens": null,
+            "cost_usd": null,
+            "basis": "conservative_budget"
+          },
+          "cost_estimate_usd": null,
+          "price_basis": null
+        }
+      ],
+      "actions_omitted": 0,
+      "actions_filtered": 0,
+      "feedback": [],
+      "feedback_omitted": 0,
+      "result": {
+        "status": "synthetic_example"
+      },
+      "reward": {
+        "correctness": null,
+        "source": null
+      },
+      "budget_checkpoint": {
+        "calls": null,
+        "repairs": null,
+        "tokens_charged": null,
+        "cost_charged_usd": null,
+        "basis": "conservative_budget_including_pending_reservations"
+      }
+    },
+    {
+      "run_id": "synthetic-run-4",
+      "project_id": "synthetic-project",
+      "execution_mode": "synthetic",
+      "synthetic": true,
+      "fixture_only": true,
+      "task_group_id": "924352c90d26ee61d2a147cc134c3d0cf2ca8753b697ad773a8bccd7b4dfe19d",
+      "split": "holdout",
+      "scope": {
+        "topic": "合成评测任务 9 v2",
+        "target_product": {
+          "name": "Synthetic Product 9",
+          "official_url": "https://example.invalid"
+        },
+        "research_depth": "quick",
+        "competitors": [
+          "Synthetic Candidate D"
+        ],
+        "dimensions": [
+          "feature"
+        ],
+        "decision_brief": {
+          "decision_question": "合成团队如何比较方案？",
+          "primary_job": null,
+          "success_metric": null
+        }
+      },
+      "actions": [
+        {
+          "id": "synthetic-span-1",
+          "kind": "tool",
+          "agent": "synthetic-agent",
+          "name": "synthetic_comparison",
+          "status": "ok",
+          "duration_ms": 1,
+          "provider": "synthetic_fixture",
+          "model": null,
+          "input_summary": "合成比较输入，仅用于格式评测",
+          "output_summary": "合成结果，不代表事实正确性",
+          "usage_source": "estimate",
+          "provider_usage": {
+            "prompt_tokens": null,
+            "completion_tokens": null,
+            "total_tokens": null,
+            "prompt_cache_hit_tokens": null,
+            "prompt_cache_miss_tokens": null
+          },
+          "provider_usage_scope": "last_attempt_only",
+          "token_estimates": {
+            "input_tokens_estimate": null,
+            "output_tokens_estimate": null
+          },
+          "attempts": null,
+          "budget_charge": {
+            "tokens": null,
+            "cost_usd": null,
+            "basis": "conservative_budget"
+          },
+          "cost_estimate_usd": null,
+          "price_basis": null
+        }
+      ],
+      "actions_omitted": 0,
+      "actions_filtered": 0,
+      "feedback": [],
+      "feedback_omitted": 0,
+      "result": {
+        "status": "synthetic_example"
+      },
+      "reward": {
+        "correctness": null,
+        "source": null
+      },
+      "budget_checkpoint": {
+        "calls": null,
+        "repairs": null,
+        "tokens_charged": null,
+        "cost_charged_usd": null,
+        "basis": "conservative_budget_including_pending_reservations"
+      }
+    }
+  ]
+}
