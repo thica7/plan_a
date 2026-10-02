@@ -46,6 +46,10 @@ _SECRET_ASSIGNMENT = re.compile(
 )
 _BEARER = re.compile(r"(?i)\bbearer\s+[^\s,;&]+")
 _URL_CREDENTIALS = re.compile(r"(?i)(https?://)[^/\s?#]+@")
+_CREDENTIAL_FRAGMENT = re.compile(
+    r"(?i)\b(?:sk-|pplx-|gsk_|xai-|AIza|AKIA|"
+    r"(?:ak|rk|pk|xoxb|ghp|github_pat|hf|glpat)_)[A-Za-z0-9_-]+"
+)
 
 
 class ExportError(ValueError):
@@ -75,6 +79,26 @@ def _number(value: Any, *, integer: bool = False) -> int | float | None:
     if isinstance(value, int):
         return value if 0 <= value <= 2**63 - 1 else None
     return value if math.isfinite(value) and value >= 0 else None
+
+
+def _summary(span: dict[str, Any], direction: str) -> tuple[str | None, str | None, str | None]:
+    complete = span.get(f"full_{direction}")
+    if isinstance(complete, str) and complete:
+        # Legacy producers truncated previews before redaction. The complete text
+        # is used only to build a redacted bounded excerpt, never exported as a field.
+        return _text(complete), "full_text", None
+    preview = span.get(f"{direction}_preview")
+    if not isinstance(preview, str) or not preview:
+        return None, None, "missing_text"
+    original_chars = _number(span.get(f"{direction}_chars"), integer=True)
+    if preview.rstrip().endswith(("...", "…")) or (
+        original_chars is not None and original_chars > len(preview)
+    ):
+        return None, None, "truncated_preview"
+    safe = _redact(preview)
+    if _CREDENTIAL_FRAGMENT.search(safe) or "@" in safe:
+        return None, None, "unsafe_preview"
+    return safe[:MAX_TEXT], "preview", None
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -116,6 +140,12 @@ def _non_real(record: dict[str, Any]) -> bool:
                     return True
             if name in {"mode", "provider", "llmprovider", "providername"}:
                 if isinstance(value, str) and value.strip().lower().startswith(("demo", "simulat")):
+                    return True
+            if name in {"sourcetype", "sourcerole", "communitysourcetype"}:
+                if isinstance(value, str) and any(
+                    part in {"demo", "simulated", "simulation", "synthetic"}
+                    for part in re.split(r"[_\s-]+", value.strip().lower())
+                ):
                     return True
     return False
 
@@ -217,15 +247,16 @@ def _action(span: dict[str, Any]) -> dict[str, Any]:
     if not provider_usage:
         usage = dict.fromkeys(USAGE_FIELDS)
     action = {key: _text(span.get(key)) for key in ("id", "kind", "agent", "name", "status")}
+    for direction in ("input", "output"):
+        summary, source, reason = _summary(span, direction)
+        action[f"{direction}_summary"] = summary
+        action[f"{direction}_summary_source"] = source
+        action[f"{direction}_summary_omitted_reason"] = reason
     action.update(
         {
             "duration_ms": _number(span.get("duration_ms")),
             "provider": _text(span.get("provider") or metadata.get("llm_provider")),
             "model": _text(span.get("model") or metadata.get("llm_model")),
-            # Only existing previews are allowed. Full prompts, reports and arbitrary
-            # nested metadata never enter the output, even when previews are missing.
-            "input_summary": _text(span.get("input_preview")),
-            "output_summary": _text(span.get("output_preview")),
             "usage_source": "provider" if provider_usage else "estimate",
             "provider_usage": usage,
             "provider_usage_scope": "last_attempt_only",
@@ -321,7 +352,7 @@ def export_agent_eval(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Read-only SQLite export of explicit real Agent runs, with redacted previews.",
+        description="Read-only SQLite export of explicit real Agent runs, with redacted summaries.",
         epilog="All correctness rewards remain null. Usage is the last attempt only; budget "
         "charges and configured cost estimates are not account invoices. Synthetic "
         "split examples and commands: backend/tests/fixtures/agent_eval/README.md",

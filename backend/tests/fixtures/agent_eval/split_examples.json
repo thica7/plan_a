@@ -82,7 +82,11 @@
             "basis": "conservative_budget"
           },
           "cost_estimate_usd": null,
-          "price_basis": null
+          "price_basis": null,
+          "input_summary_source": "synthetic_fixture",
+          "input_summary_omitted_reason": null,
+          "output_summary_source": "synthetic_fixture",
+          "output_summary_omitted_reason": null
         }
       ],
       "actions_omitted": 0,
@@ -163,7 +167,11 @@
             "basis": "conservative_budget"
           },
           "cost_estimate_usd": null,
-          "price_basis": null
+          "price_basis": null,
+          "input_summary_source": "synthetic_fixture",
+          "input_summary_omitted_reason": null,
+          "output_summary_source": "synthetic_fixture",
+          "output_summary_omitted_reason": null
         }
       ],
       "actions_omitted": 0,
@@ -244,7 +252,11 @@
             "basis": "conservative_budget"
           },
           "cost_estimate_usd": null,
-          "price_basis": null
+          "price_basis": null,
+          "input_summary_source": "synthetic_fixture",
+          "input_summary_omitted_reason": null,
+          "output_summary_source": "synthetic_fixture",
+          "output_summary_omitted_reason": null
         }
       ],
       "actions_omitted": 0,
@@ -325,7 +337,11 @@
             "basis": "conservative_budget"
           },
           "cost_estimate_usd": null,
-          "price_basis": null
+          "price_basis": null,
+          "input_summary_source": "synthetic_fixture",
+          "input_summary_omitted_reason": null,
+          "output_summary_source": "synthetic_fixture",
+          "output_summary_omitted_reason": null
         }
       ],
       "actions_omitted": 0,

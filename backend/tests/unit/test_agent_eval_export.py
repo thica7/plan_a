@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 import pytest
+
 from scripts.export_agent_eval import MAX_ACTIONS, export_agent_eval, task_group
 
 BACKEND = Path(__file__).resolve().parents[2]
@@ -30,8 +31,8 @@ def _span(**updates):
         "model": "deepseek-v4-flash",
         "input_preview": "比较功能",
         "output_preview": "缺少来源，待复核",
-        "full_input": "DO_NOT_EXPORT_FULL_PROMPT",
-        "full_output": "DO_NOT_EXPORT_FULL_OUTPUT",
+        "full_input": updates.get("input_preview", "比较功能"),
+        "full_output": updates.get("output_preview", "缺少来源，待复核"),
         "input_tokens_estimate": 900,
         "output_tokens_estimate": 100,
         "cost_estimate_usd": 0.0002,
@@ -171,6 +172,55 @@ def test_demo_spans_are_filtered_and_unknown_failures_and_cancellations_survive(
     assert task["actions_filtered"] == 4
 
 
+def test_actual_survey_and_explicit_community_simulation_sources_are_filtered(tmp_path):
+    spans = [
+        _span(
+            id="simulated-survey",
+            kind="tool",
+            provider=None,
+            name="survey_interview_agent",
+            metadata={"source_type": "survey_simulated"},
+        ),
+        _span(
+            id="simulated-community",
+            kind="tool",
+            provider=None,
+            metadata={"community_source_type": "community_simulated"},
+        ),
+        _span(id="demo-source", kind="tool", provider=None, metadata={"source_role": "demo"}),
+        _span(
+            id="real-survey",
+            kind="tool",
+            provider=None,
+            name="survey_interview_agent",
+            metadata={"source_type": "survey_response"},
+        ),
+        _span(
+            id="real-community",
+            kind="tool",
+            provider=None,
+            metadata={"community_source_type": "community_forum"},
+        ),
+        _span(
+            id="real-tool",
+            kind="tool",
+            provider=None,
+            name="simulated_research_qa",
+            output_preview="解释模拟来源限制的真实检查",
+        ),
+    ]
+    journal = _journal(tmp_path / "runs.db", [_run(trace_spans=spans)])
+
+    task = export_agent_eval(journal, "ws-a")["tasks"][0]
+
+    assert [action["id"] for action in task["actions"]] == [
+        "real-survey",
+        "real-community",
+        "real-tool",
+    ]
+    assert task["actions_filtered"] == 3
+
+
 def test_feedback_requires_matching_raw_workspace_project_and_explicit_run(tmp_path):
     journal = _journal(tmp_path / "runs.db", [_run()])
     feedback = _feedback(
@@ -262,6 +312,63 @@ def test_every_external_string_is_redacted_before_bounding_and_metadata_is_allow
     assert len(task["scope"]["topic"]) <= 600
     assert len(task["actions"][0]["input_summary"]) <= 600
     assert "[redacted:" in serialized
+
+
+@pytest.mark.parametrize("direction", ["input", "output"])
+def test_complete_text_is_redacted_before_replacing_an_unsafe_legacy_preview(tmp_path, direction):
+    complete = "context " * 50 + " " + FAKE_KEY + " end" + " safe context" * 100
+    legacy_preview = complete[:417] + "..."
+    span = _span(**{f"full_{direction}": complete, f"{direction}_preview": legacy_preview})
+    journal = _journal(tmp_path / "runs.db", [_run(trace_spans=[span])])
+
+    action = export_agent_eval(journal, "ws-a")["tasks"][0]["actions"][0]
+
+    assert "sk-synthe" not in action[f"{direction}_summary"]
+    assert "[redacted:api_key]" in action[f"{direction}_summary"]
+    assert len(action[f"{direction}_summary"]) <= 600
+    assert action[f"{direction}_summary_source"] == "full_text"
+    assert action[f"{direction}_summary_omitted_reason"] is None
+    assert complete not in json.dumps(action)
+    assert f"full_{direction}" not in action
+
+
+@pytest.mark.parametrize("direction", ["input", "output"])
+@pytest.mark.parametrize("omission", ["ellipsis", "character_count", "unsafe_fragment"])
+def test_preview_without_complete_text_is_omitted_when_truncated_or_unsafe(
+    tmp_path,
+    direction,
+    omission,
+):
+    complete = "context " * 50 + " " + FAKE_KEY + " end"
+    preview = complete[:417]
+    if omission == "ellipsis":
+        preview += "..."
+    elif omission == "unsafe_fragment":
+        preview = "possibly sk-syntheticsecr"
+    span = _span(**{f"full_{direction}": "", f"{direction}_preview": preview})
+    if omission == "character_count":
+        span[f"{direction}_chars"] = len(complete)
+    journal = _journal(tmp_path / "runs.db", [_run(trace_spans=[span])])
+
+    action = export_agent_eval(journal, "ws-a")["tasks"][0]["actions"][0]
+
+    assert action[f"{direction}_summary"] is None
+    assert action[f"{direction}_summary_source"] is None
+    reason = "unsafe_preview" if omission == "unsafe_fragment" else "truncated_preview"
+    assert action[f"{direction}_summary_omitted_reason"] == reason
+    assert "sk-synthe" not in json.dumps(action)
+
+
+def test_complete_untruncated_preview_is_redacted_when_full_text_is_unavailable(tmp_path):
+    span = _span(full_input="", input_preview="api_key=shortsecret 比较功能")
+    journal = _journal(tmp_path / "runs.db", [_run(trace_spans=[span])])
+
+    action = export_agent_eval(journal, "ws-a")["tasks"][0]["actions"][0]
+
+    assert "shortsecret" not in action["input_summary"]
+    assert "[redacted:secret]" in action["input_summary"]
+    assert action["input_summary_source"] == "preview"
+    assert action["input_summary_omitted_reason"] is None
 
 
 def test_provider_usage_cache_and_budget_charges_have_separate_bases(tmp_path):
