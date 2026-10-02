@@ -5,6 +5,7 @@ import pytest
 from packages.agents import SubagentContext
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
+from packages.identity import compute_competitor_id
 from packages.memory import RunJournal
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
@@ -322,6 +323,52 @@ def test_unknown_capture_provenance_only_offers_the_original_refresh_url():
     assert context.selected[0].advisory_facts == []
     assert context.refresh_required[0].freshness == "unreviewed"
     assert context.refresh_required[0].reason == "provenance_unknown"
+
+
+@pytest.mark.parametrize("mode", ["unknown", "auto", None])
+def test_explicit_non_real_evidence_mode_cannot_supply_fresh_history_facts(mode):
+    store = EnterpriseMemoryStore()
+    old_run(store)
+    store.evidence_records["e-old"].metadata["execution_mode"] = mode
+    context = reuse(store)
+    assert context.selected[0].advisory_facts == []
+    assert context.refresh_required[0].freshness == "unreviewed"
+    assert context.refresh_required[0].reason == "provenance_unknown"
+
+
+def test_related_common_product_does_not_import_another_products_old_version_evidence():
+    store = EnterpriseMemoryStore()
+    old_plan = AnalysisPlan(
+        topic="AI coding", competitors=["Cursor", "Cursor 1.0", "Common"], dimensions=["feature"]
+    )
+    old_run(store, old_plan=old_plan)
+    old_evidence = store.evidence_records["e-old"]
+    old_evidence.competitor_id = compute_competitor_id("ws", "Cursor 1.0")
+    old_claim = store.claim_records["c-old"]
+    old_claim.competitor_id = old_evidence.competitor_id
+    common = old_evidence.model_copy(deep=True)
+    common.id = "common-evidence"
+    common.competitor_id = compute_competitor_id("ws", "Common")
+    common.url = "https://common.example/docs/features"
+    store.evidence_records[common.id] = common
+    common_claim = old_claim.model_copy(deep=True)
+    common_claim.id = "common-claim"
+    common_claim.competitor_id = common.competitor_id
+    common_claim.claim_text = "Common historical advisory"
+    common_claim.evidence_ids = [common.id]
+    store.claim_records[common_claim.id] = common_claim
+    store.report_versions["r-old"].evidence_ids.append(common.id)
+    store.report_versions["r-old"].claim_ids.append(common_claim.id)
+    current = AnalysisPlan(
+        topic="AI coding", competitors=["Cursor 2.0", "Common"], dimensions=["feature"]
+    )
+    context = reuse(store, current_plan=current)
+    assert context.selected[0].advisory_facts == ["Common historical advisory"]
+    assert [link.competitor for link in context.refresh_required] == ["Common"]
+    assert any(
+        skip.evidence_id == "e-old" and skip.reason == "version_conflict"
+        for skip in context.skipped
+    )
 
 
 def test_explicit_demo_run_cannot_be_overridden_by_report_real_metadata():
@@ -662,3 +709,118 @@ async def test_history_pass_respects_a_one_candidate_budget():
     )
     assert len(calls) == 1
     assert len(result.candidates) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "depth,has_history,dimension,skip_optional",
+    [
+        ("quick", True, "feature", True),
+        ("quick", False, "feature", False),
+        ("standard", True, "feature", False),
+        ("deep", True, "feature", False),
+        ("quick", True, "persona", False),
+    ],
+)
+async def test_complete_collector_branch_only_skips_optional_community_for_sufficient_quick_history(
+    depth,
+    has_history,
+    dimension,
+    skip_optional,
+):
+    store = EnterpriseMemoryStore()
+    if has_history:
+        old_run(
+            store,
+            old_plan=plan().model_copy(update={"dimensions": [dimension]}),
+            dimension=dimension,
+            url="https://cursor.com/customers"
+            if dimension == "persona"
+            else "https://cursor.com/docs/features",
+        )
+    runner = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(
+            demo_mode=False,
+            ark_api_key="fixture-key",
+            ark_model="fixture-model",
+            pplx_api_key="fixture-key",
+            web_search_provider="perplexity",
+            collector_react_enabled=False,
+            collector_target_verified_sources_per_branch=1,
+        ),
+        enterprise_store=store,
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    searches = []
+
+    async def unexpected_llm(*args, **kwargs):
+        raise AssertionError("This fixture must never call a model")
+
+    runner._trace_llm_json = unexpected_llm
+    runner._trace_llm_text = unexpected_llm
+    runner._llm.complete_json = unexpected_llm
+    runner._llm.complete_text = unexpected_llm
+    try:
+        detail = await runner.create_run(
+            RunCreateRequest(
+                topic="AI coding",
+                workspace_id="ws",
+                project_id="new-project",
+                target_product=None if dimension == "persona" else plan().target_product,
+                research_depth=depth,
+                competitors=["Cursor"],
+                dimensions=[dimension],
+                execution_mode="real",
+            )
+        )
+
+        async def fetch(record, agent, subagent, url, context=None, **kwargs):
+            text = (
+                "Cursor supports code completion, repository indexing, "
+                "multi-file editing and agent workflows. "
+                "Cursor customers are developers and enterprise engineering teams. "
+                "Customer case studies show "
+                "workflow fit, onboarding effort, adoption benefits and switching costs. "
+                "Cursor面向企业开发者，适合代码编写。"
+            ) * 3
+            return EvidenceFetchResult(
+                url=url,
+                ok=True,
+                title="Cursor features and customers",
+                text=text,
+                content_hash="current-hash",
+                status_code=200,
+                fetch_method="fixture_fetch",
+                quality_score=0.95,
+                text_length=len(text),
+            )
+
+        async def search(record, agent, subagent, query, max_results, context=None, **kwargs):
+            searches.append(query)
+            return []
+
+        runner._trace_fetch = fetch
+        runner._trace_search = search
+        await runner._real_collector_branch_step(runner._runs[detail.id], dimension, "Cursor")
+        assert detail.raw_sources
+        community_searches = [
+            query
+            for query in searches
+            if any(word in query for word in ("reddit", "forum", "review"))
+        ]
+        if skip_optional:
+            assert searches == []
+            event = next(
+                event
+                for event in runner._runs[detail.id].events
+                if event.type == "node_completed" and event.agent == "collector"
+            )
+            assert (
+                event.payload["collect"]["community_skip_reason"]
+                == "quick_history_current_coverage_complete"
+            )
+        else:
+            assert community_searches
+    finally:
+        await runner._graph_checkpointer.aclose()

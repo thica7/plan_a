@@ -103,6 +103,11 @@ def build_report_reuse_context(
 ) -> ReportReuseContext:
     context = ReportReuseContext()
     now = _utc(now or datetime.utcnow())
+    current_names = [*plan.competitors]
+    if plan.target_product is not None:
+        current_names.append(plan.target_product.name)
+    current_product_keys = {_key(name) for name in current_names}
+    current_product_bases = {re.sub(r"[\d.]+", "", key) for key in current_product_keys}
     runs = {detail.id: detail for detail in historical_runs if detail.workspace_id == workspace_id}
     # Each bundle keeps evidence and claims in its own validated project scope.
     bundles: dict[
@@ -221,6 +226,14 @@ def build_report_reuse_context(
             if not competitor:
                 skip(report.id, "product_identity_missing", item.id)
                 continue
+            if _key(competitor) not in current_product_keys:
+                reason = (
+                    "version_conflict"
+                    if re.sub(r"[\d.]+", "", _key(competitor)) in current_product_bases
+                    else "product_identity_missing"
+                )
+                skip(report.id, reason, item.id)
+                continue
             if "simulated" in item.source_type.casefold() or item.metadata.get(
                 "execution_mode"
             ) in {"demo", "simulated"}:
@@ -261,7 +274,10 @@ def build_report_reuse_context(
                 if age < 0
                 else "current_fetch_required"
             )
-            if reason == "current_fetch_required" and source_type != "webpage_verified":
+            if reason == "current_fetch_required" and (
+                source_type != "webpage_verified"
+                or ("execution_mode" in item.metadata and item.metadata["execution_mode"] != "real")
+            ):
                 reason = "provenance_unknown"
             if reason != "current_fetch_required":
                 skip(report.id, reason, item.id)

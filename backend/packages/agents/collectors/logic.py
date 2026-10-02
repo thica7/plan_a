@@ -1894,7 +1894,19 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         community_sources = [
             source for source in sources if source.metadata.get("community_evidence")
         ]
-        if not community_sources:
+        skip_optional_community = (
+            detail.plan.research_depth == "quick"
+            and not self._dimension_needs_persona_strength_gate(dimension)
+            and coverage is not None and coverage.get("passed") is True
+            and sum(
+                source.source_type == "webpage_verified"
+                and bool(source.metadata.get("history_report_id"))
+                for source in sources
+            ) >= target_source_count
+        )
+        if skip_optional_community:
+            collect_payload["community_skip_reason"] = "quick_history_current_coverage_complete"
+        if not community_sources and not skip_optional_community:
             try:
                 community_sources = await self._collect_community_sources_for_branch(
                     record,
