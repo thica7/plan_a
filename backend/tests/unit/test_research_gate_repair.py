@@ -19,6 +19,7 @@ from packages.orchestrator.service import RunRecord, RunService
 from packages.research.evaluation.gaps import quality_gaps_from_extractions
 from packages.research.evaluation.release_gate import quality_gaps_from_release_gate
 from packages.research.models import QualityGap, ResearchBrief
+from packages.research.repair.acceptance import repair_issue_key
 from packages.research.repair.strategies import query_hints_for_gap
 from packages.runtime.service import RuntimeCommandError, RuntimeCommandService
 from packages.schema.api_dto import RunDetail
@@ -31,7 +32,17 @@ from packages.schema.enterprise import (
     ProjectRecord,
     ReportVersionRecord,
 )
-from packages.schema.models import AgentMessage, AnalysisPlan, QCIssue, RedoScope, RevisionRecord
+from packages.schema.models import (
+    AgentMessage,
+    AnalysisPlan,
+    CompetitorKnowledge,
+    KnowledgeClaim,
+    PricingModel,
+    QCIssue,
+    RawSource,
+    RedoScope,
+    RevisionRecord,
+)
 from packages.skills.registry import SkillRegistry
 
 
@@ -601,6 +612,186 @@ def test_manual_table_product_label_is_not_an_unsupported_fact():
     assert metadata["run_qa_blocker_count"] == 0
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("regenerate_remaining_id", [False, True])
+@pytest.mark.parametrize("remaining_token", ["phantom-two", "PHANTOM-ONE"])
+async def test_repair_acceptance_distinguishes_real_phantom_citation_objects(
+    regenerate_remaining_id, remaining_token,
+):
+    service, record, _ = _repair_service()
+    record.detail.report_md = f"[source:phantom-one] [source:{remaining_token}]"
+    before = service._build_phantom_citation_issues(record.detail)
+    assert len(before) == 2
+    record.detail.agent_messages = [AgentMessage(
+        id="redo-phantoms", run_id=record.detail.id, from_agent="orchestrator", to_agent="writer",
+        message_type="redo_request", payload_schema="RedoRequest", payload={
+            "issues": [issue.model_dump(mode="json") for issue in before],
+        },
+    )]
+    before_md = record.detail.report_md
+    record.detail.report_md = f"[source:{remaining_token}]"
+    after = service._build_phantom_citation_issues(record.detail)
+    if regenerate_remaining_id:
+        after = [after[0].model_copy(update={"id": "regenerated-remaining-id"})]
+    record.detail.qa_findings = after
+    await service._record_revision(
+        record, iteration=1, stage="writer_only", redo_scope=before[0].redo_scope,
+        redo_scopes=[], before_md=before_md, issue_ids=[issue.id for issue in before],
+        qa_issue_ids_before=[issue.id for issue in before], issue_count_before=2,
+    )
+    acceptance = record.detail.revisions[-1].metadata["repair_acceptance"]
+    fixed_id = next(issue.id for issue in before if issue.problem.endswith(" phantom-one."))
+    assert acceptance["resolved_issue_ids"] == [fixed_id]
+    assert acceptance["remaining_issue_ids"] == [after[0].id]
+    assert acceptance["improved"] is True
+    assert acceptance["no_progress"] is False
+
+
+def _fresh_projection_service():
+    now = datetime.utcnow()
+    detail = RunDetail(
+        id="fresh-sync-run", topic="Phone comparison", status="completed", execution_mode="real",
+        created_at=now, updated_at=now,
+        plan=AnalysisPlan(topic="Phone comparison", competitors=["Phone"], dimensions=["pricing"],
+                          competitor_layer="L1", research_depth="quick"),
+        report_md="## Executive Summary\nPhone costs $499. [source:pricing-1]",
+        raw_sources=[RawSource(
+            id="pricing-1", competitor="Phone", dimension="pricing",
+            source_type="webpage_verified", title="Phone pricing", url="https://example.com/price",
+            snippet="Phone costs $499.", content_hash="phone-price", confidence=0.95,
+        )],
+        competitor_knowledge={"Phone": CompetitorKnowledge(
+            competitor="Phone", pricing_model=PricingModel(notes=[KnowledgeClaim(
+                claim="Phone costs $499.", source_ids=["pricing-1"], confidence=0.95,
+            )]),
+        )},
+    )
+    store = EnterpriseMemoryStore()
+    service = RunService(skill_registry=SkillRegistry.from_default_path(), settings=Settings(),
+                         enterprise_store=store)
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    return service, record, store
+
+
+@pytest.mark.asyncio
+async def test_actual_projection_redo_keeps_old_version_and_records_real_version_ids():
+    service, record, store = _fresh_projection_service()
+    first = service._sync_enterprise_projection(record)
+    first_version = first.report_version.model_copy(deep=True)
+    first_claims = [claim.model_copy(deep=True) for claim in first.claim_records]
+    record.detail.report_md += "\nLimitations: additional product research is needed."
+    second = service._sync_enterprise_projection(record)
+    assert second.report_version.id != first_version.id
+    assert second.report_version.version_number == first_version.version_number + 1
+    assert second.report_version.parent_version_id == first_version.id
+    assert store.get_report_version(first_version.id) == first_version
+    assert [store.claim_records[claim.id] for claim in first_claims] == first_claims
+    await service._record_revision(
+        record, iteration=1, stage="writer_only",
+        redo_scope=RedoScope(kind="writer_only", rationale="Add limitations"), redo_scopes=[],
+        before_md=first_version.report_md, issue_ids=[], qa_issue_ids_before=[],
+        issue_count_before=0,
+    )
+    acceptance = record.detail.revisions[-1].metadata["repair_acceptance"]
+    assert acceptance["before_report_version_id"] == first_version.id
+    assert acceptance["after_report_version_id"] == second.report_version.id
+    third = service._sync_enterprise_projection(record)
+    assert third.report_version.id == second.report_version.id
+    assert third.report_version.parent_version_id == first_version.id
+    assert len(store.list_report_versions(project_id=third.project_id)) == 2
+    persisted = third.report_version.quality_metadata["repair_acceptance"][-1]
+    assert persisted["before_report_version_id"] == first_version.id
+    assert persisted["after_report_version_id"] == second.report_version.id
+
+
+def test_actual_projection_redo_keeps_original_claim_when_claim_body_changes():
+    service, record, store = _fresh_projection_service()
+    first = service._sync_enterprise_projection(record)
+    first_version = first.report_version.model_copy(deep=True)
+    first_claim = first.claim_records[0].model_copy(deep=True)
+    record.detail.competitor_knowledge["Phone"].pricing_model.notes[0].claim = (
+        "Phone has a published purchase price of $499."
+    )
+    record.detail.report_md = (
+        "## Executive Summary\nPhone has a published purchase price of $499. [source:pricing-1]"
+    )
+    second = service._sync_enterprise_projection(record)
+    assert second.report_version.id != first_version.id
+    assert first_claim.id not in second.report_version.claim_ids
+    assert store.get_report_version(first_version.id).claim_ids == [first_claim.id]
+    assert store.claim_records[first_claim.id] == first_claim
+
+
+def test_projection_redo_snapshots_changed_claim_support_without_mutating_old_claim():
+    service, record, store = _fresh_projection_service()
+    first = service._sync_enterprise_projection(record)
+    original = first.claim_records[0].model_copy(deep=True)
+    record.detail.competitor_knowledge["Phone"].pricing_model.notes[0].confidence = 0.8
+    record.detail.report_md += "\nUpdated confidence assessment."
+    second = service._sync_enterprise_projection(record)
+    assert second.claim_records[0].id != original.id
+    assert second.claim_records[0].confidence == 0.8
+    assert store.claim_records[original.id] == original
+    assert store.get_report_version(first.report_version.id).claim_ids == [original.id]
+    third = service._sync_enterprise_projection(record)
+    assert third.report_version.id == second.report_version.id
+    assert third.report_version.claim_ids == second.report_version.claim_ids
+    assert third.claim_records == second.claim_records
+
+
+@pytest.mark.asyncio
+async def test_real_release_gate_issue_identity_survives_acceptance_metadata_attachment():
+    service, record, _ = _fresh_projection_service()
+    projection = service._sync_enterprise_projection(record)
+    gate = service._evaluate_report_release_gate(projection)
+    before = service._sync_release_gate_repair_issues(record, gate)
+    assert before
+    record.detail.agent_messages = [AgentMessage(
+        id="redo-gate", run_id=record.detail.id, from_agent="orchestrator", to_agent="writer",
+        message_type="redo_request", payload_schema="RedoRequest", payload={
+            "issues": [issue.model_dump(mode="json") for issue in before],
+        },
+    )]
+    await service._record_revision(
+        record, iteration=1, stage="writer_only", redo_scope=before[0].redo_scope, redo_scopes=[],
+        before_md=record.detail.report_md, issue_ids=[issue.id for issue in before],
+        qa_issue_ids_before=[issue.id for issue in before], issue_count_before=len(before),
+    )
+    service._attach_release_gate_quality_metadata(projection, gate)
+    acceptance = projection.report_version.quality_metadata["repair_acceptance"][-1]
+    assert acceptance["resolved_issue_ids"] == []
+    assert set(acceptance["remaining_issue_ids"]) == {issue.id for issue in before}
+    assert acceptance["no_progress"] is True
+    assert acceptance["before_report_version_id"] == projection.report_version.id
+    assert acceptance["after_report_version_id"] == projection.report_version.id
+
+
+@pytest.mark.asyncio
+async def test_revision_before_version_resolves_current_run_in_shared_project():
+    service, record, store = _fresh_projection_service()
+    first = service._sync_enterprise_projection(record)
+    store.upsert_report_version(first.report_version.model_copy(update={
+        "id": "other-run-version", "run_id": "other-run", "version_number": 99,
+    }))
+    record.detail.report_md += "\nCurrent run revision."
+    second = service._sync_enterprise_projection(record)
+    await service._record_revision(
+        record, iteration=1, stage="writer_only",
+        redo_scope=RedoScope(kind="writer_only", rationale="Revise current run"), redo_scopes=[],
+        before_md=first.report_version.report_md, issue_ids=[], qa_issue_ids_before=[],
+        issue_count_before=0,
+    )
+    acceptance = record.detail.revisions[-1].metadata["repair_acceptance"]
+    assert acceptance["before_report_version_id"] == first.report_version.id
+    assert acceptance["after_report_version_id"] == second.report_version.id
+    service._attach_release_gate_quality_metadata(
+        second, service._evaluate_report_release_gate(second),
+    )
+    persisted = second.report_version.quality_metadata["repair_acceptance"][-1]
+    assert persisted["before_report_version_id"] == first.report_version.id
+
+
 @pytest.mark.parametrize("category", ["developer tools", "开发者硬件"])
 @pytest.mark.parametrize("strategy", [
     "pricing_model_repair", "feature_slot_repair", "persona_schema_repair",
@@ -631,7 +822,7 @@ def test_repair_acceptance_tracks_unchanged_semantic_issue_after_id_changes():
         id="revision-1", iteration=1, stage="writer_only", issue_ids=["old-id"],
         qa_issue_ids_before=["old-id"], issue_count_before=1, issue_count_after=1,
         metadata={"repair_issue_keys_by_id": {
-            "old-id": "report_md.line[2]|||writer_only",
+            "old-id": repair_issue_key(_redo_issue("old-id")),
         }},
     )]
     gate = _gate(projection.report_version, purpose="internal").model_copy(update={

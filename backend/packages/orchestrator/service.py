@@ -54,6 +54,7 @@ from packages.identity import (
     compute_content_hash,
     compute_graph_thread_id,
     compute_raw_source_id,
+    compute_report_version_id,
     compute_run_id_for_idempotency_key,
     compute_topic_normalized,
     new_run_id,
@@ -3152,6 +3153,56 @@ class RunService(
                 competitor_layer=detail.plan.competitor_layer,
                 competitor_id_map=context.competitor_id_map,
             )
+        if existing_projection is not None:
+            previous = existing_projection.report_version
+            if projection.report_version.report_md != previous.report_md:
+                version_number = self._enterprise_store.next_report_version_number(
+                    project_id=context.project_id, topic_normalized=topic_normalized,
+                    competitor_layer=detail.plan.competitor_layer,
+                    competitor_set_hash=competitor_set_hash,
+                )
+                projection.report_version = projection.report_version.model_copy(update={
+                    "id": compute_report_version_id(
+                        run_id=detail.id, version_number=version_number,
+                        topic_normalized=topic_normalized, competitor_set_hash=competitor_set_hash,
+                    ),
+                    "version_number": version_number, "parent_version_id": previous.id,
+                })
+            else:
+                projection.report_version = projection.report_version.model_copy(update={
+                    "parent_version_id": previous.parent_version_id,
+                    "created_at": previous.created_at, "status": previous.status,
+                    "published_at": previous.published_at,
+                })
+        stored_claims = {
+            claim.id: claim for claim in self._enterprise_store.list_claims(context.project_id)
+        }
+        claim_id_map = {}
+        preserved_claims = []
+        for claim in projection.claim_records:
+            original_id = claim.id
+            existing = stored_claims.get(original_id)
+            if existing is not None:
+                payload = claim.model_dump(mode="json", exclude={"id", "created_at"})
+                if payload == existing.model_dump(mode="json", exclude={"id", "created_at"}):
+                    claim = existing
+                else:
+                    snapshot_id = stable_prefixed_id(
+                        "claim-revision", original_id, json.dumps(payload, sort_keys=True),
+                        length=20,
+                    )
+                    claim = stored_claims.get(snapshot_id) or claim.model_copy(update={
+                        "id": snapshot_id,
+                    })
+            preserved_claims.append(claim)
+            claim_id_map[original_id] = claim.id
+        projection.claim_records = preserved_claims
+        projection.report_version.claim_ids = [
+            claim_id_map.get(claim_id, claim_id) for claim_id in projection.report_version.claim_ids
+        ]
+        admission = projection.report_version.quality_metadata.get("release_claim_admission") or {}
+        for excluded in admission.get("excluded_claims", []):
+            excluded["claim_id"] = claim_id_map.get(excluded["claim_id"], excluded["claim_id"])
         self._enterprise_store.save_projection(projection)
         detail.report_md = projection.report_version.report_md
         detail.enterprise_projection = projection
@@ -3382,6 +3433,9 @@ class RunService(
                     "target_competitor": scope.target_competitor,
                     "target_subagent": scope.target_subagent,
                     "redo_scope": scope.model_dump(mode="json"),
+                    "detected_by": self._release_gate_detected_by(scope),
+                    "problem": task.metadata.get("gap_reason"),
+                    "metadata": task.metadata,
                 })
             writer_metadata = next((
                 message.payload for message in reversed(record.detail.agent_messages)
@@ -3391,7 +3445,7 @@ class RunService(
                         if self._enterprise_store is not None else [])
             before_version = next((version.id for version in versions
                                    if version.report_md == latest.before_md
-                                   and version.id != projection.report_version.id), None)
+                                   and version.run_id == projection.run_id), None)
             acceptance = repair_acceptance(
                 latest, after_issue_ids=after_ids,
                 before_report_version_id=before_version,
@@ -3925,7 +3979,7 @@ class RunService(
                     if self._enterprise_store is not None and projection is not None else [])
         before_version = next((
             version.id for version in versions if version.report_md == before_md
-            and (projection is None or version.id != projection.report_version.id)
+            and version.run_id == detail.id
         ), None)
         revision.metadata["repair_acceptance"] = repair_acceptance(
             revision, after_issue_ids=revision_metadata["qa_issue_ids_after"],

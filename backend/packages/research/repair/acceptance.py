@@ -1,12 +1,28 @@
+import re
+
 from packages.schema.models import QCIssue, RevisionRecord
 
 
 def repair_issue_key(issue: QCIssue | dict) -> str:
     payload = issue.model_dump(mode="json") if isinstance(issue, QCIssue) else issue
     scope = payload.get("redo_scope") or {}
+    metadata = payload.get("metadata") or {}
+    objects = []
+    for kind in ("source", "source_token", "claim", "evidence", "object"):
+        values = metadata.get(f"{kind}_ids") or metadata.get(f"{kind}_id")
+        if kind == "source_token":
+            values = metadata.get("source_tokens") or metadata.get("source_token")
+        if values:
+            objects.extend(f"{kind}:{value}" for value in (
+                values if isinstance(values, list) else [values]
+            ))
+    identity = ",".join(sorted(set(objects))) or re.sub(
+        r"\s+", " ", str(payload.get("problem") or ""),
+    ).strip()
     return "|".join(str(value or "") for value in (
         payload.get("field_path"), payload.get("target_competitor"),
         payload.get("target_subagent"), scope.get("kind"),
+        payload.get("detected_by"), metadata.get("rule_id") or metadata.get("issue_type"), identity,
     ))
 
 
