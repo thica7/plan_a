@@ -122,21 +122,37 @@ def build_report_reuse_context(
                 context.skipped.pop()
 
     if store is not None:
-        current_project = store.get_project(project_id)
+        try:
+            current_project = store.get_project(project_id)
+        except Exception:  # noqa: BLE001 - optional history must not block a new run.
+            current_project = None
+            skip("", "history_store_project_read_failed")
         if current_project is not None and current_project.workspace_id != workspace_id:
             skip("", "scope_mismatch")
             return context
-        for project in store.list_projects(workspace_id=workspace_id):
+        try:
+            projects = store.list_projects(workspace_id=workspace_id)
+        except Exception:  # noqa: BLE001 - persisted projections remain available below.
+            projects = []
+            skip("", "history_store_projects_read_failed")
+        for project in projects:
             if project.workspace_id != workspace_id:
                 continue
-            names = {
-                item.id: item.name
-                for item in store.list_competitors(workspace_id=workspace_id, project_id=project.id)
-                if item.workspace_id == workspace_id
-            }
-            evidence = store.list_evidence(project_id=project.id)
-            claims = store.list_claims(project_id=project.id)
-            for report in store.list_report_versions(project_id=project.id):
+            try:
+                names = {
+                    item.id: item.name
+                    for item in store.list_competitors(
+                        workspace_id=workspace_id, project_id=project.id
+                    )
+                    if item.workspace_id == workspace_id
+                }
+                evidence = store.list_evidence(project_id=project.id)
+                claims = store.list_claims(project_id=project.id)
+                reports = store.list_report_versions(project_id=project.id)
+            except Exception:  # noqa: BLE001 - one project's optional reads may fail independently.
+                skip("", "history_store_records_read_failed")
+                continue
+            for report in reports:
                 if report.workspace_id != workspace_id or report.project_id != project.id:
                     skip(report.id, "scope_mismatch")
                     continue
@@ -380,8 +396,6 @@ def report_reuse_candidates(
                 rank=len(candidates),
                 confidence=0.6,
                 reason="Historical URL requires a current fetch and evidence admission.",
-                date=link.source_published_at,
-                last_updated=link.source_updated_at,
                 metadata={
                     "history_report_id": link.report_id,
                     "history_evidence_id": link.evidence_id,

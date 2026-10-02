@@ -295,13 +295,17 @@ async def _run_research_pass(
             batch_sources=[],
             target_source_count=brief.target_source_count,
             requires_accepted_evidence=True,
-            source_exists=lambda *_: False,
+            source_exists=lambda url, sources: any(
+                source.url is not None and normalize_url(str(source.url)) == normalize_url(url)
+                for source in sources
+            ),
             confidence_for_source=lambda candidate, page, snippet, items: max(
                 candidate.confidence, max((item.confidence for item in items), default=0.0)
             ),
             fallback_snippet=lambda page: page.snippet,
         )
-        if coverage.passed and len(admitted_history) >= brief.target_source_count:
+        independent_history_count = len({source.content_hash for source in admitted_history})
+        if coverage.passed and independent_history_count >= brief.target_source_count:
             return ResearchPass(
                 history_candidates,
                 history_pages,

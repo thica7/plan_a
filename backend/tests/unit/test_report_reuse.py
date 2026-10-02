@@ -283,6 +283,7 @@ def test_only_latest_report_per_run_and_bounded_unique_branch_urls():
     candidates = report_reuse_candidates(current, "Cursor", "feature")
     assert len(candidates) == 2
     assert all(item.origin == "manual" and not item.snippet for item in candidates)
+    assert all(item.date is None and item.last_updated is None for item in candidates)
     assert len({item.url for item in candidates}) == 2
 
 
@@ -489,6 +490,10 @@ async def test_history_candidate_is_currently_fetched_and_admitted_before_raw_so
                 fetch_method="fixture_fetch",
                 quality_score=0.95,
                 text_length=len(text),
+                capture_metadata={
+                    "source_published_at": "2026-10-01",
+                    "source_updated_at": "2026-10-02",
+                },
             )
 
         runner._trace_fetch = fetch
@@ -513,6 +518,10 @@ async def test_history_candidate_is_currently_fetched_and_admitted_before_raw_so
             assert sources[0].candidate_origin == "manual"
             assert sources[0].metadata["history_report_id"] == "r-old"
             assert sources[0].metadata["history_evidence_id"] == "e-old"
+            assert sources[0].metadata["source_published_at"] == "2026-10-01"
+            assert sources[0].metadata["source_updated_at"] == "2026-10-02"
+            assert sources[0].metadata["history_source_published_at"] == "2026-09-01"
+            assert sources[0].metadata["history_source_updated_at"] == "2026-09-28"
             assert "Old assertion" not in sources[0].snippet
             assert "old-source" not in sources[0].id
     finally:
@@ -822,5 +831,115 @@ async def test_complete_collector_branch_only_skips_optional_community_for_suffi
             )
         else:
             assert community_searches
+    finally:
+        await runner._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("same_content", [False, True])
+async def test_history_sources_that_redirect_or_repeat_content_do_not_skip_discovery(same_content):
+    from packages.memory.report_reuse import report_reuse_candidates
+
+    store = EnterpriseMemoryStore()
+    old_run(store)
+    old_run(store, run_id="second", url="https://cursor.com/docs/second")
+    current = plan().model_copy(update={"report_reuse_context": reuse(store)})
+    calls = []
+    searches = []
+    fallback_url = "https://cursor.com/docs/new-evidence"
+
+    async def fetch(url):
+        calls.append(url)
+        history = url != fallback_url
+        final_url = url if same_content or not history else "https://cursor.com/docs/canonical"
+        content_hash = "duplicate-content" if same_content and history else f"current-{len(calls)}"
+        text = (
+            "Cursor supports code completion, repository indexing and multi-file agent workflows. "
+            * 3
+        )
+        return EvidenceFetchResult(
+            url=final_url,
+            ok=True,
+            title="Cursor features",
+            text=text,
+            content_hash=content_hash,
+            status_code=200,
+            fetch_method="fixture_fetch",
+            quality_score=0.95,
+            text_length=len(text),
+        )
+
+    async def search(query, max_results):
+        searches.append(query)
+        return [
+            SearchResult(
+                title="Cursor current evidence", url=fallback_url, snippet="Cursor agent workflows"
+            )
+        ]
+
+    result = await run_research_pipeline(
+        ResearchBrief(
+            run_id="new",
+            topic="AI coding",
+            competitor="Cursor",
+            dimension="feature",
+            target_source_count=2,
+            max_fetches=3,
+            max_search_queries=1,
+            max_repair_rounds=0,
+            include_trusted_sources=False,
+            include_homepage_candidates=False,
+        ),
+        fetch=fetch,
+        search=search,
+        seed_candidates=report_reuse_candidates(current, "Cursor", "feature"),
+    )
+    assert len(searches) == 1
+    assert fallback_url in calls
+    assert len(calls) <= 3
+    assert any(page.requested_url == fallback_url for page in result.captured_pages)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failed_read", ["get_project", "list_projects", "list_report_versions"])
+async def test_optional_history_read_failure_preserves_journal_fallback_and_new_run(
+    tmp_path, failed_read
+):
+    store = EnterpriseMemoryStore()
+    persisted = old_run(store)
+    journal = RunJournal(tmp_path / "fallback.sqlite")
+    journal.save_run(persisted)
+    runner = service(store, journal)
+
+    async def unexpected_llm(*args, **kwargs):
+        raise AssertionError("This fixture must never call a model")
+
+    runner._trace_llm_json = unexpected_llm
+    runner._trace_llm_text = unexpected_llm
+    runner._llm.complete_json = unexpected_llm
+    runner._llm.complete_text = unexpected_llm
+
+    def broken_read(*args, **kwargs):
+        raise RuntimeError("history read fixture failure")
+
+    setattr(store, failed_read, broken_read)
+    try:
+        created = await runner.create_run(
+            RunCreateRequest(
+                topic="AI coding",
+                workspace_id="ws",
+                project_id="new-project",
+                target_product=plan().target_product,
+                competitors=["Cursor"],
+                dimensions=["feature"],
+                execution_mode="real",
+            )
+        )
+        assert created.plan.report_reuse_context.selected[0].report_id == "r-old"
+        assert any(
+            "history_store" in item.reason for item in created.plan.report_reuse_context.skipped
+        )
+        assert journal.load_run(created.id) is not None
+        assert journal.load_run(persisted.id).model_dump() == persisted.model_dump()
     finally:
         await runner._graph_checkpointer.aclose()
