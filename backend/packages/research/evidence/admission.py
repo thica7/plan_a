@@ -10,7 +10,7 @@ from packages.business_intel.entity_resolver import (
     is_trusted_url_for_competitor,
     normalize_competitor_key,
 )
-from packages.identity import compute_raw_source_id
+from packages.identity import compute_raw_source_id, normalize_url
 from packages.research.evidence.citations import snippet_from_evidence_items
 from packages.research.evidence.normalization import (
     normalized_fields_as_dicts,
@@ -298,13 +298,33 @@ def raw_sources_from_research_result(
                 detail="No accepted evidence items were attached to this captured page.",
             )
             continue
-        if source_exists(page.final_url, [*batch_sources, *sources]):
+        current_sources = [*batch_sources, *sources]
+        branch_sources = [
+            source
+            for source in current_sources
+            if source.dimension == brief.dimension
+            and any(
+                normalize_competitor_key(name) == normalize_competitor_key(brief.competitor)
+                for name in source.covered_competitors or [source.competitor]
+            )
+        ]
+        url_key = normalize_url(page.final_url)
+        # Unknown capture hashes must not merge URLs through snippet fallback hashes.
+        content_hash = page.content_hash.strip()
+        if source_exists(page.final_url, current_sources) or any(
+            (source.url and normalize_url(str(source.url)) == url_key)
+            or (content_hash and source.content_hash.strip() == content_hash)
+            for source in branch_sources
+        ):
             record_raw_source_rejection(
                 rejection_diagnostics,
                 page=page,
                 candidate=candidate,
                 reason="duplicate_source",
-                detail="A source with the same URL, dimension, and competitor was already collected.",
+                detail=(
+                    "A source with the same canonical URL or content hash was already "
+                    "collected for this competitor and dimension."
+                ),
             )
             continue
         fallback = fallback_snippet(page)

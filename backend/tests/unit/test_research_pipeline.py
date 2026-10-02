@@ -1,5 +1,6 @@
 import pytest
 
+from packages.identity import compute_content_hash
 from packages.research.assembly import (
     assemble_research_report,
     field_matrix_from_evidence_items,
@@ -239,6 +240,131 @@ def test_pricing_changelog_fitness_rejects_raw_source_admission() -> None:
     assert sources == []
     assert diagnostics[0]["reason"] == "source_quality_problem"
     assert "changelog" in str(diagnostics[0]["detail"]).casefold()
+
+
+@pytest.mark.parametrize("duplicate_kind", ["canonical_url", "content_hash", "empty_hash"])
+def test_raw_source_selection_deduplicates_before_applying_source_limit(
+    duplicate_kind: str,
+) -> None:
+    brief = ResearchBrief(
+        run_id="selection", topic="AI coding", competitor="Cursor", dimension="feature"
+    )
+    first_url = "https://cursor.com/docs/first?ref=first#overview"
+    second_url = (
+        "https://cursor.com/docs/first/?ref=second#features"
+        if duplicate_kind == "canonical_url"
+        else "https://cursor.com/docs/second"
+    )
+    urls = [first_url, second_url, "https://cursor.com/docs/independent"]
+    candidates = [
+        SourceCandidate(
+            title="Cursor features",
+            url=url,
+            origin="web_search",
+            competitor="Cursor",
+            dimension="feature",
+        )
+        for url in urls
+    ]
+    pages = []
+    for index, candidate in enumerate(candidates):
+        text_index = (
+            0 if duplicate_kind == "empty_hash"
+            or (duplicate_kind == "content_hash" and index < 2) else index
+        )
+        text = f"Cursor supports multi-file agent workflows in repository {text_index}."
+        content_hash = "" if duplicate_kind == "empty_hash" else compute_content_hash(text)
+        pages.append(
+            CapturedPage(
+                candidate_id=candidate.id,
+                requested_url=candidate.url,
+                final_url=candidate.url,
+                status="ok",
+                title=candidate.title,
+                text=text,
+                content_hash=content_hash,
+                quality_score=0.95,
+            )
+        )
+
+    sources = raw_sources_from_research_result(
+        brief,
+        ResearchResult(brief=brief, candidates=candidates, captured_pages=pages),
+        batch_sources=[],
+        target_source_count=2,
+        requires_accepted_evidence=False,
+        source_exists=lambda url, sources: any(str(source.url) == url for source in sources),
+        confidence_for_source=lambda _candidate, _page, _snippet, _items: 0.95,
+        fallback_snippet=lambda page: page.snippet,
+    )
+
+    expected_second = second_url if duplicate_kind == "empty_hash" else urls[2]
+    assert [str(source.url) for source in sources] == [first_url, expected_second]
+    assert len(sources) == 2
+
+
+@pytest.mark.parametrize(
+    "competitor,dimension,covered_competitors,duplicate",
+    [
+        ("Cursor", "feature", [], True),
+        ("Copilot", "feature", [], False),
+        ("Cursor", "pricing", [], False),
+        ("Shared", "feature", ["Cursor", "Copilot"], True),
+        ("Cursor", "feature", ["Copilot"], False),
+    ],
+)
+def test_raw_source_selection_keeps_deduplication_within_current_branch(
+    competitor: str,
+    dimension: str,
+    covered_competitors: list[str],
+    duplicate: bool,
+) -> None:
+    brief = ResearchBrief(
+        run_id="selection", topic="AI coding", competitor="Cursor", dimension="feature"
+    )
+    candidate = SourceCandidate(
+        title="Cursor features",
+        url="https://cursor.com/docs/current",
+        origin="web_search",
+        competitor="Cursor",
+        dimension="feature",
+    )
+    text = "Cursor supports multi-file agent workflows."
+    content_hash = compute_content_hash(text)
+    page = CapturedPage(
+        candidate_id=candidate.id,
+        requested_url=candidate.url,
+        final_url=candidate.url,
+        status="ok",
+        title=candidate.title,
+        text=text,
+        content_hash=content_hash,
+        quality_score=0.95,
+    )
+    existing = RawSource(
+        id="existing",
+        competitor=competitor,
+        dimension=dimension,
+        covered_competitors=covered_competitors,
+        source_type="webpage_verified",
+        title="Existing features",
+        url="https://cursor.com/docs/previous",
+        snippet=text,
+        content_hash=content_hash,
+        confidence=0.95,
+    )
+    sources = raw_sources_from_research_result(
+        brief,
+        ResearchResult(brief=brief, candidates=[candidate], captured_pages=[page]),
+        batch_sources=[existing],
+        target_source_count=2,
+        requires_accepted_evidence=False,
+        source_exists=lambda _url, _sources: False,
+        confidence_for_source=lambda _candidate, _page, _snippet, _items: 0.95,
+        fallback_snippet=lambda page: page.snippet,
+    )
+
+    assert len(sources) == (0 if duplicate else 1)
 
 
 @pytest.mark.asyncio

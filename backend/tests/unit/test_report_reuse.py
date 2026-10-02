@@ -5,7 +5,7 @@ import pytest
 from packages.agents import SubagentContext
 from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
-from packages.identity import compute_competitor_id
+from packages.identity import compute_competitor_id, compute_content_hash
 from packages.memory import RunJournal
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
@@ -841,7 +841,7 @@ async def test_history_sources_that_redirect_or_repeat_content_do_not_skip_disco
     from packages.memory.report_reuse import report_reuse_candidates
 
     store = EnterpriseMemoryStore()
-    old_run(store)
+    old_run(store, url="https://cursor.com/docs/first")
     old_run(store, run_id="second", url="https://cursor.com/docs/second")
     current = plan().model_copy(update={"report_reuse_context": reuse(store)})
     calls = []
@@ -852,9 +852,9 @@ async def test_history_sources_that_redirect_or_repeat_content_do_not_skip_disco
         calls.append(url)
         history = url != fallback_url
         final_url = url if same_content or not history else "https://cursor.com/docs/canonical"
-        content_hash = "duplicate-content" if same_content and history else f"current-{len(calls)}"
         text = (
-            "Cursor supports code completion, repository indexing and multi-file agent workflows. "
+            f"Cursor supports code {'completion' if history else 'editing'}, "
+            "repository indexing and multi-file agent workflows. "
             * 3
         )
         return EvidenceFetchResult(
@@ -862,11 +862,15 @@ async def test_history_sources_that_redirect_or_repeat_content_do_not_skip_disco
             ok=True,
             title="Cursor features",
             text=text,
-            content_hash=content_hash,
+            content_hash=compute_content_hash(text),
             status_code=200,
             fetch_method="fixture_fetch",
             quality_score=0.95,
             text_length=len(text),
+            capture_metadata={
+                "source_published_at": "2026-10-01",
+                "source_updated_at": "2026-10-02",
+            },
         )
 
     async def search(query, max_results):
@@ -896,8 +900,61 @@ async def test_history_sources_that_redirect_or_repeat_content_do_not_skip_disco
     )
     assert len(searches) == 1
     assert fallback_url in calls
-    assert len(calls) <= 3
-    assert any(page.requested_url == fallback_url for page in result.captured_pages)
+    assert len(calls) == 3
+    fallback_page = next(
+        page for page in result.captured_pages if page.requested_url == fallback_url
+    )
+    runner = service(store)
+    detail = RunDetail(
+        id="new",
+        topic=current.topic,
+        status="running",
+        execution_mode="real",
+        created_at=NOW,
+        updated_at=NOW,
+        plan=current,
+    )
+    try:
+        fallback_sources = runner._raw_sources_from_research_result(
+            detail,
+            result.brief,
+            result.model_copy(update={"captured_pages": [fallback_page]}),
+            batch_sources=[],
+            target_source_count=2,
+        )
+        assert [str(source.url) for source in fallback_sources] == [fallback_url]
+
+        sources = runner._raw_sources_from_research_result(
+            detail,
+            result.brief,
+            result,
+            batch_sources=[],
+            target_source_count=2,
+        )
+        assert fallback_url in [str(source.url) for source in sources]
+        assert len(sources) == 2
+        assert len({source.content_hash for source in sources}) >= 2
+        for source in sources:
+            page = next(
+                page for page in result.captured_pages
+                if page.requested_url == source.metadata["requested_url"]
+            )
+            assert source.metadata["fetched_at"] == page.captured_at.isoformat()
+            assert source.metadata["source_published_at"] == "2026-10-01"
+            assert source.metadata["source_updated_at"] == "2026-10-02"
+        history_source = next(source for source in sources if source.candidate_origin == "manual")
+        assert history_source.metadata["history_report_id"] in {"r-old", "r-second"}
+        assert history_source.metadata["history_evidence_id"] in {"e-old", "e-second"}
+        assert history_source.metadata["history_captured_at"] == (
+            NOW - timedelta(days=2)
+        ).isoformat()
+        assert history_source.metadata["history_source_published_at"] == "2026-09-01"
+        assert history_source.metadata["history_source_updated_at"] == "2026-09-28"
+        fallback_source = next(source for source in sources if str(source.url) == fallback_url)
+        assert fallback_source.candidate_origin == "perplexity"
+        assert not any(key.startswith("history_") for key in fallback_source.metadata)
+    finally:
+        await runner._graph_checkpointer.aclose()
 
 
 @pytest.mark.asyncio
