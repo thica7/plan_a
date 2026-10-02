@@ -119,6 +119,10 @@ async def run_research_pipeline(
     repair_candidate_count = 0
     repair_capture_count = 0
     initial_gap_count = len(gaps)
+    product_fact_branch = (
+        bool(brief.product_name or brief.product_category)
+        and "pricing" not in brief.dimension.casefold()
+    )
     for round_index in range(brief.max_repair_rounds):
         active_repairs = _same_branch_repairs(brief, planned_repairs)
         carry_candidates: list[SourceCandidate] = []
@@ -166,6 +170,8 @@ async def run_research_pipeline(
             capture_cache=cache,
             existing_candidate_ids=existing_candidate_ids,
             max_new_candidates=remaining_candidates,
+            prior_candidates=candidates if product_fact_branch else None,
+            prior_pages=captured_pages if product_fact_branch else None,
         )
         candidates = dedupe_by_id([*candidates, *repair_pass.candidates])
         captured_pages = dedupe_by_id([*captured_pages, *repair_pass.captured_pages])
@@ -257,6 +263,8 @@ async def _run_research_pass(
     capture_cache: CaptureCache,
     existing_candidate_ids: set[str] | None = None,
     max_new_candidates: int | None = None,
+    prior_candidates: list[SourceCandidate] | None = None,
+    prior_pages: list[CapturedPage] | None = None,
 ) -> ResearchPass:
     history_candidates = [
         candidate
@@ -338,6 +346,11 @@ async def _run_research_pass(
         ][:max_new_candidates]
         candidates = dedupe_by_id([*seed_candidates, *new_candidates])
     history_ids = {page.candidate_id for page in history_pages}
+    prior_pages = prior_pages or []
+    history_ids.update(page.candidate_id for page in prior_pages)
+    coverage_candidates = (
+        dedupe_by_id([*prior_candidates, *candidates]) if prior_candidates else candidates
+    )
     remaining_brief = (
         brief.model_copy(
             update={
@@ -349,6 +362,19 @@ async def _run_research_pass(
         if history_pages
         else brief
     )
+    if prior_pages:
+        _, _, _, _, prior_coverage = _evaluate_capture_set(
+            brief,
+            candidates=coverage_candidates,
+            pages=[*prior_pages, *history_pages],
+            capture_metrics=history_metrics,
+        )
+        remaining_brief = remaining_brief.model_copy(
+            update={
+                "target_source_count": max(1, prior_coverage.metadata["missing_source_count"]),
+                "max_fetches": 0 if prior_coverage.passed else remaining_brief.max_fetches,
+            }
+        )
     new_pages, capture_metrics, overflow_queue = await _capture_candidates(
         remaining_brief,
         [candidate for candidate in candidates if candidate.id not in history_ids],
@@ -359,8 +385,8 @@ async def _run_research_pass(
     capture_metrics = _merge_numeric_metrics(history_metrics, capture_metrics)
     extractions, evidence_items, gaps, ledger, coverage = _evaluate_capture_set(
         brief,
-        candidates=candidates,
-        pages=captured_pages,
+        candidates=coverage_candidates,
+        pages=[*prior_pages, *captured_pages],
         capture_metrics=capture_metrics,
     )
     while (
@@ -369,16 +395,17 @@ async def _run_research_pass(
         and capture_metrics["capture_fetch_count"] < brief.max_fetches
     ):
         candidate = overflow_queue.pop(0)
-        page = await _capture_one(candidate, fetch, capture_cache)
+        page, fetched = await _capture_one(candidate, fetch, capture_cache)
         captured_pages.append(page)
-        capture_metrics["capture_fetch_count"] += 1
+        capture_metrics["capture_fetch_count"] += int(fetched)
+        capture_metrics["capture_cache_hits"] += int(not fetched)
         capture_metrics["adaptive_backfill_fetch_count"] = (
-            capture_metrics.get("adaptive_backfill_fetch_count", 0) + 1
+            capture_metrics.get("adaptive_backfill_fetch_count", 0) + int(fetched)
         )
         extractions, evidence_items, gaps, ledger, coverage = _evaluate_capture_set(
             brief,
-            candidates=candidates,
-            pages=captured_pages,
+            candidates=coverage_candidates,
+            pages=[*prior_pages, *captured_pages],
             capture_metrics=capture_metrics,
         )
     return ResearchPass(
@@ -461,14 +488,14 @@ async def _capture_one(
     candidate: SourceCandidate,
     fetch: FetchCallable,
     capture_cache: CaptureCache | None,
-) -> CapturedPage:
+) -> tuple[CapturedPage, bool]:
     cache = capture_cache or CaptureCache()
     cached = cache.get(candidate)
     if cached is not None:
-        return cached
+        return cached, False
     page = await capture_candidate(candidate, fetch)
     cache.put(candidate, page)
-    return page
+    return page, True
 
 
 def _evaluate_capture_set(

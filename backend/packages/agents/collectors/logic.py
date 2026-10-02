@@ -30,6 +30,7 @@ from packages.memory.report_reuse import report_reuse_candidates
 from packages.refs import merge_ordered_refs
 from packages.research.budget import research_depth_budget
 from packages.research.discovery import (
+    build_search_queries,
     homepage_candidates,
     trusted_registry_candidates,
 )
@@ -465,8 +466,9 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         recent_pricing = product is not None and "pricing" in dimension.casefold()
         filters = SearchFilters(
             country=country,
+            search_language_filter=["en", "zh"],
             search_recency_filter="year" if recent_pricing else None,
-        ) if country or recent_pricing else None
+        ) if product is not None else None
         kwargs = {
             "agent": "collector", "subagent": context.subagent if context else dimension,
             "query": query, "max_results": max_results, "context": context,
@@ -948,6 +950,8 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         )
 
     def _web_search_query(self, detail: RunDetail, competitor: str, dimension: str) -> str:
+        if detail.plan.target_product is not None:
+            return build_search_queries(self._research_brief(detail, competitor, dimension))[0]
         skill = self._skill_registry.get(dimension)
         if skill and skill.query_templates:
             template = skill.query_templates[0]
@@ -978,7 +982,11 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         queries = build_community_queries(
             competitor=competitor,
             dimension=dimension,
-            topic=detail.topic,
+            topic="" if detail.plan.target_product is not None else detail.topic,
+            product_category=(
+                detail.plan.target_product.category.strip() or "product"
+                if detail.plan.target_product else ""
+            ),
             limit=max(0, int(self._settings.collector_community_queries_per_branch)),
         )
         candidates: list[SourceCandidate] = []

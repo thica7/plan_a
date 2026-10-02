@@ -284,6 +284,7 @@ class RunRecord:
     hitl_timeout_tasks: dict[str, asyncio.Task[None]] = field(default_factory=dict)
     active_graph_kind: Literal["real", "demo", "scoped_redo"] | None = None
     active_thread_id: str | None = None
+    graph_execution_depth: int = 0
     pending_graph_redo: PendingGraphRedo | None = None
     structured_report_snapshot: "StructuredReport | None" = None
     previous_structured_report_snapshot: "StructuredReport | None" = None
@@ -1663,30 +1664,36 @@ class RunService(
         thread_id: str,
         graph_input: Any,
     ) -> bool:
-        if kind == "real":
-            graph = await self._get_real_graph()
-        elif kind == "demo":
-            graph = await self._get_demo_graph()
-        else:
-            graph = await self._get_scoped_redo_graph()
-        record.active_graph_kind = kind
-        record.active_thread_id = thread_id
-        result = await graph.ainvoke(
-            graph_input,
-            config={
-                "configurable": {"thread_id": thread_id},
-                "max_concurrency": max(1, self._settings.graph_max_concurrency),
-            },
-        )
-        if isinstance(result, dict) and result.get("__interrupt__"):
-            return False
-        if record.detail.status in {"interrupted", "failed"}:
-            return False
-        record.active_graph_kind = None
-        record.active_thread_id = None
-        record.detail.interrupt_graph_kind = None
-        record.detail.interrupt_thread_id = None
-        return True
+        # Nodes retain detail references across awaits; polling must not replace
+        # this process's live state with a persisted snapshot while they execute.
+        record.graph_execution_depth += 1
+        try:
+            if kind == "real":
+                graph = await self._get_real_graph()
+            elif kind == "demo":
+                graph = await self._get_demo_graph()
+            else:
+                graph = await self._get_scoped_redo_graph()
+            record.active_graph_kind = kind
+            record.active_thread_id = thread_id
+            result = await graph.ainvoke(
+                graph_input,
+                config={
+                    "configurable": {"thread_id": thread_id},
+                    "max_concurrency": max(1, self._settings.graph_max_concurrency),
+                },
+            )
+            if isinstance(result, dict) and result.get("__interrupt__"):
+                return False
+            if record.detail.status in {"interrupted", "failed"}:
+                return False
+            record.active_graph_kind = None
+            record.active_thread_id = None
+            record.detail.interrupt_graph_kind = None
+            record.detail.interrupt_thread_id = None
+            return True
+        finally:
+            record.graph_execution_depth -= 1
 
     async def _finalize_real_pipeline(self, record: RunRecord) -> None:
         if record.detail.status == "failed":
@@ -3878,6 +3885,9 @@ class RunService(
             )
             self._runs[detail.id] = record
             self._hydrate_pending_interrupt_from_detail(record)
+            return record
+        if record.graph_execution_depth:
+            record.events = events
             return record
         record.detail = detail
         record.events = events

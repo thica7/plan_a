@@ -38,6 +38,27 @@ def select_capture_candidates(
         preferred.append(candidate)
 
     if "pricing" not in brief.dimension.casefold():
+        if brief.product_name or brief.product_category:
+            ordered = [*preferred, *[candidate for candidate, _ in fallback]]
+            initial_limit = min(brief.max_fetches, brief.target_source_count)
+            selected = ordered[:initial_limit]
+            # Cached candidates do not consume network fetches; the capture loop
+            # enforces the fetch budget while walking this bounded candidate list.
+            overflow = ordered[initial_limit:]
+            queued_ids = {candidate.id for candidate in [*selected, *overflow]}
+            skipped.update(
+                {
+                    candidate.id: reason
+                    for candidate, reason in fallback
+                    if candidate.id not in queued_ids
+                }
+            )
+            return CaptureCandidateSelection(
+                selected=selected,
+                overflow_queue=overflow,
+                skipped_reasons=skipped,
+                selected_intents=_selected_intents(brief, [*selected, *overflow]),
+            )
         if len(preferred) >= brief.target_source_count:
             selected = preferred[: brief.max_fetches]
             selected_ids = {candidate.id for candidate in selected}

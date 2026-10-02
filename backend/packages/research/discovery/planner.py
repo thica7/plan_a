@@ -67,17 +67,16 @@ def _dimension_queries(brief: ResearchBrief) -> list[str]:
 
 def _generic_dimension_queries(brief: ResearchBrief) -> list[str]:
     scope = " ".join([
-        brief.competitor, brief.product_category,
-        *brief.product_use_cases[:2], brief.product_market, brief.topic,
+        brief.competitor, brief.product_category, brief.product_market,
     ]).strip()
     key = brief.dimension.casefold()
     if "pricing" in key or "price" in key:
-        intents = ["官方价格 套餐 购买费用", "pricing purchase cost official"]
-    elif "persona" in key or "user" in key:
-        intents = ["目标用户 使用场景 评价", "customers use cases reviews"]
+        intents = ["official price pricing purchase cost", "官方价格 购买费用"]
+    elif any(token in key for token in ("persona", "user", "usecase", "use_case")):
+        intents = ["target users customers use cases", "目标用户 使用场景 用户评价"]
     else:
-        intents = ["产品功能 规格 官方说明", "features specifications use cases official"]
-    return [f"{scope} {intent}" for intent in intents]
+        intents = ["official specifications features", "产品功能 规格 官方说明"]
+    return [f"{brief.competitor} {intents[0]}", f"{scope} {intents[1]}"]
 
 
 def _same_branch(brief: ResearchBrief, task: RepairTask) -> bool:

@@ -273,6 +273,8 @@ class CollectorKBBridgeMixin:
             metadata["kb_collector_confidence"] = confidence
 
     def _kb_retrieval_query(self, detail: RunDetail, competitor: str, dimension: str) -> str:
+        if detail.plan.target_product is not None:
+            return self._web_search_query(detail, competitor, dimension)
         skill = self._skill_registry.get(dimension)
         parts = [
             self._web_search_query(detail, competitor, dimension),

@@ -1,5 +1,11 @@
 # RAG + Crawling + Knowledge Base Architecture
 
+> 2026-10-02 实现说明：本文包含目标架构描述。当前采集器使用关键词检索，
+> 写入资料时不建立向量索引。本地 embedding 和 reranker 实际为 hash provider；
+> BGE 接口已经存在，但尚未启用。企业证据检索另有一套流程。
+> 实测结果、已知问题和分阶段升级标准详见
+> [RAG 核查与证据复用设计](optimization/2026-10-02-rag-evidence-design.md)。
+
 ## Overview
 
 Competiscope v2 adds three new subsystems for retrieval-augmented analysis:

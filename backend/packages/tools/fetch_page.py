@@ -9,12 +9,19 @@ from io import BytesIO
 from urllib.parse import urljoin
 
 import httpx
+from lxml.etree import ParserError
+from lxml.html import HTMLParser, document_fromstring, tostring
 from pypdf import PdfReader
+from trafilatura import extract as trafilatura_extract
+from trafilatura.settings import use_config
 
 from packages.crawler.policy import SSRFError, SSRFGuard
 
 _MAX_REDIRECTS = 8
 _DEFAULT_MAX_BYTES = 2_000_000
+# Keep short specification tables out of trafilatura's unstructured baseline rescue.
+_HTML_TEXT_CONFIG = use_config()
+_HTML_TEXT_CONFIG.set("DEFAULT", "MIN_EXTRACTED_SIZE", "0")
 
 
 @dataclass(frozen=True)
@@ -110,7 +117,7 @@ async def fetch_page(
             error=f"Unsupported content type: {content_type}", content_type=content_type,
         )
     title = _extract_title(body)
-    text = _html_to_text(body)
+    text = await asyncio.to_thread(_html_to_text, body)
     return FetchPageResult(
         url=str(response.url),
         ok=bool(text),
@@ -140,6 +147,24 @@ def _extract_title(body: str) -> str:
 
 
 def _html_to_text(body: str) -> str:
+    try:
+        parser = HTMLParser(encoding="utf-8", huge_tree=True)
+        tree = document_fromstring(body.encode("utf-8"), parser=parser)
+    except (ParserError, ValueError):
+        tree = None
+    if tree is not None:
+        for node in tree.xpath("//nav | //footer"):
+            node.drop_tree()
+        body = tostring(tree, encoding="unicode")
+    text = trafilatura_extract(
+        tree if tree is not None else body,
+        include_comments=False,
+        include_tables=True,
+        favor_recall=True,
+        config=_HTML_TEXT_CONFIG,
+    )
+    if text and text.strip():
+        return text.strip()
     cleaned = re.sub(r"(?is)<(script|style|noscript|svg).*?</\1>", " ", body)
     cleaned = re.sub(r"(?is)<[^>]+>", " ", cleaned)
     cleaned = html.unescape(cleaned)

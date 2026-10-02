@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-02",
+  "scope": "14 fixed synthetic queries; not production semantic or isolation validation",
+  "provider": {
+    "requested_provider": "hash",
+    "effective_provider": "hash",
+    "model_version": "hash-embedding-v1",
+    "dimensions": 64,
+    "degraded": false,
+    "reason": null
+  },
+  "reranker": {
+    "requested_provider": "hash",
+    "effective_provider": "hash",
+    "model_version": "hash-reranker-v1",
+    "degraded": false,
+    "reason": null
+  },
+  "model_calls": 0,
+  "modes": {
+    "sparse": {
+      "top_k": 3,
+      "query_count": 14,
+      "recall_at_k": 0.8571428571428571,
+      "mrr": 0.7142857142857143,
+      "ndcg_at_k": 0.7516942153061308,
+      "citation_correctness": 1.0,
+      "stale_source_misuse": 0,
+      "scope_leaks": 0
+    },
+    "hybrid": {
+      "top_k": 3,
+      "query_count": 14,
+      "recall_at_k": 0.9285714285714286,
+      "mrr": 0.8928571428571429,
+      "ndcg_at_k": 0.902209268112247,
+      "citation_correctness": 1.0,
+      "stale_source_misuse": 0,
+      "scope_leaks": 0
+    },
+    "rerank": {
+      "top_k": 3,
+      "query_count": 14,
+      "recall_at_k": 0.9285714285714286,
+      "mrr": 0.8571428571428571,
+      "ndcg_at_k": 0.8758471076530654,
+      "citation_correctness": 1.0,
+      "stale_source_misuse": 0,
+      "scope_leaks": 0
+    }
+  }
+}

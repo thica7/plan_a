@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from packages.identity import normalize_url
 from packages.research.models import (
     CandidateIntent,
     CandidateLedgerEntry,
@@ -40,6 +41,8 @@ def evaluate_coverage_contract(
             metadata={"contract": "product_pricing_v1", "authority": "source_requires_review"},
         )
     if "pricing" not in brief.dimension.casefold():
+        if brief.product_name or brief.product_category:
+            return _product_fact_coverage(brief, pages, evidence_items)
         blocking_reasons = [
             gap
             for gap in _ledger_blocking_reasons(brief, ledger)
@@ -88,6 +91,71 @@ def evaluate_coverage_contract(
         metadata={
             "contract": "pricing_v1",
             "accepted_ledger_count": sum(1 for entry in ledger if entry.status == "accepted"),
+        },
+    )
+
+
+def _product_fact_coverage(
+    brief: ResearchBrief,
+    pages: list[CapturedPage],
+    evidence_items: list[EvidenceItem],
+) -> CoverageContractResult:
+    page_by_id = {page.id: page for page in pages}
+    accepted = [
+        item for item in evidence_items
+        if item.status == "accepted"
+        and item.competitor == brief.competitor
+        and item.dimension == brief.dimension
+    ]
+    source_groups: list[set[tuple[str, str]]] = []
+    for item in accepted:
+        page = page_by_id.get(item.captured_page_id)
+        if (
+            page is None or page.status != "ok"
+            or item.source_candidate_id != page.candidate_id
+        ):
+            continue
+        url = normalize_url(page.final_url)
+        content_hash = page.content_hash.strip()
+        identity = {("page", page.id)}
+        if url:
+            identity.add(("url", url))
+        if content_hash:
+            identity.add(("hash", content_hash))
+        independent_groups = []
+        for group in source_groups:
+            if group.isdisjoint(identity):
+                independent_groups.append(group)
+            else:
+                identity.update(group)
+        source_groups = [*independent_groups, identity]
+
+    usable_source_count = len(source_groups)
+    missing_source_count = max(0, brief.target_source_count - usable_source_count)
+    supported = missing_source_count == 0
+    return CoverageContractResult(
+        dimension=brief.dimension,
+        competitor=brief.competitor,
+        required_intents=["product_fact_support"],
+        satisfied_intents=["product_fact_support"] if supported else [],
+        missing_intents=[] if supported else ["product_fact_support"],
+        blocking_reasons=[] if supported else [
+            f"Product fact coverage for {brief.competitor} / {brief.dimension} has "
+            f"{usable_source_count} independent usable sources; "
+            f"{brief.target_source_count} required."
+        ],
+        repair_hints=[] if supported else [
+            f"Find {missing_source_count} additional independent {brief.dimension} sources "
+            f"with reviewable product facts for {brief.competitor} "
+            f"({brief.product_category or brief.product_name})."
+        ],
+        passed=supported,
+        metadata={
+            "contract": "product_facts_v1",
+            "required_source_count": brief.target_source_count,
+            "accepted_evidence_count": len(accepted),
+            "usable_source_count": usable_source_count,
+            "missing_source_count": missing_source_count,
         },
     )
 

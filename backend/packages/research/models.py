@@ -26,6 +26,7 @@ CandidateIntent = Literal[
     "official_pricing_page",
     "official_billing_or_usage_docs",
     "current_plan_price_support",
+    "product_fact_support",
     "community_or_conflict_signal",
     "official_docs",
     "product_page",

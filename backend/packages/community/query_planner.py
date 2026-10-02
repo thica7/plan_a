@@ -6,9 +6,49 @@ def build_community_queries(
     competitor: str,
     dimension: str,
     topic: str,
+    product_category: str = "",
     limit: int = 3,
 ) -> list[str]:
     normalized_dimension = dimension.casefold().replace("-", "_")
+    if product_category.strip():
+        if any(token in normalized_dimension for token in ("pricing", "price", "billing")):
+            intents = [
+                "price purchase cost reddit",
+                "purchase value for money forum",
+                "buying cost user complaints",
+                "purchase experience user reviews",
+            ]
+        elif "review" in normalized_dimension or "feedback" in normalized_dimension:
+            intents = [
+                "user reviews pros cons reddit",
+                "customer reviews forum",
+                "user experience complaints",
+                "customer feedback alternatives",
+            ]
+        elif any(
+            token in normalized_dimension
+            for token in (
+                "persona", "user", "customer", "buyer", "adoption", "switching",
+                "usecase", "use_case",
+            )
+        ):
+            intents = [
+                "target users use cases reddit",
+                "user experience everyday use forum",
+                "buyer needs switching reasons",
+                "use cases user complaints",
+            ]
+        else:
+            intents = [
+                "feature limitation user discussion",
+                "features real world use reddit",
+                "product problems limitations forum",
+                "product performance user complaints",
+            ]
+        return _dedupe(
+            f"{competitor} {intent} {product_category}".strip()
+            for intent in intents
+        )[: max(0, limit)]
     if "pricing" in normalized_dimension or "billing" in normalized_dimension:
         intents = [
             "pricing usage limit reddit",
