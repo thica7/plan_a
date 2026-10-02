@@ -15,6 +15,7 @@ COMPETISCOPE_LOAD_ENV_FILES=0 PYTHONPATH=backend ../plan_a/.venv/bin/python \
 ```
 
 `--feedback-db` 可省略。脚本通过 SQLite `mode=ro` 读取源库，不调用 store 初始化或迁移。
+输出路径不能覆盖任一源库的主文件、-wal/-shm/-journal，也不能通过 symlink/hardlink 别名覆盖它们。
 不存在的库、损坏 SQLite、缺少表/字段及非法 JSON 会以固定错误说明失败，不创建空库或回显原始异常。
 只纳入原始 JSON 明确 `execution_mode=real` 的 run，并校验 JSON 的 id/workspace/project 与数据库列一致；
 Demo、模拟和 fixture 标记会过滤，包括实际 survey producer 的 `source_type=survey_simulated`，
@@ -30,6 +31,8 @@ Demo、模拟和 fixture 标记会过滤，包括实际 survey producer 的 `sou
 则对应摘要置 `null`；summary_omitted_reason 明确标为 truncated_preview/unsafe_preview。
 可用摘要的 summary_source 标明 full_text/preview；没有文本时标 missing_text，不声称旧 preview 一定安全。
 所有其他外部字符串也先完整脱敏，再截断至 600 字；不输出整篇 report、user_id 或任意 metadata。
+脱敏覆盖中文直接相邻的已知密钥、邮箱和电话；明确 credential assignment 的完整值在 URL 解码前处理，
+并识别 quoted 值中的 escaped quote，避免编码分隔符或转义引号造成凭据后缀残留。
 每个 run 最多 100 个动作、50 条反馈；scope 每个列表最多 20 项，并给出相应省略计数。
 未知失败和取消动作不因缺少 usage 被过滤；超过动作上限的内容仍受同一省略规则约束。
 

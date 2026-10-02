@@ -24,6 +24,7 @@ MAX_TEXT = 600
 MAX_ACTIONS = 100
 MAX_FEEDBACK = 50
 MAX_SCOPE_ITEMS = 20
+SQLITE_SOURCE_SUFFIXES = ("", "-wal", "-shm", "-journal")
 USAGE_FIELDS = (
     "prompt_tokens",
     "completion_tokens",
@@ -40,15 +41,47 @@ SPLIT_POLICY = {
 # Compliance covers known key families. Also remove unrecognizable credentials
 # in errors/URLs (e.g. api_key=short), before any preview truncation.
 _SECRET_ASSIGNMENT = re.compile(
-    r"(?i)\b(?:[\w-]*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret"
+    r"(?i)(?<![A-Za-z0-9_-])(?:[A-Za-z0-9_-]*(?:api[_-]?key|access[_-]?token|"
+    r"refresh[_-]?token|password|secret"
     r"|authorization)|token|key)[\"']?\s*[:=]\s*(?:(?:bearer|basic)\s+)?"
-    r"(?:\"[^\"]*\"|'[^']*'|[^\s,;&]+)"
+    r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s,;&]+)"
 )
-_BEARER = re.compile(r"(?i)\bbearer\s+[^\s,;&]+")
+_BEARER = re.compile(r"(?i)(?<![A-Za-z0-9_])bearer\s+[^\s,;&]+")
 _URL_CREDENTIALS = re.compile(r"(?i)(https?://)[^/\s?#]+@")
 _CREDENTIAL_FRAGMENT = re.compile(
-    r"(?i)\b(?:sk-|pplx-|gsk_|xai-|AIza|AKIA|"
+    r"(?i)(?<![A-Za-z0-9_])(?:sk-|pplx-|gsk_|xai-|AIza|AKIA|"
     r"(?:ak|rk|pk|xoxb|ghp|github_pat|hf|glpat)_)[A-Za-z0-9_-]+"
+)
+# The shared compliance patterns use Unicode word boundaries. Export also needs
+# ASCII boundaries so Chinese prose directly adjacent to these known values is safe.
+_ASCII_PII_PATTERNS = (
+    (
+        "api_key",
+        re.compile(
+            r"(?i)(?<![A-Za-z0-9_])(?:"
+            r"sk-or-v1-[A-Za-z0-9_-]{16,}|sk-proj-[A-Za-z0-9_-]{16,}|"
+            r"sk-ant-api03-[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9_-]{16,}|"
+            r"pplx-[A-Za-z0-9_-]{16,}|gsk_[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|"
+            r"AIza[0-9A-Za-z_-]{20,}|AKIA[0-9A-Z]{16}|"
+            r"(?:ak|rk|pk|xoxb|ghp|github_pat|hf|glpat)_[A-Za-z0-9_-]{16,}"
+            r")(?![A-Za-z0-9_-])",
+        ),
+    ),
+    (
+        "email",
+        re.compile(
+            r"(?i)(?<![A-Za-z0-9._%+-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}"
+            r"(?![A-Za-z0-9.-])",
+        ),
+    ),
+    (
+        "phone",
+        re.compile(
+            r"(?<![A-Za-z0-9_])(?:\+?86[-.\s]?)?1[3-9]\d{9}(?![A-Za-z0-9_])|"
+            r"(?<![A-Za-z0-9_])(?:\+?1[-.\s]?)?(?:\([2-9]\d{2}\)|[2-9]\d{2})"
+            r"[-.\s]?[2-9]\d{2}[-.\s]?\d{4}(?![A-Za-z0-9_])",
+        ),
+    ),
 )
 
 
@@ -57,14 +90,21 @@ class ExportError(ValueError):
 
 
 def _redact(value: str) -> str:
-    # Decode escaped URL credentials before applying the same redaction rules.
+    # Remove complete credential values before decoding: an encoded '&' is part
+    # of a password, not a query boundary. Escaped quoted values stay together.
     text = value
-    while (decoded := unquote(text)) != text:
+    while True:
+        text = _URL_CREDENTIALS.sub(r"\1[redacted:credentials]@", text)
+        text = _SECRET_ASSIGNMENT.sub("[redacted:secret]", text)
+        text = _BEARER.sub("[redacted:bearer_token]", text)
+        decoded = unquote(text)
+        if decoded == text:
+            break
         text = decoded
-    text = _URL_CREDENTIALS.sub(r"\1[redacted:credentials]@", text)
-    text = _SECRET_ASSIGNMENT.sub("[redacted:secret]", text)
-    text = _BEARER.sub("[redacted:bearer_token]", text)
-    return redact_text(text).text
+    text = redact_text(text).text
+    for label, pattern in _ASCII_PII_PATTERNS:
+        text = pattern.sub(f"[redacted:{label}]", text)
+    return text
 
 
 def _text(value: Any) -> str | None:
@@ -368,11 +408,17 @@ def main() -> int:
     args = parser.parse_args()
     try:
         for source in (args.journal, args.feedback_db):
-            if source is not None and (
-                args.output.resolve() == source.resolve()
-                or (args.output.exists() and source.exists() and args.output.samefile(source))
-            ):
-                raise ExportError("Output must not overwrite a source database.")
+            if source is None:
+                continue
+            for base in {source, source.resolve()}:
+                for suffix in SQLITE_SOURCE_SUFFIXES:
+                    protected = Path(str(base) + suffix)
+                    if args.output.resolve() == protected.resolve() or (
+                        args.output.exists()
+                        and protected.exists()
+                        and args.output.samefile(protected)
+                    ):
+                        raise ExportError("Output must not overwrite a source database or sidecar.")
         result = export_agent_eval(args.journal, args.workspace, feedback_db=args.feedback_db)
         args.output.write_text(
             json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + "\n"

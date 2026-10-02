@@ -7,6 +7,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -127,6 +128,42 @@ def _cli(*args):
         text=True,
         check=False,
     )
+
+
+@contextmanager
+def _live_wal_writer(source):
+    # Isolate the open SQLite mmap: a deliberately overwritten SHM file must not
+    # send SIGBUS to the pytest process during the red phase.
+    code = (
+        "import sqlite3, sys\n"
+        "conn = sqlite3.connect(sys.argv[1])\n"
+        "conn.execute('PRAGMA journal_mode=WAL')\n"
+        "conn.execute('PRAGMA wal_autocheckpoint=0')\n"
+        "conn.execute('CREATE TABLE live_wal_probe (value INTEGER)')\n"
+        "conn.execute('INSERT INTO live_wal_probe VALUES (1)')\n"
+        "conn.commit()\n"
+        "print('ready', flush=True)\n"
+        "sys.stdin.readline()\n"
+        "conn.close()\n"
+    )
+    writer = subprocess.Popen(
+        [sys.executable, "-c", code, str(source)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert writer.stdout.readline().strip() == "ready"
+        yield
+    finally:
+        try:
+            writer.communicate("close\n", timeout=5)
+        except subprocess.TimeoutExpired:
+            writer.kill()
+            writer.communicate()
+            raise
+        assert writer.returncode == 0, "Temporary SQLite writer did not exit cleanly"
 
 
 def test_only_explicit_raw_real_and_workspace_consistent_runs_are_exported(tmp_path):
@@ -314,6 +351,105 @@ def test_every_external_string_is_redacted_before_bounding_and_metadata_is_allow
     assert "[redacted:" in serialized
 
 
+def test_chinese_adjacent_sensitive_values_are_redacted_in_all_text_fields_and_full_summaries(
+    tmp_path,
+):
+    sensitive = f"联系ops@example.com获得支持；密钥{FAKE_KEY}用于测试；联系电话13800138000获得帮助"
+    plan = {
+        "topic": sensitive,
+        "target_product": dict.fromkeys(
+            ("name", "official_url", "category", "audience", "market"), sensitive
+        ),
+        "research_depth": sensitive,
+        "competitors": [sensitive],
+        "dimensions": [sensitive],
+        "decision_brief": dict.fromkeys(
+            ("decision_question", "primary_job", "success_metric"), sensitive
+        ),
+    }
+    record = _run(
+        sensitive,
+        workspace_id=sensitive,
+        project_id=sensitive,
+        topic=sensitive,
+        plan=plan,
+        status=sensitive,
+        trace_spans=[
+            _span(
+                id=sensitive,
+                kind=sensitive,
+                agent=sensitive,
+                name=sensitive,
+                status=sensitive,
+                provider=sensitive,
+                model=sensitive,
+                full_input=sensitive,
+                full_output=sensitive,
+                metadata={"price_basis": sensitive},
+            )
+        ],
+    )
+    journal = _journal(tmp_path / "runs.db", [record])
+    feedback = _feedback(
+        tmp_path / "feedback.db",
+        [
+            _feedback_record(
+                sensitive,
+                workspace_id=sensitive,
+                project_id=sensitive,
+                run_id=sensitive,
+                feedback_type=sensitive,
+                target_type=sensitive,
+                report_version_id=sensitive,
+                message=sensitive,
+                metadata={"source": sensitive},
+            )
+        ],
+    )
+
+    result = export_agent_eval(journal, sensitive, feedback_db=feedback)
+    serialized = json.dumps(result, ensure_ascii=False)
+
+    assert len(result["tasks"]) == 1 and len(result["tasks"][0]["feedback"]) == 1
+    for private in ("ops@example.com", FAKE_KEY, "13800138000"):
+        assert private not in serialized
+    assert "[redacted:email]" in serialized
+    assert "[redacted:api_key]" in serialized
+    assert "[redacted:phone]" in serialized
+
+
+@pytest.mark.parametrize("direction", ["input", "output"])
+@pytest.mark.parametrize(
+    "structured",
+    [
+        "password=abc%26verysecret",
+        "https://example.com?password=abc%26verysecret&public=ok",
+        json.dumps({"password": 'abc\\"verysecret'}),
+    ],
+)
+def test_encoded_or_escaped_password_suffix_is_fully_redacted(tmp_path, direction, structured):
+    journal = _journal(
+        tmp_path / "runs.db",
+        [
+            _run(
+                trace_spans=[
+                    _span(
+                        **{
+                            f"full_{direction}": structured,
+                            f"{direction}_preview": structured,
+                        }
+                    )
+                ]
+            )
+        ],
+    )
+
+    action = export_agent_eval(journal, "ws-a")["tasks"][0]["actions"][0]
+
+    assert "verysecret" not in json.dumps(action)
+    assert "[redacted:secret]" in action[f"{direction}_summary"]
+
+
 @pytest.mark.parametrize("direction", ["input", "output"])
 def test_complete_text_is_redacted_before_replacing_an_unsafe_legacy_preview(tmp_path, direction):
     complete = "context " * 50 + " " + FAKE_KEY + " end" + " safe context" * 100
@@ -333,7 +469,10 @@ def test_complete_text_is_redacted_before_replacing_an_unsafe_legacy_preview(tmp
 
 
 @pytest.mark.parametrize("direction", ["input", "output"])
-@pytest.mark.parametrize("omission", ["ellipsis", "character_count", "unsafe_fragment"])
+@pytest.mark.parametrize(
+    "omission",
+    ["ellipsis", "character_count", "unsafe_fragment", "unsafe_chinese_fragment"],
+)
 def test_preview_without_complete_text_is_omitted_when_truncated_or_unsafe(
     tmp_path,
     direction,
@@ -345,6 +484,8 @@ def test_preview_without_complete_text_is_omitted_when_truncated_or_unsafe(
         preview += "..."
     elif omission == "unsafe_fragment":
         preview = "possibly sk-syntheticsecr"
+    elif omission == "unsafe_chinese_fragment":
+        preview = "密钥sk-syntheticsecr"
     span = _span(**{f"full_{direction}": "", f"{direction}_preview": preview})
     if omission == "character_count":
         span[f"{direction}_chars"] = len(complete)
@@ -354,7 +495,7 @@ def test_preview_without_complete_text_is_omitted_when_truncated_or_unsafe(
 
     assert action[f"{direction}_summary"] is None
     assert action[f"{direction}_summary_source"] is None
-    reason = "unsafe_preview" if omission == "unsafe_fragment" else "truncated_preview"
+    reason = "unsafe_preview" if omission.startswith("unsafe_") else "truncated_preview"
     assert action[f"{direction}_summary_omitted_reason"] == reason
     assert "sk-synthe" not in json.dumps(action)
 
@@ -665,3 +806,65 @@ def test_cli_refuses_to_overwrite_source_database(tmp_path):
 
     assert completed.returncode != 0
     assert journal.read_bytes() == original
+
+
+@pytest.mark.parametrize("source_kind", ["journal", "feedback"])
+@pytest.mark.parametrize("suffix", ["", "-wal", "-shm", "-journal"])
+@pytest.mark.parametrize("alias", ["direct", "symlink", "hardlink"])
+def test_cli_protects_live_wal_sources_sidecars_and_output_aliases(
+    tmp_path,
+    source_kind,
+    suffix,
+    alias,
+):
+    journal = _journal(tmp_path / "runs.db", [_run()])
+    feedback = _feedback(tmp_path / "feedback.db", [_feedback_record("linked")])
+    source = journal if source_kind == "journal" else feedback
+    with _live_wal_writer(source):
+        protected = [Path(str(source) + item) for item in ("", "-wal", "-shm", "-journal")]
+        assert protected[1].is_file() and protected[2].is_file()
+        # An empty rollback sidecar is not hot; it also must never become an export.
+        protected[3].touch()
+        target = Path(str(source) + suffix)
+        output = target
+        if alias != "direct":
+            output = tmp_path / "output-alias.json"
+            if alias == "symlink":
+                output.symlink_to(target)
+            else:
+                os.link(target, output)
+        original = {path: hashlib.sha256(path.read_bytes()).digest() for path in protected}
+
+        completed = _cli(
+            "--journal",
+            journal,
+            "--workspace",
+            "ws-a",
+            "--feedback-db",
+            feedback,
+            "--output",
+            output,
+        )
+
+        assert all(
+            hashlib.sha256(path.read_bytes()).digest() == digest
+            for path, digest in original.items()
+        ), "Source SQLite files were overwritten"
+        assert completed.returncode != 0
+        assert "must not overwrite" in completed.stderr
+        with sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True) as reader:
+            assert reader.execute("SELECT value FROM live_wal_probe").fetchone() == (1,)
+
+
+def test_cli_protects_canonical_sidecar_when_journal_path_is_a_symlink(tmp_path):
+    journal = _journal(tmp_path / "runs.db", [_run()])
+    alias = tmp_path / "journal-alias.db"
+    alias.symlink_to(journal)
+    with _live_wal_writer(journal):
+        wal = Path(str(journal) + "-wal")
+        original = wal.read_bytes()
+
+        completed = _cli("--journal", alias, "--workspace", "ws-a", "--output", wal)
+
+        assert completed.returncode != 0
+        assert wal.read_bytes() == original
