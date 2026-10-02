@@ -5059,7 +5059,10 @@ class WriterAgentMixin:
 
     def _harden_report_markdown(self, detail: RunDetail, markdown: str) -> str:
         if detail.plan.research_depth == "quick":
-            return self._harden_schema_contract_report_markdown(detail, markdown)
+            # The quick writer emits free-form Markdown. Preserve its grounded
+            # findings and replace only malformed opportunities with a hypothesis.
+            repaired = self._replace_invalid_product_opportunities_section(detail, markdown)
+            return self._harden_schema_contract_report_markdown(detail, repaired)
         repaired = repair_mojibake_text(markdown)
         return self._ensure_report_claim_citations(
             detail,

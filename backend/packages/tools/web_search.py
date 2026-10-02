@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from packages.search import PerplexitySearchClient, SearchFilters, SearchResult
+from packages.search import SearchClient, SearchFilters, SearchResult
 
 
 @dataclass(frozen=True)
@@ -13,7 +13,7 @@ class WebSearchRequest:
 
 
 async def web_search(
-    client: PerplexitySearchClient,
+    client: SearchClient,
     request: WebSearchRequest,
 ) -> list[SearchResult]:
     kwargs = {"max_results": max(1, min(request.max_results, 20))}

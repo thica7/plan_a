@@ -85,6 +85,7 @@ from packages.orchestrator.graph import (
     build_scoped_redo_graph,
 )
 from packages.orchestrator.llm_execution import LLMExecutionMixin
+from packages.orchestrator.search_execution import SearchExecutionMixin
 from packages.quality import FinalQualityResult, build_final_quality_result
 from packages.refs import merge_ordered_refs, normalize_dimension_refs
 from packages.research.budget import (
@@ -136,14 +137,12 @@ from packages.schema.models import (
     TraceSpan,
 )
 from packages.schema.survey import UserResearchImportRequest, UserResearchImportResult
-from packages.search import PerplexitySearchClient, SearchFilters, SearchResult
+from packages.search import SearchFilters, SearchResult, create_search_client
 from packages.skills.registry import SkillRegistry
 from packages.tools import (
     EvidenceFetchResult,
-    WebSearchRequest,
     fetch_evidence_page,
     robots_check,
-    web_search,
 )
 
 if TYPE_CHECKING:
@@ -289,11 +288,14 @@ class RunRecord:
     structured_report_snapshot: "StructuredReport | None" = None
     previous_structured_report_snapshot: "StructuredReport | None" = None
     llm_budget: RunLLMBudget | None = None
+    search_cache: dict[str, tuple[float, list[SearchResult]]] = field(default_factory=dict)
+    search_locks: dict[str, asyncio.Lock] = field(default_factory=dict)
     resume_task: asyncio.Task[None] | None = None
 
 
 class RunService(
     LLMExecutionMixin,
+    SearchExecutionMixin,
     PlannerAgentMixin,
     CollectorAgentMixin,
     SurveyInterviewAgentMixin,
@@ -318,7 +320,7 @@ class RunService(
         self._settings = settings
         self._llm = DoubaoClient(settings)
         self._llm_semaphore = asyncio.Semaphore(max(1, settings.llm_max_concurrency))
-        self._search = PerplexitySearchClient(settings)
+        self._search = create_search_client(settings)
         self._journal = journal
         self._kb_cache = kb_cache
         self._preference_memory = preference_memory
@@ -4307,122 +4309,6 @@ class RunService(
         )
         return usage, budget
 
-    async def _trace_search(
-        self,
-        record: RunRecord,
-        *,
-        agent: str,
-        subagent: str | None,
-        query: str,
-        max_results: int,
-        context: SubagentContext | None = None,
-        filters: SearchFilters | None = None,
-    ) -> list[SearchResult]:
-        started = time.perf_counter()
-        collector_budget = self._collector_research_budget_usage(
-            record, agent, subagent, context
-        )
-        if collector_budget is not None:
-            usage, budget = collector_budget
-            if usage.search_calls >= budget.max_search_queries:
-                self._append_trace_span(
-                    record,
-                    kind="search",
-                    agent=agent,
-                    subagent=subagent,
-                    name="web_search",
-                    status="error",
-                    started=started,
-                    input_text=query,
-                    output_text="collector_search_budget_exhausted",
-                    metadata={"budget_exhausted": True},
-                )
-                return []
-            usage.search_calls += 1
-        if context is not None:
-            context.add_tool_call("web_search", query)
-        try:
-            results = await web_search(
-                self._search,
-                WebSearchRequest(query=query, max_results=max_results, filters=filters),
-            )
-        except Exception as exc:
-            self._append_trace_span(
-                record,
-                kind="search",
-                agent=agent,
-                subagent=subagent,
-                name="web_search",
-                status="error",
-                started=started,
-                input_text=query,
-                output_text=str(exc),
-                metadata=self._trace_metadata(
-                    context,
-                    {
-                        "provider": self._settings.web_search_provider,
-                        "error": str(exc),
-                        "filters": (
-                            json.dumps(filters.payload(), ensure_ascii=False)
-                            if filters else ""
-                        ),
-                    },
-                ),
-            )
-            raise
-        output_text = json.dumps([result.__dict__ for result in results], ensure_ascii=False)
-        span_id = self._append_trace_span(
-            record,
-            kind="search",
-            agent=agent,
-            subagent=subagent,
-            name="web_search",
-            status="ok",
-            started=started,
-            input_text=query,
-            output_text=output_text,
-            metadata=self._trace_metadata(
-                context,
-                {
-                    "provider": self._settings.web_search_provider,
-                    "result_count": len(results),
-                    "max_results": max_results,
-                    "filters": json.dumps(filters.payload(), ensure_ascii=False) if filters else "",
-                },
-            ),
-        )
-        await self.emit(
-            record.detail.id,
-            "tool.called",
-            agent,
-            subagent,
-            f"web_search returned {len(results)} result(s).",
-            {
-                "tool": "web_search",
-                "query": query,
-                "result_count": len(results),
-                "filters": filters.payload() if filters else {},
-                "related_span_ids": [span_id],
-                "input": query,
-                "output": f"{len(results)} result(s)",
-            },
-        )
-        await self.emit(
-            record.detail.id,
-            "rag.retrieved",
-            agent,
-            subagent,
-            f"Retrieved {len(results)} search candidate(s) for RAG grounding.",
-            {
-                "query": query,
-                "result_count": len(results),
-                "candidate_urls": [result.url for result in results[:5]],
-                "related_span_ids": [span_id],
-                "reason": "Search candidates provide online evidence candidates for collectors.",
-            },
-        )
-        return results
-
     async def _trace_fetch(
         self,
         record: RunRecord,
@@ -4731,7 +4617,7 @@ class RunService(
             input_tokens = self._estimate_tokens(input_text)
         if output_tokens is None:
             output_tokens = self._estimate_tokens(output_text)
-        if kind == "llm" and (metadata or {}).get("llm_request_attempts") == 0:
+        if (metadata or {}).get("llm_request_attempts") == 0:
             input_tokens = output_tokens = 0
         redacted_input_text, redacted_output_text, redaction_metadata = self._redact_trace_texts(
             input_text,
@@ -4774,7 +4660,7 @@ class RunService(
             input_tokens_estimate=input_tokens,
             output_tokens_estimate=output_tokens,
             cost_estimate_usd=round(float(span_metadata["llm_cost_charged_usd"]), 8)
-            if kind == "llm" and "llm_cost_charged_usd" in span_metadata
+            if "llm_cost_charged_usd" in span_metadata
             else self._estimate_span_cost_usd(kind, input_tokens, output_tokens),
             input_preview=self._preview(redacted_input_text),
             output_preview=self._preview(redacted_output_text),
@@ -4846,7 +4732,9 @@ class RunService(
         return RunMetrics(
             total_spans=len(spans),
             total_duration_ms=sum(span.duration_ms for span in spans),
-            llm_calls=sum(1 for span in spans if span.kind == "llm"),
+            llm_calls=sum(1 for span in spans if span.kind == "llm" or (
+                span.kind == "search" and span.metadata.get("native_search")
+                and span.metadata.get("llm_request_attempts", 0) > 0)),
             search_calls=sum(1 for span in spans if span.kind == "search"),
             fetch_calls=sum(1 for span in spans if span.kind == "fetch"),
             input_tokens_estimate=sum(span.input_tokens_estimate for span in spans),

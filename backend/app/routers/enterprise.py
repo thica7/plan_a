@@ -184,7 +184,7 @@ from packages.schema.enterprise import (
     WorkspaceUsageSummary,
 )
 from packages.schema.quality import QualityFinding
-from packages.search import PerplexitySearchClient
+from packages.search import create_search_client
 from packages.tools import (
     FetchPageResult,
     WebSearchRequest,
@@ -947,7 +947,7 @@ async def fill_project_evidence_gaps(
     versions = store.list_report_versions(project_id=project_id)
     source_version = versions[0] if versions else None
     if settings.has_web_search_credentials:
-        search_client = PerplexitySearchClient(settings)
+        search_client = create_search_client(settings)
 
         async def search_online(query: str, max_results: int):
             return await web_search(

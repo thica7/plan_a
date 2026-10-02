@@ -19,6 +19,7 @@ class SearchResult:
     snippet: str
     date: str | None = None
     last_updated: str | None = None
+    provider: str = ""
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,7 @@ class PerplexitySearchClient:
                     snippet=str(item.get("snippet") or ""),
                     date=str(item["date"]) if item.get("date") else None,
                     last_updated=str(item["last_updated"]) if item.get("last_updated") else None,
+                    provider="perplexity",
                 )
             )
         return results

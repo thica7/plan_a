@@ -462,7 +462,7 @@ async def test_collector_search_budget_counts_filtered_fallback_and_community(
     async def fake_web_search(provider: object, request: object) -> list[object]:
         calls.append(request.query)
         return []
-    monkeypatch.setattr("packages.orchestrator.service.web_search", fake_web_search)
+    monkeypatch.setattr("packages.orchestrator.search_execution.web_search", fake_web_search)
     service._search = SimpleNamespace(is_enabled=True)
     await service._search_research_candidates(
         record, detail, "pricing", context, "Cursor pricing", 5

@@ -15,7 +15,8 @@ class LLMExecutionMixin:
 
     def _run_llm_budget(self, record) -> RunLLMBudget:
         if record.llm_budget is None:
-            spans = [span for span in record.detail.trace_spans if span.kind == "llm"]
+            spans = [span for span in record.detail.trace_spans if span.kind == "llm"
+                     or (span.kind == "search" and span.metadata.get("native_search"))]
             depth_budget = research_depth_budget(record.detail.plan.research_depth)
             max_calls = max(1, self._settings.run_llm_max_calls)
             checkpoint = record.detail.llm_budget_checkpoint

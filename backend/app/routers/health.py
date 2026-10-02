@@ -10,6 +10,7 @@ from app.deps import get_app_settings, get_run_journal, get_skill_registry
 from packages.config import Settings
 from packages.enterprise import EnterprisePostgresStore
 from packages.llm import DoubaoClient, LLMError
+from packages.llm.errors import LLMExecutionLimitError
 from packages.memory import RunJournal
 from packages.schema.api_dto import (
     FetchSmokeRequest,
@@ -19,7 +20,7 @@ from packages.schema.api_dto import (
     SearchSmokeRequest,
     SmokeResult,
 )
-from packages.search import PerplexitySearchClient, WebSearchError
+from packages.search import WebSearchError, create_search_client
 from packages.skills.registry import SkillRegistry
 from packages.tools import fetch_page
 from packages.workflows.service import temporal_cutover_status
@@ -132,15 +133,19 @@ async def smoke_search(
     if not settings.has_web_search_credentials:
         raise HTTPException(
             status_code=400,
-            detail="PPLX_API_KEY is required for Perplexity search.",
+            detail="DeepSeek 搜索需要有效的 DeepSeek API Key。"
+            if settings.web_search_provider == "deepseek"
+            else "PPLX_API_KEY is required for Perplexity search.",
         )
 
     start = perf_counter()
     try:
-        results = await PerplexitySearchClient(settings).search(
+        results = await create_search_client(settings).search(
             request.query,
             max_results=request.max_results,
         )
+    except LLMExecutionLimitError as exc:
+        raise HTTPException(status_code=400, detail=f"搜索预算不足：{exc}") from exc
     except WebSearchError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

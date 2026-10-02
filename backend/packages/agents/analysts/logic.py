@@ -12,6 +12,7 @@ from packages.agents.analysts.citation_tools import inspect_sources, validate_so
 from packages.memory import KBCacheEntry
 from packages.refs import merge_ordered_refs
 from packages.research.budget import research_depth_budget
+from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import (
     deterministic_claim_text_from_source,
     source_business_snippet,
@@ -810,6 +811,11 @@ class AnalystAgentMixin:
                     for node in self._feature_nodes_from_text(
                         " ".join(claim.claim for claim in claim_models),
                         claim_models,
+                        use_coding_taxonomy=not any(
+                            str(field.get("slot", "")).startswith("capability_")
+                            for source in dimension_sources
+                            for field in normalized_fields_from_source(source)
+                        ),
                     )
                 ]
                 if claim_models
@@ -1259,7 +1265,8 @@ class AnalystAgentMixin:
         else:
             knowledge.feature_tree.summary_claims = claims
             knowledge.feature_tree.nodes = self._feature_nodes_from_text(
-                " ".join(claim.claim for claim in claims), claims
+                " ".join(claim.claim for claim in claims), claims,
+                use_coding_taxonomy=detail.plan.target_product is None,
             )
         if self._dimension_uses_review_summary(dimension):
             review_sources = [
@@ -2350,10 +2357,10 @@ class AnalystAgentMixin:
         ]
 
     def _feature_nodes_from_text(
-        self, text: str, claims: list[KnowledgeClaim]
+        self, text: str, claims: list[KnowledgeClaim], *, use_coding_taxonomy: bool = True,
     ) -> list[FeatureNode]:
         nodes: list[FeatureNode] = []
-        for name, description, patterns in self._feature_taxonomy():
+        for name, description, patterns in self._feature_taxonomy() if use_coding_taxonomy else []:
             if not self._any_pattern_matches(text, patterns):
                 continue
             related_claims = [
@@ -2375,7 +2382,7 @@ class AnalystAgentMixin:
             return nodes
         return [
             FeatureNode(
-                name="Feature evidence",
+                name="Feature evidence" if use_coding_taxonomy else claim.claim[:60],
                 description=claim.claim,
                 claims=[claim],
                 children=[],
@@ -2390,6 +2397,8 @@ class AnalystAgentMixin:
         dimension: str,
         feature_tree: FeatureTree,
     ) -> None:
+        if detail.plan.target_product is not None:
+            return
         evidence_text = " ".join(
             " ".join((source.title, source.snippet))
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)

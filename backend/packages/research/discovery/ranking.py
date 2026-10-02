@@ -57,6 +57,13 @@ def _score(
     host = _host(candidate.url)
     homepage_host = _host(homepage_hint or "")
     origin_score = SOURCE_ORIGIN_PRIORITY.get(candidate.origin, 0)
+    # A verified user URL precedes search candidates while trusted registry
+    # sources keep their priority. This does not change evidence authority.
+    if (
+        candidate.metadata.get("user_supplied_url") is True
+        and candidate.metadata.get("identity_status") == "verified"
+    ):
+        origin_score = max(origin_score, SOURCE_ORIGIN_PRIORITY["deepseek"] + 1)
     trust_score = 1 if is_trusted_url_for_competitor(competitor, candidate.url) else 0
     homepage_score = 1 if homepage_host and host.endswith(homepage_host) else 0
     dimension_score = 1 if _dimension_hint_present(dimension, url, candidate.snippet) else 0

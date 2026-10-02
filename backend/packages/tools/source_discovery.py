@@ -19,7 +19,7 @@ def source_candidate_from_search_result(
         title=result.title,
         url=result.url,
         snippet=result.snippet,
-        origin=origin,
+        origin=result.provider or origin,
         rank=rank,
         confidence=confidence,
         competitor=competitor,
@@ -27,6 +27,7 @@ def source_candidate_from_search_result(
         query=query,
         date=result.date,
         last_updated=result.last_updated,
+        metadata={"search_provider": result.provider} if result.provider else {},
     )
 
 

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, cast
+from urllib.parse import urlsplit
 
 DEFAULT_ENTERPRISE_DATABASE_URL = (
     "postgresql://competiscope:competiscope@127.0.0.1:55432/competiscope?connect_timeout=5"
@@ -109,6 +110,10 @@ class Settings:
     pplx_api_key: str | None = None
     pplx_base_url: str = "https://api.perplexity.ai"
     web_search_provider: str = "perplexity"
+    deepseek_api_key: str | None = None
+    deepseek_search_model: str = "deepseek-flash"
+    deepseek_search_max_tokens: int = 1024
+    deepseek_search_max_uses: int = 1
     max_iterations: int = 2
     auto_redo_enabled: bool = True
     auto_redo_warn_enabled: bool = True
@@ -188,7 +193,20 @@ class Settings:
 
     @property
     def has_web_search_credentials(self) -> bool:
+        if self.web_search_provider == "deepseek":
+            return bool(self.resolved_deepseek_api_key and self.deepseek_search_model)
         return self.web_search_provider == "perplexity" and bool(self.pplx_api_key)
+
+    @property
+    def resolved_deepseek_api_key(self) -> str | None:
+        if self.deepseek_api_key:
+            return self.deepseek_api_key
+        # Only reuse a credential already configured for the official provider.
+        endpoint = urlsplit(self.ark_base_url)
+        if (self.llm_provider_name == "deepseek" and endpoint.scheme == "https"
+                and endpoint.hostname == "api.deepseek.com"):
+            return self.ark_api_key
+        return None
 
     @property
     def default_execution_mode(self) -> str:
@@ -240,6 +258,12 @@ def get_settings() -> Settings:
         pplx_api_key=os.getenv("PPLX_API_KEY") or os.getenv("PERPLEXITY_API_KEY") or None,
         pplx_base_url=os.getenv("PPLX_BASE_URL", "https://api.perplexity.ai").rstrip("/"),
         web_search_provider=os.getenv("WEB_SEARCH_PROVIDER", "perplexity").strip().lower(),
+        deepseek_api_key=os.getenv("DEEPSEEK_API_KEY") or None,
+        deepseek_search_model=os.getenv("DEEPSEEK_SEARCH_MODEL", "deepseek-flash").strip(),
+        deepseek_search_max_tokens=_env_int(
+            "DEEPSEEK_SEARCH_MAX_TOKENS", 1024, minimum=256, maximum=4096),
+        deepseek_search_max_uses=_env_int(
+            "DEEPSEEK_SEARCH_MAX_USES", 1, minimum=1, maximum=3),
         max_iterations=max(1, int(os.getenv("MAX_ITERATIONS", "2"))),
         auto_redo_enabled=_env_bool("AUTO_REDO_ENABLED", True),
         auto_redo_warn_enabled=_env_bool("AUTO_REDO_WARN_ENABLED", True),
@@ -443,11 +467,12 @@ def validate_env_vars() -> None:
     logger = logging.getLogger(__name__)
 
     warnings = []
-    if not os.getenv("PPLX_API_KEY"):
-        warnings.append("PPLX_API_KEY not set - online search will be disabled")
-    if not os.getenv("ARK_API_KEY"):
+    settings = get_settings()
+    if not settings.has_web_search_credentials:
+        warnings.append(f"{settings.web_search_provider} credentials missing - online search will be disabled")
+    if not settings.has_primary_llm_credentials:
         warnings.append("ARK_API_KEY not set - primary LLM unavailable")
-    if not os.getenv("BACKUP_LLM_API_KEY"):
+    if not settings.has_backup_llm_credentials:
         warnings.append("BACKUP_LLM_API_KEY not set - no LLM fallback")
 
     for msg in warnings:

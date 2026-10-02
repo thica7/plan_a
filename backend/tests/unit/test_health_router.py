@@ -41,6 +41,42 @@ class _FakeSocket:
         return None
 
 
+def test_deepseek_search_ready_without_perplexity_key(monkeypatch) -> None:
+    from test_deepseek_search import install_response, native_response
+    requests = install_response(monkeypatch, native_response())
+    client = _client(_settings(
+        web_search_provider="deepseek", deepseek_api_key="test-deepseek-key",
+    ))
+    runtime = client.get("/api/runtime").json()
+    assert runtime["has_web_search_key"] is True
+    response = client.post("/api/smoke/search", json={"query": "Nintendo Switch 2", "max_results": 3})
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert response.json()["details"]["provider"] == "deepseek"
+    assert len(requests) == 1
+
+
+def test_missing_deepseek_smoke_credentials_message_names_selected_provider() -> None:
+    client = _client(_settings(web_search_provider="deepseek"))
+    response = client.post("/api/smoke/search", json={"query": "Nintendo Switch 2"})
+    assert response.status_code == 400
+    assert "DeepSeek" in response.json()["detail"]
+    assert "PPLX" not in response.json()["detail"]
+
+
+def test_deepseek_smoke_budget_limit_returns_actionable_client_error(monkeypatch) -> None:
+    from test_deepseek_search import install_response, native_response
+    requests = install_response(monkeypatch, native_response())
+    client = _client(_settings(
+        web_search_provider="deepseek", deepseek_api_key="test-deepseek-key",
+        run_llm_max_tokens=100,
+    ))
+    response = client.post("/api/smoke/search", json={"query": "Nintendo Switch 2"})
+    assert response.status_code == 400
+    assert "预算" in response.json()["detail"]
+    assert requests == []
+
+
 def test_health_reports_foundation_checks(monkeypatch) -> None:
     monkeypatch.setattr(
         "app.routers.health.socket.create_connection",
@@ -231,7 +267,7 @@ def test_search_smoke_returns_perplexity_results(monkeypatch) -> None:
     async def fake_search(self, query: str, max_results: int):  # noqa: ANN001, ANN202
         return [SearchResult(title="A result", url="https://example.com/a", snippet="snippet")]
 
-    monkeypatch.setattr("app.routers.health.PerplexitySearchClient.search", fake_search)
+    monkeypatch.setattr("packages.search.perplexity_client.PerplexitySearchClient.search", fake_search)
     client = _client(_settings(pplx_api_key="pplx-secret"))
 
     response = client.post("/api/smoke/search", json={"query": "test", "max_results": 1})

@@ -15,20 +15,20 @@ def search_result_candidates(
     origin: str,
     query: str | None = None,
 ) -> list[SourceCandidate]:
-    candidate_origin = _candidate_origin(origin)
     candidates = [
         SourceCandidate(
             title=result.title,
             url=result.url,
             snippet=result.snippet,
-            origin=candidate_origin,
+            origin=_candidate_origin(result.provider or origin),
             competitor=brief.competitor,
             dimension=brief.dimension,
             rank=index,
-            confidence=_search_confidence(candidate_origin, result, competitor=brief.competitor),
+            confidence=_search_confidence(_candidate_origin(result.provider or origin), result, competitor=brief.competitor),
             query=query,
             date=result.date,
             last_updated=result.last_updated,
+            metadata={"search_provider": result.provider} if result.provider else {},
         )
         for index, result in enumerate(results)
     ]
@@ -44,6 +44,7 @@ def _candidate_origin(origin: str) -> CandidateOrigin:
     if normalized in {
         "trusted_registry",
         "perplexity",
+        "deepseek",
         "web_search",
         "community_search",
         "homepage_derived",
@@ -71,7 +72,7 @@ def _search_confidence(
         if not _mentions_competitor(result, competitor):
             return max(0.35, base - 0.24)
         return base
-    if origin == "perplexity":
+    if origin in {"perplexity", "deepseek"}:
         base = 0.72
     elif origin == "web_search":
         base = 0.66

@@ -11,6 +11,7 @@ from packages.research.budget import ResearchDepth
 CandidateOrigin = Literal[
     "trusted_registry",
     "perplexity",
+    "deepseek",
     "web_search",
     "community_search",
     "homepage_derived",

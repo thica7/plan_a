@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from packages.config import get_settings
-from packages.search import PerplexitySearchClient
+from packages.search import create_search_client
 
 
 async def main() -> None:
@@ -20,9 +20,9 @@ async def main() -> None:
 
     settings = get_settings()
     if not settings.has_web_search_credentials:
-        raise SystemExit("PPLX_API_KEY is required for the Perplexity search smoke test.")
+        raise SystemExit(f"{settings.web_search_provider} 搜索缺少有效凭据。")
 
-    results = await PerplexitySearchClient(settings).search(
+    results = await create_search_client(settings).search(
         args.query, max_results=args.max_results
     )
     print(

@@ -553,6 +553,23 @@ def test_fallback_full_hardening_does_not_cite_user_context_or_hypothesis() -> N
     assert "user-provided" in section.casefold()
 
 
+def test_quick_report_replaces_malformed_opportunity_with_explicit_hypothesis() -> None:
+    detail = _detail(DecisionBrief(primary_job="便携玩游戏"), language="zh-CN")
+    detail.plan.research_depth = "quick"
+    draft = (
+        "# 极简调研\n\n## 执行摘要\n保留已采集事实。 [source:source-pricing]\n\n"
+        "## 竞争发现\n保留功能比较。 [source:source-pricing]\n\n"
+        "## 产品机会与验证\n**机会**：无来源的产品优越性。\n\n"
+        "**验证动作**：用户试用。\n\n## 证据附录\n"
+        "[source:source-pricing] 产品资料\n"
+    )
+    report = _service()._harden_report_markdown(detail, draft)
+    assert "无来源的产品优越性" not in report
+    assert "待验证机会假设" in report
+    assert "保留功能比较。 [source:source-pricing]" in report
+    assert run_writer_quality_preflight(detail, report).passed
+
+
 def test_fallback_without_brief_keeps_legacy_sections() -> None:
     detail = _detail()
 
