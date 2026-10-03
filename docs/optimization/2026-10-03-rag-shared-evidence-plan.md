@@ -8,13 +8,14 @@
 
 **Tech Stack:** Python、Pydantic、SQLite RunJournal、LangGraph、现有知识仓库和 pytest；仅更新生成的前端 API 类型，不新增页面。
 
-设计依据：[共享证据设计](2026-10-03-rag-shared-evidence-design.md)。状态：待用户确认实施计划，尚未修改业务代码。本阶段不调用付费模型 / 搜索，不部署 HTTP Qdrant，不自动迁移旧资料归属。
+设计依据：[共享证据设计](2026-10-03-rag-shared-evidence-design.md)。状态：用户已于 2026-10-03 确认，开始按任务实施；基线 `6b42b30`，沿用已有隔离工作区。本阶段不调用付费模型 / 搜索，不部署 HTTP Qdrant，不自动迁移旧资料归属。
 
 ## 文件与接口边界
 
 | 文件 | 职责 |
 | --- | --- |
 | 新建 `backend/packages/research/evidence/snapshot_models.py` | RunEvidenceSnapshot、EvidenceSource、EvidenceFact、EvidenceConsumption、StageEvidenceView；不依赖 RunDetail，避免循环导入 |
+| 必要修改 `backend/packages/research/evidence/__init__.py` | 原公开接口保持兼容，延迟加载业务依赖，避免 typed DTO 导入模型时触发循环 |
 | 新建 `backend/packages/research/evidence/snapshot.py` | 规范化与构建快照、内容摘要、版本比对、按 ID 回读 |
 | 新建 `backend/packages/research/evidence/views.py` | 按身份 / 职责筛选、原文与事实成对组装、上下文预算 |
 | 新建 `backend/packages/orchestrator/evidence_context.py` | canonical 文档引用解析、冻结、消费记录、旧结果提交检查 |
@@ -59,11 +60,12 @@ def _validate_evidence_use(self, record, use):
 
 **Files:** 新建 snapshot_models.py、snapshot.py；修改 api_dto.py；新建 `backend/tests/unit/test_run_evidence_snapshot.py`。
 
-- [ ] 写失败用例：相同输入不同到达顺序不变版本；事实值改变而正文 hash 不变产生新版本；嵌套对象不能改写历史；同 hash 不同工作区不能复用。
-- [ ] 运行新测试并保留失败依据。
-- [ ] 定义来源 / 事实 / 冲突 / 缺口及消费模型，模型 `extra="forbid"`；快照记录冻结，结构化值以 canonical JSON 保存，视图解码为新对象。身份、原日期、引用和事实值都参与内容摘要；创建时间与检索排名不参与。
-- [ ] 快照来源采用明确的字段白名单；网页任意 metadata、full_text、HTML、凭据和工作流指令不进入阶段提示。引用身份由 canonical 资料或已准入的本次来源确定，不能由模型生成。
-- [ ] 追加 RunDetail 字段，原 JSON 缺字段时正常读取：
+- [x] 写失败用例：相同输入不同到达顺序不变版本；事实值改变而正文 hash 不变产生新版本；嵌套对象不能改写历史；同 hash 不同工作区不能复用。
+- [x] 运行新测试并保留失败依据。
+- [x] 定义来源 / 事实 / 冲突 / 缺口及消费模型，模型 `extra="forbid"`；快照记录冻结，结构化值以 canonical JSON 保存，视图解码为新对象。身份、原日期、引用和事实值都参与内容摘要；创建时间与检索排名不参与。
+- [x] 快照来源采用明确的字段白名单；网页任意 metadata、full_text、HTML、凭据和工作流指令不进入阶段提示。引用身份由 canonical 资料或已准入的本次来源确定，不能由模型生成。
+- [x] 接线时已复现包初始化循环；为 evidence 包保留全部原 exports 的延迟加载，先补独立进程导入顺序 RED / GREEN 回归。不重构其他包。
+- [x] 追加 RunDetail 字段，原 JSON 缺字段时正常读取：
 
 ```python
 evidence_snapshots: list[RunEvidenceSnapshot] = Field(default_factory=list)
@@ -71,8 +73,8 @@ evidence_snapshot_id: str | None = None
 evidence_consumptions: list[EvidenceConsumption] = Field(default_factory=list)
 ```
 
-- [ ] 实现 seal_snapshot / current_snapshot / changed_evidence；当前指针与历史列表一起交给现有 RunJournal.save_run。相同契约且同 phase 复用，否则单调升版；来源冲突不覆盖旧值。
-- [ ] 新测试转绿，再跑 run_journal / active_run_journal 回归；保存任务提交并审查。
+- [x] 实现 seal_snapshot / current_snapshot / changed_evidence；当前指针与历史列表一起交给现有 RunJournal.save_run。相同契约且同 phase 复用，否则单调升版；来源冲突不覆盖旧值。
+- [x] 新测试转绿，再跑 run_journal / active_run_journal 回归；独立规格与质量复审通过，按任务保存提交。
 
 代表性失败测试使用本文件末尾的 make_detail：
 
