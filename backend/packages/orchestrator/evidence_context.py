@@ -168,6 +168,11 @@ class EvidenceContextMixin:
             if stored.status == "rejected":
                 raise EvidenceUseRejectedError("evidence credential was already rejected")
             snapshot = self._current_evidence_snapshot(record)
+            if (
+                use.agent in {"analyst", "comparator", "reflector", "writer"}
+                and snapshot.phase != "analysis"
+            ):
+                raise EvidenceUseRejectedError("analysis evidence is not currently accepted")
             current = select_evidence_view(
                 snapshot,
                 agent=use.agent,

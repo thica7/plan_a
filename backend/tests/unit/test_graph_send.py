@@ -5,6 +5,15 @@ import pytest
 from packages.orchestrator.graph import build_real_analysis_graph
 
 
+class FrozenGraphContract:
+    async def _prepare_evidence_snapshot(self, record, *, phase):
+        self.snapshot = SimpleNamespace(id=f"snapshot-{phase}", phase=phase)
+        return self.snapshot
+
+    def _current_evidence_snapshot(self, record):
+        return self.snapshot
+
+
 @pytest.mark.asyncio
 async def test_real_graph_uses_send_fanout_for_collector_and_analyst() -> None:
     calls: list[tuple[str, str | None, str | None]] = []
@@ -18,7 +27,7 @@ async def test_real_graph_uses_send_fanout_for_collector_and_analyst() -> None:
     )
     record = SimpleNamespace(detail=detail)
 
-    class Service:
+    class Service(FrozenGraphContract):
         _runs = {"run-1": record}
 
         def _analyst_branch_id(self, dimension: str, competitor: str) -> str:
@@ -64,7 +73,10 @@ async def test_real_graph_uses_send_fanout_for_collector_and_analyst() -> None:
         async def _real_analyst_dispatch_step(self, _record, dimensions, competitors) -> None:
             calls.append(("analyst_dispatch", ",".join(dimensions), ",".join(competitors)))
 
-        async def _real_analyst_branch_step(self, _record, dimension: str, competitor: str) -> None:
+        async def _real_analyst_branch_step(
+            self, _record, dimension: str, competitor: str, *, expected_snapshot_id=None
+        ) -> None:
+            assert expected_snapshot_id == self.snapshot.id
             calls.append(("analyst", dimension, competitor))
 
         async def _real_analyst_join_step(self, _record, dimensions, competitors) -> None:
@@ -129,7 +141,7 @@ async def test_real_graph_stops_after_writer_marks_run_failed() -> None:
     )
     record = SimpleNamespace(detail=detail)
 
-    class Service:
+    class Service(FrozenGraphContract):
         _runs = {"run-writer-failed": record}
 
         def _analyst_branch_id(self, dimension: str, competitor: str) -> str:
@@ -176,7 +188,10 @@ async def test_real_graph_stops_after_writer_marks_run_failed() -> None:
         async def _real_analyst_dispatch_step(self, _record, _dimensions, _competitors) -> None:
             calls.append("analyst_dispatch")
 
-        async def _real_analyst_branch_step(self, _record, _dimension, _competitor) -> None:
+        async def _real_analyst_branch_step(
+            self, _record, _dimension, _competitor, *, expected_snapshot_id=None
+        ) -> None:
+            assert expected_snapshot_id == self.snapshot.id
             calls.append("analyst")
 
         async def _real_analyst_join_step(self, _record, _dimensions, _competitors) -> None:
@@ -229,7 +244,7 @@ async def test_final_qa_redo_limit_ends_graph_after_allowed_retry() -> None:
     )
     record = SimpleNamespace(detail=detail)
 
-    class Service:
+    class Service(FrozenGraphContract):
         _runs = {"run-final-qa-limit": record}
 
         def _analyst_branch_id(self, dimension: str, competitor: str) -> str:
@@ -273,7 +288,10 @@ async def test_final_qa_redo_limit_ends_graph_after_allowed_retry() -> None:
         async def _real_analyst_dispatch_step(self, _record, _dimensions, _competitors) -> None:
             calls.append("analyst_dispatch")
 
-        async def _real_analyst_branch_step(self, _record, _dimension, _competitor) -> None:
+        async def _real_analyst_branch_step(
+            self, _record, _dimension, _competitor, *, expected_snapshot_id=None
+        ) -> None:
+            assert expected_snapshot_id == self.snapshot.id
             calls.append("analyst")
 
         async def _real_analyst_join_step(self, _record, _dimensions, _competitors) -> None:

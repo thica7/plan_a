@@ -121,12 +121,13 @@ def test_view_is_scoped_and_does_not_mutate_snapshot():
 
 **Files:** 修改 graph.py、state.py、service.py；新建 `backend/tests/unit/test_evidence_snapshot_graph.py`；扩展 test_run_journal.py。
 
-- [ ] 写失败回放：survey 补充进入 collect 快照；HITL 补采接受后所有 Analyst 取得同一 analysis 版本；重复 QA / 恢复不升版；并行旧分支不能提交到新版本。
-- [ ] 在真实与 scoped redo 图的 collect_qa 调用前准备 collect 快照；analyst_dispatch 前准备 analysis 快照。demo 图走相同冻结契约，模型和搜索保持合成回放。
-- [ ] GraphState 只携带快照 ID，完整清单存 RunDetail；并行分支取得固定凭据，不在共享 detail 上替换输入或全文。
-- [ ] snapshot.current 的查验、消费记录与恢复沿用 RunJournal；当前指针失配 / hash 失配必须明确失败或回到安全重建入口，不能悄悄重建旧 ID。
-- [ ] 旧已完成报告只读；无快照的旧未完成运行在安全入口新建首份快照。运行 test_graph_send.py 和 journal / HITL 相关回归。
-- [ ] 保存任务提交并完成两级审查。
+- [x] 写失败回放：survey 补充进入 collect 快照；HITL 补采接受后所有 Analyst 取得同一 analysis 版本；重复 QA / 恢复不升版；并行旧分支不能提交到新版本。
+- [x] 在真实与 scoped redo 图的 collect_qa 调用前准备 collect 快照；analyst_dispatch 前准备 analysis 快照。demo 图走相同冻结契约，模型和搜索保持合成回放。
+- [x] GraphState 只携带快照 ID，完整清单存 RunDetail；并行分支取得固定凭据，不在共享 detail 上替换输入或全文。
+- [x] 必要提交边界接线：Graph 经既有 Analyst runner 显式传固定 ID，真实 / demo 分支本地持有消费凭据，在缓存应用、ReAct 与 one-shot 合并前检查；证据拒绝异常不能被 ReAct fallback 吞掉。保留旧 direct-call 可选参数兼容，实际提示输入投影仍由任务 4 完成；不以 Graph 返回后的检查代替合并前保护。
+- [x] snapshot.current 的查验、消费记录与恢复沿用 RunJournal；当前指针失配 / hash 失配必须明确失败或回到安全重建入口，不能悄悄重建旧 ID。
+- [x] 旧已完成报告只读；无快照的旧未完成运行在安全入口新建首份快照。运行 test_graph_send.py 和 journal / HITL 相关回归。
+- [x] 保存任务提交并完成两级审查。
 
 恢复测试的核心断言：
 

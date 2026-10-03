@@ -15421,7 +15421,10 @@ async def test_real_pipeline_runs_through_langgraph() -> None:
     async def fake_collector(record, dimension, competitor):  # noqa: ANN001, ANN202
         order.append(f"collector:{competitor}:{dimension}")
 
-    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+    async def fake_analyst(
+        record, dimension, competitor, *, expected_snapshot_id=None
+    ):  # noqa: ANN001, ANN202
+        assert expected_snapshot_id == record.detail.evidence_snapshot_id
         order.append(f"analyst:{competitor}:{dimension}")
 
     async def fake_comparator(record):  # noqa: ANN001, ANN202
@@ -15576,7 +15579,10 @@ async def test_collector_and_analyst_dimensions_run_concurrently() -> None:
             (f"collector:{competitor}:{dimension}", "end", asyncio.get_running_loop().time())
         )
 
-    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+    async def fake_analyst(
+        record, dimension, competitor, *, expected_snapshot_id=None
+    ):  # noqa: ANN001, ANN202
+        assert expected_snapshot_id == record.detail.evidence_snapshot_id
         timeline.append(
             (f"analyst:{competitor}:{dimension}", "start", asyncio.get_running_loop().time())
         )
@@ -15668,7 +15674,10 @@ async def test_collect_qa_blocks_and_retries_collector_before_analyst() -> None:
             )
         )
 
-    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+    async def fake_analyst(
+        record, dimension, competitor, *, expected_snapshot_id=None
+    ):  # noqa: ANN001, ANN202
+        assert expected_snapshot_id == record.detail.evidence_snapshot_id
         order.append("analyst")
         service._merge_competitor_kb_slice(
             record.detail, competitor, dimension, ["A costs $10. [source:pricing-1]"]
@@ -15786,7 +15795,10 @@ async def test_weak_persona_collect_qa_retries_collector_before_analyst() -> Non
             )
         )
 
-    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+    async def fake_analyst(
+        record, dimension, competitor, *, expected_snapshot_id=None
+    ):  # noqa: ANN001, ANN202
+        assert expected_snapshot_id == record.detail.evidence_snapshot_id
         order.append("analyst")
         service._merge_competitor_kb_slice(
             record.detail,
@@ -15893,7 +15905,10 @@ async def test_real_pipeline_auto_runs_scoped_redo_for_qa_findings() -> None:
             )
         )
 
-    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+    async def fake_analyst(
+        record, dimension, competitor, *, expected_snapshot_id=None
+    ):  # noqa: ANN001, ANN202
+        assert expected_snapshot_id == record.detail.evidence_snapshot_id
         service._merge_competitor_kb_slice(
             record.detail, competitor, dimension, [f"A {dimension} finding."]
         )
@@ -16631,7 +16646,10 @@ async def test_real_pipeline_does_not_auto_redo_warn_only_findings() -> None:
             )
         )
 
-    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+    async def fake_analyst(
+        record, dimension, competitor, *, expected_snapshot_id=None
+    ):  # noqa: ANN001, ANN202
+        assert expected_snapshot_id == record.detail.evidence_snapshot_id
         service._merge_competitor_kb_slice(
             record.detail, competitor, dimension, ["A pricing finding. [source:pricing-1]"]
         )
@@ -16738,7 +16756,10 @@ async def test_real_pipeline_auto_redoes_warn_when_run_option_enabled() -> None:
             )
         )
 
-    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+    async def fake_analyst(
+        record, dimension, competitor, *, expected_snapshot_id=None
+    ):  # noqa: ANN001, ANN202
+        assert expected_snapshot_id == record.detail.evidence_snapshot_id
         service._merge_competitor_kb_slice(
             record.detail, competitor, dimension, ["A pricing finding."]
         )
@@ -19290,7 +19311,10 @@ async def test_real_scoped_redo_runs_through_langgraph() -> None:
     async def fake_collector(record, dimension, competitor):  # noqa: ANN001, ANN202
         order.append(f"collector:{competitor}:{dimension}")
 
-    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+    async def fake_analyst(
+        record, dimension, competitor, *, expected_snapshot_id=None
+    ):  # noqa: ANN001, ANN202
+        assert expected_snapshot_id == record.detail.evidence_snapshot_id
         order.append(f"analyst:{competitor}:{dimension}")
 
     async def fake_comparator(record):  # noqa: ANN001, ANN202
@@ -19491,7 +19515,10 @@ async def test_hitl_uses_langgraph_command_resume_and_updates_plan() -> None:
     async def fake_collector(record, dimension, competitor):  # noqa: ANN001, ANN202
         return None
 
-    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+    async def fake_analyst(
+        record, dimension, competitor, *, expected_snapshot_id=None
+    ):  # noqa: ANN001, ANN202
+        assert expected_snapshot_id == record.detail.evidence_snapshot_id
         return None
 
     async def fake_phase_qa(record, phase):  # noqa: ANN001, ANN202
@@ -20217,7 +20244,10 @@ async def test_hitl_timeout_auto_accepts_interrupt() -> None:
     async def fake_collector(record, dimension, competitor):  # noqa: ANN001, ANN202
         return None
 
-    async def fake_analyst(record, dimension, competitor):  # noqa: ANN001, ANN202
+    async def fake_analyst(
+        record, dimension, competitor, *, expected_snapshot_id=None
+    ):  # noqa: ANN001, ANN202
+        assert expected_snapshot_id == record.detail.evidence_snapshot_id
         return None
 
     async def fake_phase_qa(record, phase):  # noqa: ANN001, ANN202

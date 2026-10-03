@@ -29,7 +29,9 @@ from packages.agents import (
 from packages.agents import (
     writer as writer_agent,
 )
+from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.orchestrator.state import GraphState
+from packages.research.evidence.snapshot import current_snapshot
 
 _FINAL_QA_REDO_ROUTES = {"writer_only", "comparator", "analyst", "collector", "full"}
 
@@ -100,7 +102,18 @@ def build_scoped_redo_graph(service: Any, checkpointer: Any | None = None):
                 consumer_agent="redo_router",
                 message_types={"redo_request"},
             )
-        return {"current_node": "redo_router", "redo_kind": state.get("redo_kind") or "full"}
+        kind = state.get("redo_kind") or "full"
+        result = {"current_node": "redo_router", "redo_kind": kind}
+        if kind in {"writer_only", "comparator"}:
+            snapshot = current_snapshot(record.detail)
+            if snapshot is None:
+                snapshot = await service._prepare_evidence_snapshot(record, phase="analysis")
+            else:
+                snapshot = service._current_evidence_snapshot(record)
+            if snapshot.phase != "analysis":
+                raise EvidenceUseRejectedError("scoped redo requires an accepted analysis snapshot")
+            result["evidence_snapshot_id"] = snapshot.id
+        return result
 
     def route_redo(state: GraphState) -> str:
         kind = state.get("redo_kind")
@@ -291,9 +304,11 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
         record = service._runs[state["run_id"]]
         dimensions = state.get("dimensions") or record.detail.plan.dimensions
         competitors = state.get("target_competitors") or record.detail.plan.competitors
+        snapshot = await service._prepare_evidence_snapshot(record, phase="analysis")
         await analyst_agent.dispatch(service, record, list(dimensions), list(competitors))
         return {
             "current_node": "analyst_dispatch",
+            "evidence_snapshot_id": snapshot.id,
             "dimensions": list(dimensions),
             "target_competitors": list(competitors),
         }
@@ -306,7 +321,10 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
             raise RuntimeError("analyst node must be entered through Send(competitor x slice).")
         dimension = branch_dimensions[-1]
         competitor = branch_competitors[-1]
-        await analyst_agent.run_branch(service, record, dimension, competitor)
+        snapshot_id = _require_analysis_snapshot(service, record, state)
+        await analyst_agent.run_branch(
+            service, record, dimension, competitor, expected_snapshot_id=snapshot_id
+        )
         return {"completed_analyst_branches": [service._analyst_branch_id(dimension, competitor)]}
 
     async def analyst_join(state: GraphState) -> GraphState:
@@ -330,6 +348,7 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
 
     async def collect_qa(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
+        snapshot = await service._prepare_evidence_snapshot(record, phase="collect")
         await qa_agent.run_phase(service, record, "collect")
         attempts = state.get("collect_qa_attempts", 0)
         blockers = service._blocking_phase_issues(record.detail, "collect")
@@ -347,6 +366,7 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
         )
         return {
             "current_node": "collect_qa",
+            "evidence_snapshot_id": snapshot.id,
             "collect_qa_attempts": attempts,
             "dimensions": next_dimensions,
             "target_competitors": next_competitors,
@@ -492,9 +512,11 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
 
     async def collect_qa(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
+        snapshot = await service._prepare_evidence_snapshot(record, phase="collect")
         await service._demo_phase_qa_step(record, "collect")
         return {
             "current_node": "collect_qa",
+            "evidence_snapshot_id": snapshot.id,
             "collect_qa_attempts": state.get("collect_qa_attempts", 0),
             "dimensions": list(state.get("dimensions") or record.detail.plan.dimensions),
             "target_competitors": list(
@@ -517,9 +539,11 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
         record = service._runs[state["run_id"]]
         dimensions = state.get("dimensions") or record.detail.plan.dimensions
         competitors = state.get("target_competitors") or record.detail.plan.competitors
+        snapshot = await service._prepare_evidence_snapshot(record, phase="analysis")
         await analyst_agent.dispatch(service, record, list(dimensions), list(competitors))
         return {
             "current_node": "analyst_dispatch",
+            "evidence_snapshot_id": snapshot.id,
             "dimensions": list(dimensions),
             "target_competitors": list(competitors),
         }
@@ -532,7 +556,10 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
             raise RuntimeError("analyst node must be entered through Send(competitor x slice).")
         dimension = branch_dimensions[-1]
         competitor = branch_competitors[-1]
-        await service._demo_analyst_branch_step(record, dimension, competitor)
+        snapshot_id = _require_analysis_snapshot(service, record, state)
+        await service._demo_analyst_branch_step(
+            record, dimension, competitor, expected_snapshot_id=snapshot_id
+        )
         return {"completed_analyst_branches": [service._analyst_branch_id(dimension, competitor)]}
 
     async def analyst_join(state: GraphState) -> GraphState:
@@ -635,6 +662,7 @@ def _send_analysts(state: GraphState) -> list[Send]:
             "analyst",
             {
                 "run_id": state["run_id"],
+                "evidence_snapshot_id": state["evidence_snapshot_id"],
                 "branch_dimensions": [dimension],
                 "branch_competitors": [competitor],
             },
@@ -642,6 +670,16 @@ def _send_analysts(state: GraphState) -> list[Send]:
         for dimension in dimensions
         for competitor in competitors
     ]
+
+
+def _require_analysis_snapshot(service: Any, record: Any, state: GraphState) -> str:
+    snapshot_id = state.get("evidence_snapshot_id")
+    if not snapshot_id:
+        raise EvidenceUseRejectedError("analyst Send requires a fixed evidence snapshot ID")
+    snapshot = service._current_evidence_snapshot(record)
+    if snapshot.id != snapshot_id or snapshot.phase != "analysis":
+        raise EvidenceUseRejectedError("analyst Send evidence snapshot is no longer current")
+    return snapshot_id
 
 
 def _route_final_qa(state: GraphState) -> str:

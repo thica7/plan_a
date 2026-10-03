@@ -1054,7 +1054,10 @@ async def test_scoped_redo_evidence_interrupt_restores_its_graph_thread_from_jou
         journal=journal, real=True, checkpointer=GraphCheckpointer(checkpoint_path)
     )
 
-    async def no_analyst(_record, _dimension, _competitor):  # noqa: ANN001, ANN202
+    async def no_analyst(
+        _record, _dimension, _competitor, *, expected_snapshot_id=None
+    ):  # noqa: ANN001, ANN202
+        assert expected_snapshot_id == _record.detail.evidence_snapshot_id
         return None
 
     async def no_node(_record):  # noqa: ANN001, ANN202

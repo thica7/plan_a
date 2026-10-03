@@ -10,6 +10,7 @@ from packages.agents import SubagentContext
 from packages.agents.analysts.cards import build_claim_card_bundle
 from packages.agents.analysts.citation_tools import inspect_sources, validate_source_ids
 from packages.memory import KBCacheEntry
+from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.refs import merge_ordered_refs
 from packages.research.budget import research_depth_budget
 from packages.research.evidence.normalization import normalized_fields_from_source
@@ -383,9 +384,21 @@ class AnalystAgentMixin:
         return None
 
     async def _real_analyst_branch_step(
-        self, record: RunRecord, dimension: str, competitor: str
+        self,
+        record: RunRecord,
+        dimension: str,
+        competitor: str,
+        *,
+        expected_snapshot_id: str | None = None,
     ) -> None:
         detail = record.detail
+        use = None
+        if expected_snapshot_id is not None:
+            view, use = self._begin_evidence_use(
+                record, agent="analyst", competitor=competitor, dimension=dimension
+            )
+            if view.snapshot_id != expected_snapshot_id:
+                raise EvidenceUseRejectedError("analyst dispatch evidence snapshot changed")
         branch_id = self._analyst_branch_id(dimension, competitor)
         context = SubagentContext(run_id=detail.id, agent="analyst", subagent=branch_id)
         detail.current_node = "analyst"
@@ -434,6 +447,8 @@ class AnalystAgentMixin:
         if self._kb_cache is not None and cache_content_hash and not qa_feedback:
             cache_entry = self._kb_cache.get(competitor, dimension, cache_content_hash)
             if cache_entry is not None:
+                if use is not None:
+                    self._validate_evidence_use(record, use)
                 self._apply_kb_cache_entry(detail, cache_entry)
                 self._emit_claim_card_bundle(
                     record,
@@ -496,6 +511,8 @@ class AnalystAgentMixin:
                         dimension_sources=dimension_sources,
                         payload=payload,
                     )
+                    if use is not None:
+                        self._validate_evidence_use(record, use)
                     self._merge_structured_knowledge_payload(detail, competitor, dimension, payload)
                     self._store_kb_cache_entry(detail, competitor, dimension, cache_content_hash)
                     knowledge = detail.competitor_knowledge.get(competitor)
@@ -535,6 +552,8 @@ class AnalystAgentMixin:
                         },
                     )
                     return
+            except EvidenceUseRejectedError:
+                raise
             except Exception as exc:  # noqa: BLE001 - bounded ReAct falls back to one-shot analysis.
                 react_payload["react_error"] = str(exc)
         elif self._settings.analyst_react_enabled:
@@ -590,6 +609,8 @@ class AnalystAgentMixin:
         if fallback_reason:
             react_payload["fallback_reason"] = fallback_reason
             react_payload["deterministic_fallback"] = True
+        if use is not None:
+            self._validate_evidence_use(record, use)
         self._merge_structured_knowledge_payload(detail, competitor, dimension, payload)
         self._store_kb_cache_entry(detail, competitor, dimension, cache_content_hash)
         knowledge = detail.competitor_knowledge.get(competitor)

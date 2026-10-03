@@ -2,7 +2,7 @@ import asyncio
 import json
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -79,7 +79,7 @@ from packages.observability import (
 from packages.orchestrator.audit import build_revision_record, convergence_ratio
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.demo_report import build_demo_report
-from packages.orchestrator.evidence_context import EvidenceContextMixin
+from packages.orchestrator.evidence_context import EvidenceContextMixin, EvidenceUseRejectedError
 from packages.orchestrator.graph import (
     build_demo_analysis_graph,
     build_real_analysis_graph,
@@ -94,6 +94,7 @@ from packages.research.budget import (
     research_depth_budget,
 )
 from packages.research.evaluation import quality_gaps_from_release_gate
+from packages.research.evidence.snapshot import current_snapshot
 from packages.research.repair import (
     repair_task_to_redo_scope,
     repair_tasks_from_gaps,
@@ -1552,6 +1553,8 @@ class RunService(
         record = self._runs.get(run_id)
         if record is None:
             return None
+        if record.detail.status in {"completed", "completed_with_blockers"}:
+            return record.detail
         try:
             if record.detail.execution_mode == "real":
                 await self._run_real_pipeline(run_id)
@@ -1670,6 +1673,24 @@ class RunService(
         # this process's live state with a persisted snapshot while they execute.
         record.graph_execution_depth += 1
         try:
+            snapshot = current_snapshot(record.detail)
+            if snapshot is not None:
+                self._current_evidence_snapshot(record)
+            elif isinstance(graph_input, Command) and record.detail.current_node in {
+                "analyst_dispatch", "analyst", "analyst_join", "analyst_qa",
+                "comparator", "reflector", "writer", "qa", "qa_hitl",
+            }:
+                # Only historical downstream recovery needs an initial analysis
+                # snapshot. Planner/evidence resumes reach normal freeze nodes.
+                snapshot = await self._prepare_evidence_snapshot(record, phase="analysis")
+                graph_input = replace(
+                    graph_input,
+                    update={**(graph_input.update or {}), "evidence_snapshot_id": snapshot.id},
+                )
+            elif isinstance(graph_input, Command) and record.detail.current_node not in {
+                "planner_hitl", "evidence_hitl",
+            }:
+                raise ValueError("evidence snapshot required at an unknown recovery entry")
             if kind == "real":
                 graph = await self._get_real_graph()
             elif kind == "demo":
@@ -1942,9 +1963,21 @@ class RunService(
         await self.emit(detail.id, "node_completed", "qa", phase, f"Demo {phase} QA passed.")
 
     async def _demo_analyst_branch_step(
-        self, record: RunRecord, dimension: str, competitor: str
+        self,
+        record: RunRecord,
+        dimension: str,
+        competitor: str,
+        *,
+        expected_snapshot_id: str | None = None,
     ) -> None:
         detail = record.detail
+        use = None
+        if expected_snapshot_id is not None:
+            view, use = self._begin_evidence_use(
+                record, agent="analyst", competitor=competitor, dimension=dimension
+            )
+            if view.snapshot_id != expected_snapshot_id:
+                raise EvidenceUseRejectedError("analyst dispatch evidence snapshot changed")
         branch_id = self._analyst_branch_id(dimension, competitor)
         detail.current_node = "analyst"
         source_ids = [
@@ -1953,6 +1986,8 @@ class RunService(
             if source.dimension == dimension and self._source_matches_competitor(source, competitor)
         ]
         source_suffix = f" [source:{source_ids[0]}]" if source_ids else ""
+        if use is not None:
+            self._validate_evidence_use(record, use)
         self._merge_kb_slice(
             detail,
             dimension,

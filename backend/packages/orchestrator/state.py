@@ -4,6 +4,7 @@ from typing import Annotated, Literal, TypedDict
 
 class GraphState(TypedDict, total=False):
     run_id: str
+    evidence_snapshot_id: str
     dimensions: list[str]
     target_competitors: list[str]
     branch_dimensions: Annotated[list[str], operator.add]
