@@ -78,7 +78,7 @@ describe("useKnowledgeStore rollbackDocuments", () => {
         restore_previous: false,
       }),
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/knowledge/documents?page=1&page_size=10", expect.objectContaining({ headers: expect.any(Headers) }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/knowledge/documents?limit=10&offset=0", expect.objectContaining({ headers: expect.any(Headers) }));
     expect(useKnowledgeStore.getState().rollbackResult).toEqual(rollbackResult);
     expect(useKnowledgeStore.getState().documents).toEqual(refreshedDocuments);
     expect(useKnowledgeStore.getState().totalCount).toBe(1);

@@ -1,4 +1,5 @@
 import { apiFetch } from "../api/http";
+import { knowledgeProjectUrl } from '../api/knowledge';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useKnowledgeStore, type KnowledgeChunk, type KnowledgeRollbackResult } from '../stores/knowledgeStore';
@@ -31,12 +32,14 @@ const EMPTY_ROLLBACK_FORM: RollbackFormState = {
 export default function KnowledgePage() {
   const { t, locale } = useTranslation();
   const [searchParams] = useSearchParams();
+  const projectId = searchParams.get('project_id')?.trim() || null;
   const focusDocumentId = searchParams.get('document_id')?.trim() || '';
   const focusChunkId = searchParams.get('chunk_id')?.trim() || '';
   const focusRawSourceId = searchParams.get('raw_source_id')?.trim() || '';
   const {
     documents, loading, error, filters, page, pageSize, totalCount,
     fetchDocuments, deleteDocument, rollbackDocuments, rollbackLoading, rollbackResult, setFilter, setPage,
+    projectId: storeProjectId, setProjectId,
   } = useKnowledgeStore();
 
   const [sortBy, setSortBy] = useState<SortKey>('fetched_at');
@@ -53,13 +56,22 @@ export default function KnowledgePage() {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
+    setProjectId(projectId);
+    setSelectedDocId(null);
+    setLinkedDocument(null);
+    setDocumentChunks([]);
+    setChunksLoading(false);
+    setDetailTab('content');
+    setUploadOpen(false);
+    setRollbackForm(EMPTY_ROLLBACK_FORM);
+    dialogRef.current?.close?.();
     fetchDocuments();
-  }, [fetchDocuments]);
+  }, [fetchDocuments, projectId, setProjectId]);
 
   useEffect(() => {
     if (!focusRawSourceId) return;
     setRollbackForm((current) => ({ ...current, raw_source_id: focusRawSourceId }));
-  }, [focusRawSourceId]);
+  }, [focusRawSourceId, projectId]);
 
   useEffect(() => {
     if (!focusRawSourceId) {
@@ -94,7 +106,7 @@ export default function KnowledgePage() {
     return () => {
       active = false;
     };
-  }, [focusRawSourceId]);
+  }, [focusRawSourceId, projectId]);
 
   useEffect(() => {
     if (!focusDocumentId || documents.some((doc) => doc.id === focusDocumentId)) {
@@ -102,7 +114,8 @@ export default function KnowledgePage() {
       return;
     }
     let active = true;
-    apiFetch(`/api/knowledge/documents/${encodeURIComponent(focusDocumentId)}`)
+    setLinkedDocument(null);
+    apiFetch(knowledgeProjectUrl(`/api/knowledge/documents/${encodeURIComponent(focusDocumentId)}`, projectId))
       .then((response) => (response.ok ? response.json() : null))
       .then((document) => {
         if (active) setLinkedDocument(document);
@@ -113,9 +126,9 @@ export default function KnowledgePage() {
     return () => {
       active = false;
     };
-  }, [documents, focusDocumentId]);
+  }, [documents, focusDocumentId, projectId]);
 
-  const visibleDocuments =
+  const visibleDocuments = storeProjectId !== projectId ? [] :
     linkedDocument && !documents.some((doc) => doc.id === linkedDocument.id)
       ? [linkedDocument, ...documents]
       : documents;
@@ -154,7 +167,7 @@ export default function KnowledgePage() {
     }
     let active = true;
     setChunksLoading(true);
-    apiFetch(`/api/knowledge/documents/${encodeURIComponent(selectedDocId)}/chunks`)
+    apiFetch(knowledgeProjectUrl(`/api/knowledge/documents/${encodeURIComponent(selectedDocId)}/chunks`, projectId))
       .then((response) => (response.ok ? response.json() : []))
       .then((chunks) => {
         if (active) setDocumentChunks(Array.isArray(chunks) ? chunks : []);
@@ -168,7 +181,7 @@ export default function KnowledgePage() {
     return () => {
       active = false;
     };
-  }, [selectedDocId]);
+  }, [selectedDocId, projectId]);
 
   const updateRollbackField = (key: keyof RollbackFormState, value: string | boolean) => {
     setRollbackForm((current) => ({ ...current, [key]: value }));
@@ -177,12 +190,15 @@ export default function KnowledgePage() {
   const handleRollbackBySelector = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canRollbackBySelector) return;
-    await rollbackDocuments(rollbackForm);
+    await rollbackDocuments({ ...rollbackForm, project_id: projectId });
   };
 
   const handleRollbackDocument = async (documentId: string) => {
+    const document = visibleDocuments.find((doc) => doc.id === documentId);
+    if (!document) return;
     await rollbackDocuments({
       document_ids: [documentId],
+      project_id: document.project_id === undefined ? projectId : document.project_id,
       restore_previous: rollbackForm.restore_previous,
     });
   };
@@ -314,7 +330,7 @@ export default function KnowledgePage() {
                 </div>
                 <button
                   className="btn btn-sm btn-error absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => deleteDocument(doc.id)}
+                  onClick={() => deleteDocument(doc.id, doc.project_id === undefined ? projectId : doc.project_id)}
                 >
                   {t('common.delete')}
                 </button>
@@ -413,7 +429,7 @@ export default function KnowledgePage() {
                   </div>
                 </>
               ) : (
-                <VersionDrawer documentId={selectedDoc.id} onMerged={fetchDocuments} />
+                <VersionDrawer key={`${selectedDoc.id}:${selectedDoc.project_id}`} documentId={selectedDoc.id} projectId={selectedDoc.project_id === undefined ? projectId : selectedDoc.project_id} onMerged={fetchDocuments} />
               )}
             </>
           )}
@@ -429,6 +445,8 @@ export default function KnowledgePage() {
       </dialog>
 
       <UploadDrawer
+        key={projectId ?? 'workspace-library'}
+        projectId={projectId}
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
         onComplete={fetchDocuments}

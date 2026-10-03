@@ -19,8 +19,9 @@ from packages.tools.ingest_document import ingest_document_tool
 @pytest.mark.asyncio
 async def test_collector_reuses_verified_source_written_to_sparse_kb(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    db_path = Path("backend/tests/unit/.tmp_rag_kb_collector_chain.db")
+    db_path = tmp_path / "kb.db"
     _remove_sqlite_files(db_path)
     monkeypatch.setenv("KB_DB_PATH", str(db_path))
     service = RunService(
@@ -36,6 +37,8 @@ async def test_collector_reuses_verified_source_written_to_sparse_kb(
     )
     detail = RunDetail(
         id="run-kb-chain",
+        workspace_id="ws-a",
+        project_id="project-a",
         topic="Acme coding agent feature evidence",
         status="running",
         execution_mode="real",
@@ -71,6 +74,8 @@ async def test_collector_reuses_verified_source_written_to_sparse_kb(
                 },
                 "crawl_run_id": "collector-run-1",
                 "index_vectors": False,
+                "workspace_id": detail.workspace_id,
+                "project_id": detail.project_id,
             }
         )
 
@@ -117,6 +122,8 @@ async def test_collector_traces_rejected_kb_hits(
     )
     detail = RunDetail(
         id="run-kb-rejections",
+        workspace_id="ws-a",
+        project_id="project-a",
         topic="Acme coding agent feature evidence",
         status="running",
         execution_mode="real",
@@ -164,6 +171,13 @@ async def test_collector_traces_rejected_kb_hits(
             "title": "Acme feature docs",
             "source_type": "webpage_verified",
             "score": 0.87,
+            "workspace_id": detail.workspace_id,
+            "project_id": detail.project_id,
+            "competitor": "Acme",
+            "dimension": "feature",
+            "document_version": 1,
+            "content_hash": "verified-document-hash",
+            "fetched_at": datetime.now(UTC).isoformat(),
             "metadata": {
                 "raw_source_id": "raw-source-feature-1",
                 "run_id": "collector-run-1",

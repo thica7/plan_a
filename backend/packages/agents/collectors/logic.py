@@ -607,6 +607,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             target_source_count=target_source_count,
             rejection_diagnostics=admission_diagnostics,
         )
+        await self._persist_captured_sources_to_kb(record, detail, sources, result, context)
         self._trace_local_tool(
             record,
             agent="collector",
@@ -1576,6 +1577,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             target_source_count=1,
             rejection_diagnostics=admission_diagnostics,
         )
+        await self._persist_captured_sources_to_kb(record, detail, sources, result_obj, context)
         if not sources and not self._requires_verified_web_evidence(detail, dimension):
             source = self._demo_search_result_source(
                 detail,

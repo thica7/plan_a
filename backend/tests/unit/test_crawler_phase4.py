@@ -163,6 +163,7 @@ async def test_frontier_persists_dedupes_and_tracks_status(tmp_path) -> None:
         added = await repo.add_frontier_items(
             ["https://example.com/a#section", "https://example.com/a"],
             source_type="manual",
+            source_id=source.id,
             run_id=source.id,
         )
 

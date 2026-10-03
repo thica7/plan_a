@@ -52,13 +52,18 @@ async def test_kb_reuse_keeps_original_page_dates_for_price_freshness() -> None:
             "title": "Old price", "url": "https://notion.so/old-pricing",
             "source_type": "webpage_verified", "document_id": "doc-old", "chunk_id": "chunk-old",
             "last_seen_at": "2026-09-28T00:00:00Z",
+            "fetched_at": "2026-09-28T00:00:00Z",
+            "source_published_at": "2020-01-01",
+            "last_verified_at": None,
             "metadata": {
-                "source_published_at": "2020-01-01",
-                "source_updated_at": "2020-02-01",
+                "source_published_at": "2099-01-01",
+                "source_updated_at": "2099-02-01",
+                "last_verified_at": "2099-03-01",
             },
         }, rank=1, query="Notion pricing",
     )
     assert source is not None
     assert source.metadata["source_published_at"] == "2020-01-01"
-    assert source.metadata["source_updated_at"] == "2020-02-01"
+    assert "source_updated_at" not in source.metadata
+    assert "last_verified_at" not in source.metadata
     assert QualityAgentMixin()._source_freshness_problem(source) is not None

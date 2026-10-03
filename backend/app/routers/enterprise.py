@@ -21,6 +21,7 @@ from app.deps import (
     get_run_service,
     get_runtime_command_service,
 )
+from app.knowledge_access import resolve_knowledge_scope
 from packages.agents import AgentExecutionRequest, AgentExecutionResult
 from packages.artifacts import (
     ArtifactLifecycleReport,
@@ -1853,13 +1854,15 @@ async def sync_project_knowledge_evidence(
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
 ) -> KnowledgeEvidenceSyncResult:
-    project = _project_or_404(project_id, store, user, "evidence:write")
+    scope = resolve_knowledge_scope(
+        user, "evidence:write", store=store, project_id=project_id,
+    )
     # 这里只做 KB -> Evidence 的投影，不重新抓取网页；采集和同步解耦能减少请求耗时。
     async with KnowledgeRepository() as repo:
         return await sync_knowledge_to_evidence(
             repo=repo,
             store=store,
-            workspace_id=project.workspace_id,
+            workspace_id=scope.workspace_id,
             project_id=project_id,
             request=request,
             competitor_id_map=_competitor_id_map_for_project(project_id, store),
@@ -1877,16 +1880,18 @@ async def start_project_knowledge_evidence_sync_job(
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
 ) -> KnowledgeEvidenceSyncJobRecord:
-    project = _project_or_404(project_id, store, user, "evidence:write")
+    scope = resolve_knowledge_scope(
+        user, "evidence:write", store=store, project_id=project_id,
+    )
     job = _create_kb_sync_job(
-        workspace_id=project.workspace_id,
+        workspace_id=scope.workspace_id,
         project_id=project_id,
         request=request,
     )
     background_tasks.add_task(
         _run_kb_sync_job,
         job.id,
-        workspace_id=project.workspace_id,
+        workspace_id=scope.workspace_id,
         project_id=project_id,
         request=request,
         store=store,
@@ -1905,10 +1910,12 @@ async def list_project_knowledge_evidence_sync_metrics(
     user: EnterpriseUserDep,
     limit: int = Query(default=50, ge=1, le=200),
 ) -> list[KnowledgeEvidenceSyncMetricRecord]:
-    project = _project_or_404(project_id, store, user, "evidence:read")
+    scope = resolve_knowledge_scope(
+        user, "evidence:read", store=store, project_id=project_id,
+    )
     async with KnowledgeRepository() as repo:
         rows = await repo.list_evidence_sync_metrics(
-            workspace_id=project.workspace_id,
+            workspace_id=scope.workspace_id,
             project_id=project_id,
             limit=limit,
         )
@@ -1925,9 +1932,15 @@ def get_project_knowledge_evidence_sync_job(
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
 ) -> KnowledgeEvidenceSyncJobRecord:
-    _project_or_404(project_id, store, user, "evidence:read")
+    scope = resolve_knowledge_scope(
+        user, "evidence:read", store=store, project_id=project_id,
+    )
     job = _get_kb_sync_job(job_id)
-    if job is None or job.project_id != project_id:
+    if (
+        job is None
+        or job.workspace_id != scope.workspace_id
+        or job.project_id != scope.project_id
+    ):
         raise HTTPException(status_code=404, detail="KB sync job not found")
     return job
 

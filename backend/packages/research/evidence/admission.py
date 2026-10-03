@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Callable
+from datetime import datetime
 
 from packages.business_intel.entity_resolver import (
     confusion_terms_for_competitor,
@@ -43,6 +44,29 @@ USER_RESEARCH_SOURCE_TYPES = {
     "manual_note",
     "manual",
 }
+
+
+def capture_fact_verification_time(
+    dimension: str | None,
+    captured_at: datetime,
+    *,
+    source_published_at: object = None,
+    source_updated_at: object = None,
+) -> datetime | None:
+    """Fetching dated prices or versions verifies the page, not its facts' currentness."""
+    if any(
+        term in (dimension or "").casefold() for term in ("pric", "version", "版本", "价格", "定价")
+    ):
+        for value in (source_published_at, source_updated_at):
+            if isinstance(value, datetime):
+                return None
+            if isinstance(value, str):
+                try:
+                    datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                return None
+    return captured_at
 
 
 def admit_evidence_items(
@@ -133,7 +157,9 @@ def _admission_rejection_reasons(
         quote_problem = quote_quality_problem(quote.text, dimension=extraction.dimension)
         if quote_problem:
             reasons.append(quote_problem)
-    if extraction.extractor_name == "generic_product_pricing" and field in {"price_rows", "price_points"}:
+    if extraction.extractor_name == "generic_product_pricing" and field in {
+        "price_rows", "price_points"
+    }:
         rows = extraction.fields.get("price_rows")
         if not isinstance(rows, list) or not rows:
             reasons.append("price_row_evidence_missing")
@@ -152,7 +178,9 @@ def _admission_rejection_reasons(
                     reasons.append("price_row_evidence_invalid")
                     break
             if field == "price_points" and isinstance(value, list):
-                if set(str(point) for point in value) != {str(row.get("price") or "") for row in rows if isinstance(row, dict)}:
+                if set(str(point) for point in value) != {
+                    str(row.get("price") or "") for row in rows if isinstance(row, dict)
+                }:
                     reasons.append("price_points_rows_mismatch")
     return reasons
 
@@ -211,13 +239,38 @@ def raw_source_from_capture(
         "fetched_at": capture.captured_at.isoformat(),
     }
     source_metadata.update(capture.metadata)
-    if candidate.date:
-        source_metadata["source_published_at"] = candidate.date
-    if candidate.last_updated:
-        source_metadata["source_updated_at"] = candidate.last_updated
     source_metadata.update(metadata or {})
+    # Source dates come from candidates or typed captures, never generic metadata.
+    for field, value in (
+        ("source_published_at", candidate.date or capture.source_published_at),
+        ("source_updated_at", candidate.last_updated or capture.source_updated_at),
+    ):
+        source_metadata.pop(field, None)
+        if value:
+            source_metadata[field] = value
+    # Page metadata cannot supply server persistence references or duplicate the body.
+    source_metadata = {
+        key: value for key, value in source_metadata.items()
+        if not key.startswith("kb_")
+        and key not in {"full_text", "text", "markdown", "html"}
+    }
     # Preserve capture identity separately from hashes derived from snippet fallbacks.
     source_metadata["capture_content_hash"] = capture.content_hash.strip()
+    source_metadata["captured_page_id"] = capture.id
+    source_metadata["fetched_at"] = capture.captured_at.isoformat()
+    source_metadata.pop("last_verified_at", None)
+    source_metadata.pop("capture_verified_at", None)
+    if capture.status == "ok" and not capture.failure_reason and (
+        capture.text.strip() or capture.markdown.strip()
+    ):
+        source_metadata["capture_verified_at"] = capture.captured_at.isoformat()
+        verified_at = capture_fact_verification_time(
+            brief.dimension, capture.captured_at,
+            source_published_at=source_metadata.get("source_published_at"),
+            source_updated_at=source_metadata.get("source_updated_at"),
+        )
+        if verified_at is not None:
+            source_metadata["last_verified_at"] = verified_at.isoformat()
     return RawSource(
         id=compute_raw_source_id(
             source_type=source_type,
@@ -244,6 +297,7 @@ def raw_source_from_capture(
         quality_score=capture.quality_score,
         failure_reason=capture.failure_reason,
         metadata=source_metadata,
+        extracted_at=capture.captured_at,
     )
 
 
@@ -472,7 +526,9 @@ def has_concrete_source_signal(dimension: str, normalized_text: str) -> bool:
     if "persona" in dimension_key or "user" in dimension_key:
         return any(
             term in normalized_text
-            for term in ("developer", "customer", "enterprise", "team", "user", "家庭", "适合", "面向")
+            for term in (
+                "developer", "customer", "enterprise", "team", "user", "家庭", "适合", "面向"
+            )
         )
     return bool(HARDWARE_SPEC_RE.search(normalized_text)) or any(
         term in normalized_text for term in (

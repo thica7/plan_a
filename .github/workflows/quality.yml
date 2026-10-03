@@ -130,6 +130,18 @@ jobs:
       - name: Run RAG KB quality tests
         run: |
           pytest -q \
+            backend/tests/unit/test_knowledge_scope_storage.py \
+            backend/tests/unit/test_knowledge_scope_retrieval.py \
+            backend/tests/integration/test_qdrant_local_scope.py \
+            backend/tests/unit/test_collector_knowledge_scope.py \
+            backend/tests/unit/test_collector_full_source_storage.py \
+            backend/tests/unit/test_knowledge_http_scope.py \
+            backend/tests/unit/test_knowledge_job_scope.py \
+            backend/tests/unit/test_knowledge_sync_scope.py \
+            backend/tests/unit/test_crawler_scope.py \
+            backend/tests/unit/test_knowledge_reference_context.py \
+            backend/tests/unit/test_source_currentness.py \
+            backend/tests/unit/test_kb_candidate_confidence.py \
             backend/tests/unit/test_rag_kb_eval_set.py \
             backend/tests/unit/test_rag_kb_collector_chain.py \
             backend/tests/unit/test_knowledge_evidence_bridge.py \
@@ -171,7 +183,7 @@ jobs:
 
       - name: Test report source trace
         working-directory: frontend
-        run: pnpm test -- src/features/report/ReportSourceTrace.test.tsx src/features/report/sourceBundle.test.ts src/stores/knowledgeStore.test.ts src/features/workbench/ReportReviewDesk.test.tsx src/features/workbench/ReleaseGateReviewQueue.test.tsx src/features/workbench/NotificationStream.test.tsx src/features/workbench/dataLoaders.test.ts src/features/workbench/OverviewPanels.test.tsx src/features/trace/TraceList.test.ts
+        run: pnpm test -- src/features/report/ReportSourceTrace.test.tsx src/features/report/sourceBundle.test.ts src/stores/knowledgeStore.test.ts src/pages/KnowledgeScopeNavigation.test.tsx src/features/workbench/knowledgeReferenceContext.test.tsx src/features/workbench/enterpriseKnowledgeRollback.test.tsx src/features/workbench/ReportReviewDesk.test.tsx src/features/workbench/ReleaseGateReviewQueue.test.tsx src/features/workbench/NotificationStream.test.tsx src/features/workbench/dataLoaders.test.ts src/features/workbench/OverviewPanels.test.tsx src/features/trace/TraceList.test.ts
 
       - name: Build frontend
         working-directory: frontend

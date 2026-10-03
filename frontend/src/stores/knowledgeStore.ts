@@ -1,8 +1,11 @@
 import { apiFetch } from "../api/http";
+import { knowledgeProjectUrl } from "../api/knowledge";
 import { create } from 'zustand';
 
 export interface KnowledgeDocument {
   id: string;
+  workspace_id?: string | null;
+  project_id?: string | null;
   url: string | null;
   title: string;
   source_type: string;
@@ -30,6 +33,7 @@ export interface KnowledgeChunk {
 }
 
 export interface KnowledgeRollbackRequest {
+  project_id?: string | null;
   document_ids?: string[];
   run_id?: string | null;
   raw_source_id?: string | null;
@@ -48,6 +52,9 @@ export interface KnowledgeRollbackResult {
 }
 
 interface KnowledgeState {
+  projectId: string | null;
+  scopeRevision: number;
+  setProjectId: (projectId: string | null) => void;
   documents: KnowledgeDocument[];
   loading: boolean;
   error: string | null;
@@ -64,7 +71,7 @@ interface KnowledgeState {
   rollbackLoading: boolean;
   rollbackResult: KnowledgeRollbackResult | null;
   fetchDocuments: () => Promise<void>;
-  deleteDocument: (id: string) => Promise<void>;
+  deleteDocument: (id: string, projectId?: string | null) => Promise<void>;
   rollbackDocuments: (request: KnowledgeRollbackRequest) => Promise<KnowledgeRollbackResult>;
   setFilter: (key: keyof KnowledgeState['filters'], value: string) => void;
   setPage: (page: number) => void;
@@ -91,6 +98,15 @@ function compactRollbackRequest(request: KnowledgeRollbackRequest) {
 }
 
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
+  projectId: null,
+  scopeRevision: 0,
+  setProjectId: (projectId) => {
+    if (get().projectId === projectId) return;
+    const { debounceTimer } = get();
+    if (debounceTimer) clearTimeout(debounceTimer);
+    set((state) => ({ projectId, scopeRevision: state.scopeRevision + 1, documents: [], totalCount: 0,
+      page: 1, loading: false, error: null, rollbackLoading: false, rollbackResult: null, debounceTimer: null }));
+  },
   documents: [],
   loading: false,
   error: null,
@@ -104,15 +120,17 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   rollbackResult: null,
 
   fetchDocuments: async () => {
+    const { projectId, scopeRevision, filters, page, pageSize } = get();
+    const isCurrent = () => get().scopeRevision === scopeRevision && get().projectId === projectId;
     set({ loading: true, error: null });
     try {
-      const { filters, page, pageSize } = get();
       const params = new URLSearchParams();
+      if (projectId) params.set('project_id', projectId);
       if (filters.competitor) params.set('competitor', filters.competitor);
       if (filters.dimension) params.set('dimension', filters.dimension);
       if (filters.source_type) params.set('source_type', filters.source_type);
-      params.set('page', String(page));
-      params.set('page_size', String(pageSize));
+      params.set('limit', String(pageSize));
+      params.set('offset', String((page - 1) * pageSize));
 
       const res = await apiFetch(`/api/knowledge/documents?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -120,25 +138,31 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       const totalCountHeader = res.headers.get('X-Total-Count');
       const totalCount = totalCountHeader ? parseInt(totalCountHeader, 10) : data.length;
 
-      set({ documents: data, totalCount, loading: false });
+      if (isCurrent()) set({ documents: data, totalCount, loading: false });
     } catch (err) {
+      if (!isCurrent()) return;
       set({ error: String(err), loading: false });
       scheduleTransientError(set, get);
     }
   },
 
-  deleteDocument: async (id: string) => {
+  deleteDocument: async (id: string, projectId?: string | null) => {
+    const scopeProjectId = projectId === undefined ? get().projectId : projectId;
+    const revision = get().scopeRevision;
     try {
-      const res = await apiFetch(`/api/knowledge/documents/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(knowledgeProjectUrl(`/api/knowledge/documents/${id}`, scopeProjectId), { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      set((s) => ({ documents: s.documents.filter((d) => d.id !== id) }));
+      if (get().scopeRevision === revision) set((s) => ({ documents: s.documents.filter((d) => d.id !== id) }));
     } catch (err) {
+      if (get().scopeRevision !== revision) return;
       set({ error: String(err) });
       scheduleTransientError(set, get);
     }
   },
 
   rollbackDocuments: async (request: KnowledgeRollbackRequest) => {
+    const projectId = request.project_id === undefined ? get().projectId : request.project_id;
+    const revision = get().scopeRevision;
     const payload = compactRollbackRequest(request);
     if (
       payload.document_ids.length === 0 &&
@@ -151,19 +175,23 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
 
     set({ rollbackLoading: true, rollbackResult: null, error: null });
     try {
-      const res = await apiFetch('/api/knowledge/documents/rollback', {
+      const res = await apiFetch(knowledgeProjectUrl('/api/knowledge/documents/rollback', projectId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = (await res.json()) as KnowledgeRollbackResult;
-      set({ rollbackResult: result, rollbackLoading: false });
-      await get().fetchDocuments();
+      if (get().scopeRevision === revision) {
+        set({ rollbackResult: result, rollbackLoading: false });
+        await get().fetchDocuments();
+      }
       return result;
     } catch (err) {
-      set({ error: String(err), rollbackLoading: false });
-      scheduleTransientError(set, get);
+      if (get().scopeRevision === revision) {
+        set({ error: String(err), rollbackLoading: false });
+        scheduleTransientError(set, get);
+      }
       throw err;
     }
   },

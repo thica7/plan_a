@@ -80,6 +80,11 @@ def _test_graph_checkpointer() -> GraphCheckpointer:
     return GraphCheckpointer.in_memory()
 
 
+@pytest.fixture(autouse=True)
+def _isolated_collector_kb(tmp_path, monkeypatch):
+    monkeypatch.setenv("KB_DB_PATH", str(tmp_path / "collector-kb.db"))
+
+
 def _now() -> datetime:
     return datetime.utcnow()
 
@@ -15278,6 +15283,11 @@ async def test_collector_warm_starts_from_rag_kb(monkeypatch: pytest.MonkeyPatch
                     "dimension": "feature",
                     "source_type": "webpage_verified",
                     "content_hash": "hash-acme-feature",
+                    "workspace_id": payload["workspace_id"],
+                    "project_id": payload["project_id"],
+                    "market": payload["market"],
+                    "document_version": 1,
+                    "fetched_at": _now().isoformat(),
                 }
             ]
 

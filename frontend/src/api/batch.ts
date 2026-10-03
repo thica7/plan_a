@@ -1,4 +1,5 @@
 import { apiFetch } from "./http";
+import { knowledgeProjectUrl } from "./knowledge";
 export type UploadItemStatus = 'queued' | 'uploading' | 'parsed' | 'embedded' | 'ingested' | 'failed';
 
 export interface BatchIngestItem {
@@ -30,12 +31,13 @@ export interface IngestJob {
   updated_at: string;
 }
 
-export async function createBatch(items: BatchIngestItem[], maxConcurrent = 4): Promise<BatchIngestResponse> {
+export async function createBatch(items: BatchIngestItem[], maxConcurrent = 4, projectId: string | null = null): Promise<BatchIngestResponse> {
   const res = await apiFetch('/api/knowledge/batch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       items,
+      project_id: projectId,
       options: {
         max_concurrent: maxConcurrent,
         fail_fast: false,
@@ -48,8 +50,8 @@ export async function createBatch(items: BatchIngestItem[], maxConcurrent = 4): 
   return res.json() as Promise<BatchIngestResponse>;
 }
 
-export async function getIngestJob(jobId: string, signal?: AbortSignal): Promise<IngestJob> {
-  const res = await apiFetch(`/api/knowledge/ingest-jobs/${jobId}`, { signal });
+export async function getIngestJob(jobId: string, signal?: AbortSignal, projectId: string | null = null): Promise<IngestJob> {
+  const res = await apiFetch(knowledgeProjectUrl(`/api/knowledge/ingest-jobs/${jobId}`, projectId), { signal });
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
   }

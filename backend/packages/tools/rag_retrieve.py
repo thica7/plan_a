@@ -10,7 +10,7 @@ from ..knowledge.embeddings import (
     EmbeddingProvider,
     get_embedding_provider_from_env,
 )
-from ..knowledge.models import RetrievalRequest
+from ..knowledge.models import KnowledgeScope, RetrievalRequest, SourceRole
 from ..knowledge.repository import KnowledgeRepository
 from ..knowledge.retrieval import RetrievalService
 
@@ -32,8 +32,18 @@ async def rag_retrieve_tool(
     top_k: int,
     mode: str = "hybrid",
     preset: str | None = None,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
+    market: str | None = None,
+    source_roles: list[SourceRole] | None = None,
+    max_age_days: int | None = None,
 ) -> list[dict[str, object]]:
     """Retrieve relevant knowledge chunks for a competitive analysis query."""
+    # The server caller supplies this boundary; this tool is not an authentication layer.
+    if workspace_id is None:
+        return []
+    scope = KnowledgeScope(workspace_id=workspace_id, project_id=project_id)
     repo = KnowledgeRepository()
     await repo.initialise()
     try:
@@ -47,7 +57,9 @@ async def rag_retrieve_tool(
 
             embedding_provider = _get_embedding_provider()
             vector_store = VectorStore()
-            embed_fn = embedding_provider.embed_documents if embedding_provider else _empty_embeddings
+            embed_fn = (
+                embedding_provider.embed_documents if embedding_provider else _empty_embeddings
+            )
         service = RetrievalService(
             repo=repo,
             vector_store=vector_store,
@@ -65,6 +77,12 @@ async def rag_retrieve_tool(
                 enable_query_rewrite=retrieval_mode != "sparse",
                 num_rewrites=0 if retrieval_mode == "sparse" else 3,
                 mode=retrieval_mode,
+                workspace_id=scope.workspace_id,
+                project_id=scope.project_id,
+                include_workspace_library=include_workspace_library,
+                market=market,
+                source_roles=source_roles or [],
+                max_age_days=max_age_days,
             )
         )
         return [hit.model_dump(mode="json") for hit in response.hits]

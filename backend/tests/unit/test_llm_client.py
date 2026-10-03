@@ -73,7 +73,9 @@ async def test_deepseek_payload_provider_and_safe_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_concurrent_calls_keep_usage_and_provider_in_their_own_task(monkeypatch):
-    client = DoubaoClient(_settings(backup_llm_api_key='backup-key', backup_llm_model='backup-model'))
+    client = DoubaoClient(
+        _settings(backup_llm_api_key='backup-key', backup_llm_model='backup-model')
+    )
     first_done, second_done = asyncio.Event(), asyncio.Event()
     async def post(url, payload, headers):
         text = payload['messages'][1]['content']
@@ -87,12 +89,16 @@ async def test_concurrent_calls_keep_usage_and_provider_in_their_own_task(monkey
         await client.complete_text(system='system', user='first')
         first_done.set()
         await second_done.wait()
-        return client.consume_last_usage().prompt_tokens, client.last_provider(), client.last_model()
+        return (
+            client.consume_last_usage().prompt_tokens, client.last_provider(), client.last_model()
+        )
     async def second():
         await first_done.wait()
         await client.complete_text(system='system', user='second')
         second_done.set()
-        return client.consume_last_usage().prompt_tokens, client.last_provider(), client.last_model()
+        return (
+            client.consume_last_usage().prompt_tokens, client.last_provider(), client.last_model()
+        )
     assert await asyncio.gather(first(), second()) == [
         (10, 'doubao', 'primary-model'), (20, 'backup', 'backup-model')]
 

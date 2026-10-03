@@ -490,10 +490,8 @@ async def test_history_candidate_is_currently_fetched_and_admitted_before_raw_so
                 fetch_method="fixture_fetch",
                 quality_score=0.95,
                 text_length=len(text),
-                capture_metadata={
-                    "source_published_at": "2026-10-01",
-                    "source_updated_at": "2026-10-02",
-                },
+                source_published_at="2026-10-01",
+                source_updated_at="2026-10-02",
             )
 
         runner._trace_fetch = fetch
@@ -867,10 +865,8 @@ async def test_history_sources_that_redirect_or_repeat_content_do_not_skip_disco
             fetch_method="fixture_fetch",
             quality_score=0.95,
             text_length=len(text),
-            capture_metadata={
-                "source_published_at": "2026-10-01",
-                "source_updated_at": "2026-10-02",
-            },
+            source_published_at="2026-10-01",
+            source_updated_at="2026-10-02",
         )
 
     async def search(query, max_results):

@@ -7,10 +7,12 @@ import hashlib
 import math
 import os
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from typing import Any, TypeVar
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
+    DatetimeRange,
     Distance,
     FieldCondition,
     Filter,
@@ -21,7 +23,7 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-from .models import RetrievalHit
+from .models import KnowledgeScope, RetrievalHit
 
 COLLECTION_NAME = "knowledge_chunks"
 EMBEDDING_DIM = 1024  # bge-m3
@@ -142,6 +144,10 @@ class VectorStore:
         top_k: int = 20,
         competitors: list[str] | None = None,
         dimensions: list[str] | None = None,
+        scope: KnowledgeScope | None = None,
+        market: str | None = None,
+        source_roles: list[str] | None = None,
+        max_age_days: int | None = None,
     ) -> list[RetrievalHit]:
         if len(query_vector) != self._dimensions:
             raise ValueError("Query vector dimension does not match index")
@@ -152,10 +158,39 @@ class VectorStore:
         ]
         if competitors:
             must_conditions.append(
-                FieldCondition(key="competitor", match=MatchAny(any=competitors))
+                FieldCondition(key="competitor_key", match=MatchAny(
+                    any=[item.casefold() for item in competitors]
+                ))
             )
         if dimensions:
-            must_conditions.append(FieldCondition(key="dimension", match=MatchAny(any=dimensions)))
+            must_conditions.append(FieldCondition(key="dimension_key", match=MatchAny(
+                any=[item.casefold() for item in dimensions]
+            )))
+        if scope is not None:
+            must_conditions.append(FieldCondition(
+                key="workspace_id", match=MatchValue(value=scope.workspace_id)
+            ))
+            project_match = (
+                MatchAny(any=[scope.project_id, ""])
+                if scope.project_id is not None and scope.include_workspace_library
+                else MatchValue(value=scope.project_id or "")
+            )
+            must_conditions.append(FieldCondition(key="project_id", match=project_match))
+        if market is not None:
+            must_conditions.append(FieldCondition(key="market", match=MatchValue(value=market)))
+        if source_roles:
+            must_conditions.append(FieldCondition(
+                key="source_role", match=MatchAny(any=source_roles)
+            ))
+        if max_age_days is not None:
+            if max_age_days < 0:
+                raise ValueError("max_age_days must be nonnegative")
+            now = datetime.now(UTC)
+            must_conditions.append(FieldCondition(
+                key="observed_at", range=DatetimeRange(
+                    gte=now - timedelta(days=max_age_days), lte=now,
+                ),
+            ))
 
         search_filter = Filter(must=must_conditions) if must_conditions else None
 
@@ -164,6 +199,20 @@ class VectorStore:
         hits: list[RetrievalHit] = []
         for r in results:
             pl = r.payload or {}
+            if scope is not None and (
+                not pl.get("workspace_id") or "project_id" not in pl
+                or not pl.get("document_content_hash") or not pl.get("document_version")
+                or not pl.get("fetched_at")
+                or pl.get("source_role") not in {"source", "historical_report"}
+            ):
+                continue
+            metadata = dict(pl.get("metadata", {})) if isinstance(pl.get("metadata"), dict) else {}
+            metadata["vector_index"] = {
+                "model_version": pl.get("embedding_model"),
+                "index_version": pl.get("index_version"),
+                "dimensions": pl.get("embedding_dimensions"),
+                "chunk_content_hash": pl.get("content_hash"),
+            }
             hits.append(
                 RetrievalHit(
                     chunk_id=pl.get("chunk_id", str(r.id)),
@@ -175,8 +224,17 @@ class VectorStore:
                     competitor=pl.get("competitor"),
                     dimension=pl.get("dimension"),
                     source_type=pl.get("source_type", ""),
-                    content_hash=pl.get("content_hash", ""),
-                    metadata=pl.get("metadata", {}) if isinstance(pl.get("metadata"), dict) else {},
+                    workspace_id=pl.get("workspace_id") or None,
+                    project_id=pl.get("project_id") or None,
+                    market=pl.get("market"),
+                    source_role=pl.get("source_role", "source"),
+                    document_version=pl.get("document_version", 1),
+                    source_published_at=pl.get("source_published_at"),
+                    source_updated_at=pl.get("source_updated_at"),
+                    last_verified_at=pl.get("last_verified_at"),
+                    fetched_at=pl.get("fetched_at"),
+                    content_hash=pl.get("document_content_hash", ""),
+                    metadata=metadata,
                 )
             )
         return hits

@@ -25,6 +25,8 @@ class EvidenceFetchResult:
     failure_reason: str | None = None
     content_type: str = ""
     capture_metadata: dict[str, Any] = field(default_factory=dict)
+    source_published_at: str | None = None
+    source_updated_at: str | None = None
 
     @property
     def snippet(self) -> str:
@@ -89,7 +91,9 @@ async def fetch_evidence_page(
 
 
 def _basic_fetch_is_sufficient(result: FetchPageResult, *, min_text_chars: int) -> bool:
-    minimum = min(min_text_chars, 40) if result.content_type == "application/pdf" else min_text_chars
+    minimum = (
+        min(min_text_chars, 40) if result.content_type == "application/pdf" else min_text_chars
+    )
     return result.ok and len(result.text.strip()) >= minimum
 
 

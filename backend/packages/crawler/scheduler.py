@@ -74,10 +74,12 @@ class CrawlerScheduler:
         added = await self._repository.add_frontier_items(
             [request.url],
             source_type="manual",
+            source_id=request.source_id,
             competitor=request.competitor,
             dimension=request.dimension,
             priority=priority,
             run_id=request.run_id,
+            require_source=True,
         )
         self._progress["queued"] += added
         await self._emit_progress()
@@ -124,18 +126,21 @@ class CrawlerScheduler:
         self._progress["running"] += 1
         await self._emit_progress()
         try:
-            source_config = {}
-            if item.run_id:
-                source = await self._repository.get_source(item.run_id)
-                source_config = source.config if source else {}
-            max_depth = _int_config(source_config, "max_depth", 2)
+            source = await self._repository.get_source(item.source_id) if item.source_id else None
+            if source is None or not source.workspace_id or not source.workspace_id.strip():
+                await self._repository.mark_failed(item.id, "Crawl source has no trusted workspace")
+                self._progress["failed"] += 1
+                return
+            source_config = source.config
+            max_depth = _int_config(source_config, "max_depth", 2, allow_zero=True)
             max_urls = _int_config(source_config, "max_urls", 1_000)
             max_total_bytes = _int_config(source_config, "max_total_bytes", 50_000_000)
             request = CrawlRequest(
                 url=item.url,
+                source_id=source.id,
                 run_id=item.run_id,
-                competitor=item.competitor,
-                dimension=item.dimension,
+                competitor=source.competitor,
+                dimension=source.dimension,
                 max_depth=max_depth,
                 max_urls=max_urls,
                 max_total_bytes=max_total_bytes,
@@ -143,22 +148,28 @@ class CrawlerScheduler:
             result = await self.crawl_sync(request)
 
             if result.success:
-                await self._repository.mark_done(item.id)
+                if not await self._repository.mark_done(item.id, require_source=True):
+                    return
                 self._progress["completed"] += 1
                 if result.page and item.depth < request.max_depth:
                     await self._repository.add_frontier_items(
                         result.page.links,
-                        source_type=item.source_type,
-                        competitor=item.competitor,
-                        dimension=item.dimension,
+                        source_type=source.type,
+                        source_id=source.id,
+                        competitor=source.competitor,
+                        dimension=source.dimension,
                         priority=item.priority + 10,
                         depth=item.depth + 1,
                         parent_id=item.id,
                         run_id=item.run_id,
                         max_urls=request.max_urls,
+                        require_source=True,
                     )
             else:
-                await self._repository.mark_failed(item.id, result.error or "crawl failed")
+                if not await self._repository.mark_failed(
+                    item.id, result.error or "crawl failed", require_source=True,
+                ):
+                    return
                 self._progress["failed"] += 1
 
             if self._on_result:
@@ -189,8 +200,12 @@ def _should_auto_render(result: CrawlResult) -> bool:
     )
 
 
-def _int_config(config: dict[str, object], key: str, default: int) -> int:
+def _int_config(
+    config: dict[str, object], key: str, default: int, *, allow_zero: bool = False,
+) -> int:
     try:
-        return int(config.get(key) or default)
+        value = config.get(key)
+        parsed = int(value) if value is not None else default
+        return parsed if parsed != 0 or allow_zero else default
     except (TypeError, ValueError):
         return default

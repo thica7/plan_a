@@ -5,14 +5,86 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+SourceRole = Literal["source", "historical_report"]
+KnowledgeNamespace = tuple[str | None, str | None, str | None, str | None, str | None, str | None]
+
+
+class KnowledgeScope(BaseModel):
+    """Trusted workspace and project boundary; None project selects its public library."""
+
+    workspace_id: str = Field(min_length=1)
+    project_id: str | None = None
+    include_workspace_library: bool = False
+
+    @field_validator("workspace_id")
+    @classmethod
+    def validate_workspace_id(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("workspace_id must be nonempty")
+        return value
+
+    @field_validator("project_id")
+    @classmethod
+    def validate_project_id(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("project_id must be nonempty or None for the workspace library")
+        return value
+
+
+class _ScopedContext(BaseModel):
+    workspace_id: str | None = Field(default=None, min_length=1)
+    project_id: str | None = None
+
+    @field_validator("workspace_id")
+    @classmethod
+    def validate_workspace_id(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("workspace_id must be nonempty")
+        return value
+
+    @field_validator("project_id")
+    @classmethod
+    def validate_project_id(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("project_id must be nonempty or None for the workspace library")
+        return value
+
+    @property
+    def scope(self) -> KnowledgeScope | None:
+        if self.workspace_id is None:
+            return None
+        return KnowledgeScope(workspace_id=self.workspace_id, project_id=self.project_id)
+
+
+class _SourceContext(_ScopedContext):
+    market: str | None = None
+    source_role: SourceRole = "source"
+    source_published_at: datetime | None = None
+    source_updated_at: datetime | None = None
+    last_verified_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def classify_report(self):
+        if self.source_type == "report":
+            self.source_role = "historical_report"
+        return self
+
+    @property
+    def namespace(self) -> KnowledgeNamespace:
+        if self.workspace_id is None:
+            return (None, None, None, None, None, None)
+        return (self.workspace_id, self.project_id, self.competitor,
+                self.dimension, self.market, self.source_role)
+
 
 # ---------------------------------------------------------------------------
 # Document
 # ---------------------------------------------------------------------------
 
 
-class KnowledgeDocument(BaseModel):
+class KnowledgeDocument(_SourceContext):
     """A crawled or ingested document stored in the knowledge base."""
 
     id: str
@@ -52,7 +124,7 @@ class KnowledgeRollbackResult(BaseModel):
     vector_cleanup_error: str | None = None
 
 
-class DocumentCreate(BaseModel):
+class DocumentCreate(_SourceContext):
     """Payload to ingest a new document."""
 
     url: str | None = None
@@ -64,6 +136,7 @@ class DocumentCreate(BaseModel):
     text: str
     markdown: str = ""
     metadata: dict[str, Any] = {}
+    fetched_at: datetime | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +163,7 @@ class KnowledgeChunk(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class RetrievalHit(BaseModel):
+class RetrievalHit(_SourceContext):
     """A single result from hybrid retrieval."""
 
     chunk_id: str
@@ -104,6 +177,7 @@ class RetrievalHit(BaseModel):
     competitor: str | None = None
     dimension: str | None = None
     source_type: str = ""
+    document_version: int = 1
     content_hash: str = ""
     fetched_at: datetime | None = None
     last_seen_at: datetime | None = None
@@ -111,7 +185,19 @@ class RetrievalHit(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class RetrievalRequest(BaseModel):
+class RetrievalRequest(_ScopedContext):
+    include_workspace_library: bool = False
+    market: str | None = None
+    source_roles: list[SourceRole] = Field(default_factory=list, max_length=2)
+    max_age_days: int | None = Field(default=None, ge=0)
+
+    @property
+    def scope(self) -> KnowledgeScope | None:
+        scope = super().scope
+        if scope is not None:
+            scope.include_workspace_library = self.include_workspace_library
+        return scope
+
     query: str = Field(min_length=1, max_length=2_000)
     preset: str | None = None
     competitors: list[str] = Field(default_factory=list, max_length=50)

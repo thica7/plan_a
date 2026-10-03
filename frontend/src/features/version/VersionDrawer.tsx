@@ -1,5 +1,6 @@
 import { apiFetch } from "../../api/http";
-import { useEffect, useMemo, useState } from 'react';
+import { knowledgeProjectUrl } from '../../api/knowledge';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { GitMerge, RefreshCw } from 'lucide-react';
 import { useTranslation } from '../../stores/i18n';
 import { SystemMessage } from '../../i18n/SystemMessage';
@@ -25,24 +26,25 @@ interface DocumentDiffResponse {
 
 interface VersionDrawerProps {
   documentId: string;
+  projectId?: string | null;
   onMerged: () => void;
 }
 
-async function getVersions(documentId: string): Promise<VersionDocument[]> {
-  const res = await apiFetch(`/api/knowledge/documents/${documentId}/versions`);
+async function getVersions(documentId: string, projectId: string | null): Promise<VersionDocument[]> {
+  const res = await apiFetch(knowledgeProjectUrl(`/api/knowledge/documents/${documentId}/versions`, projectId));
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<VersionDocument[]>;
 }
 
-async function getDiff(documentId: string, against: string): Promise<DocumentDiffResponse> {
+async function getDiff(documentId: string, against: string, projectId: string | null): Promise<DocumentDiffResponse> {
   const params = new URLSearchParams({ against });
-  const res = await apiFetch(`/api/knowledge/documents/${documentId}/diff?${params}`);
+  const res = await apiFetch(knowledgeProjectUrl(`/api/knowledge/documents/${documentId}/diff?${params}`, projectId));
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<DocumentDiffResponse>;
 }
 
-async function mergeVersion(documentId: string, targetDocumentId: string): Promise<VersionDocument> {
-  const res = await apiFetch(`/api/knowledge/documents/${documentId}/merge`, {
+async function mergeVersion(documentId: string, targetDocumentId: string, projectId: string | null): Promise<VersionDocument> {
+  const res = await apiFetch(knowledgeProjectUrl(`/api/knowledge/documents/${documentId}/merge`, projectId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ target_document_id: targetDocumentId }),
@@ -71,7 +73,7 @@ function splitDiff(lines: string[]) {
   return { left, right };
 }
 
-export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
+export function VersionDrawer({ documentId, projectId = null, onMerged }: VersionDrawerProps) {
   const { t, locale } = useTranslation();
   const [versions, setVersions] = useState<VersionDocument[]>([]);
   const [baseId, setBaseId] = useState('');
@@ -80,6 +82,9 @@ export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
   const [loading, setLoading] = useState(false);
   const [merging, setMerging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const context = useRef({ documentId, projectId });
+  context.current = { documentId, projectId };
+  const isCurrent = () => context.current.documentId === documentId && context.current.projectId === projectId;
 
   const selectedDiff = useMemo(() => splitDiff(diff?.diff ?? []), [diff]);
 
@@ -87,22 +92,27 @@ export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
     setLoading(true);
     setError(null);
     try {
-      const data = await getVersions(documentId);
+      const data = await getVersions(documentId, projectId);
+      if (!isCurrent()) return;
       setVersions(data);
       const active = data.find((version) => version.id === documentId) ?? data[data.length - 1];
       const previous = data.find((version) => version.id !== active?.id) ?? data[0];
       setTargetId(active?.id ?? '');
       setBaseId(previous?.id ?? active?.id ?? '');
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (isCurrent()) setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
 
   useEffect(() => {
+    setVersions([]);
+    setBaseId('');
+    setTargetId('');
+    setDiff(null);
     void loadVersions();
-  }, [documentId]);
+  }, [documentId, projectId]);
 
   useEffect(() => {
     if (!baseId || !targetId || baseId === targetId) {
@@ -110,7 +120,7 @@ export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
       return;
     }
     let cancelled = false;
-    void getDiff(targetId, baseId)
+    void getDiff(targetId, baseId, projectId)
       .then((data) => {
         if (!cancelled) setDiff(data);
       })
@@ -120,20 +130,21 @@ export function VersionDrawer({ documentId, onMerged }: VersionDrawerProps) {
     return () => {
       cancelled = true;
     };
-  }, [baseId, targetId]);
+  }, [baseId, targetId, projectId]);
 
   const handleMerge = async () => {
     if (!targetId) return;
     setMerging(true);
     setError(null);
     try {
-      await mergeVersion(documentId, targetId);
+      await mergeVersion(documentId, targetId, projectId);
+      if (!isCurrent()) return;
       await loadVersions();
       onMerged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (isCurrent()) setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setMerging(false);
+      if (isCurrent()) setMerging(false);
     }
   };
 

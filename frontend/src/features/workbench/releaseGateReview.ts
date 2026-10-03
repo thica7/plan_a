@@ -94,6 +94,7 @@ export function buildReleaseIssueAuditRows(issue: BusinessQAFinding, locale: Loc
           chunkId: metadataText(item, "kb_chunk_id"),
           documentId: kbDocumentId,
           rawSourceId: kbRawSourceId || rawSourceId,
+          projectId: metadataText(item, "kb_document_project_id"),
         }),
       });
     }
@@ -101,7 +102,7 @@ export function buildReleaseIssueAuditRows(issue: BusinessQAFinding, locale: Loc
       rows.push({
         label: "KB raw source",
         value: kbRawSourceId,
-        href: knowledgeLocatorHref({ rawSourceId: kbRawSourceId }),
+        href: knowledgeLocatorHref({ rawSourceId: kbRawSourceId, projectId: metadataText(item, "kb_document_project_id") }),
       });
     }
     if (collectorRunId) {
@@ -141,7 +142,7 @@ function buildEvidencePairRow(pair: Record<string, unknown>, locale: Locale): Re
     .join(" ");
   const live = [liveSourceId, livePosition ? `(${livePosition})` : ""].filter(Boolean).join(" ");
   return {
-    href: knowledgeLocatorHref({ chunkId: kbChunkId, documentId: kbDocumentId, rawSourceId: kbSourceId }),
+    href: knowledgeLocatorHref({ chunkId: kbChunkId, documentId: kbDocumentId, rawSourceId: kbSourceId, projectId: metadataText(pair, "kb_document_project_id") }),
     label: "Evidence pair",
     value: locale === 'zh-CN' ? `${kb || '知识库来源'} 对照 ${live || '实时来源'}` : `${kb || "KB source"} vs ${live || "live source"}`,
   };
@@ -151,15 +152,18 @@ function knowledgeLocatorHref({
   chunkId,
   documentId,
   rawSourceId,
+  projectId,
 }: {
   chunkId?: string | null;
   documentId?: string | null;
   rawSourceId?: string | null;
+  projectId?: string | null;
 }): string | undefined {
   const params = new URLSearchParams();
   if (documentId) params.set("document_id", documentId);
   if (chunkId) params.set("chunk_id", chunkId);
   if (rawSourceId) params.set("raw_source_id", rawSourceId);
+  if (projectId) params.set("project_id", projectId);
   const query = params.toString();
   return query ? `/knowledge?${query}` : undefined;
 }
@@ -171,32 +175,50 @@ export function buildReleaseIssueRollbackTarget(issue: BusinessQAFinding): Relea
     trail.map((item) => metadataText(item, "kb_document_id")).filter((item): item is string => Boolean(item)),
   );
   if (documentIds.length > 0) {
+    const items = trail.filter((item) => metadataText(item, "kb_document_id"));
+    const scopes = new Set(items.map((item) => JSON.stringify({
+      workspaceId: metadataText(item, "kb_document_workspace_id"),
+      projectId: referenceProjectId(item),
+    })));
+    if (scopes.size > 1) return null;
+    const projectId = referenceProjectId(items[0]);
     return {
       issueId: issue.id,
-      request: { document_ids: documentIds, restore_previous: true },
+      request: { document_ids: documentIds, restore_previous: true, ...(projectId !== undefined ? { project_id: projectId } : {}) },
       selectorSummary: documentIds.length === 1 ? documentIds[0] : `${documentIds.length} KB documents`,
     };
   }
 
   const rawSourceId = firstMetadataText(trail, "kb_raw_source_id");
   if (rawSourceId) {
+    const item = trail.find((entry) => metadataText(entry, "kb_raw_source_id") === rawSourceId)!;
+    const projectId = referenceProjectId(item);
     return {
       issueId: issue.id,
-      request: { raw_source_id: rawSourceId, restore_previous: true },
+      request: { raw_source_id: rawSourceId, restore_previous: true, ...(projectId !== undefined ? { project_id: projectId } : {}) },
       selectorSummary: `raw source ${rawSourceId}`,
     };
   }
 
   const collectorRunId = firstMetadataText(trail, "kb_collector_run_id");
   if (collectorRunId) {
+    const item = trail.find((entry) => metadataText(entry, "kb_collector_run_id") === collectorRunId)!;
+    const projectId = referenceProjectId(item);
     return {
       issueId: issue.id,
-      request: { run_id: collectorRunId, restore_previous: true },
+      request: { run_id: collectorRunId, restore_previous: true, ...(projectId !== undefined ? { project_id: projectId } : {}) },
       selectorSummary: `collector run ${collectorRunId}`,
     };
   }
 
   return null;
+}
+
+function referenceProjectId(item: Record<string, unknown>): string | null | undefined {
+  const projectId = metadataText(item, "kb_document_project_id");
+  if (projectId) return projectId;
+  if (item.kb_document_project_id === null) return null;
+  return undefined;
 }
 
 export function buildReleaseIssueRedoTarget(issue: BusinessQAFinding): ReleaseIssueRedoTarget {

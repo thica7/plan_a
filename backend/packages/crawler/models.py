@@ -13,6 +13,7 @@ class CrawlRequest(BaseModel):
     """Request to crawl a single URL."""
 
     url: str = Field(min_length=1, max_length=2048)
+    source_id: str | None = None
     run_id: str | None = None
     competitor: str | None = None
     dimension: str | None = None
@@ -135,6 +136,8 @@ _SOURCE_CONFIG_SCHEMAS: dict[CrawlSourceType, type[BaseModel]] = {
 
 
 class CrawlSourceCreate(BaseModel):
+    project_id: str | None = None
+    market: str | None = None
     type: CrawlSourceType = Field(validation_alias=AliasChoices("type", "source_type"))
     config: dict[str, Any] = Field(default_factory=dict)
     competitor: str | None = None
@@ -151,6 +154,9 @@ class CrawlSourceCreate(BaseModel):
 
 class CrawlSource(BaseModel):
     id: str
+    workspace_id: str | None = None
+    project_id: str | None = None
+    market: str | None = None
     type: CrawlSourceType
     config: dict[str, Any]
     competitor: str | None = None

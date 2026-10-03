@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -27,6 +28,9 @@ async def test_sync_knowledge_to_evidence_uses_watermark_and_safe_metadata(tmp_p
             DocumentCreate(
                 url="https://example.com/pricing",
                 title="Example pricing",
+                workspace_id="workspace-kb", project_id="project-kb",
+                source_published_at=datetime(2020, 1, 1, tzinfo=UTC),
+                source_updated_at=datetime(2020, 2, 1, tzinfo=UTC),
                 source_type="webpage_verified",
                 competitor="Example",
                 dimension="pricing",
@@ -120,8 +124,8 @@ async def test_sync_knowledge_to_evidence_uses_watermark_and_safe_metadata(tmp_p
         assert evidence.metadata["kb_collector_candidate_origin"] == "web_fetch"
         assert evidence.metadata["kb_collector_fetch_method"] == "browser_fetch"
         assert evidence.metadata["kb_collector_confidence"] == 0.92
-        assert evidence.metadata["source_published_at"] == "2020-01-01"
-        assert evidence.metadata["source_updated_at"] == "2020-02-01"
+        assert evidence.metadata["source_published_at"] == document.source_published_at.isoformat()
+        assert evidence.metadata["source_updated_at"] == document.source_updated_at.isoformat()
         states = await repo.get_evidence_sync_states(
             workspace_id="workspace-kb",
             project_id="project-kb",
@@ -234,6 +238,7 @@ async def _seed_kb_database(db_path: str) -> None:
             DocumentCreate(
                 url="https://example.com/acme/onboarding",
                 title="Acme onboarding automation",
+                workspace_id="workspace-api-kb", project_id="project-api-kb",
                 source_type="webpage_verified",
                 competitor="Acme",
                 dimension="feature",

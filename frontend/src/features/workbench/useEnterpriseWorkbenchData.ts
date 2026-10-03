@@ -203,7 +203,13 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     setKbRollbackResult(null);
     setError(null);
     try {
-      const result = await rollbackDocuments(request);
+      if (request.project_id === undefined && !selectedProject) {
+        throw new Error("Unable to resolve KB evidence project");
+      }
+      const result = await rollbackDocuments({
+        ...request,
+        project_id: request.project_id === undefined ? selectedProject!.id : request.project_id,
+      });
       setKbRollbackResult({ issueId, result });
       if (selectedProject) await refreshProject(selectedProject);
     } catch (err) {

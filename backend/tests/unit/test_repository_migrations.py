@@ -8,7 +8,7 @@ import aiosqlite
 import pytest
 
 from packages.knowledge.ingestion import IngestionPipeline
-from packages.knowledge.models import DocumentCreate, KnowledgeChunk
+from packages.knowledge.models import DocumentCreate, KnowledgeChunk, KnowledgeScope
 from packages.knowledge.repository import KnowledgeRepository
 
 
@@ -84,6 +84,10 @@ async def test_repository_initialise_migrates_existing_schema(tmp_path) -> None:
             """,
             (now,),
         )
+        await db.execute(
+            "INSERT INTO crawl_jobs (id, url, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            ("legacy-job", "https://legacy.test", now, now),
+        )
         await db.commit()
 
     repo = KnowledgeRepository(str(db_path))
@@ -130,6 +134,16 @@ async def test_repository_initialise_migrates_existing_schema(tmp_path) -> None:
         }
         assert {"is_active", "version", "parent_document_id", "last_seen_at"} <= document_columns
         assert "crawl_run_id" in chunk_columns
+        assert "add scoped knowledge jobs and eval runs" in migrations
+        for table in ("crawl_jobs", "ingest_jobs", "eval_runs"):
+            async with db.execute(f"PRAGMA table_info({table})") as cur:
+                columns = {row["name"] for row in await cur.fetchall()}
+            assert {"workspace_id", "project_id"} <= columns
+        legacy_job = await repo.get_crawl_job("legacy-job")
+        assert legacy_job["workspace_id"] is None and legacy_job["project_id"] is None
+        assert await repo.get_crawl_job(
+            "legacy-job", scope=KnowledgeScope(workspace_id="default-workspace"),
+        ) is None
         assert {
             "chunks_fts",
             "ingest_jobs",

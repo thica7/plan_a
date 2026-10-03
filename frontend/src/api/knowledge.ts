@@ -1,6 +1,8 @@
 import { apiFetch } from "./http";
 export interface KnowledgeDocument {
   id: string;
+  workspace_id?: string | null;
+  project_id?: string | null;
   url: string | null;
   title: string;
   source_type: string;
@@ -40,11 +42,18 @@ export interface RetrievalResponse {
 }
 
 export interface ListDocumentsFilters {
+  project_id?: string | null;
   competitor?: string;
   dimension?: string;
   source_type?: string;
   page?: number;
   page_size?: number;
+}
+
+export function knowledgeProjectUrl(path: string, projectId: string | null = null): string {
+  if (!projectId) return path;
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}${new URLSearchParams({ project_id: projectId })}`;
 }
 
 /**
@@ -59,11 +68,12 @@ export async function listDocuments(
 ): Promise<KnowledgeDocument[] & { totalCount: number }> {
   const params = new URLSearchParams();
   if (filters) {
+    if (filters.project_id) params.set('project_id', filters.project_id);
     if (filters.competitor) params.set('competitor', filters.competitor);
     if (filters.dimension) params.set('dimension', filters.dimension);
     if (filters.source_type) params.set('source_type', filters.source_type);
-    if (filters.page) params.set('page', String(filters.page));
-    if (filters.page_size) params.set('page_size', String(filters.page_size));
+    if (filters.page_size) params.set('limit', String(filters.page_size));
+    if (filters.page) params.set('offset', String((filters.page - 1) * (filters.page_size ?? 10)));
   }
   const res = await apiFetch(`/api/knowledge/documents?${params}`, { signal });
   if (!res.ok) {
@@ -80,8 +90,8 @@ export async function listDocuments(
  * @param id 文档唯一标识
  * @returns 知识库文档详情
  */
-export async function getDocument(id: string): Promise<KnowledgeDocument> {
-  const res = await apiFetch(`/api/knowledge/documents/${id}`);
+export async function getDocument(id: string, projectId: string | null = null): Promise<KnowledgeDocument> {
+  const res = await apiFetch(knowledgeProjectUrl(`/api/knowledge/documents/${id}`, projectId));
   if (!res.ok) {
     throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
   }
@@ -92,8 +102,8 @@ export async function getDocument(id: string): Promise<KnowledgeDocument> {
  * 删除指定的知识库文档
  * @param id 文档唯一标识
  */
-export async function deleteDocument(id: string): Promise<void> {
-  const res = await apiFetch(`/api/knowledge/documents/${id}`, {
+export async function deleteDocument(id: string, projectId: string | null = null): Promise<void> {
+  const res = await apiFetch(knowledgeProjectUrl(`/api/knowledge/documents/${id}`, projectId), {
     method: 'DELETE',
   });
   if (!res.ok) {

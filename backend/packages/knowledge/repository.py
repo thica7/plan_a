@@ -23,7 +23,9 @@ from .models import (
     DocumentCreate,
     KnowledgeChunk,
     KnowledgeDocument,
+    KnowledgeNamespace,
     KnowledgeRollbackResult,
+    KnowledgeScope,
     RetrievalHit,
 )
 from .tokenization import fts_tokens, lexical_tokens
@@ -169,15 +171,19 @@ CREATE INDEX IF NOT EXISTS idx_evidence_sync_metrics_project
 ON evidence_sync_metrics(workspace_id, project_id, completed_at);
 """
 
-_POST_MIGRATION_SCHEMA = """
+_DOCUMENT_NAMESPACE_SQL = """CASE WHEN workspace_id IS NULL
+    THEN json_array(NULL, NULL, NULL, NULL, NULL, NULL)
+    ELSE json_array(workspace_id, project_id, competitor, dimension, market, source_role) END"""
+
+_POST_MIGRATION_SCHEMA = f"""
 CREATE INDEX IF NOT EXISTS idx_documents_parent_document_id ON documents(parent_document_id);
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_documents_active_canonical_url
-ON documents(canonical_url)
+CREATE UNIQUE INDEX IF NOT EXISTS ux_documents_namespace_active_canonical_url
+ON documents(({_DOCUMENT_NAMESPACE_SQL}), canonical_url)
 WHERE is_active = 1 AND canonical_url IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_documents_active_content_hash
-ON documents(content_hash)
+CREATE UNIQUE INDEX IF NOT EXISTS ux_documents_namespace_active_content_hash
+ON documents(({_DOCUMENT_NAMESPACE_SQL}), content_hash)
 WHERE is_active = 1;
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_chunks_document_chunk_index
@@ -231,6 +237,10 @@ Migration = tuple[int, str, Callable[["KnowledgeRepository"], Awaitable[None]]]
 # Repository
 # ---------------------------------------------------------------------------
 
+class CrawlSourceUnavailableError(ValueError):
+    """A durable crawl source no longer authorizes publication in this scope."""
+
+
 class KnowledgeRepository:
     """Async SQLite repository for knowledge base metadata."""
 
@@ -253,12 +263,19 @@ class KnowledgeRepository:
         )
         self._db.row_factory = aiosqlite.Row
         await self._db.create_function("kb_tokens", 1, fts_tokens, deterministic=True)
+        await self._db.create_function(
+            "kb_casefold", 1, lambda value: value.casefold() if value is not None else None,
+            deterministic=True,
+        )
         try:
             async with write_lock_for(self._db_path):
                 await self._apply_pragmas()
                 await self._db.executescript(_BASE_SCHEMA)
                 await self._ensure_migration_table()
                 await self._migrate_schema()
+                # Older processes can recreate global constraints after the scope migration.
+                await self._db.execute("DROP INDEX IF EXISTS ux_documents_active_canonical_url")
+                await self._db.execute("DROP INDEX IF EXISTS ux_documents_active_content_hash")
                 await self._deduplicate_active_documents()
                 await self._db.executescript(_POST_MIGRATION_SCHEMA)
                 await self._db.commit()
@@ -299,95 +316,129 @@ class KnowledgeRepository:
 
     # -- Documents ----------------------------------------------------------
 
-    async def upsert_document(self, doc: DocumentCreate, content_hash: str) -> KnowledgeDocument:
+    async def upsert_document(
+        self, doc: DocumentCreate, content_hash: str, *, crawl_source_id: str | None = None,
+    ) -> KnowledgeDocument:
         now = datetime.now(UTC).isoformat()
+        fetched = doc.fetched_at or datetime.fromisoformat(now)
+        if fetched.tzinfo is None:
+            fetched = fetched.replace(tzinfo=UTC)
+        fetched_at = fetched.astimezone(UTC).isoformat()
         doc_id = str(uuid.uuid4())
         canonical_url = doc.canonical_url or doc.url
         version = 1
         parent_document_id: str | None = None
+        namespace_where, namespace_params = self._namespace_filter(doc.namespace)
 
         async with self._write_transaction() as db:
+            if crawl_source_id is not None:
+                # Shares the source-deletion SQLite write lock; check before any dedup or writes.
+                async with db.execute(
+                    "SELECT 1 FROM crawl_source WHERE id = ? AND workspace_id = ? "
+                    "AND project_id IS ? AND trim(workspace_id) != ''",
+                    (crawl_source_id, doc.workspace_id, doc.project_id),
+                ) as cur:
+                    if await cur.fetchone() is None:
+                        raise CrawlSourceUnavailableError(
+                            "Crawl source is unavailable in this scope"
+                        )
+            # Recheck inside the transaction so concurrent ingests share a single identity.
+            async with db.execute(
+                f"""SELECT * FROM documents
+                    WHERE content_hash = ? AND is_active = 1 AND {namespace_where}
+                    LIMIT 1""",
+                [content_hash, *namespace_params],
+            ) as cur:
+                duplicate = await cur.fetchone()
+            if duplicate is not None:
+                stored = self._row_to_document(duplicate)
+                if (
+                    doc.metadata.get("source_material_level") == "full_source"
+                    and stored.metadata.get("source_material_level") != "full_source"
+                ):
+                    stored.metadata["source_material_level"] = "full_source"
+                    await db.execute(
+                        "UPDATE documents SET metadata_json = ? WHERE id = ?",
+                        (json.dumps(stored.metadata), stored.id),
+                    )
+                return stored
+
             if canonical_url:
                 async with db.execute(
-                    """
-                    SELECT * FROM documents
-                    WHERE canonical_url = ? AND is_active = 1
-                    ORDER BY version DESC, fetched_at DESC
-                    LIMIT 1
-                    """,
-                    (canonical_url,),
+                    f"""SELECT * FROM documents
+                        WHERE canonical_url = ? AND is_active = 1 AND {namespace_where}
+                        ORDER BY version DESC, fetched_at DESC LIMIT 1""",
+                    [canonical_url, *namespace_params],
                 ) as cur:
                     previous = await cur.fetchone()
                 if previous is not None:
+                    if (
+                        doc.metadata.get("source_material_level") == "summary"
+                        and json.loads(previous["metadata_json"]).get("source_material_level")
+                        == "full_source"
+                    ):
+                        return self._row_to_document(previous)
                     version = int(previous["version"]) + 1
                     parent_document_id = previous["parent_document_id"] or previous["id"]
                     await db.execute(
-                        """
-                        UPDATE documents
-                        SET is_active = 0, status = 'archived', indexed_at = ?
-                        WHERE id = ?
-                        """,
+                        """UPDATE documents SET is_active = 0, status = 'archived', indexed_at = ?
+                           WHERE id = ?""",
                         (now, previous["id"]),
                     )
 
             await db.execute(
-                """
-                INSERT INTO documents
+                """INSERT INTO documents
                     (id, url, canonical_url, title, source_type, competitor, dimension,
                      content_hash, text, markdown, status, is_active, version,
-                     parent_document_id, fetched_at, indexed_at, last_seen_at, metadata_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    doc_id,
-                    doc.url,
-                    canonical_url,
-                    doc.title,
-                    doc.source_type,
-                    doc.competitor,
-                    doc.dimension,
-                    content_hash,
-                    doc.text,
-                    doc.markdown,
-                    version,
-                    parent_document_id,
-                    now,
-                    None,
-                    now,
-                    json.dumps(doc.metadata),
-                ),
+                     parent_document_id, fetched_at, indexed_at, last_seen_at, metadata_json,
+                     workspace_id, project_id, market, source_role, source_published_at,
+                     source_updated_at, last_verified_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?, ?, ?,
+                            ?, ?, ?, ?, ?, ?, ?)""",
+                (doc_id, doc.url, canonical_url, doc.title, doc.source_type, doc.competitor,
+                 doc.dimension, content_hash, doc.text, doc.markdown, version,
+                 parent_document_id, fetched_at, None, now, json.dumps(doc.metadata),
+                 doc.workspace_id, doc.project_id, doc.market, doc.source_role,
+                 doc.source_published_at.isoformat() if doc.source_published_at else None,
+                 doc.source_updated_at.isoformat() if doc.source_updated_at else None,
+                 doc.last_verified_at.isoformat() if doc.last_verified_at else None),
             )
+            async with db.execute("SELECT * FROM documents WHERE id = ?", (doc_id,)) as cur:
+                row = await cur.fetchone()
+        return self._row_to_document(row)
 
-        return KnowledgeDocument(
-            id=doc_id,
-            url=doc.url,
-            canonical_url=canonical_url,
-            title=doc.title,
-            source_type=doc.source_type,
-            competitor=doc.competitor,
-            dimension=doc.dimension,
-            content_hash=content_hash,
-            text=doc.text,
-            markdown=doc.markdown,
-            status="active",
-            is_active=True,
-            version=version,
-            parent_document_id=parent_document_id,
-            metadata=doc.metadata,
-            fetched_at=datetime.fromisoformat(now),
-            indexed_at=None,
-            last_seen_at=datetime.fromisoformat(now),
-        )
-
-    async def get_document(self, doc_id: str) -> KnowledgeDocument | None:
-        db = self._connection
-        async with db.execute(
-            "SELECT * FROM documents WHERE id = ?", (doc_id,)
+    async def get_document(
+        self, doc_id: str, *, scope: KnowledgeScope | None = None,
+    ) -> KnowledgeDocument | None:
+        clauses, params = ["id = ?"], [doc_id]
+        self._add_scope_filters(clauses, params, scope=scope)
+        async with self._connection.execute(
+            f"SELECT * FROM documents WHERE {' AND '.join(clauses)}", params
         ) as cur:
             row = await cur.fetchone()
-            if not row:
-                return None
-            return self._row_to_document(row)
+            return self._row_to_document(row) if row else None
+
+    async def has_active_full_source_for_url(
+        self,
+        url: str,
+        *,
+        scope: KnowledgeScope,
+        competitor: str,
+        dimension: str,
+        market: str | None,
+    ) -> bool:
+        """Check material without loading bodies, within the exact write namespace."""
+        async with self._connection.execute(
+            """SELECT 1 FROM documents
+                WHERE workspace_id = ? AND project_id IS ?
+                  AND competitor = ? AND dimension = ? AND market IS ?
+                  AND source_role = 'source' AND status = 'active' AND is_active = 1
+                  AND rtrim(COALESCE(canonical_url, url, ''), '/') = rtrim(?, '/')
+                  AND json_extract(metadata_json, '$.source_material_level') = 'full_source'
+                LIMIT 1""",
+            [scope.workspace_id, scope.project_id, competitor, dimension, market, url],
+        ) as cursor:
+            return await cursor.fetchone() is not None
 
     async def set_indexing_state(
         self, document_id: str, status: str, *, error: str | None = None,
@@ -413,6 +464,10 @@ class KnowledgeRepository:
     async def list_documents(
         self,
         *,
+        scope: KnowledgeScope | None = None,
+        market: str | None = None,
+        source_roles: list[str] | None = None,
+        max_age_days: int | None = None,
         competitor: str | None = None,
         dimension: str | None = None,
         source_type: str | None = None,
@@ -432,6 +487,8 @@ class KnowledgeRepository:
         if source_type:
             clauses.append("source_type = ?")
             params.append(source_type)
+        self._add_scope_filters(clauses, params, scope=scope, market=market,
+                                source_roles=source_roles, max_age_days=max_age_days)
         where = " AND ".join(clauses)
         params.extend([limit, offset])
         async with db.execute(
@@ -444,6 +501,10 @@ class KnowledgeRepository:
     async def list_documents_for_evidence_sync(
         self,
         *,
+        scope: KnowledgeScope | None = None,
+        market: str | None = None,
+        source_roles: list[str] | None = None,
+        max_age_days: int | None = None,
         crawl_run_id: str | None = None,
         competitors: list[str] | None = None,
         dimensions: list[str] | None = None,
@@ -484,6 +545,8 @@ class KnowledgeRepository:
             placeholders = ", ".join("?" for _ in source_types)
             clauses.append(f"d.source_type IN ({placeholders})")
             params.extend(source_types)
+        self._add_scope_filters(clauses, params, scope=scope, market=market,
+                                source_roles=source_roles, max_age_days=max_age_days, prefix="d.")
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params.extend([limit, offset])
         async with db.execute(
@@ -659,6 +722,10 @@ class KnowledgeRepository:
     async def count_documents(
         self,
         *,
+        scope: KnowledgeScope | None = None,
+        market: str | None = None,
+        source_roles: list[str] | None = None,
+        max_age_days: int | None = None,
         competitor: str | None = None,
         dimension: str | None = None,
         source_type: str | None = None,
@@ -676,6 +743,8 @@ class KnowledgeRepository:
         if source_type:
             clauses.append("source_type = ?")
             params.append(source_type)
+        self._add_scope_filters(clauses, params, scope=scope, market=market,
+                                source_roles=source_roles, max_age_days=max_age_days)
         where = " AND ".join(clauses)
         async with db.execute(
             f"SELECT COUNT(*) AS total FROM documents WHERE {where}", params
@@ -752,6 +821,10 @@ class KnowledgeRepository:
         query: str,
         limit: int = 20,
         *,
+        scope: KnowledgeScope | None = None,
+        market: str | None = None,
+        source_roles: list[str] | None = None,
+        max_age_days: int | None = None,
         competitors: list[str] | None = None,
         dimensions: list[str] | None = None,
     ) -> list[KnowledgeDocument]:
@@ -768,12 +841,14 @@ class KnowledgeRepository:
         params: list[Any] = [match_query]
         if competitors:
             placeholders = ", ".join("?" for _ in competitors)
-            clauses.append(f"d.competitor IN ({placeholders})")
-            params.extend(competitors)
+            clauses.append(f"kb_casefold(d.competitor) IN ({placeholders})")
+            params.extend(item.casefold() for item in competitors)
         if dimensions:
             placeholders = ", ".join("?" for _ in dimensions)
-            clauses.append(f"d.dimension IN ({placeholders})")
-            params.extend(dimensions)
+            clauses.append(f"kb_casefold(d.dimension) IN ({placeholders})")
+            params.extend(item.casefold() for item in dimensions)
+        self._add_scope_filters(clauses, params, scope=scope, market=market,
+                                source_roles=source_roles, max_age_days=max_age_days, prefix="d.")
         params.append(limit)
         async with db.execute(
             f"""
@@ -791,6 +866,10 @@ class KnowledgeRepository:
 
     async def search_chunks(
         self, query: str, limit: int = 20, *,
+        scope: KnowledgeScope | None = None,
+        market: str | None = None,
+        source_roles: list[str] | None = None,
+        max_age_days: int | None = None,
         competitors: list[str] | None = None,
         dimensions: list[str] | None = None,
     ) -> list[RetrievalHit]:
@@ -799,11 +878,13 @@ class KnowledgeRepository:
         if not match_query:
             return []
         filters = ["d.is_active = 1", "d.status IN ('active', 'stale')"]
-        scope: list[Any] = []
+        params: list[Any] = []
         for column, values in (("competitor", competitors), ("dimension", dimensions)):
             if values:
-                filters.append(f"d.{column} IN ({', '.join('?' for _ in values)})")
-                scope.extend(values)
+                filters.append(f"kb_casefold(d.{column}) IN ({', '.join('?' for _ in values)})")
+                params.extend(item.casefold() for item in values)
+        self._add_scope_filters(filters, params, scope=scope, market=market,
+                                source_roles=source_roles, max_age_days=max_age_days, prefix="d.")
         where = " AND ".join(filters)
         hits: dict[str, RetrievalHit] = {}
         for table, match, join, extra in (
@@ -820,7 +901,7 @@ class KnowledgeRepository:
                     JOIN documents d ON d.id = c.document_id
                     WHERE {join} AND {table} MATCH ? AND {where} {extra}
                     ORDER BY fts_rank, d.id, c.chunk_index LIMIT ?""",
-                [match, *scope, limit],
+                [match, *params, limit],
             ) as cur:
                 rows = await cur.fetchall()
             for rank, row in enumerate(rows, 1):
@@ -830,6 +911,11 @@ class KnowledgeRepository:
                     score=self.get_document_weight(doc) / rank,
                     url=doc.url, title=doc.title, competitor=doc.competitor,
                     dimension=doc.dimension, source_type=doc.source_type,
+                    workspace_id=doc.workspace_id, project_id=doc.project_id,
+                    market=doc.market, source_role=doc.source_role,
+                    source_published_at=doc.source_published_at,
+                    source_updated_at=doc.source_updated_at,
+                    last_verified_at=doc.last_verified_at, document_version=doc.version,
                     content_hash=doc.content_hash, fetched_at=doc.fetched_at,
                     last_seen_at=doc.last_seen_at, status=doc.status, metadata=doc.metadata,
                 )
@@ -837,72 +923,69 @@ class KnowledgeRepository:
                     hits[hit.chunk_id] = hit
         return sorted(hits.values(), key=lambda hit: hit.score, reverse=True)[:limit]
 
-    async def get_document_by_content_hash(self, content_hash: str) -> KnowledgeDocument | None:
-        db = self._connection
-        async with db.execute(
-            """
-            SELECT * FROM documents
-            WHERE content_hash = ? AND status = 'active' AND is_active = 1
-            LIMIT 1
-            """,
-            (content_hash,),
+    async def get_document_by_content_hash(
+        self, content_hash: str, *, scope: KnowledgeScope | None = None,
+        competitor: str | None = None, dimension: str | None = None,
+        market: str | None = None, source_role: str = "source",
+    ) -> KnowledgeDocument | None:
+        namespace: KnowledgeNamespace = (
+            (scope.workspace_id, scope.project_id, competitor, dimension, market, source_role)
+            if scope is not None else (None, None, None, None, None, None)
+        )
+        namespace_where, params = self._namespace_filter(namespace)
+        async with self._connection.execute(
+            f"""SELECT * FROM documents WHERE content_hash = ?
+                AND status IN ('active', 'stale') AND is_active = 1 AND {namespace_where}
+                LIMIT 1""",
+            [content_hash, *params],
         ) as cur:
             row = await cur.fetchone()
             return self._row_to_document(row) if row else None
 
-    async def get_document_versions(self, document_id: str) -> list[KnowledgeDocument]:
-        db = self._connection
-        async with db.execute(
-            "SELECT id, parent_document_id FROM documents WHERE id = ?", (document_id,)
-        ) as cur:
-            row = await cur.fetchone()
-        if row is None:
+    async def get_document_versions(
+        self, document_id: str, *, scope: KnowledgeScope | None = None,
+    ) -> list[KnowledgeDocument]:
+        document = await self.get_document(document_id, scope=scope)
+        if document is None:
             return []
-        root_id = row["parent_document_id"] or row["id"]
-        async with db.execute(
-            """
-            SELECT * FROM documents
-            WHERE id = ? OR parent_document_id = ?
-            ORDER BY version ASC, fetched_at ASC
-            """,
-            (root_id, root_id),
+        root_id = document.parent_document_id or document.id
+        namespace_where, params = self._namespace_filter(document.namespace)
+        async with self._connection.execute(
+            f"""SELECT * FROM documents
+                WHERE (id = ? OR parent_document_id = ?) AND {namespace_where}
+                ORDER BY version ASC, fetched_at ASC""",
+            [root_id, root_id, *params],
         ) as cur:
-            rows = await cur.fetchall()
-            return [self._row_to_document(r) for r in rows]
+            return [self._row_to_document(row) for row in await cur.fetchall()]
 
     async def merge_document_version(
-        self,
-        document_id: str,
-        target_document_id: str,
+        self, document_id: str, target_document_id: str, *, scope: KnowledgeScope | None = None,
     ) -> KnowledgeDocument | None:
-        versions = await self.get_document_versions(document_id)
+        if scope is not None:
+            scope = scope.model_copy(update={"include_workspace_library": False})
+        versions = await self.get_document_versions(document_id, scope=scope)
         if not versions or target_document_id not in {doc.id for doc in versions}:
             return None
-
         now = datetime.now(UTC).isoformat()
-        root_id = next((doc.parent_document_id or doc.id for doc in versions), document_id)
+        root_id = versions[0].parent_document_id or versions[0].id
+        namespace_where, params = self._namespace_filter(versions[0].namespace)
         async with self._write_transaction() as db:
             await db.execute(
-                """
-                UPDATE documents
-                SET is_active = 0, status = 'archived', indexed_at = ?
-                WHERE id = ? OR parent_document_id = ?
-                """,
-                (now, root_id, root_id),
+                f"""UPDATE documents SET is_active = 0, status = 'archived', indexed_at = ?
+                    WHERE (id = ? OR parent_document_id = ?) AND {namespace_where}""",
+                [now, root_id, root_id, *params],
             )
             await db.execute(
-                """
-                UPDATE documents
-                SET is_active = 1, status = 'active', indexed_at = ?
-                WHERE id = ?
-                """,
+                """UPDATE documents SET is_active = 1, status = 'active', indexed_at = ?
+                   WHERE id = ?""",
                 (now, target_document_id),
             )
-        return await self.get_document(target_document_id)
+        return await self.get_document(target_document_id, scope=scope)
 
     async def rollback_documents(
         self,
         *,
+        scope: KnowledgeScope | None = None,
         document_ids: list[str] | None = None,
         run_id: str | None = None,
         raw_source_id: str | None = None,
@@ -910,6 +993,8 @@ class KnowledgeRepository:
         restore_previous: bool = True,
     ) -> KnowledgeRollbackResult:
         """Archive polluted active documents and optionally restore previous versions."""
+        if scope is not None:
+            scope = scope.model_copy(update={"include_workspace_library": False})
         selectors_present = any((document_ids, run_id, raw_source_id, crawl_run_id))
         if not selectors_present:
             raise ValueError("At least one rollback selector is required")
@@ -922,6 +1007,7 @@ class KnowledgeRepository:
         async with self._write_transaction() as db:
             clauses = ["d.is_active = 1", "d.status IN ('active', 'stale')"]
             params: list[Any] = []
+            self._add_scope_filters(clauses, params, scope=scope, prefix="d.")
             if document_ids:
                 unique_document_ids = sorted({item for item in document_ids if item})
                 placeholders = ", ".join("?" for _ in unique_document_ids)
@@ -987,55 +1073,45 @@ class KnowledgeRepository:
 
             if restore_previous:
                 archived_set = set(archive_ids)
-                canonical_urls = sorted(
-                    {
-                        row["canonical_url"]
-                        for row in rows
-                        if row["canonical_url"]
-                    }
-                )
-                for canonical_url in canonical_urls:
+                seen_identities: set[tuple[Any, ...]] = set()
+                for row in rows:
+                    canonical_url = row["canonical_url"]
+                    if not canonical_url:
+                        continue
+                    namespace = self._row_to_document(row).namespace
+                    identity = (canonical_url, *namespace)
+                    if identity in seen_identities:
+                        continue
+                    seen_identities.add(identity)
+                    namespace_where, namespace_params = self._namespace_filter(namespace)
                     async with db.execute(
-                        """
-                        SELECT id
-                        FROM documents
-                        WHERE canonical_url = ?
-                          AND is_active = 1
-                          AND status IN ('active', 'stale')
-                        LIMIT 1
-                        """,
-                        (canonical_url,),
+                        f"""SELECT id FROM documents WHERE canonical_url = ?
+                            AND {namespace_where} AND is_active = 1
+                            AND status IN ('active', 'stale') LIMIT 1""",
+                        [canonical_url, *namespace_params],
                     ) as cur:
                         active = await cur.fetchone()
                     if active is not None:
                         continue
-
                     exclude_placeholders = ", ".join("?" for _ in archived_set)
                     async with db.execute(
-                        f"""
-                        SELECT id
-                        FROM documents
-                        WHERE canonical_url = ?
-                          AND id NOT IN ({exclude_placeholders})
-                          AND status = 'archived'
-                        ORDER BY version DESC, fetched_at DESC, rowid DESC
-                        LIMIT 1
-                        """,
-                        [canonical_url, *archived_set],
+                        f"""SELECT id FROM documents WHERE canonical_url = ?
+                            AND {namespace_where} AND id NOT IN ({exclude_placeholders})
+                            AND status = 'archived'
+                            ORDER BY version DESC, fetched_at DESC, rowid DESC LIMIT 1""",
+                        [canonical_url, *namespace_params, *archived_set],
                     ) as cur:
                         previous = await cur.fetchone()
                     if previous is None:
                         skipped_ids.extend(
-                            row["id"] for row in rows if row["canonical_url"] == canonical_url
+                            candidate["id"] for candidate in rows
+                            if candidate["canonical_url"] == canonical_url
+                            and self._row_to_document(candidate).namespace == namespace
                         )
                         continue
-
                     await db.execute(
-                        """
-                        UPDATE documents
-                        SET is_active = 1, status = 'active', indexed_at = ?
-                        WHERE id = ?
-                        """,
+                        """UPDATE documents SET is_active = 1, status = 'active', indexed_at = ?
+                           WHERE id = ?""",
                         (now, previous["id"]),
                     )
                     restored_ids.append(previous["id"])
@@ -1114,15 +1190,19 @@ class KnowledgeRepository:
     async def create_crawl_job(
         self, url: str, *, run_id: str | None = None,
         competitor: str | None = None, dimension: str | None = None,
+        scope: KnowledgeScope | None = None, market: str | None = None,
     ) -> str:
         now = datetime.now(UTC).isoformat()
         job_id = str(uuid.uuid4())
         async with self._write_transaction() as db:
             await db.execute(
                 "INSERT INTO crawl_jobs"
-                " (id, run_id, url, competitor, dimension, status, created_at, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
-                (job_id, run_id, url, competitor, dimension, now, now),
+                " (id, run_id, url, competitor, dimension, status, created_at, updated_at, "
+                "workspace_id, project_id, market)"
+                " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)",
+                (job_id, run_id, url, competitor, dimension, now, now,
+                 scope.workspace_id if scope else None,
+                 scope.project_id if scope else None, market),
             )
         return job_id
 
@@ -1149,85 +1229,98 @@ class KnowledgeRepository:
                     (status, error, json.dumps(result_metadata), now, job_id),
                 )
 
-    async def get_crawl_job(self, job_id: str) -> aiosqlite.Row | None:
-        db = self._connection
-        async with db.execute("SELECT * FROM crawl_jobs WHERE id = ?", (job_id,)) as cur:
+    async def _get_scoped_job(
+        self, table: str, job_id: str, scope: KnowledgeScope | None,
+    ) -> aiosqlite.Row | None:
+        clauses, params = ["id = ?"], [job_id]
+        self._add_scope_filters(clauses, params, scope=scope)
+        async with self._connection.execute(
+            f"SELECT * FROM {table} WHERE {' AND '.join(clauses)}", params,
+        ) as cur:
             return await cur.fetchone()
 
-    async def list_crawl_jobs(
-        self,
-        *,
+    async def _list_scoped_jobs(
+        self, table: str, *, scope: KnowledgeScope | None, limit: int, offset: int,
         status: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
     ) -> list[aiosqlite.Row]:
-        db = self._connection
         clauses: list[str] = []
         params: list[Any] = []
+        self._add_scope_filters(clauses, params, scope=scope)
         if status:
             clauses.append("status = ?")
             params.append(status)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        params.extend([limit, offset])
-        async with db.execute(
-            f"SELECT * FROM crawl_jobs {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            params,
+        async with self._connection.execute(
+            f"SELECT * FROM {table} {where} ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?",
+            [*params, limit, offset],
         ) as cur:
             return await cur.fetchall()
 
-    async def count_crawl_jobs(self, *, status: str | None = None) -> int:
-        db = self._connection
+    async def _count_scoped_jobs(
+        self, table: str, *, scope: KnowledgeScope | None, status: str | None = None,
+    ) -> int:
         clauses: list[str] = []
         params: list[Any] = []
+        self._add_scope_filters(clauses, params, scope=scope)
         if status:
             clauses.append("status = ?")
             params.append(status)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        async with db.execute(f"SELECT COUNT(*) AS total FROM crawl_jobs {where}", params) as cur:
+        async with self._connection.execute(
+            f"SELECT COUNT(*) AS total FROM {table} {where}", params,
+        ) as cur:
             row = await cur.fetchone()
             return int(row["total"]) if row else 0
 
-    async def list_crawl_runs(self) -> list[dict[str, Any]]:
-        db = self._connection
-        async with db.execute(
-            """
-            WITH run_ids AS (
-                SELECT crawl_run_id AS id FROM chunks WHERE crawl_run_id IS NOT NULL
-                UNION
-                SELECT run_id AS id FROM crawl_jobs WHERE run_id IS NOT NULL
-            )
-            SELECT
-                run_ids.id AS crawl_run_id,
-                COUNT(DISTINCT chunks.document_id) AS doc_count,
-                COUNT(chunks.id) AS chunk_count,
-                MIN(crawl_jobs.created_at) AS first_seen_at,
-                MAX(crawl_jobs.updated_at) AS last_seen_at
-            FROM run_ids
-            LEFT JOIN chunks ON chunks.crawl_run_id = run_ids.id
-            LEFT JOIN crawl_jobs ON crawl_jobs.run_id = run_ids.id
-            GROUP BY run_ids.id
-            ORDER BY COALESCE(last_seen_at, first_seen_at, run_ids.id) DESC
-            """
+    async def get_crawl_job(
+        self, job_id: str, *, scope: KnowledgeScope | None = None,
+    ) -> aiosqlite.Row | None:
+        return await self._get_scoped_job("crawl_jobs", job_id, scope)
+
+    async def list_crawl_jobs(
+        self, *, status: str | None = None, limit: int = 50, offset: int = 0,
+        scope: KnowledgeScope | None = None,
+    ) -> list[aiosqlite.Row]:
+        return await self._list_scoped_jobs("crawl_jobs", scope=scope, status=status,
+                                           limit=limit, offset=offset)
+
+    async def count_crawl_jobs(
+        self, *, status: str | None = None, scope: KnowledgeScope | None = None,
+    ) -> int:
+        return await self._count_scoped_jobs("crawl_jobs", scope=scope, status=status)
+
+    async def list_crawl_runs(
+        self, *, scope: KnowledgeScope | None = None,
+    ) -> list[dict[str, Any]]:
+        doc_clauses: list[str] = []
+        doc_params: list[Any] = []
+        self._add_scope_filters(doc_clauses, doc_params, scope=scope, prefix="d.")
+        job_clauses: list[str] = []
+        job_params: list[Any] = []
+        self._add_scope_filters(job_clauses, job_params, scope=scope)
+        doc_where = " AND ".join(["c.crawl_run_id IS NOT NULL", *doc_clauses])
+        job_where = " AND ".join(["run_id IS NOT NULL", *job_clauses])
+        async with self._connection.execute(
+            f"""
+            WITH chunk_counts AS (
+                SELECT c.crawl_run_id AS id, COUNT(DISTINCT c.document_id) AS doc_count,
+                       COUNT(c.id) AS chunk_count
+                FROM chunks c JOIN documents d ON d.id = c.document_id
+                WHERE {doc_where} GROUP BY c.crawl_run_id
+            ), job_times AS (
+                SELECT run_id AS id, MIN(created_at) AS first_seen_at,
+                       MAX(updated_at) AS last_seen_at
+                FROM crawl_jobs WHERE {job_where} GROUP BY run_id
+            ), run_ids AS (SELECT id FROM chunk_counts UNION SELECT id FROM job_times)
+            SELECT run_ids.id AS crawl_run_id, COALESCE(c.doc_count, 0) AS doc_count,
+                   COALESCE(c.chunk_count, 0) AS chunk_count, j.first_seen_at, j.last_seen_at
+            FROM run_ids LEFT JOIN chunk_counts c ON c.id = run_ids.id
+            LEFT JOIN job_times j ON j.id = run_ids.id
+            ORDER BY COALESCE(j.last_seen_at, j.first_seen_at, run_ids.id) DESC
+            """, [*doc_params, *job_params],
         ) as cur:
             rows = await cur.fetchall()
-        return [
-            {
-                "crawl_run_id": row["crawl_run_id"],
-                "doc_count": int(row["doc_count"]),
-                "chunk_count": int(row["chunk_count"]),
-                "first_seen_at": (
-                    datetime.fromisoformat(row["first_seen_at"])
-                    if row["first_seen_at"]
-                    else None
-                ),
-                "last_seen_at": (
-                    datetime.fromisoformat(row["last_seen_at"])
-                    if row["last_seen_at"]
-                    else None
-                ),
-            }
-            for row in rows
-        ]
+        return [dict(row) for row in rows]
 
     # -- Ingest Jobs --------------------------------------------------------
 
@@ -1239,6 +1332,7 @@ class KnowledgeRepository:
         accepted_items: int,
         rejected_items: list[dict[str, Any]],
         options: dict[str, Any],
+        scope: KnowledgeScope | None = None,
     ) -> None:
         now = datetime.now(UTC).isoformat()
         async with self._write_transaction() as db:
@@ -1247,8 +1341,9 @@ class KnowledgeRepository:
                 INSERT INTO ingest_jobs
                     (id, status, total_items, accepted_items, completed_items,
                      failed_items, rejected_items_json, failed_items_json,
-                     result_items_json, options_json, created_at, updated_at)
-                VALUES (?, 'pending', ?, ?, 0, 0, ?, '[]', '[]', ?, ?, ?)
+                     result_items_json, options_json, created_at, updated_at,
+                     workspace_id, project_id)
+                VALUES (?, 'pending', ?, ?, 0, 0, ?, '[]', '[]', ?, ?, ?, ?, ?)
                 """,
                 (
                     job_id,
@@ -1258,6 +1353,8 @@ class KnowledgeRepository:
                     json.dumps(options),
                     now,
                     now,
+                    scope.workspace_id if scope else None,
+                    scope.project_id if scope else None,
                 ),
             )
 
@@ -1313,18 +1410,18 @@ class KnowledgeRepository:
                 failed_items=failed,
             )
 
-    async def get_ingest_job(self, job_id: str) -> aiosqlite.Row | None:
-        db = self._connection
-        async with db.execute("SELECT * FROM ingest_jobs WHERE id = ?", (job_id,)) as cur:
-            return await cur.fetchone()
+    async def get_ingest_job(
+        self, job_id: str, *, scope: KnowledgeScope | None = None,
+    ) -> aiosqlite.Row | None:
+        return await self._get_scoped_job("ingest_jobs", job_id, scope)
 
-    async def list_ingest_jobs(self, *, limit: int = 50, offset: int = 0) -> list[aiosqlite.Row]:
-        db = self._connection
-        async with db.execute(
-            "SELECT * FROM ingest_jobs ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            (limit, offset),
-        ) as cur:
-            return await cur.fetchall()
+    async def list_ingest_jobs(
+        self, *, limit: int = 50, offset: int = 0, scope: KnowledgeScope | None = None,
+    ) -> list[aiosqlite.Row]:
+        return await self._list_scoped_jobs("ingest_jobs", scope=scope, limit=limit, offset=offset)
+
+    async def count_ingest_jobs(self, *, scope: KnowledgeScope | None = None) -> int:
+        return await self._count_scoped_jobs("ingest_jobs", scope=scope)
 
     async def _get_ingest_job_in_transaction(
         self,
@@ -1375,14 +1472,16 @@ class KnowledgeRepository:
         metrics: dict[str, Any],
         labels: list[dict[str, Any]],
         results: list[dict[str, Any]],
+        scope: KnowledgeScope | None = None,
     ) -> None:
         now = datetime.now(UTC).isoformat()
         async with self._write_transaction() as db:
             await db.execute(
                 """
                 INSERT INTO eval_runs
-                    (id, created_at, top_k, metrics_json, labels_json, results_json)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (id, created_at, top_k, metrics_json, labels_json, results_json,
+                     workspace_id, project_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
@@ -1391,46 +1490,38 @@ class KnowledgeRepository:
                     json.dumps(metrics),
                     json.dumps(labels),
                     json.dumps(results),
+                    scope.workspace_id if scope else None,
+                    scope.project_id if scope else None,
                 ),
             )
 
-    async def list_eval_runs(self, *, limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
-        async with self._connection.execute(
-            """
-            SELECT id, created_at, top_k, metrics_json
-            FROM eval_runs
-            ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
-            """,
-            (limit, offset),
-        ) as cur:
-            rows = await cur.fetchall()
-        return [
-            {
-                "id": row["id"],
-                "created_at": datetime.fromisoformat(row["created_at"]),
-                "top_k": int(row["top_k"]),
-                "metrics": json.loads(row["metrics_json"]),
-            }
-            for row in rows
-        ]
+    async def list_eval_runs(
+        self, *, limit: int = 20, offset: int = 0, scope: KnowledgeScope | None = None,
+    ) -> list[dict[str, Any]]:
+        rows = await self._list_scoped_jobs("eval_runs", scope=scope, limit=limit, offset=offset)
+        return [self._eval_run_payload(row, detail=False) for row in rows]
 
-    async def get_eval_run(self, run_id: str) -> dict[str, Any] | None:
-        async with self._connection.execute(
-            "SELECT * FROM eval_runs WHERE id = ?",
-            (run_id,),
-        ) as cur:
-            row = await cur.fetchone()
-        if row is None:
-            return None
-        return {
-            "id": row["id"],
-            "created_at": datetime.fromisoformat(row["created_at"]),
-            "top_k": int(row["top_k"]),
-            "metrics": json.loads(row["metrics_json"]),
-            "labels": json.loads(row["labels_json"]),
-            "results": json.loads(row["results_json"]),
+    async def count_eval_runs(self, *, scope: KnowledgeScope | None = None) -> int:
+        return await self._count_scoped_jobs("eval_runs", scope=scope)
+
+    async def get_eval_run(
+        self, run_id: str, *, scope: KnowledgeScope | None = None,
+    ) -> dict[str, Any] | None:
+        row = await self._get_scoped_job("eval_runs", run_id, scope)
+        return self._eval_run_payload(row) if row else None
+
+    @staticmethod
+    def _eval_run_payload(row: aiosqlite.Row, *, detail: bool = True) -> dict[str, Any]:
+        payload = {
+            "id": row["id"], "created_at": datetime.fromisoformat(row["created_at"]),
+            "top_k": int(row["top_k"]), "metrics": json.loads(row["metrics_json"]),
+            "workspace_id": dict(row).get("workspace_id"),
+            "project_id": dict(row).get("project_id"),
         }
+        if detail:
+            payload.update(labels=json.loads(row["labels_json"]),
+                           results=json.loads(row["results_json"]))
+        return payload
 
     async def record_retrieval_trace(self, record: Any) -> str:
         trace_id = str(uuid.uuid4())
@@ -1471,57 +1562,60 @@ class KnowledgeRepository:
 
     # -- Stats -------------------------------------------------------------
 
-    async def knowledge_stats(self) -> dict[str, Any]:
+    async def knowledge_stats(
+        self, *, scope: KnowledgeScope | None = None, market: str | None = None,
+        source_roles: list[str] | None = None, max_age_days: int | None = None,
+    ) -> dict[str, Any]:
         db = self._connection
+        clauses = ["d.status = 'active'", "d.is_active = 1"]
+        params: list[Any] = []
+        self._add_scope_filters(clauses, params, scope=scope, market=market,
+                                source_roles=source_roles, max_age_days=max_age_days, prefix="d.")
+        where = " AND ".join(clauses)
         async with db.execute(
-            """
-            SELECT COUNT(*) AS total
-            FROM documents
-            WHERE status = 'active' AND is_active = 1
-            """
+            f"SELECT COUNT(*) AS total FROM documents d WHERE {where}", params
         ) as cur:
             row = await cur.fetchone()
             doc_count = int(row["total"]) if row else 0
 
         async with db.execute(
-            """
-            SELECT COUNT(*) AS total, COALESCE(AVG(LENGTH(c.text)), 0) AS avg_len
-            FROM chunks c
-            JOIN documents d ON d.id = c.document_id
-            WHERE d.status = 'active' AND d.is_active = 1
-            """
+            f"""SELECT COUNT(*) AS total, COALESCE(AVG(LENGTH(c.text)), 0) AS avg_len
+                FROM chunks c JOIN documents d ON d.id = c.document_id WHERE {where}""",
+            params,
         ) as cur:
             row = await cur.fetchone()
             chunk_count = int(row["total"]) if row else 0
             average_chunk_length = float(row["avg_len"]) if row else 0.0
 
         async with db.execute(
-            """
-            SELECT source_type, COUNT(*) AS total
-            FROM documents
-            WHERE status = 'active' AND is_active = 1
-            GROUP BY source_type
-            ORDER BY source_type
-            """
+            f"""SELECT source_type, COUNT(*) AS total FROM documents d WHERE {where}
+                GROUP BY source_type ORDER BY source_type""", params,
         ) as cur:
-            rows = await cur.fetchall()
-            source_breakdown = {row["source_type"]: int(row["total"]) for row in rows}
+            source_breakdown = {
+                row["source_type"]: int(row["total"]) for row in await cur.fetchall()
+            }
 
         since = (datetime.now(UTC) - timedelta(days=1)).isoformat()
         async with db.execute(
-            """
-            SELECT COUNT(*) AS total
-            FROM documents
-            WHERE status = 'active' AND is_active = 1 AND fetched_at >= ?
-            """,
-            (since,),
+            f"SELECT COUNT(*) AS total FROM documents d "
+            f"WHERE {where} AND julianday(fetched_at) >= julianday(?)",
+            [*params, since],
         ) as cur:
             row = await cur.fetchone()
             last_24h_ingest_count = int(row["total"]) if row else 0
 
         fts_size = 0
-        for table_name in ("documents_fts", "chunks_fts"):
-            async with db.execute(f"SELECT COUNT(*) AS total FROM {table_name}") as cur:
+        for table_name, join in (
+            ("documents_fts", "JOIN documents d ON d.rowid = documents_fts.rowid"),
+            ("chunks_fts", "JOIN chunks c ON c.rowid = chunks_fts.rowid "
+                           "JOIN documents d ON d.id = c.document_id"),
+        ):
+            if scope is None and market is None and not source_roles and max_age_days is None:
+                sql, fts_params = f"SELECT COUNT(*) AS total FROM {table_name}", []
+            else:
+                sql = f"SELECT COUNT(*) AS total FROM {table_name} {join} WHERE {where}"
+                fts_params = params
+            async with db.execute(sql, fts_params) as cur:
                 row = await cur.fetchone()
                 fts_size += int(row["total"]) if row else 0
 
@@ -1567,6 +1661,10 @@ class KnowledgeRepository:
             (9, "add evidence sync tracking", self._migration_009_evidence_sync_tracking),
             (10, "rebuild FTS with CJK bigrams", self._migration_010_cjk_fts),
             (11, "add recoverable vector indexing state", self._migration_011_indexing_state),
+            (12, "add scoped source context and namespace identity",
+             self._migration_012_knowledge_scope),
+            (13, "add scoped knowledge jobs and eval runs", self._migration_013_job_scope),
+            (14, "add typed source updated timestamp", self._migration_014_source_updated),
         ]
         db = self._connection
         async with db.execute("SELECT id FROM _schema_version") as cur:
@@ -1621,6 +1719,32 @@ class KnowledgeRepository:
         await self._connection.execute(
             "UPDATE documents SET indexed_at = NULL WHERE indexing_status != 'ready'"
         )
+
+    async def _migration_014_source_updated(self) -> None:
+        await self._add_column_if_missing("documents", "source_updated_at", "TEXT")
+
+    async def _migration_013_job_scope(self) -> None:
+        for table in ("crawl_jobs", "ingest_jobs", "eval_runs"):
+            await self._add_column_if_missing(table, "workspace_id", "TEXT")
+            await self._add_column_if_missing(table, "project_id", "TEXT")
+            await self._connection.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{table}_scope "
+                f"ON {table}(workspace_id, project_id, created_at)"
+            )
+        await self._add_column_if_missing("crawl_jobs", "market", "TEXT")
+
+    async def _migration_012_knowledge_scope(self) -> None:
+        for column, declaration in (
+            ("workspace_id", "TEXT"), ("project_id", "TEXT"), ("market", "TEXT"),
+            ("source_role", "TEXT NOT NULL DEFAULT 'source'"),
+            ("source_published_at", "TEXT"), ("last_verified_at", "TEXT"),
+        ):
+            await self._add_column_if_missing("documents", column, declaration)
+        await self._connection.execute(
+            "UPDATE documents SET source_role = 'historical_report' WHERE source_type = 'report'"
+        )
+        for name in ("ux_documents_active_canonical_url", "ux_documents_active_content_hash"):
+            await self._connection.execute(f"DROP INDEX IF EXISTS {name}")
 
     async def _migration_002_documents_versioning(self) -> None:
         await self._add_column_if_missing(
@@ -1815,33 +1939,66 @@ class KnowledgeRepository:
         await self._deduplicate_active_documents_by("content_hash")
 
     async def _deduplicate_active_documents_by(self, column: str) -> None:
-        db = self._connection
-        async with db.execute(
-            f"""
-            SELECT {column} AS value
-            FROM documents
-            WHERE is_active = 1 AND {column} IS NOT NULL
-            GROUP BY {column}
-            HAVING COUNT(*) > 1
-            """
+        if column not in {"canonical_url", "content_hash"}:
+            raise ValueError("Unsupported duplicate identity column")
+        async with self._connection.execute(
+            f"""SELECT id FROM (
+                    SELECT id, ROW_NUMBER() OVER (
+                        PARTITION BY {_DOCUMENT_NAMESPACE_SQL}, {column}
+                        ORDER BY fetched_at DESC, rowid DESC
+                    ) AS duplicate_rank
+                    FROM documents WHERE is_active = 1 AND {column} IS NOT NULL
+                ) WHERE duplicate_rank > 1"""
         ) as cur:
-            duplicate_values = [row["value"] for row in await cur.fetchall()]
-        for value in duplicate_values:
-            async with db.execute(
-                f"""
-                SELECT id
-                FROM documents
-                WHERE is_active = 1 AND {column} = ?
-                ORDER BY fetched_at DESC, rowid DESC
-                """,
-                (value,),
-            ) as cur:
-                rows = await cur.fetchall()
-            for row in rows[1:]:
-                await db.execute(
-                    "UPDATE documents SET is_active = 0, status = 'archived' WHERE id = ?",
-                    (row["id"],),
-                )
+            rows = await cur.fetchall()
+        for row in rows:
+            await self._connection.execute(
+                "UPDATE documents SET is_active = 0, status = 'archived' WHERE id = ?",
+                (row["id"],),
+            )
+
+    @staticmethod
+    def _namespace_filter(
+        namespace: KnowledgeNamespace, *, prefix: str = "",
+    ) -> tuple[str, list[Any]]:
+        if namespace[0] is None:
+            return f"{prefix}workspace_id IS NULL", []
+        columns = ("workspace_id", "project_id", "competitor", "dimension", "market", "source_role")
+        return " AND ".join(f"{prefix}{column} IS ?" for column in columns), list(namespace)
+
+    @staticmethod
+    def _add_scope_filters(
+        clauses: list[str], params: list[Any], *, scope: KnowledgeScope | None = None,
+        market: str | None = None, source_roles: list[str] | None = None,
+        max_age_days: int | None = None, prefix: str = "",
+    ) -> None:
+        if scope is not None:
+            clauses.append(f"{prefix}workspace_id = ?")
+            params.append(scope.workspace_id)
+            if scope.project_id is not None and scope.include_workspace_library:
+                clauses.append(f"({prefix}project_id = ? OR {prefix}project_id IS NULL)")
+                params.append(scope.project_id)
+            else:
+                clauses.append(f"{prefix}project_id IS ?")
+                params.append(scope.project_id)
+        if market is not None:
+            clauses.append(f"{prefix}market = ?")
+            params.append(market)
+        if source_roles:
+            clauses.append(f"{prefix}source_role IN ({', '.join('?' for _ in source_roles)})")
+            params.extend(source_roles)
+        if max_age_days is not None:
+            if max_age_days < 0:
+                raise ValueError("max_age_days must be nonnegative")
+            now = datetime.now(UTC)
+            cutoff = (now - timedelta(days=max_age_days)).isoformat()
+            clauses.append(
+                f"julianday(COALESCE({prefix}last_verified_at, "
+                f"{prefix}source_updated_at, "
+                f"{prefix}source_published_at, {prefix}fetched_at)) "
+                "BETWEEN julianday(?) AND julianday(?)"
+            )
+            params.extend([cutoff, now.isoformat()])
 
     @staticmethod
     def _row_to_document(row: aiosqlite.Row) -> KnowledgeDocument:
@@ -1853,6 +2010,14 @@ class KnowledgeRepository:
             source_type=row["source_type"],
             competitor=row["competitor"],
             dimension=row["dimension"],
+            workspace_id=row["workspace_id"], project_id=row["project_id"],
+            market=row["market"], source_role=row["source_role"],
+            source_published_at=(datetime.fromisoformat(row["source_published_at"])
+                                 if row["source_published_at"] else None),
+            source_updated_at=(datetime.fromisoformat(row["source_updated_at"])
+                               if row["source_updated_at"] else None),
+            last_verified_at=(datetime.fromisoformat(row["last_verified_at"])
+                              if row["last_verified_at"] else None),
             content_hash=row["content_hash"],
             text=row["text"],
             markdown=row["markdown"],

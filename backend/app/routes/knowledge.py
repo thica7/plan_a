@@ -16,10 +16,11 @@ import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
-from app.deps import get_enterprise_user_context
+from app.deps import get_enterprise_store, get_enterprise_user_context
+from app.knowledge_access import resolve_knowledge_scope, select_project, stored_job_scope
 from packages.auth import EnterpriseUserContext, can_access_workspace
 from packages.crawler.models import CrawlRequest, CrawlResult
-from packages.enterprise.store import DEFAULT_WORKSPACE_ID
+from packages.enterprise.store import DEFAULT_WORKSPACE_ID, EnterpriseStore
 from packages.knowledge.embeddings import (
     EmbeddingProvider,
     get_embedding_provider_from_env,
@@ -31,13 +32,16 @@ from packages.knowledge.models import (
     KnowledgeChunk,
     KnowledgeDocument,
     KnowledgeRollbackResult,
+    KnowledgeScope,
     RetrievalRequest,
     RetrievalResponse,
+    SourceRole,
 )
 from packages.knowledge.parsers import ParsedDocument, parse_document
 from packages.knowledge.repository import KnowledgeRepository
 from packages.knowledge.reranker import RerankerProvider, get_reranker_provider_from_env
 from packages.knowledge.retrieval import RetrievalPreset, RetrievalService, get_retrieval_presets
+from packages.research.evidence.admission import capture_fact_verification_time
 
 router = APIRouter()
 _repository = KnowledgeRepository()
@@ -57,6 +61,8 @@ _BATCH_ALLOWED_MIME_TYPES = {
 
 
 class CrawlJobCreate(BaseModel):
+    project_id: str | None = None
+    market: str | None = None
     url: str
     run_id: str | None = None
     competitor: str | None = None
@@ -64,6 +70,9 @@ class CrawlJobCreate(BaseModel):
 
 
 class CrawlJob(BaseModel):
+    market: str | None = None
+    workspace_id: str | None = None
+    project_id: str | None = None
     id: str
     run_id: str | None = None
     url: str
@@ -78,6 +87,11 @@ class CrawlJob(BaseModel):
 
 
 class BatchIngestItem(BaseModel):
+    market: str | None = None
+    source_role: SourceRole = "source"
+    source_published_at: datetime | None = None
+    source_updated_at: datetime | None = None
+    last_verified_at: datetime | None = None
     source: Literal["url", "text", "base64"]
     url: str | None = Field(default=None, max_length=2048)
     crawl_run_id: str | None = None
@@ -96,6 +110,7 @@ class BatchIngestOptions(BaseModel):
 
 
 class BatchIngestRequest(BaseModel):
+    project_id: str | None = None
     items: list[BatchIngestItem] = Field(min_length=1, max_length=_BATCH_MAX_ITEMS)
     options: BatchIngestOptions = Field(default_factory=BatchIngestOptions)
 
@@ -112,6 +127,8 @@ class BatchIngestResponse(BaseModel):
 
 
 class IngestJob(BaseModel):
+    workspace_id: str | None = None
+    project_id: str | None = None
     id: str
     status: str
     total_items: int
@@ -151,12 +168,16 @@ class EvalLabel(BaseModel):
 
 
 class EvalRequest(BaseModel):
+    project_id: str | None = None
+    include_workspace_library: bool = False
     labels: list[EvalLabel]
     top_k: int = 10
     preset: str | None = None
 
 
 class EvalRunSummary(BaseModel):
+    workspace_id: str | None = None
+    project_id: str | None = None
     id: str
     created_at: datetime
     top_k: int
@@ -209,6 +230,7 @@ RepositoryDep = Annotated[KnowledgeRepository, Depends(get_repository)]
 EmbeddingProviderDep = Annotated[EmbeddingProvider | None, Depends(get_embedding_provider)]
 RerankerProviderDep = Annotated[RerankerProvider | None, Depends(get_reranker_provider)]
 EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
+EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
 
 
 @router.get("/knowledge/documents", response_model=list[KnowledgeDocument])
@@ -221,10 +243,17 @@ async def list_knowledge_documents(
     source_type: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> list[KnowledgeDocument]:
-    _require_kb_access(user, "memory:read")
+    scope = resolve_knowledge_scope(
+        user, "memory:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
     try:
         total = await repo.count_documents(
+            scope=scope,
             competitor=competitor,
             dimension=dimension,
             source_type=source_type,
@@ -233,6 +262,7 @@ async def list_knowledge_documents(
         response.headers["X-Limit"] = str(limit)
         response.headers["X-Offset"] = str(offset)
         return await repo.list_documents(
+            scope=scope,
             competitor=competitor,
             dimension=dimension,
             source_type=source_type,
@@ -248,10 +278,16 @@ async def get_knowledge_document(
     document_id: str,
     repo: RepositoryDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> KnowledgeDocument:
-    _require_kb_access(user, "memory:read")
+    scope = resolve_knowledge_scope(
+        user, "memory:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
     try:
-        document = await repo.get_document(document_id)
+        document = await repo.get_document(document_id, scope=scope)
         if document is None:
             raise HTTPException(status_code=404, detail="Document not found")
         return document
@@ -266,10 +302,16 @@ async def get_knowledge_document_chunks(
     document_id: str,
     repo: RepositoryDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> list[KnowledgeChunk]:
-    _require_kb_access(user, "memory:read")
+    scope = resolve_knowledge_scope(
+        user, "memory:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
     try:
-        document = await repo.get_document(document_id)
+        document = await repo.get_document(document_id, scope=scope)
         if document is None:
             raise HTTPException(status_code=404, detail="Document not found")
         return await repo.get_chunks_for_document(document_id)
@@ -283,12 +325,18 @@ async def get_knowledge_document_chunks(
 async def reindex_knowledge_document(
     document_id: str, repo: RepositoryDep, embedding_provider: EmbeddingProviderDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> KnowledgeDocument:
-    _require_kb_access(user, "memory:write")
+    scope = resolve_knowledge_scope(
+        user, "memory:write", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=False,
+    )
+    if await repo.get_document(document_id, scope=scope) is None:
+        raise HTTPException(status_code=404, detail="Document not found")
     if embedding_provider is None:
         raise HTTPException(status_code=400, detail="Embedding provider is disabled")
-    if await repo.get_document(document_id) is None:
-        raise HTTPException(status_code=404, detail="Document not found")
     pipeline = IngestionPipeline(repo, _vector_store_for_ingest(embedding_provider))
     try:
         await pipeline.reindex_document(document_id, embedding_provider=embedding_provider)
@@ -296,7 +344,9 @@ async def reindex_knowledge_document(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Reindex failed: {exc}") from exc
-    return await get_knowledge_document(document_id, repo, user)
+    return await get_knowledge_document(
+        document_id, repo, user, store=store, project_id=scope.project_id,
+    )
 
 
 @router.get("/knowledge/providers")
@@ -322,10 +372,16 @@ async def delete_knowledge_document(
     document_id: str,
     repo: RepositoryDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> None:
-    _require_kb_access(user, "memory:write")
+    scope = resolve_knowledge_scope(
+        user, "memory:write", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=False,
+    )
     try:
-        document = await repo.get_document(document_id)
+        document = await repo.get_document(document_id, scope=scope)
         if document is None:
             raise HTTPException(status_code=404, detail="Document not found")
         await repo.delete_document(document_id)
@@ -343,9 +399,15 @@ async def get_knowledge_document_versions(
     document_id: str,
     repo: RepositoryDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> list[KnowledgeDocument]:
-    _require_kb_access(user, "memory:read")
-    versions = await repo.get_document_versions(document_id)
+    scope = resolve_knowledge_scope(
+        user, "memory:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
+    versions = await repo.get_document_versions(document_id, scope=scope)
     if not versions:
         raise HTTPException(status_code=404, detail="Document not found")
     return versions
@@ -357,10 +419,16 @@ async def diff_knowledge_document(
     repo: RepositoryDep,
     user: EnterpriseUserDep,
     against: str = Query(...),
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> DocumentDiffResponse:
-    _require_kb_access(user, "memory:read")
-    document = await repo.get_document(document_id)
-    other = await repo.get_document(against)
+    scope = resolve_knowledge_scope(
+        user, "memory:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
+    document = await repo.get_document(document_id, scope=scope)
+    other = await repo.get_document(against, scope=scope)
     if document is None or other is None:
         raise HTTPException(status_code=404, detail="Document not found")
     diff = list(difflib.unified_diff(
@@ -379,9 +447,15 @@ async def merge_knowledge_document_version(
     request: DocumentMergeRequest,
     repo: RepositoryDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> KnowledgeDocument:
-    _require_kb_access(user, "memory:write")
-    merged = await repo.merge_document_version(document_id, request.target_document_id)
+    scope = resolve_knowledge_scope(
+        user, "memory:write", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=False,
+    )
+    merged = await repo.merge_document_version(document_id, request.target_document_id, scope=scope)
     if merged is None:
         raise HTTPException(status_code=404, detail="Document version not found")
     return merged
@@ -392,12 +466,22 @@ async def rollback_knowledge_documents(
     request: DocumentRollbackRequest,
     repo: RepositoryDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> KnowledgeRollbackResult:
-    _require_kb_access(user, "memory:write")
+    scope = resolve_knowledge_scope(
+        user, "memory:write", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=False,
+    )
     if not any((request.document_ids, request.run_id, request.raw_source_id, request.crawl_run_id)):
         raise HTTPException(status_code=400, detail="At least one rollback selector is required")
+    for document_id in request.document_ids:
+        if await repo.get_document(document_id, scope=scope) is None:
+            raise HTTPException(status_code=404, detail="Document not found")
     try:
         result = await repo.rollback_documents(
+            scope=scope,
             document_ids=request.document_ids or None,
             run_id=request.run_id,
             raw_source_id=request.raw_source_id,
@@ -424,8 +508,19 @@ async def search_knowledge(
     embedding_provider: EmbeddingProviderDep,
     reranker_provider: RerankerProviderDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> RetrievalResponse:
-    _require_kb_access(user, "memory:read")
+    scope = resolve_knowledge_scope(
+        user, "memory:read", store=store,
+        project_id=select_project(project_id, request.project_id),
+        include_workspace_library=(include_workspace_library or request.include_workspace_library),
+    )
+    request = request.model_copy(update={
+        "workspace_id": scope.workspace_id, "project_id": scope.project_id,
+        "include_workspace_library": scope.include_workspace_library,
+    })
     try:
         service = RetrievalService(
             repo=repo,
@@ -457,8 +552,15 @@ async def evaluate_knowledge(
     embedding_provider: EmbeddingProviderDep,
     reranker_provider: RerankerProviderDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> EvalRunDetail:
-    _require_kb_access(user, "memory:write")
+    scope = resolve_knowledge_scope(
+        user, "memory:write", store=store,
+        project_id=select_project(project_id, request.project_id),
+        include_workspace_library=(include_workspace_library or request.include_workspace_library),
+    )
     top_k = max(1, request.top_k)
     labels = [
         RetrievalLabel(
@@ -481,6 +583,8 @@ async def evaluate_knowledge(
         responses = [
             await service.retrieve(
                 RetrievalRequest(
+                    workspace_id=scope.workspace_id, project_id=scope.project_id,
+                    include_workspace_library=scope.include_workspace_library,
                     query=label.query,
                     preset=request.preset,
                     top_k=top_k,
@@ -504,13 +608,14 @@ async def evaluate_knowledge(
     ]
     label_payload = [label.model_dump(mode="json") for label in request.labels]
     await repo.record_eval_run(
+        scope=scope,
         run_id=run_id,
         top_k=top_k,
         metrics=metrics,
         labels=label_payload,
         results=result_payload,
     )
-    stored = await repo.get_eval_run(run_id)
+    stored = await repo.get_eval_run(run_id, scope=scope)
     if stored is None:
         raise HTTPException(status_code=500, detail="Eval run was not persisted")
     return EvalRunDetail(**stored)
@@ -522,9 +627,15 @@ async def list_knowledge_eval_runs(
     user: EnterpriseUserDep,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> list[EvalRunSummary]:
-    _require_kb_access(user, "memory:read")
-    rows = await repo.list_eval_runs(limit=limit, offset=offset)
+    scope = resolve_knowledge_scope(
+        user, "memory:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
+    rows = await repo.list_eval_runs(scope=scope, limit=limit, offset=offset)
     return [EvalRunSummary(**row) for row in rows]
 
 
@@ -533,9 +644,15 @@ async def get_knowledge_eval_run(
     run_id: str,
     repo: RepositoryDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> EvalRunDetail:
-    _require_kb_access(user, "memory:read")
-    row = await repo.get_eval_run(run_id)
+    scope = resolve_knowledge_scope(
+        user, "memory:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
+    row = await repo.get_eval_run(run_id, scope=scope)
     if row is None:
         raise HTTPException(status_code=404, detail="Eval run not found")
     return EvalRunDetail(**row)
@@ -545,9 +662,15 @@ async def get_knowledge_eval_run(
 async def get_knowledge_stats(
     repo: RepositoryDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> KnowledgeStatsResponse:
-    _require_kb_access(user, "memory:read")
-    stats = await repo.knowledge_stats()
+    scope = resolve_knowledge_scope(
+        user, "memory:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
+    stats = await repo.knowledge_stats(scope=scope)
     return KnowledgeStatsResponse(**stats)
 
 
@@ -559,13 +682,19 @@ async def list_knowledge_crawl_jobs(
     status_filter: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> list[CrawlJob]:
-    _require_kb_access(user, "source:read")
-    total = await repo.count_crawl_jobs(status=status_filter)
+    scope = resolve_knowledge_scope(
+        user, "source:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
+    total = await repo.count_crawl_jobs(scope=scope, status=status_filter)
     response.headers["X-Total-Count"] = str(total)
     response.headers["X-Limit"] = str(limit)
     response.headers["X-Offset"] = str(offset)
-    rows = await repo.list_crawl_jobs(status=status_filter, limit=limit, offset=offset)
+    rows = await repo.list_crawl_jobs(scope=scope, status=status_filter, limit=limit, offset=offset)
     return [_row_to_crawl_job(row) for row in rows]
 
 
@@ -574,16 +703,25 @@ async def create_knowledge_crawl_job(
     request: CrawlJobCreate,
     repo: RepositoryDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> CrawlJob:
-    _require_kb_access(user, "source:write")
+    scope = resolve_knowledge_scope(
+        user, "source:write", store=store,
+        project_id=select_project(project_id, request.project_id),
+        include_workspace_library=False,
+    )
     job_id = await repo.create_crawl_job(
         request.url,
+        scope=scope,
+        market=request.market,
         run_id=request.run_id,
         competitor=request.competitor,
         dimension=request.dimension,
     )
     asyncio.create_task(_run_crawl_job(job_id))
-    row = await repo.get_crawl_job(job_id)
+    row = await repo.get_crawl_job(job_id, scope=scope)
     if row is None:
         raise HTTPException(status_code=404, detail="Crawl job not found")
     return _row_to_crawl_job(row)
@@ -594,9 +732,15 @@ async def get_knowledge_crawl_job(
     job_id: str,
     repo: RepositoryDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> CrawlJob:
-    _require_kb_access(user, "source:read")
-    row = await repo.get_crawl_job(job_id)
+    scope = resolve_knowledge_scope(
+        user, "source:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
+    row = await repo.get_crawl_job(job_id, scope=scope)
     if row is None:
         raise HTTPException(status_code=404, detail="Crawl job not found")
     return _row_to_crawl_job(row)
@@ -606,9 +750,15 @@ async def get_knowledge_crawl_job(
 async def list_knowledge_crawl_runs(
     repo: RepositoryDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> list[CrawlRunSummary]:
-    _require_kb_access(user, "source:read")
-    rows = await repo.list_crawl_runs()
+    scope = resolve_knowledge_scope(
+        user, "source:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
+    rows = await repo.list_crawl_runs(scope=scope)
     return [CrawlRunSummary(**row) for row in rows]
 
 
@@ -618,8 +768,15 @@ async def create_knowledge_batch(
     repo: RepositoryDep,
     embedding_provider: EmbeddingProviderDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> BatchIngestResponse:
-    _require_kb_access(user, "memory:write")
+    scope = resolve_knowledge_scope(
+        user, "memory:write", store=store,
+        project_id=select_project(project_id, request.project_id),
+        include_workspace_library=False,
+    )
     rejected: list[RejectedItem] = []
     accepted_items: list[tuple[int, BatchIngestItem]] = []
     for index, item in enumerate(request.items):
@@ -636,6 +793,7 @@ async def create_knowledge_batch(
     }
     await repo.create_ingest_job(
         job_id,
+        scope=scope,
         total_items=len(request.items),
         accepted_items=len(accepted_items),
         rejected_items=[item.model_dump() for item in rejected],
@@ -661,9 +819,15 @@ async def get_knowledge_ingest_job(
     job_id: str,
     repo: RepositoryDep,
     user: EnterpriseUserDep,
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> IngestJob:
-    _require_kb_access(user, "memory:read")
-    row = await repo.get_ingest_job(job_id)
+    scope = resolve_knowledge_scope(
+        user, "memory:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
+    row = await repo.get_ingest_job(job_id, scope=scope)
     if row is None:
         raise HTTPException(status_code=404, detail="Ingest job not found")
     return _row_to_ingest_job(row)
@@ -675,9 +839,15 @@ async def list_knowledge_ingest_jobs(
     user: EnterpriseUserDep,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    store: EnterpriseStoreDep = None,
+    project_id: str | None = None,
+    include_workspace_library: bool = False,
 ) -> list[IngestJob]:
-    _require_kb_access(user, "memory:read")
-    rows = await repo.list_ingest_jobs(limit=limit, offset=offset)
+    scope = resolve_knowledge_scope(
+        user, "memory:read", store=store, project_id=select_project(project_id, None),
+        include_workspace_library=include_workspace_library,
+    )
+    rows = await repo.list_ingest_jobs(scope=scope, limit=limit, offset=offset)
     return [_row_to_ingest_job(row) for row in rows]
 
 
@@ -685,6 +855,11 @@ async def _run_crawl_job(job_id: str) -> None:
     repo = await get_repository()
     row = await repo.get_crawl_job(job_id)
     if row is None:
+        return
+    try:
+        scope = stored_job_scope(row)
+    except ValueError as exc:
+        await repo.update_crawl_job(job_id, status="failed", error=str(exc))
         return
     job = _row_to_crawl_job(row)
 
@@ -709,6 +884,7 @@ async def _run_crawl_job(job_id: str) -> None:
                 repo,
                 result,
                 embedding_provider=get_embedding_provider(),
+                scope=scope, market=job.market,
             )
     except Exception as exc:
         final_status = "failed"
@@ -727,6 +903,9 @@ async def _run_crawl_job(job_id: str) -> None:
 
 def _row_to_crawl_job(row: aiosqlite.Row) -> CrawlJob:
     return CrawlJob(
+        market=dict(row).get("market"),
+        workspace_id=dict(row).get("workspace_id"),
+        project_id=dict(row).get("project_id"),
         id=row["id"],
         run_id=row["run_id"],
         url=row["url"],
@@ -753,6 +932,8 @@ def _load_result_metadata(raw: str | None) -> dict[str, Any]:
 
 def _row_to_ingest_job(row: aiosqlite.Row) -> IngestJob:
     return IngestJob(
+        workspace_id=dict(row).get("workspace_id"),
+        project_id=dict(row).get("project_id"),
         id=row["id"],
         status=row["status"],
         total_items=row["total_items"],
@@ -773,14 +954,32 @@ async def ingest_crawl_result(
     result: CrawlResult,
     *,
     embedding_provider: EmbeddingProvider | None = None,
+    scope: KnowledgeScope | None = None,
+    market: str | None = None,
+    source_role: SourceRole = "source",
+    source_published_at: datetime | None = None,
+    source_updated_at: datetime | None = None,
+    crawl_source_id: str | None = None,
 ) -> dict[str, Any]:
     if not _kb_ingest_on_crawl():
         return {"ingested": False, "reason": "disabled"}
+    if scope is None:
+        raise ValueError("Trusted knowledge scope is required for crawl ingestion")
+    if not result.success:
+        return {"ingested": False, "reason": "crawl_failed"}
     if not result.page or not result.page.text.strip():
         return {"ingested": False, "reason": "empty_page"}
 
     page = result.page
     doc = DocumentCreate(
+        workspace_id=scope.workspace_id, project_id=scope.project_id,
+        market=market, source_role=source_role, source_published_at=source_published_at,
+        source_updated_at=source_updated_at,
+        fetched_at=page.fetched_at,
+        last_verified_at=capture_fact_verification_time(
+            result.request.dimension, page.fetched_at, source_published_at=source_published_at,
+            source_updated_at=source_updated_at,
+        ),
         url=page.url,
         canonical_url=page.url,
         title=page.title or page.url,
@@ -799,17 +998,24 @@ async def ingest_crawl_result(
             "links": page.links,
             "tables": page.tables,
             "fetched_at": page.fetched_at.isoformat(),
+            "capture_verified_at": page.fetched_at.isoformat(),
         },
     )
     pipeline = IngestionPipeline(
         repo=repo,
         vector_store=_vector_store_for_ingest(embedding_provider),
     )
-    document_id = await pipeline.ingest(
-        doc,
-        embedding_provider=embedding_provider,
-        crawl_run_id=result.request.run_id,
-    )
+    from packages.knowledge.repository import CrawlSourceUnavailableError
+
+    try:
+        document_id = await pipeline.ingest(
+            doc,
+            embedding_provider=embedding_provider,
+            crawl_run_id=result.request.run_id,
+            crawl_source_id=crawl_source_id,
+        )
+    except CrawlSourceUnavailableError:
+        return {"ingested": False, "reason": "source_unavailable"}
     return {"ingested": True, "document_id": document_id}
 
 
@@ -821,6 +1027,15 @@ async def _process_batch_ingest(
     options: dict[str, Any],
     embedding_provider: EmbeddingProvider | None,
 ) -> None:
+    row = await repo.get_ingest_job(job_id)
+    if row is None:
+        return
+    try:
+        scope = stored_job_scope(row)
+    except ValueError as exc:
+        await repo.record_ingest_job_failure(job_id, index=-1, reason=str(exc))
+        await repo.update_ingest_job_status(job_id, "failed")
+        return
     await repo.update_ingest_job_status(job_id, "running")
     semaphore = asyncio.Semaphore(options["max_concurrent"])
     failed_fast = asyncio.Event()
@@ -846,6 +1061,7 @@ async def _process_batch_ingest(
                     index,
                     item,
                     embedding_provider=embedding_provider,
+                    scope=scope,
                 )
                 async with update_lock:
                     await repo.record_ingest_job_success(
@@ -879,9 +1095,12 @@ async def _ingest_batch_item(
     item: BatchIngestItem,
     *,
     embedding_provider: EmbeddingProvider | None,
+    scope: KnowledgeScope,
 ) -> str:
     if item.source == "url":
-        return await _ingest_url_batch_item(repo, item, embedding_provider=embedding_provider)
+        return await _ingest_url_batch_item(
+            repo, item, embedding_provider=embedding_provider, scope=scope,
+        )
 
     if item.source == "text":
         parsed = parse_document(
@@ -900,6 +1119,9 @@ async def _ingest_batch_item(
             dimension=item.dimension,
             embedding_provider=embedding_provider,
             crawl_run_id=item.crawl_run_id,
+            scope=scope, market=item.market, source_role=item.source_role,
+            source_published_at=item.source_published_at, last_verified_at=item.last_verified_at,
+            source_updated_at=item.source_updated_at,
         )
 
     try:
@@ -917,6 +1139,9 @@ async def _ingest_batch_item(
         dimension=item.dimension,
         embedding_provider=embedding_provider,
         crawl_run_id=item.crawl_run_id,
+        scope=scope, market=item.market, source_role=item.source_role,
+        source_published_at=item.source_published_at, last_verified_at=item.last_verified_at,
+        source_updated_at=item.source_updated_at,
     )
 
 
@@ -925,6 +1150,7 @@ async def _ingest_url_batch_item(
     item: BatchIngestItem,
     *,
     embedding_provider: EmbeddingProvider | None,
+    scope: KnowledgeScope,
 ) -> str:
     from packages.crawler.scheduler import CrawlerScheduler
 
@@ -938,7 +1164,12 @@ async def _ingest_url_batch_item(
         ))
         if not result.success or result.page is None:
             raise ValueError(result.error or "crawl failed")
-        metadata = await ingest_crawl_result(repo, result, embedding_provider=embedding_provider)
+        metadata = await ingest_crawl_result(
+            repo, result, embedding_provider=embedding_provider, scope=scope,
+            market=item.market, source_role=item.source_role,
+            source_published_at=item.source_published_at,
+            source_updated_at=item.source_updated_at,
+        )
         if not metadata.get("document_id"):
             raise ValueError(metadata.get("reason") or "crawl result was not ingested")
         return str(metadata["document_id"])
@@ -956,7 +1187,13 @@ async def _ingest_parsed_document(
     competitor: str | None,
     dimension: str | None,
     embedding_provider: EmbeddingProvider | None,
+    scope: KnowledgeScope,
     crawl_run_id: str | None = None,
+    market: str | None = None,
+    source_role: SourceRole = "source",
+    source_published_at: datetime | None = None,
+    source_updated_at: datetime | None = None,
+    last_verified_at: datetime | None = None,
 ) -> str:
     if not parsed.text.strip():
         raise ValueError("parsed document is empty")
@@ -971,6 +1208,10 @@ async def _ingest_parsed_document(
         "tables": parsed.tables,
     })
     doc = DocumentCreate(
+        workspace_id=scope.workspace_id, project_id=scope.project_id,
+        market=market, source_role=source_role, source_published_at=source_published_at,
+        source_updated_at=source_updated_at,
+        last_verified_at=last_verified_at,
         url=source_url,
         canonical_url=canonical_url,
         title=parsed.title or canonical_url or source_url or "Untitled",

@@ -138,7 +138,10 @@ async def test_reindex_api_returns_ready_document_and_provider_status(tmp_path, 
         store = local_store()
         monkeypatch.setattr(routes, "_vector_store_for_ingest", lambda _provider: store)
         doc_id = await IngestionPipeline(repo, object()).ingest(
-            DocumentCreate(title="Legacy", text="Legacy pricing guide", source_type="manual")
+            DocumentCreate(
+                title="Legacy", text="Legacy pricing guide", source_type="manual",
+                workspace_id="default-workspace",
+            )
         )
         user = EnterpriseUserContext(
             user_id="owner", role="owner", workspace_id="default-workspace"

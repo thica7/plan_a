@@ -9,6 +9,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Any
 
@@ -18,7 +19,7 @@ from packages.config import get_settings
 from packages.llm import DoubaoClient
 
 from .embeddings import EmbeddingProvider
-from .models import RetrievalHit, RetrievalRequest, RetrievalResponse
+from .models import KnowledgeScope, RetrievalHit, RetrievalRequest, RetrievalResponse
 from .repository import KnowledgeRepository
 from .reranker import RerankerProvider
 
@@ -182,6 +183,10 @@ class _TTLCache:
         while len(self._items) > self._maxsize:
             self._items.popitem(last=False)
 
+    def delete(self, key: str) -> None:
+        self._items.pop(key, None)
+        self._cached_get.cache_clear()
+
 
 def _normalise_scores(hits: list[RetrievalHit]) -> list[RetrievalHit]:
     """Min-max normalise scores to [0, 1]."""
@@ -223,7 +228,11 @@ def _rrf_fuse_ranked_lists(
     for hits, weight in zip(ranked_lists, weights, strict=False):
         for rank, hit in enumerate(hits, 1):
             rrf_scores[hit.chunk_id] = rrf_scores.get(hit.chunk_id, 0.0) + weight / (k + rank)
-            hit_map[hit.chunk_id] = hit.model_copy(deep=True)
+            previous = hit_map.get(hit.chunk_id)
+            merged = hit.model_copy(deep=True)
+            if previous is not None and "vector_index" in previous.metadata:
+                merged.metadata["vector_index"] = previous.metadata["vector_index"]
+            hit_map[hit.chunk_id] = merged
 
     sorted_ids = sorted(rrf_scores, key=lambda cid: rrf_scores[cid], reverse=True)
     result: list[RetrievalHit] = []
@@ -278,15 +287,28 @@ class RetrievalService:
         if request.enable_query_rewrite and request.num_rewrites > 0:
             response = await self._retrieve_with_rewrites(request)
         else:
-            cache_key = self._cache_key(request)
+            cache_key = self._response_cache_key(request)
             cached = self._retrieval_cache.get(cache_key)
+            if cached is not None and cached.diagnostics.get("degraded"):
+                self._retrieval_cache.delete(cache_key)
+                cached = None
+            if cached is not None:
+                refreshed = await self._refresh_canonical_hits(cached.hits, request)
+                if len(refreshed) != len(cached.hits):
+                    self._retrieval_cache.delete(cache_key)
+                    cached = None
+                else:
+                    cached = cached.model_copy(update={"hits": refreshed}, deep=True)
             if cached is not None:
                 cache_hit = True
                 response = cached.model_copy(deep=True)
             else:
                 response = await self._retrieve_without_rewrites(request)
                 response.diagnostics = self._diagnostics(request)
-                self._retrieval_cache.set(cache_key, response.model_copy(deep=True))
+                if response.hits and not response.diagnostics.get("degraded"):
+                    self._retrieval_cache.set(
+                        self._response_cache_key(request), response.model_copy(deep=True)
+                    )
 
         await self._record_observability(
             request,
@@ -344,6 +366,16 @@ class RetrievalService:
     ) -> list[RetrievalHit]:
         dense_hits: list[RetrievalHit] = []
         sparse_hits: list[RetrievalHit] = []
+        filters = {
+            "competitors": request.competitors or None,
+            "dimensions": request.dimensions or None,
+        }
+        if (request.scope is not None or request.market is not None
+                or request.source_roles or request.max_age_days is not None):
+            filters.update(
+                scope=request.scope, market=request.market,
+                source_roles=request.source_roles or None, max_age_days=request.max_age_days,
+            )
 
         if request.mode in {"dense", "hybrid"}:
             try:
@@ -353,14 +385,16 @@ class RetrievalService:
                     configure(self._embedding_provider.model_version, len(qvec),
                               index_version=os.getenv("KB_INDEX_VERSION", "v1"))
                 dense_hits = await self._vs.search(
-                    qvec, top_k=request.top_k, competitors=request.competitors or None,
-                    dimensions=request.dimensions or None,
+                    qvec, top_k=request.top_k, **filters,
                 )
             except Exception as exc:
                 if request.mode == "dense":
                     raise RuntimeError(f"Dense retrieval failed: {exc}") from exc
                 self._dense_error = f"Dense retrieval unavailable: {exc}"
-            dense_hits = await self._filter_dense_hits_by_document_status(dense_hits)
+            had_dense_candidates = bool(dense_hits)
+            dense_hits = await self._refresh_canonical_hits(dense_hits, request, dense=True)
+            if request.mode == "hybrid" and had_dense_candidates and not dense_hits:
+                self._dense_error = "Dense candidates rejected by canonical document validation"
             dense_hits = _normalise_scores(dense_hits)
             self._dense_hits += len(dense_hits)
 
@@ -368,8 +402,7 @@ class RetrievalService:
             sparse_hits = await self._sparse_search(
                 query,
                 request.top_k,
-                competitors=request.competitors or None,
-                dimensions=request.dimensions or None,
+                **filters,
             )
             self._sparse_hits += len(sparse_hits)
 
@@ -385,37 +418,88 @@ class RetrievalService:
         return sparse_hits
 
 
-    async def _filter_dense_hits_by_document_status(
+    async def _refresh_canonical_hits(
         self,
         hits: list[RetrievalHit],
+        request: RetrievalRequest,
+        *,
+        dense: bool = False,
     ) -> list[RetrievalHit]:
         get_document = getattr(self._repo, "get_document", None)
         if not hits or not callable(get_document):
-            return hits
+            return [] if request.scope is not None else hits
 
+        strict = request.scope is not None or isinstance(self._repo, KnowledgeRepository)
         document_cache: dict[str, Any] = {}
+        chunk_cache: dict[str, dict[str, Any]] = {}
         filtered: list[RetrievalHit] = []
-        for hit in hits:
+        for hit in _filter_hits_by_request(hits, request):
             if not hit.document_id:
                 continue
             if hit.document_id not in document_cache:
-                document_cache[hit.document_id] = await get_document(hit.document_id)
+                document_cache[hit.document_id] = await get_document(
+                    hit.document_id,
+                    **({"scope": request.scope} if request.scope is not None else {}),
+                )
             document = document_cache[hit.document_id]
             if document is None:
                 continue
             status = getattr(document, "status", "active")
             if status not in {"active", "stale"} or not getattr(document, "is_active", True):
                 continue
-            if getattr(document, "indexing_status", "ready") != "ready":
+            if strict and (
+                hit.document_version != getattr(document, "version", None)
+                or hit.content_hash != getattr(document, "content_hash", None)
+                or hit.workspace_id != getattr(document, "workspace_id", None)
+                or hit.project_id != getattr(document, "project_id", None)
+            ):
                 continue
-            if self._embedding_provider is not None:
-                expected_model = self._embedding_provider.model_version
+            chunk = None
+            if strict:
+                get_chunks = getattr(self._repo, "get_chunks_for_document", None)
+                if not callable(get_chunks):
+                    continue
+                if document.id not in chunk_cache:
+                    chunk_cache[document.id] = {
+                        item.id: item for item in await get_chunks(document.id)
+                    }
+                chunk = chunk_cache[document.id].get(hit.chunk_id)
+                if chunk is None or chunk.document_id != document.id or chunk.text != hit.text:
+                    continue
+            vector_index = hit.metadata.get("vector_index")
+            if dense or vector_index is not None:
+                if getattr(document, "indexing_status", "ready") != "ready":
+                    continue
+                expected_model = (
+                    self._embedding_provider.model_version if self._embedding_provider else None
+                )
+                status_fn = getattr(self._vs, "status", None)
+                index = status_fn() if callable(status_fn) else {}
+                expected_model = expected_model or index.get("model_version")
+                expected_dimensions = getattr(
+                    self._embedding_provider, "dimensions", index.get("dimensions")
+                )
                 expected_version = os.getenv("KB_INDEX_VERSION", "v1")
                 if (
-                    getattr(document, "embedding_model", expected_model) != expected_model
-                    or getattr(document, "index_version", expected_version) != expected_version
+                    (expected_model
+                     and getattr(document, "embedding_model", None) != expected_model)
+                    or ((strict or expected_model)
+                        and getattr(document, "index_version", None) != expected_version)
+                    or (expected_dimensions is not None
+                        and getattr(document, "embedding_dimensions", None) != expected_dimensions)
                 ):
                     continue
+                if strict and (
+                    not isinstance(vector_index, dict)
+                    or vector_index.get("model_version") != document.embedding_model
+                    or vector_index.get("index_version") != document.index_version
+                    or vector_index.get("dimensions") != document.embedding_dimensions
+                    or vector_index.get("chunk_content_hash") != chunk.content_hash
+                ):
+                    continue
+            metadata = dict(getattr(document, "metadata", hit.metadata))
+            if vector_index is not None:
+                metadata["vector_index"] = vector_index
             filtered.append(
                 hit.model_copy(
                     update={
@@ -425,14 +509,28 @@ class RetrievalService:
                         "dimension": getattr(document, "dimension", hit.dimension),
                         "source_type": getattr(document, "source_type", hit.source_type),
                         "content_hash": getattr(document, "content_hash", hit.content_hash),
+                        "document_version": getattr(document, "version", hit.document_version),
+                        "workspace_id": getattr(document, "workspace_id", hit.workspace_id),
+                        "project_id": getattr(document, "project_id", hit.project_id),
+                        "market": getattr(document, "market", hit.market),
+                        "source_role": getattr(document, "source_role", hit.source_role),
+                        "source_published_at": getattr(
+                            document, "source_published_at", hit.source_published_at
+                        ),
+                        "source_updated_at": getattr(
+                            document, "source_updated_at", hit.source_updated_at
+                        ),
+                        "last_verified_at": getattr(
+                            document, "last_verified_at", hit.last_verified_at
+                        ),
                         "fetched_at": getattr(document, "fetched_at", hit.fetched_at),
                         "last_seen_at": getattr(document, "last_seen_at", hit.last_seen_at),
                         "status": status,
-                        "metadata": getattr(document, "metadata", hit.metadata),
+                        "metadata": metadata,
                     }
                 )
             )
-        return filtered
+        return _filter_hits_by_request(filtered, request)
 
     async def _sparse_search(
         self,
@@ -441,17 +539,25 @@ class RetrievalService:
         *,
         competitors: list[str] | None = None,
         dimensions: list[str] | None = None,
+        scope: KnowledgeScope | None = None,
+        market: str | None = None,
+        source_roles: list[str] | None = None,
+        max_age_days: int | None = None,
     ) -> list[RetrievalHit]:
         search_chunks = getattr(self._repo, "search_chunks", None)
+        filters = {"competitors": competitors, "dimensions": dimensions}
+        if scope is not None or market is not None or source_roles or max_age_days is not None:
+            filters.update(
+                scope=scope, market=market, source_roles=source_roles, max_age_days=max_age_days
+            )
         if callable(search_chunks):
             return await search_chunks(
-                query, limit=top_k, competitors=competitors, dimensions=dimensions
+                query, limit=top_k, **filters,
             )
         keyword_docs = await self._repo.search_documents(
             query,
             limit=top_k,
-            competitors=competitors,
-            dimensions=dimensions,
+            **filters,
         )
         sparse_hits: list[RetrievalHit] = []
         chunks_by_doc = await self._repo.get_chunks_for_documents([doc.id for doc in keyword_docs])
@@ -471,6 +577,14 @@ class RetrievalService:
                     dimension=doc.dimension,
                     source_type=doc.source_type,
                     content_hash=doc.content_hash,
+                    document_version=getattr(doc, "version", 1),
+                    workspace_id=getattr(doc, "workspace_id", None),
+                    project_id=getattr(doc, "project_id", None),
+                    market=getattr(doc, "market", None),
+                    source_role=getattr(doc, "source_role", "source"),
+                    source_published_at=getattr(doc, "source_published_at", None),
+                    source_updated_at=getattr(doc, "source_updated_at", None),
+                    last_verified_at=getattr(doc, "last_verified_at", None),
                     fetched_at=getattr(doc, "fetched_at", None),
                     last_seen_at=getattr(doc, "last_seen_at", None),
                     status=getattr(doc, "status", "active"),
@@ -565,11 +679,15 @@ class RetrievalService:
         return lambda_value * relevance_score - (1.0 - lambda_value) * diversity_penalty
 
     async def _embed_query(self, query: str) -> list[float]:
-        cached = self._embedding_cache.get(query)
+        cache_key = repr((
+            getattr(self._embedding_provider, "model_version", None),
+            getattr(self._embedding_provider, "dimensions", None), query,
+        ))
+        cached = self._embedding_cache.get(cache_key)
         if cached is not None:
             return cached
         vector = (await _maybe_await(self._embed_fn([query])))[0]
-        self._embedding_cache.set(query, vector)
+        self._embedding_cache.set(cache_key, vector)
         return vector
 
     async def _embed_texts(self, texts: list[str]) -> list[list[float]]:
@@ -580,6 +698,20 @@ class RetrievalService:
     @staticmethod
     def _cache_key(request: RetrievalRequest) -> str:
         return request.model_dump_json()
+
+    def _response_cache_key(self, request: RetrievalRequest) -> str:
+        status_fn = getattr(self._vs, "status", None)
+        index = status_fn() if callable(status_fn) else {}
+        identity = (
+            getattr(self._embedding_provider, "model_version", None),
+            getattr(self._embedding_provider, "dimensions", None),
+            tuple(index.get(key) for key in (
+                "collection", "model_version", "dimensions", "index_version"
+            )),
+            os.getenv("KB_INDEX_VERSION", "v1"),
+            getattr(self._reranker_provider, "model_version", None), self._rerank_model,
+        )
+        return f"{self._cache_key(request)}:{identity!r}"
 
     def _reset_observability_counts(self) -> None:
         self._dense_error: str | None = None
@@ -656,15 +788,38 @@ def _filter_hits_by_request(
 ) -> list[RetrievalHit]:
     competitors = {item.casefold() for item in request.competitors if item.strip()}
     dimensions = {item.casefold() for item in request.dimensions if item.strip()}
-    if not competitors and not dimensions:
-        return hits
+    scope = request.scope
+    now = datetime.now(UTC)
+    cutoff = (now - timedelta(days=request.max_age_days)
+              if request.max_age_days is not None else None)
 
     filtered: list[RetrievalHit] = []
     for hit in hits:
+        if scope is not None:
+            if hit.workspace_id != scope.workspace_id:
+                continue
+            projects = {scope.project_id}
+            if scope.project_id is not None and scope.include_workspace_library:
+                projects.add(None)
+            if hit.project_id not in projects:
+                continue
         if competitors and (hit.competitor or "").casefold() not in competitors:
             continue
         if dimensions and (hit.dimension or "").casefold() not in dimensions:
             continue
+        if request.market is not None and hit.market != request.market:
+            continue
+        if request.source_roles and hit.source_role not in request.source_roles:
+            continue
+        if cutoff is not None:
+            observed = (hit.last_verified_at or hit.source_updated_at
+                        or hit.source_published_at or hit.fetched_at)
+            if observed is None:
+                continue
+            if observed.tzinfo is None:
+                observed = observed.replace(tzinfo=UTC)
+            if observed < cutoff or observed > now:
+                continue
         filtered.append(hit)
     return filtered
 

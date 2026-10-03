@@ -26,6 +26,7 @@ interface UploadEntry {
 
 interface UploadDrawerProps {
   open: boolean;
+  projectId?: string | null;
   onClose: () => void;
   onComplete: () => void;
 }
@@ -83,7 +84,7 @@ function applyJobProgress(entries: UploadEntry[], job: IngestJob): UploadEntry[]
   });
 }
 
-export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
+export function UploadDrawer({ open, projectId = null, onClose, onComplete }: UploadDrawerProps) {
   const { t, locale } = useTranslation();
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -125,11 +126,11 @@ export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
     }
   };
 
-  const pollJob = async (jobId: string, indexes: Set<number>) => {
+  const pollJob = async (jobId: string, indexes: Set<number>, jobProjectId: string | null) => {
     let done = false;
     while (!done) {
       await new Promise((resolve) => setTimeout(resolve, 900));
-      const job = await getIngestJob(jobId);
+      const job = await getIngestJob(jobId, undefined, jobProjectId);
       setEntries((current) => applyJobProgress(current, job));
       done = ['success', 'failed'].includes(job.status)
         || job.completed_items >= indexes.size
@@ -138,6 +139,7 @@ export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
   };
 
   const submitEntries = async (retryOnly = false) => {
+    const jobProjectId = projectId;
     const targets = entries
       .map((entry, index) => ({ entry, index }))
       .filter(({ entry }) => retryOnly ? entry.status === 'failed' && isAccepted(entry.file) && entry.file.size <= maxBytes : entry.status === 'queued');
@@ -157,7 +159,7 @@ export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
         mime: entry.file.type || undefined,
         content_b64: await fileToBase64(entry.file),
       })));
-      const response = await createBatch(items);
+      const response = await createBatch(items, 4, jobProjectId);
       const rejected = new Map(response.rejected.map((item) => [item.index, item.reason]));
       setEntries((current) => current.map((entry, index) => {
         if (!indexes.has(index)) return entry;
@@ -167,7 +169,7 @@ export function UploadDrawer({ open, onClose, onComplete }: UploadDrawerProps) {
         }
         return { ...entry, status: 'parsed', progress: 45 };
       }));
-      await pollJob(response.job_id, indexes);
+      await pollJob(response.job_id, indexes, jobProjectId);
       onComplete();
     } catch (err) {
       setEntries((current) => current.map((entry, index) => (

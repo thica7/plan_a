@@ -2769,6 +2769,20 @@ export interface components {
         };
         /** BatchIngestItem */
         BatchIngestItem: {
+            /** Market */
+            market?: string | null;
+            /**
+             * Source Role
+             * @default source
+             * @enum {string}
+             */
+            source_role: "source" | "historical_report";
+            /** Source Published At */
+            source_published_at?: string | null;
+            /** Source Updated At */
+            source_updated_at?: string | null;
+            /** Last Verified At */
+            last_verified_at?: string | null;
             /**
              * Source
              * @enum {string}
@@ -2808,6 +2822,8 @@ export interface components {
         };
         /** BatchIngestRequest */
         BatchIngestRequest: {
+            /** Project Id */
+            project_id?: string | null;
             /** Items */
             items: components["schemas"]["BatchIngestItem"][];
             options?: components["schemas"]["BatchIngestOptions"];
@@ -3617,6 +3633,12 @@ export interface components {
         };
         /** CrawlJob */
         CrawlJob: {
+            /** Workspace Id */
+            workspace_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Market */
+            market?: string | null;
             /** Id */
             id: string;
             /** Run Id */
@@ -3653,6 +3675,10 @@ export interface components {
         };
         /** CrawlJobCreate */
         CrawlJobCreate: {
+            /** Project Id */
+            project_id?: string | null;
+            /** Market */
+            market?: string | null;
             /** Url */
             url: string;
             /** Run Id */
@@ -3679,6 +3705,12 @@ export interface components {
         CrawlSource: {
             /** Id */
             id: string;
+            /** Workspace Id */
+            workspace_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Market */
+            market?: string | null;
             /**
              * Type
              * @enum {string}
@@ -3705,6 +3737,10 @@ export interface components {
         };
         /** CrawlSourceCreate */
         CrawlSourceCreate: {
+            /** Project Id */
+            project_id?: string | null;
+            /** Market */
+            market?: string | null;
             /**
              * Type
              * @enum {string}
@@ -4393,6 +4429,13 @@ export interface components {
         };
         /** EvalRequest */
         EvalRequest: {
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Include Workspace Library
+             * @default false
+             */
+            include_workspace_library: boolean;
             /** Labels */
             labels: components["schemas"]["EvalLabel"][];
             /**
@@ -4405,6 +4448,10 @@ export interface components {
         };
         /** EvalRunDetail */
         EvalRunDetail: {
+            /** Workspace Id */
+            workspace_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
             /** Id */
             id: string;
             /**
@@ -4429,6 +4476,10 @@ export interface components {
         };
         /** EvalRunSummary */
         EvalRunSummary: {
+            /** Workspace Id */
+            workspace_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
             /** Id */
             id: string;
             /**
@@ -5070,6 +5121,10 @@ export interface components {
         };
         /** IngestJob */
         IngestJob: {
+            /** Workspace Id */
+            workspace_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
             /** Id */
             id: string;
             /** Status */
@@ -5174,6 +5229,24 @@ export interface components {
          * @description A crawled or ingested document stored in the knowledge base.
          */
         KnowledgeDocument: {
+            /** Workspace Id */
+            workspace_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Market */
+            market?: string | null;
+            /**
+             * Source Role
+             * @default source
+             * @enum {string}
+             */
+            source_role: "source" | "historical_report";
+            /** Source Published At */
+            source_published_at?: string | null;
+            /** Source Updated At */
+            source_updated_at?: string | null;
+            /** Last Verified At */
+            last_verified_at?: string | null;
             /** Id */
             id: string;
             /** Url */
@@ -7148,6 +7221,24 @@ export interface components {
          * @description A single result from hybrid retrieval.
          */
         RetrievalHit: {
+            /** Workspace Id */
+            workspace_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Market */
+            market?: string | null;
+            /**
+             * Source Role
+             * @default source
+             * @enum {string}
+             */
+            source_role: "source" | "historical_report";
+            /** Source Published At */
+            source_published_at?: string | null;
+            /** Source Updated At */
+            source_updated_at?: string | null;
+            /** Last Verified At */
+            last_verified_at?: string | null;
             /** Chunk Id */
             chunk_id: string;
             /** Document Id */
@@ -7173,6 +7264,11 @@ export interface components {
              * @default
              */
             source_type: string;
+            /**
+             * Document Version
+             * @default 1
+             */
+            document_version: number;
             /**
              * Content Hash
              * @default
@@ -7266,6 +7362,21 @@ export interface components {
         };
         /** RetrievalRequest */
         RetrievalRequest: {
+            /** Workspace Id */
+            workspace_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Include Workspace Library
+             * @default false
+             */
+            include_workspace_library: boolean;
+            /** Market */
+            market?: string | null;
+            /** Source Roles */
+            source_roles?: ("source" | "historical_report")[];
+            /** Max Age Days */
+            max_age_days?: number | null;
             /** Query */
             query: string;
             /** Preset */
@@ -10311,6 +10422,8 @@ export interface operations {
                 source_type?: string | null;
                 limit?: number;
                 offset?: number;
+                project_id?: string | null;
+                include_workspace_library?: boolean;
             };
             header?: {
                 "X-User-Id"?: string | null;
@@ -10344,7 +10457,10 @@ export interface operations {
     };
     get_knowledge_document_api_knowledge_documents__document_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10379,7 +10495,10 @@ export interface operations {
     };
     delete_knowledge_document_api_knowledge_documents__document_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10412,7 +10531,10 @@ export interface operations {
     };
     get_knowledge_document_chunks_api_knowledge_documents__document_id__chunks_get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10447,7 +10569,10 @@ export interface operations {
     };
     reindex_knowledge_document_api_knowledge_documents__document_id__reindex_post: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10517,7 +10642,10 @@ export interface operations {
     };
     get_knowledge_document_versions_api_knowledge_documents__document_id__versions_get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10554,6 +10682,8 @@ export interface operations {
         parameters: {
             query: {
                 against: string;
+                project_id?: string | null;
+                include_workspace_library?: boolean;
             };
             header?: {
                 "X-User-Id"?: string | null;
@@ -10589,7 +10719,10 @@ export interface operations {
     };
     merge_knowledge_document_version_api_knowledge_documents__document_id__merge_post: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10628,7 +10761,10 @@ export interface operations {
     };
     rollback_knowledge_documents_api_knowledge_documents_rollback_post: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10665,7 +10801,10 @@ export interface operations {
     };
     search_knowledge_api_knowledge_search_post: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10722,7 +10861,10 @@ export interface operations {
     };
     evaluate_knowledge_api_knowledge_eval_post: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10762,6 +10904,8 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                project_id?: string | null;
+                include_workspace_library?: boolean;
             };
             header?: {
                 "X-User-Id"?: string | null;
@@ -10795,7 +10939,10 @@ export interface operations {
     };
     get_knowledge_eval_run_api_knowledge_eval_runs__run_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10830,7 +10977,10 @@ export interface operations {
     };
     get_knowledge_stats_api_knowledge_stats_get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10867,6 +11017,8 @@ export interface operations {
                 status?: string | null;
                 limit?: number;
                 offset?: number;
+                project_id?: string | null;
+                include_workspace_library?: boolean;
             };
             header?: {
                 "X-User-Id"?: string | null;
@@ -10900,7 +11052,10 @@ export interface operations {
     };
     create_knowledge_crawl_job_api_knowledge_crawl_jobs_post: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10937,7 +11092,10 @@ export interface operations {
     };
     get_knowledge_crawl_job_api_knowledge_crawl_jobs__job_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -10972,7 +11130,10 @@ export interface operations {
     };
     list_knowledge_crawl_runs_api_knowledge_crawl_runs_get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -11005,7 +11166,10 @@ export interface operations {
     };
     create_knowledge_batch_api_knowledge_batch_post: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -11042,7 +11206,10 @@ export interface operations {
     };
     get_knowledge_ingest_job_api_knowledge_ingest_jobs__job_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -11080,6 +11247,8 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                project_id?: string | null;
+                include_workspace_library?: boolean;
             };
             header?: {
                 "X-User-Id"?: string | null;
@@ -11117,6 +11286,8 @@ export interface operations {
                 status?: string | null;
                 limit?: number;
                 offset?: number;
+                project_id?: string | null;
+                include_workspace_library?: boolean;
             };
             header?: {
                 "X-User-Id"?: string | null;
@@ -11150,7 +11321,10 @@ export interface operations {
     };
     create_crawl_job_api_crawl_jobs_post: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -11187,7 +11361,10 @@ export interface operations {
     };
     list_crawl_sources_api_crawl_sources_get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -11220,7 +11397,10 @@ export interface operations {
     };
     create_crawl_source_api_crawl_sources_post: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -11257,7 +11437,10 @@ export interface operations {
     };
     get_crawl_source_api_crawl_sources__source_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -11292,7 +11475,10 @@ export interface operations {
     };
     delete_crawl_source_api_crawl_sources__source_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -11325,7 +11511,10 @@ export interface operations {
     };
     retry_crawl_source_api_crawl_sources__source_id__retry_post: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -11360,7 +11549,10 @@ export interface operations {
     };
     get_crawl_frontier_stats_api_crawl_frontier_stats_get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -11393,7 +11585,10 @@ export interface operations {
     };
     get_crawl_job_api_crawl_jobs__job_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;
@@ -11428,7 +11623,10 @@ export interface operations {
     };
     stream_crawl_job_api_crawl_jobs__job_id__stream_get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+                include_workspace_library?: boolean;
+            };
             header?: {
                 "X-User-Id"?: string | null;
                 "X-User-Role"?: string | null;

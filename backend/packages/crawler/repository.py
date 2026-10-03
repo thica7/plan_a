@@ -12,6 +12,7 @@ from urllib.parse import urldefrag, urlparse, urlunparse
 
 import aiosqlite
 
+from packages.knowledge.models import KnowledgeScope
 from packages.sqlite_locks import (
     apply_sqlite_pragmas,
     begin_immediate_transaction,
@@ -24,6 +25,9 @@ from .models import CrawlFrontierItem, CrawlFrontierStats, CrawlSource, CrawlSou
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS crawl_source (
     id          TEXT PRIMARY KEY,
+    workspace_id TEXT,
+    project_id  TEXT,
+    market      TEXT,
     type        TEXT NOT NULL,
     competitor  TEXT,
     dimension   TEXT,
@@ -52,12 +56,9 @@ CREATE TABLE IF NOT EXISTS crawl_frontier (
 );
 
 CREATE INDEX IF NOT EXISTS idx_crawl_source_type ON crawl_source(type);
-CREATE INDEX IF NOT EXISTS idx_crawl_frontier_source_id ON crawl_frontier(source_id);
 CREATE INDEX IF NOT EXISTS idx_crawl_frontier_status_next_run
 ON crawl_frontier(status, next_run_at, priority);
 CREATE INDEX IF NOT EXISTS idx_crawl_frontier_run_id ON crawl_frontier(run_id);
-CREATE UNIQUE INDEX IF NOT EXISTS ux_crawl_frontier_canonical_url
-ON crawl_frontier(canonical_url);
 """
 
 
@@ -126,6 +127,8 @@ class CrawlerRepository:
         competitor: str | None = None,
         dimension: str | None = None,
         priority: int = 100,
+        scope: KnowledgeScope | None = None,
+        market: str | None = None,
     ) -> CrawlSource:
         now = datetime.now(UTC).isoformat()
         source_id = str(uuid.uuid4())
@@ -133,13 +136,22 @@ class CrawlerRepository:
             await db.execute(
                 """
                 INSERT INTO crawl_source
-                    (id, type, competitor, dimension, priority, config_json, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (id, type, competitor, dimension, priority, config_json, created_at,
+                     workspace_id, project_id, market)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (source_id, source_type, competitor, dimension, priority, json.dumps(config), now),
+                (
+                    source_id, source_type, competitor, dimension, priority, json.dumps(config),
+                    now,
+                    scope.workspace_id if scope else None, scope.project_id if scope else None,
+                    market,
+                ),
             )
         return CrawlSource(
             id=source_id,
+            workspace_id=scope.workspace_id if scope else None,
+            project_id=scope.project_id if scope else None,
+            market=market,
             type=source_type,
             config=config,
             competitor=competitor,
@@ -148,31 +160,44 @@ class CrawlerRepository:
             created_at=datetime.fromisoformat(now),
         )
 
-    async def list_sources(self) -> list[CrawlSource]:
+    async def list_sources(self, *, scope: KnowledgeScope | None = None) -> list[CrawlSource]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        self._add_scope_filters(clauses, params, scope=scope)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         async with self._connection.execute(
-            "SELECT * FROM crawl_source ORDER BY created_at DESC"
+            f"SELECT * FROM crawl_source {where} ORDER BY created_at DESC", params,
         ) as cur:
             rows = await cur.fetchall()
         return [self._row_to_source(row) for row in rows]
 
-    async def get_source(self, source_id: str) -> CrawlSource | None:
+    async def get_source(
+        self, source_id: str, *, scope: KnowledgeScope | None = None,
+    ) -> CrawlSource | None:
+        clauses = ["id = ?"]
+        params: list[Any] = [source_id]
+        self._add_scope_filters(clauses, params, scope=scope)
         async with self._connection.execute(
-            "SELECT * FROM crawl_source WHERE id = ?",
-            (source_id,),
+            f"SELECT * FROM crawl_source WHERE {' AND '.join(clauses)}", params,
         ) as cur:
             row = await cur.fetchone()
         return self._row_to_source(row) if row else None
 
-    async def delete_source(self, source_id: str) -> bool:
+    async def delete_source(
+        self, source_id: str, *, scope: KnowledgeScope | None = None,
+    ) -> bool:
+        clauses = ["id = ?"]
+        params: list[Any] = [source_id]
+        self._add_scope_filters(clauses, params, scope=scope, write=True)
         async with self._write_transaction() as db:
             cursor = await db.execute(
-                "DELETE FROM crawl_source WHERE id = ?",
-                (source_id,),
+                f"DELETE FROM crawl_source WHERE {' AND '.join(clauses)}", params,
             )
-            await db.execute(
-                "UPDATE crawl_frontier SET status = 'cancelled' WHERE source_id = ? OR run_id = ?",
-                (source_id, source_id),
-            )
+            if cursor.rowcount > 0:
+                await db.execute(
+                    "UPDATE crawl_frontier SET status = 'cancelled' WHERE source_id = ?",
+                    (source_id,),
+                )
         return cursor.rowcount > 0
 
     async def add_frontier_items(
@@ -189,6 +214,7 @@ class CrawlerRepository:
         run_id: str | None = None,
         next_run_at: datetime | None = None,
         max_urls: int | None = None,
+        require_source: bool = False,
     ) -> int:
         now = datetime.now(UTC)
         next_at = (next_run_at or now).isoformat()
@@ -220,6 +246,14 @@ class CrawlerRepository:
             return 0
 
         async with self._write_transaction() as db:
+            if require_source:
+                async with db.execute(
+                    "SELECT 1 FROM crawl_source WHERE id = ? "
+                    "AND workspace_id IS NOT NULL AND trim(workspace_id) != ''",
+                    (source_id,),
+                ) as cur:
+                    if await cur.fetchone() is None:
+                        return 0
             before = db.total_changes
             await db.executemany(
                 """
@@ -256,12 +290,15 @@ class CrawlerRepository:
                 rows = await cur.fetchall()
         return [self._row_to_frontier_item(row) for row in rows]
 
-    async def mark_done(self, item_id: str) -> None:
+    async def mark_done(self, item_id: str, *, require_source: bool = False) -> bool:
+        source_guard = self._live_source_guard() if require_source else ""
         async with self._write_transaction() as db:
-            await db.execute(
-                "UPDATE crawl_frontier SET status = 'done', last_error = NULL WHERE id = ?",
+            cursor = await db.execute(
+                "UPDATE crawl_frontier SET status = 'done', last_error = NULL "
+                "WHERE id = ? AND status != 'cancelled'" + source_guard,
                 (item_id,),
             )
+            return cursor.rowcount > 0
 
     async def mark_failed(
         self,
@@ -270,55 +307,60 @@ class CrawlerRepository:
         *,
         retry: bool = False,
         retry_after_seconds: float = 60.0,
-    ) -> None:
+        require_source: bool = False,
+    ) -> bool:
+        source_guard = self._live_source_guard() if require_source else ""
         async with self._write_transaction() as db:
             if retry:
                 next_run_at = (
                     datetime.now(UTC) + timedelta(seconds=retry_after_seconds)
                 ).isoformat()
-                await db.execute(
+                cursor = await db.execute(
                     """
                     UPDATE crawl_frontier
                     SET status = 'pending', next_run_at = ?, last_error = ?
-                    WHERE id = ?
-                    """,
+                    WHERE id = ? AND status != 'cancelled'
+                    """ + source_guard,
                     (next_run_at, error, item_id),
                 )
             else:
-                await db.execute(
-                    "UPDATE crawl_frontier SET status = 'failed', last_error = ? WHERE id = ?",
+                cursor = await db.execute(
+                    "UPDATE crawl_frontier SET status = 'failed', last_error = ? "
+                    "WHERE id = ? AND status != 'cancelled'" + source_guard,
                     (error, item_id),
                 )
+            return cursor.rowcount > 0
 
-    async def retry_failed(self, source_id: str | None = None) -> int:
+    @staticmethod
+    def _live_source_guard() -> str:
+        return (
+            " AND source_id IN (SELECT id FROM crawl_source "
+            "WHERE workspace_id IS NOT NULL AND trim(workspace_id) != '')"
+        )
+
+    async def retry_failed(
+        self, source_id: str | None = None, *, scope: KnowledgeScope | None = None,
+    ) -> int:
         now = datetime.now(UTC).isoformat()
+        clauses = ["status = 'failed'"]
+        params: list[Any] = [now]
+        self._add_frontier_filters(clauses, params, source_id=source_id, scope=scope, write=True)
         async with self._write_transaction() as db:
-            if source_id:
-                cursor = await db.execute(
-                    """
-                    UPDATE crawl_frontier
-                    SET status = 'pending', next_run_at = ?, last_error = NULL
-                    WHERE status = 'failed' AND (source_id = ? OR run_id = ?)
-                    """,
-                    (now, source_id, source_id),
-                )
-            else:
-                cursor = await db.execute(
-                    """
-                    UPDATE crawl_frontier
-                    SET status = 'pending', next_run_at = ?, last_error = NULL
-                    WHERE status = 'failed'
-                    """,
-                    (now,),
-                )
+            cursor = await db.execute(
+                f"""
+                UPDATE crawl_frontier
+                SET status = 'pending', next_run_at = ?, last_error = NULL
+                WHERE {' AND '.join(clauses)}
+                """, params,
+            )
         return cursor.rowcount
 
-    async def stats(self, *, source_id: str | None = None) -> CrawlFrontierStats:
+    async def stats(
+        self, *, source_id: str | None = None, scope: KnowledgeScope | None = None,
+    ) -> CrawlFrontierStats:
         clauses: list[str] = []
         params: list[Any] = []
-        if source_id:
-            clauses.append("(source_id = ? OR run_id = ?)")
-            params.extend([source_id, source_id])
+        self._add_frontier_filters(clauses, params, source_id=source_id, scope=scope)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         async with self._connection.execute(
             f"""
@@ -343,14 +385,13 @@ class CrawlerRepository:
         self,
         *,
         source_id: str | None = None,
+        scope: KnowledgeScope | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[CrawlFrontierItem]:
         clauses: list[str] = []
         params: list[Any] = []
-        if source_id:
-            clauses.append("(source_id = ? OR run_id = ?)")
-            params.extend([source_id, source_id])
+        self._add_frontier_filters(clauses, params, source_id=source_id, scope=scope)
         if status:
             clauses.append("status = ?")
             params.append(status)
@@ -373,10 +414,60 @@ class CrawlerRepository:
         await apply_sqlite_pragmas(self._connection)
 
     async def _migrate_schema(self) -> None:
+        await self._ensure_column("crawl_source", "workspace_id", "TEXT")
+        await self._ensure_column("crawl_source", "project_id", "TEXT")
+        await self._ensure_column("crawl_source", "market", "TEXT")
         await self._ensure_column("crawl_source", "competitor", "TEXT")
         await self._ensure_column("crawl_source", "dimension", "TEXT")
         await self._ensure_column("crawl_source", "priority", "INTEGER NOT NULL DEFAULT 100")
         await self._ensure_column("crawl_frontier", "source_id", "TEXT")
+        await self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_crawl_frontier_source_id ON crawl_frontier(source_id)"
+        )
+        await self._connection.execute("DROP INDEX IF EXISTS ux_crawl_frontier_canonical_url")
+        await self._connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_crawl_frontier_source_url "
+            "ON crawl_frontier(source_id, canonical_url) WHERE source_id IS NOT NULL"
+        )
+        await self._connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_crawl_frontier_legacy_url "
+            "ON crawl_frontier(canonical_url) WHERE source_id IS NULL"
+        )
+        await self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_crawl_source_scope "
+            "ON crawl_source(workspace_id, project_id)"
+        )
+
+    @staticmethod
+    def _add_scope_filters(
+        clauses: list[str], params: list[Any], *, scope: KnowledgeScope | None,
+        write: bool = False,
+    ) -> None:
+        if scope is None:
+            return
+        clauses.append("workspace_id = ?")
+        params.append(scope.workspace_id)
+        if scope.project_id is not None and scope.include_workspace_library and not write:
+            clauses.append("(project_id = ? OR project_id IS NULL)")
+        else:
+            clauses.append("project_id IS ?")
+        params.append(scope.project_id)
+
+    @classmethod
+    def _add_frontier_filters(
+        cls, clauses: list[str], params: list[Any], *, source_id: str | None,
+        scope: KnowledgeScope | None, write: bool = False,
+    ) -> None:
+        if source_id is not None:
+            clauses.append("source_id = ?")
+            params.append(source_id)
+        if scope is not None:
+            source_clauses: list[str] = []
+            cls._add_scope_filters(source_clauses, params, scope=scope, write=write)
+            clauses.append(
+                "source_id IN (SELECT id FROM crawl_source WHERE "
+                + " AND ".join(source_clauses) + ")"
+            )
 
     async def _ensure_column(self, table: str, column: str, definition: str) -> None:
         async with self._connection.execute(f"PRAGMA table_info({table})") as cur:
@@ -388,6 +479,9 @@ class CrawlerRepository:
     def _row_to_source(row: aiosqlite.Row) -> CrawlSource:
         return CrawlSource(
             id=row["id"],
+            workspace_id=row["workspace_id"],
+            project_id=row["project_id"],
+            market=row["market"],
             type=row["type"],
             config=json.loads(row["config_json"]),
             competitor=row["competitor"],

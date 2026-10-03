@@ -1,8 +1,13 @@
 # RAG + Crawling + Knowledge Base Architecture
 
-> 2026-10-02 实现说明：本文包含目标架构描述。当前采集器使用关键词检索，
+> 2026-10-03 实现说明：本文包含目标架构描述。第一阶段已接入完整正文入库、
+> 服务端资料范围、精确型号 / 市场 / 角色过滤，以及来源日期和可回查版本引用。
+> 下方技术选型表中的 BGE / Docker Qdrant 仍属目标选型：当前采集器使用关键词检索，
 > 写入资料时不建立向量索引。本地 embedding 和 reranker 实际为 hash provider；
 > BGE 接口已经存在，但尚未启用。企业证据检索另有一套流程。
+> 真实 Qdrant 本地持久化测试已通过；HTTP 服务、中文语义质量和各 Agent 共享的
+> 证据快照仍待后续验收。第一阶段改动与验证见
+> [验收记录](optimization/2026-10-02-rag-stage-one-results.md)。
 > 实测结果、已知问题和分阶段升级标准详见
 > [RAG 核查与证据复用设计](optimization/2026-10-02-rag-evidence-design.md)。
 

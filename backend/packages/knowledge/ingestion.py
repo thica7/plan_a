@@ -9,6 +9,7 @@ import os
 import re
 import uuid
 from collections.abc import Callable
+from datetime import UTC
 from typing import Any
 
 from .embeddings import EmbeddingProvider
@@ -46,6 +47,7 @@ class IngestionPipeline:
         embedding_provider: EmbeddingProvider | None = None,
         embedding_model: str = _DEFAULT_EMBEDDING_MODEL,
         crawl_run_id: str | None = None,
+        crawl_source_id: str | None = None,
     ) -> str:
         """Ingest a document. Returns the document ID.
 
@@ -59,9 +61,24 @@ class IngestionPipeline:
             embedding_model = embedding_provider.model_version
 
         content_hash = hashlib.sha256(doc.text.encode()).hexdigest()[:16]
-        stored = await self._repo.get_document_by_content_hash(content_hash)
-        if stored is None:
-            stored = await self._repo.upsert_document(doc, content_hash)
+        if crawl_source_id is not None:
+            # The guarded upsert must run even when this body already exists.
+            stored = await self._repo.upsert_document(
+                doc, content_hash, crawl_source_id=crawl_source_id,
+            )
+        else:
+            stored = await self._repo.get_document_by_content_hash(
+                content_hash, scope=doc.scope, competitor=doc.competitor, dimension=doc.dimension,
+                market=doc.market, source_role=doc.source_role,
+            )
+            if stored is None or (
+                doc.metadata.get("source_material_level") == "full_source"
+                and stored.metadata.get("source_material_level") != "full_source"
+            ):
+                stored = await self._repo.upsert_document(doc, content_hash)
+        if stored.content_hash != content_hash:
+            # A summary downgrade was declined; its caller must not build or index the full page.
+            return stored.id
         chunks = await self._repo.get_chunks_for_document(stored.id)
         if not chunks:
             chunks = self._chunk_text(
@@ -142,6 +159,10 @@ class IngestionPipeline:
             configure = getattr(self._vs, "configure_index", None)
             if callable(configure):
                 configure(embedding_model, dimensions, index_version=index_version)
+            observed_at = (stored.last_verified_at or stored.source_updated_at
+                           or stored.source_published_at or stored.fetched_at)
+            if observed_at.tzinfo is None:
+                observed_at = observed_at.replace(tzinfo=UTC)
             payloads = [
                 {
                     "chunk_id": chunk.id,
@@ -149,9 +170,29 @@ class IngestionPipeline:
                     "url": stored.url or "",
                     "title": stored.title,
                     "competitor": stored.competitor or "",
+                    "competitor_key": (stored.competitor or "").casefold(),
                     "dimension": stored.dimension or "",
+                    "dimension_key": (stored.dimension or "").casefold(),
                     "source_type": stored.source_type,
+                    "workspace_id": stored.workspace_id or "",
+                    "project_id": stored.project_id or "",
+                    "market": stored.market,
+                    "source_role": stored.source_role,
+                    "source_published_at": (
+                        stored.source_published_at.isoformat()
+                        if stored.source_published_at else None
+                    ),
+                    "last_verified_at": (
+                        stored.last_verified_at.isoformat() if stored.last_verified_at else None
+                    ),
+                    "source_updated_at": (
+                        stored.source_updated_at.isoformat() if stored.source_updated_at else None
+                    ),
+                    "fetched_at": stored.fetched_at.isoformat(),
+                    "observed_at": observed_at.isoformat(),
+                    "document_version": stored.version,
                     "content_hash": chunk.content_hash,
+                    "document_content_hash": stored.content_hash,
                     "crawl_run_id": chunk.crawl_run_id or "",
                     "text": chunk.text,
                     "metadata": stored.metadata,

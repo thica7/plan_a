@@ -29,6 +29,7 @@ async def test_reingest_same_canonical_url_creates_version_chain(tmp_path) -> No
     try:
         first = await repo.upsert_document(
             DocumentCreate(
+                workspace_id="default-workspace",
                 url="https://example.com/product",
                 title="Product",
                 source_type="manual",
@@ -38,6 +39,7 @@ async def test_reingest_same_canonical_url_creates_version_chain(tmp_path) -> No
         )
         second = await repo.upsert_document(
             DocumentCreate(
+                workspace_id="default-workspace",
                 url="https://example.com/product",
                 title="Product",
                 source_type="manual",
@@ -66,6 +68,7 @@ async def test_merge_document_version_marks_target_active(tmp_path) -> None:
     try:
         first = await repo.upsert_document(
             DocumentCreate(
+                workspace_id="default-workspace",
                 url="https://example.com/product",
                 title="Product",
                 source_type="manual",
@@ -75,6 +78,7 @@ async def test_merge_document_version_marks_target_active(tmp_path) -> None:
         )
         second = await repo.upsert_document(
             DocumentCreate(
+                workspace_id="default-workspace",
                 url="https://example.com/product",
                 title="Product",
                 source_type="manual",
@@ -110,6 +114,7 @@ async def test_get_knowledge_document_chunks_returns_ordered_chunks(tmp_path) ->
     try:
         document = await repo.upsert_document(
             DocumentCreate(
+                workspace_id="default-workspace",
                 url="https://example.com/security",
                 title="Security",
                 source_type="manual",
@@ -146,4 +151,3 @@ async def test_get_knowledge_document_chunks_returns_ordered_chunks(tmp_path) ->
         assert chunks[0].text == "First chunk."
     finally:
         await repo.close()
-

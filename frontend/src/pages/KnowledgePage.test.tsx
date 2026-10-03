@@ -51,7 +51,7 @@ describe("KnowledgePage deep links", () => {
   it("focuses a KB locator from query params", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === "/api/knowledge/documents?page=1&page_size=10") {
+      if (url === "/api/knowledge/documents?limit=10&offset=0") {
         return Promise.resolve(jsonResponse([linkedDocument], { "X-Total-Count": "1" }));
       }
       if (url === "/api/knowledge/documents/kb-doc-security-v2") {
@@ -152,7 +152,7 @@ describe("KnowledgePage deep links", () => {
     expect(await screen.findByText(/Focused chunk: Acme supports SSO/)).toBeInTheDocument();
     expect(await screen.findByText(/Source snapshot: Acme security page/)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Raw source ID")).toHaveValue("kb-security-sso"));
-    expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents?page=1&page_size=10", expect.objectContaining({ headers: expect.any(Headers) }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents?limit=10&offset=0", expect.objectContaining({ headers: expect.any(Headers) }));
     expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents/kb-doc-security-v2", expect.objectContaining({ headers: expect.any(Headers) }));
     expect(fetchMock).toHaveBeenCalledWith("/api/knowledge/documents/kb-doc-security-v2/chunks", expect.objectContaining({ headers: expect.any(Headers) }));
     expect(fetchMock).toHaveBeenCalledWith(
@@ -168,7 +168,7 @@ describe("KnowledgePage deep links", () => {
   it("renders visual screenshot artifact previews", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === "/api/knowledge/documents?page=1&page_size=10") {
+      if (url === "/api/knowledge/documents?limit=10&offset=0") {
         return Promise.resolve(jsonResponse([linkedDocument], { "X-Total-Count": "1" }));
       }
       if (url === "/api/knowledge/documents/kb-doc-security-v2") {

@@ -13,7 +13,7 @@ from packages.identity import (
     normalize_key,
     stable_prefixed_id,
 )
-from packages.knowledge.models import KnowledgeChunk, KnowledgeDocument
+from packages.knowledge.models import KnowledgeChunk, KnowledgeDocument, KnowledgeScope
 from packages.knowledge.repository import KnowledgeRepository
 from packages.schema.enterprise import (
     EvidenceRecord,
@@ -62,6 +62,9 @@ async def sync_knowledge_to_evidence(
     started_at = datetime.now(UTC)
     started_perf = time.perf_counter()
     documents = await repo.list_documents_for_evidence_sync(
+        scope=KnowledgeScope(workspace_id=workspace_id, project_id=project_id,
+                             include_workspace_library=True),
+        source_roles=["source"],
         crawl_run_id=request.crawl_run_id,
         competitors=_non_empty(request.competitors),
         dimensions=_non_empty(request.dimensions),
@@ -278,6 +281,18 @@ def _sync_metadata(
     metadata: dict[str, object] = {
         "kb_sync": True,
         "kb_document_id": document.id,
+        "kb_document_workspace_id": document.workspace_id,
+        "kb_document_project_id": document.project_id,
+        "kb_market": document.market,
+        "kb_source_role": document.source_role,
+        "kb_content_hash": document.content_hash,
+        "kb_source_published_at": _iso_or_none(document.source_published_at),
+        "kb_source_updated_at": _iso_or_none(document.source_updated_at),
+        "kb_last_verified_at": _iso_or_none(document.last_verified_at),
+        "source_published_at": _iso_or_none(document.source_published_at),
+        "source_updated_at": _iso_or_none(document.source_updated_at),
+        "last_verified_at": _iso_or_none(document.last_verified_at),
+        "source_fetched_at": _iso_or_none(document.fetched_at),
         "kb_document_version": document.version,
         "kb_parent_document_id": document.parent_document_id,
         "kb_document_status": document.status,
@@ -312,10 +327,6 @@ def _sync_metadata(
             "run_id": "kb_collector_run_id",
             "collector_candidate_origin": "kb_collector_candidate_origin",
             "collector_fetch_method": "kb_collector_fetch_method",
-            "source_published_at": "source_published_at",
-            "source_updated_at": "source_updated_at",
-            "last_verified_at": "last_verified_at",
-            "fetched_at": "source_fetched_at",
         },
     )
     collector_confidence = _safe_metadata_value(document.metadata.get("collector_confidence"))
@@ -487,19 +498,8 @@ def _freshness_score(value: datetime | None) -> float:
 
 
 def _document_fact_observed_at(document: KnowledgeDocument) -> datetime | None:
-    for key in (
-        "last_verified_at", "source_updated_at", "updated_at",
-        "source_published_at", "published_at", "source_fetched_at", "fetched_at",
-    ):
-        value = document.metadata.get(key)
-        if isinstance(value, datetime):
-            return value
-        if isinstance(value, str) and value.strip():
-            try:
-                return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
-            except ValueError:
-                continue
-    return document.fetched_at or document.last_seen_at
+    return (document.last_verified_at or document.source_updated_at
+            or document.source_published_at or document.fetched_at)
 
 
 def _http_url_or_none(value: str | None) -> str | None:

@@ -867,7 +867,7 @@ class QualityAgentMixin:
         keys = (
             (
                 "last_verified_at", "source_updated_at", "source_published_at",
-                "source_fetched_at", "kb_fetched_at", "kb_last_seen_at",
+                "source_fetched_at", "kb_fetched_at",
             )
             if is_kb_reuse
             else (
@@ -1069,6 +1069,12 @@ class QualityAgentMixin:
                                     "claim_area": claim_area,
                                     "kb_source_id": kb_source.id,
                                     "kb_position": kb_position,
+                                    "kb_document_workspace_id": kb_source.metadata.get(
+                                        "kb_document_workspace_id"
+                                    ),
+                                    "kb_document_project_id": kb_source.metadata.get(
+                                        "kb_document_project_id"
+                                    ),
                                     "kb_document_id": self._source_metadata_text(
                                         kb_source,
                                         "kb_document_id",
@@ -1088,6 +1094,10 @@ class QualityAgentMixin:
                                 }
                             )
                         )
+                        if "kb_document_project_id" in kb_source.metadata:
+                            pairs[-1]["kb_document_project_id"] = kb_source.metadata[
+                                "kb_document_project_id"
+                            ]
                         if len(pairs) >= 8:
                             return pairs
         return pairs
@@ -1098,7 +1108,7 @@ class QualityAgentMixin:
         *,
         position: str | None = None,
     ) -> dict[str, object]:
-        return self._compact_metadata(
+        item = self._compact_metadata(
             {
                 "source_id": source.id,
                 "raw_source_id": source.id,
@@ -1118,6 +1128,8 @@ class QualityAgentMixin:
                     "document_id",
                 ),
                 "kb_document_version": source.metadata.get("kb_document_version"),
+                "kb_document_workspace_id": source.metadata.get("kb_document_workspace_id"),
+                "kb_document_project_id": source.metadata.get("kb_document_project_id"),
                 "kb_document_status": self._source_document_status(source),
                 "kb_chunk_id": self._source_metadata_text(source, "kb_chunk_id", "chunk_id"),
                 "kb_chunk_ids": source.metadata.get("kb_chunk_ids"),
@@ -1136,6 +1148,9 @@ class QualityAgentMixin:
                 "is_kb_reuse": self._source_is_kb_reuse(source),
             }
         )
+        if "kb_document_project_id" in source.metadata:
+            item["kb_document_project_id"] = source.metadata["kb_document_project_id"]
+        return item
 
     def _source_metadata_text(self, source: RawSource, *keys: str) -> str:
         for key in keys:

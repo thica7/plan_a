@@ -173,6 +173,8 @@ class CapturedPage(ResearchBaseModel):
     text_length: int = Field(default=0, ge=0)
     failure_reason: str | None = None
     captured_at: datetime = Field(default_factory=datetime.utcnow)
+    source_published_at: str | None = None
+    source_updated_at: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
