@@ -306,6 +306,11 @@ def _source_record(
     }:
         material_level = "unknown"
     safe_metadata: dict[str, object] = {"normalized_fields": normalized, "source_role": role}
+    # Conservative provenance flags survive the safe projection. They can weaken
+    # synthetic/community evidence, never grant canonical scope or authority.
+    for flag in ("fallback_synthetic", "survey_interview_synthetic", "community_evidence"):
+        if metadata.get(flag) is True:
+            safe_metadata[flag] = True
     safe_metadata["source_material_level"] = material_level
     for name, value in (
         ("source_published_at", published),

@@ -123,6 +123,7 @@ class LLMExecutionMixin:
         is_repair,
         timeout_seconds,
     ):
+        record = self._evidence_live_record(record)
         started = time.perf_counter()
         input_text = f"{system}\n\n{user}"
         if schema_hint is not None:

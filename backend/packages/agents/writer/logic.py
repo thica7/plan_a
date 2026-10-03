@@ -19,6 +19,7 @@ from packages.agents.writer.assembler import (
     assemble_report_fragments,
     assemble_report_sections,
 )
+from packages.agents.writer.evidence_alignment import WriterEvidenceAlignmentMixin
 from packages.agents.writer.evidence_pack import (
     SEGMENT_INPUT_TARGET_CHARS,
     build_writer_evidence_pack,
@@ -97,6 +98,7 @@ from packages.identity.source_resolver import (
     source_tokens,
 )
 from packages.llm.errors import LLMExecutionLimitError
+from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.rag.grounded_prompt import build_run_grounding_prompt
 from packages.research.budget import research_depth_budget
 from packages.research.evidence.normalization import normalized_fields_from_source
@@ -133,6 +135,7 @@ USER_RESEARCH_SOURCE_TYPES = set(USER_RESEARCH_SOURCE_TYPE_ORDER)
 CJK_TEXT_RE = re.compile(r"[\u3400-\u9fff]")
 PROMPT_SAFE_FIELD_ALIASES = {
     "source_registry": "source_index",
+    "source_registry_count": "source_index_count",
     "allowed_source_ids": "citation_source_ids",
     "claim_cards": "evidence_claims",
     "decision_cards": "decision_guidance",
@@ -1150,8 +1153,8 @@ def _source_ids_from_structured_segments(
     return sorted(source_ids)
 
 
-class WriterAgentMixin:
-    async def _real_writer_step(self, record: RunRecord) -> None:
+class WriterAgentMixin(WriterEvidenceAlignmentMixin):
+    async def _write_report_draft(self, record: RunRecord) -> None:
         detail = record.detail
         detail.current_node = "writer"
         self._consume_queued_agent_messages(
@@ -1373,6 +1376,7 @@ class WriterAgentMixin:
                     detail.report_md = self._preserve_hardened_previous_report(
                         detail,
                         previous_report,
+                        record=record,
                     )
                     writer_mode = "preserved previous report after writer anti-regression"
                 else:
@@ -1396,6 +1400,7 @@ class WriterAgentMixin:
                     detail.report_md = self._preserve_hardened_previous_report(
                         detail,
                         previous_report,
+                        record=record,
                     )
                     writer_mode = "preserved previous report after writer error"
                 else:
@@ -1408,12 +1413,15 @@ class WriterAgentMixin:
                         anti_regression_reason=anti_regression_reason,
                         previous_report_protected=previous_report_protected,
                     )
+            except EvidenceUseRejectedError:
+                raise
             except Exception as exc:  # noqa: BLE001 - preserve existing reports, fail otherwise.
                 writer_error = str(exc)
                 if previous_report.strip():
                     detail.report_md = self._preserve_hardened_previous_report(
                         detail,
                         previous_report,
+                        record=record,
                     )
                     writer_mode = "preserved previous report after writer error"
                 else:
@@ -1635,6 +1643,7 @@ class WriterAgentMixin:
                                         self._preserve_hardened_previous_report(
                                             detail,
                                             previous_report,
+                                            record=record,
                                         )
                                     )
                                     report_md = detail.report_md
@@ -1659,6 +1668,8 @@ class WriterAgentMixin:
                                     "authoring_mode": "schema_contract_segment",
                                 },
                             )
+                    except EvidenceUseRejectedError:
+                        raise
                     except Exception as exc:  # noqa: BLE001 - structured path may be temporarily unavailable.
                         fallback_reason = str(exc)[:500]
                         if not _structured_markdown_fallback_allowed(
@@ -1685,6 +1696,7 @@ class WriterAgentMixin:
                                 detail.report_md = self._preserve_hardened_previous_report(
                                     detail,
                                     previous_report,
+                                    record=record,
                                 )
                                 writer_mode = (
                                     "preserved previous report after schema-first writer error"
@@ -1801,6 +1813,7 @@ class WriterAgentMixin:
                     detail.report_md = self._preserve_hardened_previous_report(
                         detail,
                         previous_report,
+                        record=record,
                     )
                     writer_mode = "preserved previous report after writer anti-regression"
                 else:
@@ -1824,6 +1837,7 @@ class WriterAgentMixin:
                     detail.report_md = self._preserve_hardened_previous_report(
                         detail,
                         previous_report,
+                        record=record,
                     )
                     writer_mode = "preserved previous report after writer error"
                 else:
@@ -1836,12 +1850,15 @@ class WriterAgentMixin:
                         anti_regression_reason=anti_regression_reason,
                         previous_report_protected=previous_report_protected,
                     )
+            except EvidenceUseRejectedError:
+                raise
             except Exception as exc:  # noqa: BLE001 - preserve existing reports, fail otherwise.
                 writer_error = str(exc)
                 if previous_report.strip():
                     detail.report_md = self._preserve_hardened_previous_report(
                         detail,
                         previous_report,
+                        record=record,
                     )
                     writer_mode = "preserved previous report after writer error"
                 else:
@@ -1876,6 +1893,8 @@ class WriterAgentMixin:
             source_message_ids=redo_source_message_ids,
         )
         detail.updated_at = datetime.utcnow()
+        if record.evidence_origin:
+            return
         projection = self._sync_enterprise_projection(record)
         await self.emit(
             detail.id,
@@ -2192,10 +2211,13 @@ class WriterAgentMixin:
                 required_sections=required_sections,
             )
 
-        writer_context_json = _reader_safe_prompt_json_text(
-            evidence_pack_result.to_prompt_json()
-        )
-        return await asyncio.wait_for(
+        await self._ensure_analysis_evidence(record)
+        selected, evidence_use = self._writer_segment_evidence(record, {
+            "allowed_source_ids": [source.id for source in detail.raw_sources],
+            "segment_name": "full_report",
+        })
+        writer_context_json = self._writer_evidence_context_json(selected)
+        result = await asyncio.wait_for(
             self._trace_llm_text(
                 record,
                 agent="writer",
@@ -2255,6 +2277,8 @@ class WriterAgentMixin:
             ),
             timeout=timeout_seconds,
         )
+        self._validate_evidence_use(record, evidence_use)
+        return result
 
     async def _writer_schema_contract_segment_report(
         self,
@@ -2457,6 +2481,11 @@ class WriterAgentMixin:
         allowed_source_ids: set[str],
         timeout_seconds: float,
     ) -> BaseModel:
+        await self._ensure_analysis_evidence(record)
+        if "allowed_source_ids" not in segment:
+            segment = {**segment, "allowed_source_ids": sorted(allowed_source_ids)}
+        segment, evidence_use = self._writer_segment_evidence(record, segment)
+        allowed_source_ids = set(segment["allowed_source_ids"])
         prompt = self._structured_section_prompt(
             segment=segment,
             section_schema=section_schema,
@@ -2485,6 +2514,8 @@ class WriterAgentMixin:
                 error_kind="timeout",
                 attempt="initial",
             ) from exc
+        except EvidenceUseRejectedError:
+            raise
         except Exception as exc:
             raise _structured_section_generation_error(
                 segment,
@@ -2493,6 +2524,7 @@ class WriterAgentMixin:
                 error_kind="llm_exception",
                 attempt="initial",
             ) from exc
+        self._validate_evidence_use(record, evidence_use)
         try:
             return _parse_structured_section_response(
                 response,
@@ -2530,6 +2562,8 @@ class WriterAgentMixin:
                     error_kind="timeout",
                     attempt="retry",
                 ) from retry_exc
+            except EvidenceUseRejectedError:
+                raise
             except Exception as retry_exc:
                 raise _structured_section_generation_error(
                     segment,
@@ -2539,6 +2573,7 @@ class WriterAgentMixin:
                     attempt="retry",
                 ) from retry_exc
             try:
+                self._validate_evidence_use(record, evidence_use)
                 return _parse_structured_section_response(
                     retry_response,
                     section_schema,
@@ -2552,6 +2587,8 @@ class WriterAgentMixin:
                     error_kind="validation",
                     attempt="retry",
                 ) from retry_exc
+            except EvidenceUseRejectedError:
+                raise
             except Exception as retry_exc:
                 raise _structured_section_generation_error(
                     segment,
@@ -2560,6 +2597,8 @@ class WriterAgentMixin:
                     error_kind="unexpected",
                     attempt="retry",
                 ) from retry_exc
+        except EvidenceUseRejectedError:
+            raise
         except Exception as exc:
             raise _structured_section_generation_error(
                 segment,
@@ -2586,12 +2625,7 @@ class WriterAgentMixin:
             sorted(allowed_source_ids),
             ensure_ascii=False,
         )
-        segment_json = json.dumps(
-            segment,
-            ensure_ascii=False,
-            sort_keys=True,
-            default=str,
-        ).replace("[source:", "[source token:")
+        segment_json = self._writer_evidence_context_json(segment)
         previous_error = (previous_validation_error or "none").replace(
             "[source:",
             "[source token:",
@@ -3846,6 +3880,8 @@ class WriterAgentMixin:
         contract_missing_required_heading_keys: list[str] | None = None,
     ) -> str:
         detail = record.detail
+        await self._ensure_analysis_evidence(record)
+        segment, evidence_use = self._writer_segment_evidence(record, segment)
         depth_budget = research_depth_budget(detail.plan.research_depth)
         report_target_instruction = (
             f"Full report target: {depth_budget.report_chars} characters. "
@@ -3853,10 +3889,7 @@ class WriterAgentMixin:
             "evidence and required headings.\n"
             if depth_budget is not None else ""
         )
-        segment_json = json.dumps(
-            _prompt_safe_writer_segment(segment),
-            ensure_ascii=False,
-        )
+        segment_json = self._writer_evidence_context_json(segment)
         allowed_h2_headings = ", ".join(
             heading
             for heading in segment.get("allowed_h2_headings", [])
@@ -3953,7 +3986,7 @@ class WriterAgentMixin:
                 "Write exactly one canonical report section or allowed section group from those notes.\n"
             )
         user_research_policy = writer_user_research_policy_text()
-        return await asyncio.wait_for(
+        result = await asyncio.wait_for(
             self._trace_llm_text(
                 record,
                 agent="writer",
@@ -4016,6 +4049,8 @@ class WriterAgentMixin:
             ),
             timeout=timeout_seconds,
         )
+        self._validate_evidence_use(record, evidence_use)
+        return result
 
     async def _writer_section_repair_markdown(
         self,
@@ -4130,7 +4165,20 @@ class WriterAgentMixin:
             )
 
         repaired_sections = []
-        for writer_context_json in writer_context_jsons:
+        for index, writer_context_json in enumerate(writer_context_jsons):
+            await self._ensure_analysis_evidence(record)
+            context_payload = repair_payloads[index] if repair_payloads else {}
+            ids = context_payload.get(
+                "allowed_source_ids", [source.id for source in detail.raw_sources]
+            )
+            selected, evidence_use = self._writer_segment_evidence(record, {
+                "segment_name": "section_repair", "allowed_source_ids": ids,
+                "repair_targets": {"sections": list(sections)},
+                "repair_sections": list(sections),
+                "repair_part": index + 1,
+                "repair_part_count": len(writer_context_jsons),
+            })
+            writer_context_json = self._writer_evidence_context_json(selected)
             repaired_sections.append(
                 await self._trace_llm_text(
                     record,
@@ -4162,6 +4210,7 @@ class WriterAgentMixin:
                     ),
                 )
             )
+            self._validate_evidence_use(record, evidence_use)
         return self._join_section_repair_parts(repaired_sections, section_headings)
 
     def _with_publication_repair_issues(
@@ -4339,7 +4388,11 @@ class WriterAgentMixin:
         self,
         detail: RunDetail,
         previous_report: str,
+        *,
+        record: RunRecord | None = None,
     ) -> str:
+        if record is not None:
+            record.writer_preserved_report = True
         if self._has_report_section_markers(previous_report):
             preserved_report = self._harden_schema_contract_report_markdown(
                 detail,

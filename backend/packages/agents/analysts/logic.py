@@ -14,10 +14,12 @@ from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.refs import merge_ordered_refs
 from packages.research.budget import research_depth_budget
 from packages.research.evidence.normalization import normalized_fields_from_source
+from packages.research.evidence.snapshot import current_snapshot
 from packages.research.evidence.text import (
     deterministic_claim_text_from_source,
     source_business_snippet,
 )
+from packages.research.evidence.views import select_evidence_view
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     CompetitorKB,
@@ -262,6 +264,7 @@ class AnalystAgentMixin:
         competitor: str,
         context: SubagentContext,
         dimension_sources: list[dict[str, Any]],
+        *, evidence_json: str = "",
     ) -> dict[str, Any] | None:
         detail = record.detail
         observations: list[dict[str, object]] = []
@@ -287,6 +290,7 @@ class AnalystAgentMixin:
                     f"Topic: {detail.topic}\n"
                     f"Competitor: {competitor}\n"
                     f"Dimension: {dimension}\n"
+                    f"Evidence View JSON: {evidence_json}\n"
                     f"Sources JSON: {json.dumps(dimension_sources, ensure_ascii=False)}\n"
                     f"QA feedback for redo: {json.dumps(qa_feedback, ensure_ascii=False)}\n"
                     f"Observations JSON: {json.dumps(observations, ensure_ascii=False)}\n\n"
@@ -392,13 +396,12 @@ class AnalystAgentMixin:
         expected_snapshot_id: str | None = None,
     ) -> None:
         detail = record.detail
-        use = None
-        if expected_snapshot_id is not None:
-            view, use = self._begin_evidence_use(
-                record, agent="analyst", competitor=competitor, dimension=dimension
-            )
-            if view.snapshot_id != expected_snapshot_id:
-                raise EvidenceUseRejectedError("analyst dispatch evidence snapshot changed")
+        await self._ensure_analysis_evidence(record)
+        view, use = self._begin_evidence_use(
+            record, agent="analyst", competitor=competitor, dimension=dimension
+        )
+        if expected_snapshot_id is not None and view.snapshot_id != expected_snapshot_id:
+            raise EvidenceUseRejectedError("analyst dispatch evidence snapshot changed")
         branch_id = self._analyst_branch_id(dimension, competitor)
         context = SubagentContext(run_id=detail.id, agent="analyst", subagent=branch_id)
         detail.current_node = "analyst"
@@ -415,12 +418,7 @@ class AnalystAgentMixin:
             payload={
                 "competitor": competitor,
                 "dimension": dimension,
-                "source_ids": [
-                    source.id
-                    for source in self._sources_for_competitor_dimension(
-                        detail, competitor, dimension
-                    )
-                ],
+                "source_ids": list(view.source_ids),
                 "qa_feedback": qa_feedback,
                 **task_metadata,
             },
@@ -441,12 +439,16 @@ class AnalystAgentMixin:
         )
         dimension_sources = [
             source.model_dump(mode="json")
-            for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
+            for source in (item.to_raw_source() for item in view.sources)
         ]
+        self._validate_evidence_use(record, use)
         cache_content_hash = self._kb_cache_content_hash(detail, competitor, dimension)
         if self._kb_cache is not None and cache_content_hash and not qa_feedback:
             cache_entry = self._kb_cache.get(competitor, dimension, cache_content_hash)
-            if cache_entry is not None:
+            if (
+                cache_entry is not None
+                and cache_entry.evidence_dependency_hash == view.dependency_hash
+            ):
                 if use is not None:
                     self._validate_evidence_use(record, use)
                 self._apply_kb_cache_entry(detail, cache_entry)
@@ -456,6 +458,15 @@ class AnalystAgentMixin:
                     dimension,
                     source_message_ids=[task_message.id],
                 )
+                reused = use.model_copy(update={
+                    "status": "reused", "validated_snapshot_id": view.snapshot_id,
+                    "reused_from_snapshot_id": cache_entry.producer_snapshot_id,
+                })
+                detail.evidence_consumptions = [reused if item.id == use.id else item
+                                                for item in detail.evidence_consumptions]
+                self._record_evidence_artifact(record, kind="analyst", competitor=competitor,
+                    dimension=dimension, uses=[reused],
+                    payload=self._analyst_evidence_artifact_payload(detail, competitor, dimension))
                 self._append_agent_message(
                     record,
                     from_agent="kb_cache",
@@ -503,6 +514,7 @@ class AnalystAgentMixin:
                     competitor,
                     context,
                     dimension_sources,
+                    evidence_json=view.to_prompt_json(),
                 )
                 if payload is not None:
                     payload, fallback_reason = self._ensure_structured_payload_has_claims(
@@ -513,14 +525,26 @@ class AnalystAgentMixin:
                     )
                     if use is not None:
                         self._validate_evidence_use(record, use)
-                    self._merge_structured_knowledge_payload(detail, competitor, dimension, payload)
-                    self._store_kb_cache_entry(detail, competitor, dimension, cache_content_hash)
+                    self._merge_structured_knowledge_payload(detail, competitor, dimension, payload,
+                                                             evidence_source_ids=set(view.source_ids))
+                    self._store_kb_cache_entry(detail, competitor, dimension, cache_content_hash,
+                                              evidence_use=use)
                     knowledge = detail.competitor_knowledge.get(competitor)
                     self._emit_claim_card_bundle(
                         record,
                         competitor,
                         dimension,
                         source_message_ids=[task_message.id],
+                    )
+                    self._record_evidence_artifact(
+                        record,
+                        kind="analyst",
+                        competitor=competitor,
+                        dimension=dimension,
+                        uses=[use],
+                        payload=self._analyst_evidence_artifact_payload(
+                            detail, competitor, dimension
+                        ),
                     )
                     self._append_agent_message(
                         record,
@@ -582,7 +606,7 @@ class AnalystAgentMixin:
                         f"Topic: {detail.topic}\n"
                         f"Competitor: {competitor}\n"
                         f"Dimension: {dimension}\n"
-                        f"Sources JSON: {json.dumps(dimension_sources, ensure_ascii=False)}\n\n"
+                        f"Evidence View JSON: {view.to_prompt_json()}\n"
                         f"QA feedback for this branch: {qa_feedback_json}\n\n"
                         "Return only the relevant CompetitorKnowledge slice for this dimension."
                     ),
@@ -611,8 +635,10 @@ class AnalystAgentMixin:
             react_payload["deterministic_fallback"] = True
         if use is not None:
             self._validate_evidence_use(record, use)
-        self._merge_structured_knowledge_payload(detail, competitor, dimension, payload)
-        self._store_kb_cache_entry(detail, competitor, dimension, cache_content_hash)
+        self._merge_structured_knowledge_payload(detail, competitor, dimension, payload,
+                                                             evidence_source_ids=set(view.source_ids))
+        self._store_kb_cache_entry(detail, competitor, dimension, cache_content_hash,
+                                  evidence_use=use)
         knowledge = detail.competitor_knowledge.get(competitor)
         self._emit_claim_card_bundle(
             record,
@@ -620,6 +646,9 @@ class AnalystAgentMixin:
             dimension,
             source_message_ids=[task_message.id],
         )
+        self._record_evidence_artifact(record, kind="analyst", competitor=competitor,
+            dimension=dimension, uses=[use],
+            payload=self._analyst_evidence_artifact_payload(detail, competitor, dimension))
         self._append_agent_message(
             record,
             from_agent="analyst",
@@ -926,6 +955,12 @@ class AnalystAgentMixin:
         competitor: str,
         dimension: str,
     ) -> list[RawSource]:
+        snapshot = current_snapshot(detail)
+        if snapshot is not None and snapshot.phase == "analysis":
+            view = select_evidence_view(snapshot, agent="analyst", competitor=competitor,
+                dimension=dimension, max_bytes={"quick": 8192, "standard": 16384,
+                                               "deep": 24576}.get(detail.plan.research_depth, 8192))
+            return [source.to_raw_source() for source in view.sources]
         return [
             source
             for source in detail.raw_sources
@@ -1153,6 +1188,7 @@ class AnalystAgentMixin:
         competitor: str,
         dimension: str,
         content_hash: str,
+        *, evidence_use=None,
     ) -> None:
         if self._kb_cache is None or not content_hash:
             return
@@ -1171,8 +1207,25 @@ class AnalystAgentMixin:
             ],
             confidence=kb.confidence,
             knowledge=knowledge,
+            producer_snapshot_id=evidence_use.snapshot_id if evidence_use else None,
+            evidence_dependency_hash=evidence_use.dependency_hash if evidence_use else None,
         )
         self._kb_cache.put(entry)
+
+    def _analyst_evidence_artifact_payload(self, detail, competitor, dimension):
+        knowledge = detail.competitor_knowledge.get(competitor)
+        key = ("pricing_model" if "pricing" in dimension.casefold() else
+               "user_personas" if any(term in dimension.casefold() for term in ("persona", "user"))
+               else "feature_tree")
+        kb = detail.competitor_kbs.get(competitor)
+        return {
+            "knowledge": getattr(knowledge, key).model_dump(mode="json") if knowledge else None,
+            "review_summary": knowledge.review_summary.model_dump(mode="json")
+                if knowledge and self._dimension_uses_review_summary(dimension) else None,
+            "kb_slice": kb.slices.get(dimension, []) if kb else [],
+            "cards": [bundle.model_dump(mode="json") for bundle in detail.claim_card_bundles
+                      if bundle.competitor == competitor and bundle.dimension == dimension],
+        }
 
     def _merge_kb_slice(
         self,
@@ -1338,6 +1391,7 @@ class AnalystAgentMixin:
         competitor: str,
         dimension: str,
         payload: dict[str, Any],
+        *, evidence_source_ids: set[str] | None = None,
     ) -> None:
         raw = payload.get("structured_knowledge")
         if not isinstance(raw, dict):
@@ -1442,6 +1496,7 @@ class AnalystAgentMixin:
             dimension,
             knowledge,
             sanitize_review_summary=review_summary_changed,
+            evidence_source_ids=evidence_source_ids,
         )
         claims = self._structured_claims_for_dimension(knowledge, dimension)
         knowledge.source_ids = merge_ordered_refs(
@@ -1486,13 +1541,14 @@ class AnalystAgentMixin:
         knowledge: CompetitorKnowledge,
         *,
         sanitize_review_summary: bool = False,
+        evidence_source_ids: set[str] | None = None,
     ) -> None:
-        valid_source_ids = set(
+        valid_source_ids = evidence_source_ids if evidence_source_ids is not None else set(
             self._source_ids_for_competitor_dimension(detail, competitor, dimension)
         )
         if sanitize_review_summary:
             self._sanitize_review_summary_source_ids(knowledge.review_summary, valid_source_ids)
-        if not valid_source_ids:
+        if not valid_source_ids and evidence_source_ids is None:
             return
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:

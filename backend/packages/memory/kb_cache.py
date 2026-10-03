@@ -19,6 +19,8 @@ class KBCacheEntry(BaseModel):
     source_ids: list[str] = Field(default_factory=list)
     confidence: float = 0.0
     knowledge: CompetitorKnowledge
+    producer_snapshot_id: str | None = None
+    evidence_dependency_hash: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

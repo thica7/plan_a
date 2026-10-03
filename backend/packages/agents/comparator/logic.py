@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from packages.agents.comparator.decision_cards import build_decision_card_bundle
+from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.refs import merge_ordered_refs
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
@@ -54,6 +55,10 @@ COMPARATOR_LLM_MAX_ATTEMPTS = 3
 class ComparatorAgentMixin:
     async def _real_comparator_step(self, record: RunRecord) -> None:
         detail = record.detail
+        await self._ensure_analysis_evidence(record)
+        view, use = self._begin_evidence_use(record, agent="comparator")
+        projected, dependency_gaps = self._project_evidence_detail(record, [view])
+        baseline = self._analysis_artifacts_hash(detail)
         detail.current_node = "comparator"
         self._consume_queued_agent_messages(
             record,
@@ -66,22 +71,75 @@ class ComparatorAgentMixin:
         payload, fallback = await self._comparator_payload_with_retries(
             record,
             timeout_seconds=timeout_seconds,
+            evidence_view=view, evidence_detail=projected,
         )
         if fallback.get("used"):
             payload = self._deterministic_comparator_payload(timeout_seconds)
         module_status = "fallback" if fallback.get("used") else "llm"
-        detail.comparison_matrix = self._build_comparison_matrix(
-            detail,
+        matrix = self._build_comparison_matrix(
+            projected,
             payload,
             fallback_used=bool(fallback.get("used")),
         )
+        # Compare matching semantic slots/tier names; keep time and other basis qualifiers.
+        incomparable = set()
+        for dimension in projected.plan.dimensions:
+            groups = {}
+            for fact in view.facts:
+                if fact.dimension != dimension:
+                    continue
+                qualifiers = fact.qualifiers
+                slot = tuple(
+                    (key, str(qualifiers.pop(key)))
+                    for key in ("slot", "tier_name")
+                    if key in qualifiers
+                )
+                groups.setdefault((fact.field, slot), []).append((fact, qualifiers))
+            for (field, slot), members in groups.items():
+                supported = {fact.competitor.strip().casefold() for fact, _ in members}
+                missing = [
+                    product
+                    for product in projected.plan.competitors
+                    if product.strip().casefold() not in supported
+                ]
+                if missing:
+                    incomparable.add(dimension)
+                    dependency_gaps.append(
+                        f"Not comparable: {dimension} / {field} / {dict(slot)}; "
+                        f"comparison_counterpart_missing: {', '.join(missing)}."
+                    )
+                    continue
+                quantitative = field in {"price", "usage_limit", "capacity"}
+                unknown = quantitative and any(
+                    not fact.unit or not fact.market for fact, _ in members
+                )
+                contexts = {
+                    (fact.unit, fact.market, json.dumps(qualifiers, sort_keys=True))
+                    for fact, qualifiers in members
+                }
+                if unknown or len(contexts) > 1:
+                    incomparable.add(dimension)
+                    reason = "comparison_basis_unknown" if unknown else "comparison_basis_differs"
+                    dependency_gaps.append(
+                        f"Not comparable: {dimension} / {field}; {reason}; "
+                        "unit, market or time/qualifier context is unknown or differs."
+                    )
+        for dimension in incomparable:
+            matrix.winner_by_dimension[dimension] = "tie"
+        matrix.summary.extend(dependency_gaps)
+        self._validate_evidence_use(record, use)
+        if baseline != self._analysis_artifacts_hash(detail):
+            raise EvidenceUseRejectedError("Comparator analysis artifacts changed before commit")
+        detail.comparison_matrix = matrix
         self._refresh_swot_analyses(detail)
         detail.decision_card_bundle = build_decision_card_bundle(
             run_id=detail.id,
-            claim_bundles=detail.claim_card_bundles,
+            claim_bundles=projected.claim_card_bundles,
             matrix=detail.comparison_matrix,
             fallback_used=bool(fallback.get("used")),
         )
+        self._record_evidence_artifact(record, kind="comparator", uses=[use],
+            payload=self._comparator_evidence_artifact_payload(detail))
         self._append_agent_message(
             record,
             from_agent="comparator",
@@ -123,8 +181,17 @@ class ComparatorAgentMixin:
         record: RunRecord,
         *,
         timeout_seconds: float,
+        evidence_view=None, evidence_detail=None,
     ) -> tuple[dict[str, object], dict[str, object]]:
-        detail = record.detail
+        detail = evidence_detail or record.detail
+        analysis_json = self._bounded_analysis_json(
+            evidence_view,
+            {
+                "kbs": json.loads(self._competitor_kb_json(detail)),
+                "knowledge": json.loads(self._competitor_knowledge_json(detail)),
+            },
+        )
+        evidence_json = evidence_view.to_prompt_json()
         last_error: BaseException | None = None
         last_reason = "empty_content"
         for attempt in range(1, COMPARATOR_LLM_MAX_ATTEMPTS + 1):
@@ -137,18 +204,15 @@ class ComparatorAgentMixin:
                         name="comparison_matrix",
                         is_repair=attempt > 1,
                         system=(
-                            "You are a comparator. Build a compact "
-                            "cross-competitor matrix summary."
+                            "You are a comparator. Build a compact cross-competitor matrix summary."
                         ),
                         user=(
                             f"Topic: {detail.topic}\n"
                             f"Target product: {detail.plan.target_product.name if detail.plan.target_product else 'none'}\n"
                             f"Competitors: {', '.join(detail.plan.competitors)}\n"
                             f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                            f"Competitor KB JSON: {self._competitor_kb_json(detail)}\n"
-                            "Competitor Knowledge Schema JSON: "
-                            f"{self._competitor_knowledge_json(detail)}\n"
-                            f"Source digest JSON: {self._source_digest_json(detail)}"
+                            f"Analysis JSON: {analysis_json}\n"
+                            f"Evidence View JSON: {evidence_json}"
                         ),
                         schema_hint=(
                             '{"matrix_summary":["row"],'
@@ -172,6 +236,8 @@ class ComparatorAgentMixin:
             except TimeoutError as exc:
                 last_reason = "timeout"
                 last_error = exc
+            except EvidenceUseRejectedError:
+                raise
             except Exception as exc:  # noqa: BLE001 - comparator can degrade after retries.
                 last_reason = "llm_error"
                 last_error = exc
@@ -187,6 +253,17 @@ class ComparatorAgentMixin:
         if last_error is not None and last_reason != "timeout":
             fallback["error"] = str(last_error)
         return {}, fallback
+
+    @staticmethod
+    def _comparator_evidence_artifact_payload(detail):
+        return {
+            "matrix": detail.comparison_matrix.model_dump(mode="json")
+            if detail.comparison_matrix
+            else None,
+            "decision_cards": detail.decision_card_bundle.model_dump(mode="json")
+            if detail.decision_card_bundle
+            else None,
+        }
 
     def _comparator_payload_has_content(self, payload: object) -> bool:
         if not isinstance(payload, dict):

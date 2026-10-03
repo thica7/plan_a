@@ -10,7 +10,6 @@ from packages.agents.writer.assembler import StructuredReportAssembler
 from packages.agents.writer.logic import (
     STRUCTURED_SECTION_INPUT_TARGET_CHARS,
     CitedTextListSection,
-    WriterAgentMixin,
     _structured_section_inputs,
     build_structured_writer_section_plan,
 )
@@ -20,9 +19,12 @@ from packages.agents.writer.structured_report import (
     ReportSupport,
 )
 from packages.agents.writer.structured_sections import StructuredSectionGenerationError
-from packages.orchestrator.service import RunRecord
+from packages.config import Settings
+from packages.orchestrator.checkpointer import GraphCheckpointer
+from packages.orchestrator.service import RunRecord, RunService
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import AnalysisPlan, RawSource
+from packages.skills.registry import SkillRegistry
 
 
 def test_structured_assembler_accepts_complete_report_and_emits_coverage_telemetry() -> None:
@@ -51,8 +53,10 @@ def test_structured_assembler_reports_duplicate_deep_dives() -> None:
     assert result.telemetry["duplicate_deep_dive_competitors"] == ["Cursor"]
 
 
-class _WriterHarness(WriterAgentMixin):
+class _WriterHarness(RunService):
     def __init__(self, responses: list[str]) -> None:
+        super().__init__(SkillRegistry.from_default_path(), Settings(demo_mode=True),
+                         graph_checkpointer=GraphCheckpointer.in_memory())
         self.responses = responses
         self.prompts: list[str] = []
         self.emitted_events: list[tuple[str, str, str | None, str | None, str, dict[str, object] | None]] = []
@@ -929,7 +933,7 @@ async def test_structured_section_json_accepts_valid_json_and_rejects_markdown_c
     harness = _WriterHarness([json.dumps(payload)])
 
     section = await harness._writer_structured_section_json(
-        record=object(),
+        record=_writer_record_with_sources(["raw-source-a"]),
         segment={"section_id": "executive_summary", "content": "Evidence"},
         section_schema=ExecutiveSummarySection,
         allowed_source_ids={"raw-source-a"},
@@ -984,7 +988,7 @@ async def test_structured_section_json_retries_invalid_json_once() -> None:
     harness = _WriterHarness(["## Markdown response", json.dumps(valid_payload)])
 
     section = await harness._writer_structured_section_json(
-        record=object(),
+        record=_writer_record_with_sources(["raw-source-a"]),
         segment={"section_id": "executive_summary", "content": "Evidence"},
         section_schema=ExecutiveSummarySection,
         allowed_source_ids={"raw-source-a"},
@@ -1002,7 +1006,7 @@ async def test_structured_section_json_raises_typed_failure_after_retry() -> Non
 
     with pytest.raises(Exception) as exc_info:
         await harness._writer_structured_section_json(
-            record=object(),
+            record=_writer_record_with_sources(["raw-source-a"]),
             segment={"section_id": "executive_summary", "content": "Evidence"},
             section_schema=ExecutiveSummarySection,
             allowed_source_ids={"raw-source-a"},
@@ -1031,7 +1035,7 @@ async def test_structured_section_json_wraps_initial_timeout_as_typed_failure(
 
     with pytest.raises(StructuredSectionGenerationError) as exc_info:
         await harness._writer_structured_section_json(
-            record=object(),
+            record=_writer_record_with_sources(["raw-source-a"]),
             segment={"section_id": "executive_summary", "content": "Evidence"},
             section_schema=ExecutiveSummarySection,
             allowed_source_ids={"raw-source-a"},
@@ -1061,7 +1065,7 @@ async def test_structured_section_json_wraps_retry_provider_exception_as_typed_f
 
     with pytest.raises(StructuredSectionGenerationError) as exc_info:
         await harness._writer_structured_section_json(
-            record=object(),
+            record=_writer_record_with_sources(["raw-source-a"]),
             segment={"section_id": "executive_summary", "content": "Evidence"},
             section_schema=ExecutiveSummarySection,
             allowed_source_ids={"raw-source-a"},
@@ -1182,7 +1186,7 @@ async def test_structured_section_json_rejects_disallowed_support_appendix_sourc
 
     with pytest.raises(StructuredSectionGenerationError, match="raw-source-b"):
         await harness._writer_structured_section_json(
-            record=object(),
+            record=_writer_record_with_sources(["raw-source-a"]),
             segment={"section_id": "support", "content": "Evidence"},
             section_schema=ReportSupport,
             allowed_source_ids={"raw-source-a"},
@@ -1225,7 +1229,7 @@ async def test_structured_section_json_normalizes_high_confidence_evidence_gaps(
     harness = _WriterHarness([json.dumps(payload), json.dumps(payload)])
 
     section = await harness._writer_structured_section_json(
-        record=object(),
+        record=_writer_record_with_sources(["raw-source-a"]),
         segment={"section_id": "support", "content": "Evidence"},
         section_schema=ReportSupport,
         allowed_source_ids={"raw-source-a"},

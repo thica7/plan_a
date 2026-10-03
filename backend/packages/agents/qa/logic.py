@@ -5,11 +5,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
+from packages.agents.qa.evidence_alignment import FinalEvidenceAuditMixin
 from packages.business_intel.report_sections import build_report_section_index
 from packages.identity import stable_prefixed_id
+from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
 from packages.rag.structured_claims import find_structured_source_conflicts
 from packages.research.evidence import publishable_text_noise_problem
+from packages.research.evidence.snapshot import current_snapshot
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
     CompetitorKnowledge,
@@ -131,7 +134,7 @@ class PersonaEvidenceStrength:
     reason: str
 
 
-class QualityAgentMixin:
+class QualityAgentMixin(FinalEvidenceAuditMixin):
     def _initial_redo_scope(
         self,
         *,
@@ -155,6 +158,33 @@ class QualityAgentMixin:
         self, record: RunRecord, phase: Literal["collect", "analyst"]
     ) -> None:
         detail = record.detail
+        snapshot = current_snapshot(detail)
+        if phase == "collect":
+            if snapshot is None:
+                snapshot = await self._prepare_evidence_snapshot(record, phase="collect")
+        else:
+            snapshot = await self._ensure_analysis_evidence(record)
+        views, uses = [], []
+        for source in snapshot.sources:
+            view, use = self._begin_evidence_use(
+                record,
+                agent="collect_qa" if phase == "collect" else "analyst_qa",
+                source_ids=[source.id],
+            )
+            views.append(view)
+            uses.append(use)
+            self._trace_local_tool(
+                record,
+                agent="qa",
+                subagent=phase,
+                name="checkpoint_qa_evidence",
+                input_text=view.to_prompt_json(),
+                output_text="fixed checkpoint evidence",
+                metadata={"estimated_bytes": view.estimated_bytes},
+            )
+        projected, _ = self._project_evidence_detail(
+            record, views, verify_analysis=phase != "collect"
+        )
         detail.current_node = "qa"
         self._consume_queued_agent_messages(
             record,
@@ -172,10 +202,14 @@ class QualityAgentMixin:
             f"Running {phase} checkpoint QA.",
         )
         if phase == "collect":
-            issues = self._build_collect_qa_issues(detail)
+            issues = self._build_collect_qa_issues(projected)
         else:
-            issues = self._build_collect_qa_issues(detail)
-            issues.extend(self._build_analyst_qa_issues(detail, self._missing_dimensions(detail)))
+            issues = self._build_collect_qa_issues(projected)
+            issues.extend(
+                self._build_analyst_qa_issues(projected, self._missing_dimensions(projected))
+            )
+        for use in uses:
+            self._validate_evidence_use(record, use)
         detail.qa_findings = issues
         self._refresh_quality_metrics(detail)
         if issues:
@@ -300,6 +334,15 @@ class QualityAgentMixin:
 
     async def _real_qa_step(self, record: RunRecord) -> None:
         detail = record.detail
+        report_baseline = self._evidence_artifact_hash(
+            {
+                "report_md": detail.report_md,
+                "artifact": detail.report_artifact.model_dump(mode="json")
+                if detail.report_artifact
+                else None,
+            }
+        )
+        projected, evidence_issues, uses = await self._final_qa_evidence(record)
         detail.current_node = "qa"
         self._consume_queued_agent_messages(
             record,
@@ -308,10 +351,22 @@ class QualityAgentMixin:
             message_types={"report_ready"},
         )
         await self.emit(detail.id, "node_started", "qa", None, "Running deterministic QA.")
-        issues = self._build_qa_issues(detail)
+        issues = [*self._build_qa_issues(projected), *evidence_issues]
+        for use in uses:
+            self._validate_evidence_use(record, use)
+        if report_baseline != self._evidence_artifact_hash(
+            {
+                "report_md": detail.report_md,
+                "artifact": detail.report_artifact.model_dump(mode="json")
+                if detail.report_artifact
+                else None,
+            }
+        ):
+            raise EvidenceUseRejectedError("Report changed during final evidence audit")
         detail.qa_findings = issues
         self._refresh_quality_metrics(detail)
-        self._sync_report_with_final_qa(detail)
+        if not evidence_issues:
+            self._sync_report_with_final_qa(detail)
         self._append_agent_message(
             record,
             from_agent="qa",
@@ -351,10 +406,17 @@ class QualityAgentMixin:
             },
         )
         if decision.decision == "force_pass":
-            detail.overridden_qa_findings.extend(detail.qa_findings)
+            protected = [
+                issue
+                for issue in detail.qa_findings
+                if issue.metadata.get("unpublishable_evidence")
+            ]
+            detail.overridden_qa_findings.extend(
+                issue for issue in detail.qa_findings if issue not in protected
+            )
             detail.qa_override_note = decision.note or ""
             detail.qa_override_at = datetime.utcnow()
-            detail.qa_findings = []
+            detail.qa_findings = protected
             detail.updated_at = datetime.utcnow()
             self._refresh_quality_metrics(detail)
             await self.emit(

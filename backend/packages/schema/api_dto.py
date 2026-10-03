@@ -4,7 +4,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 from packages.i18n.language import DEFAULT_OUTPUT_LANGUAGE, OutputLanguage
-from packages.research.evidence.snapshot_models import EvidenceConsumption, RunEvidenceSnapshot
+from packages.research.evidence.snapshot_models import (
+    EvidenceArtifactDependency,
+    EvidenceConsumption,
+    RunEvidenceSnapshot,
+)
 from packages.schema.enterprise import EnterpriseRunProjection
 from packages.schema.models import (
     AgentMessage,
@@ -276,6 +280,7 @@ class RunDetail(RunSummary):
     evidence_snapshots: list[RunEvidenceSnapshot] = Field(default_factory=list)
     evidence_snapshot_id: str | None = None
     evidence_consumptions: list[EvidenceConsumption] = Field(default_factory=list)
+    evidence_artifact_dependencies: list[EvidenceArtifactDependency] = Field(default_factory=list)
     competitor_kbs: dict[str, CompetitorKB] = Field(default_factory=dict)
     competitor_knowledge: dict[str, CompetitorKnowledge] = Field(default_factory=dict)
     competitor_discovery: CompetitorDiscovery | None = None

@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
 from packages.identity import stable_prefixed_id
+from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import QCIssue, RedoScope, ReflectionRecord
@@ -20,6 +21,11 @@ QA_CONFIDENCE_OUTLIER_THRESHOLD = 0.7
 class ReflectorAgentMixin:
     async def _real_reflector_step(self, record: RunRecord) -> None:
         detail = record.detail
+        await self._ensure_analysis_evidence(record)
+        view, use = self._begin_evidence_use(record, agent="reflector")
+        projected, dependency_gaps = self._project_evidence_detail(record, [view])
+        matrix_json = self._bounded_analysis_json(view, self._reflector_matrix_digest(projected))
+        baseline = self._analysis_artifacts_hash(detail)
         detail.current_node = "reflector"
         self._consume_queued_agent_messages(
             record,
@@ -47,16 +53,18 @@ class ReflectorAgentMixin:
                     f"Competitors: {', '.join(detail.plan.competitors)}\n"
                     f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
                     f"Comparison Matrix JSON: "
-                    f"{json.dumps(self._reflector_matrix_digest(detail), ensure_ascii=False)}\n"
-                    f"Source digest JSON: "
-                    f"{json.dumps(self._source_digest(detail.raw_sources), ensure_ascii=False)}"
+                    f"{matrix_json}\n"
+                    f"Evidence View JSON: {view.to_prompt_json()}\n"
+                    f"Analysis dependency gaps: {json.dumps(dependency_gaps, ensure_ascii=False)}"
                 ),
                 schema_hint='{"coverage_gaps":["gap"],"confidence_outliers":["outlier"],"cross_competitor_gaps":["gap"],'
                 '"suggested_redo_dimension":"dimension or null","gate_status":"pass|warn|block",'
                 '"blocking_gaps":["gap"],"writer_constraints":["constraint"]}',
             )
+        except EvidenceUseRejectedError:
+            raise
         except Exception as exc:  # noqa: BLE001 - deterministic reflection keeps the run alive.
-            payload = self._deterministic_reflector_payload(detail)
+            payload = self._deterministic_reflector_payload(projected)
             fallback = {
                 "used": True,
                 "reason": "llm_error",
@@ -64,7 +72,14 @@ class ReflectorAgentMixin:
                 "error": str(exc),
             }
         module_status = "fallback" if fallback.get("used") else "llm"
-        coverage_gaps = self._string_list(payload.get("coverage_gaps"))
+        coverage_gaps = [
+            *self._string_list(payload.get("coverage_gaps")),
+            *dependency_gaps,
+            *(
+                f"Evidence gap: {gap.reason} ({gap.source_id or gap.fact_id or 'coverage'})"
+                for gap in view.gaps
+            ),
+        ]
         confidence_outliers = self._string_list(payload.get("confidence_outliers"))
         cross_competitor_gaps = self._string_list(payload.get("cross_competitor_gaps"))
         suggested_dimension = payload.get("suggested_redo_dimension")
@@ -78,7 +93,7 @@ class ReflectorAgentMixin:
                 )
             )
         gate_status, blocking_gaps = self._reflection_gate(
-            detail,
+            projected,
             coverage_gaps=coverage_gaps,
             confidence_outliers=confidence_outliers,
             cross_competitor_gaps=cross_competitor_gaps,
@@ -90,6 +105,9 @@ class ReflectorAgentMixin:
             blocking_gaps=blocking_gaps,
             llm_constraints=self._string_list(payload.get("writer_constraints")),
         )
+        self._validate_evidence_use(record, use)
+        if baseline != self._analysis_artifacts_hash(detail):
+            raise EvidenceUseRejectedError("Reflector analysis artifacts changed before commit")
         detail.reflections.append(
             ReflectionRecord(
                 iteration=1,
@@ -102,6 +120,8 @@ class ReflectorAgentMixin:
                 writer_constraints=writer_constraints,
             )
         )
+        self._record_evidence_artifact(record, kind="reflector", uses=[use],
+            payload=detail.reflections[-1].model_dump(mode="json"))
         self._append_agent_message(
             record,
             from_agent="reflector",

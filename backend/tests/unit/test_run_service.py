@@ -89,6 +89,29 @@ def _now() -> datetime:
     return datetime.utcnow()
 
 
+def _stamp_analyst_fixture(service, record, competitor, dimension):
+    """Synthetic stage fixtures still provide a real, validated producer credential."""
+    _, use = service._begin_evidence_use(record, agent="analyst", competitor=competitor,
+                                        dimension=dimension)
+    service._validate_evidence_use(record, use)
+    service._record_evidence_artifact(record, kind="analyst", uses=[use], competitor=competitor,
+        dimension=dimension, payload=service._analyst_evidence_artifact_payload(
+            record.detail, competitor, dimension))
+
+
+async def _stamp_matrix_fixture(service, record):
+    for source in record.detail.raw_sources:
+        source.metadata["last_verified_at"] = _now().isoformat()
+    await service._prepare_evidence_snapshot(record, phase="analysis")
+    for competitor in record.detail.plan.competitors:
+        for dimension in record.detail.plan.dimensions:
+            _stamp_analyst_fixture(service, record, competitor, dimension)
+    _, use = service._begin_evidence_use(record, agent="comparator")
+    service._validate_evidence_use(record, use)
+    service._record_evidence_artifact(record, kind="comparator", uses=[use],
+        payload=service._comparator_evidence_artifact_payload(record.detail))
+
+
 def _collector_issue(issue_id: str, subagent: str, competitor: str) -> QCIssue:
     return QCIssue(
         id=issue_id,
@@ -4107,6 +4130,7 @@ async def test_reflector_prompt_includes_comparison_matrix_digest() -> None:
         },
     )
 
+    await _stamp_matrix_fixture(service, record)
     await service._real_reflector_step(record)
 
     assert comparison_message.status == "consumed"
@@ -4114,7 +4138,8 @@ async def test_reflector_prompt_includes_comparison_matrix_digest() -> None:
     assert decision_message.status == "consumed"
     assert decision_message.consumed_by == "reflector"
     assert "Comparison Matrix JSON:" in captured_user
-    assert '"source_ids": ["pricing-a"]' in captured_user
+    matrix_input = json.loads(captured_user.split("Comparison Matrix JSON: ")[1].splitlines()[0])
+    assert matrix_input["cells"][0]["source_ids"] == ["pricing-a"]
     reflection = record.detail.reflections[-1]
     assert reflection.cross_competitor_gaps == []
     assert reflection.gate_status == "pass"
@@ -4203,6 +4228,7 @@ async def test_reflector_uses_deterministic_fallback_when_llm_json_fails() -> No
         summary=["[majority-vote:pricing] winner=tie; evidence=tie"],
     )
 
+    await _stamp_matrix_fixture(service, record)
     await service._real_reflector_step(record)
 
     assert record.detail.reflections[-1].coverage_gaps == []
@@ -8997,39 +9023,42 @@ async def test_writer_routes_large_evidence_pack_to_segmented_writer(monkeypatch
     async def fake_trace_llm_text(*args, **kwargs):
         user = kwargs["user"]
         calls.append(kwargs["name"])
+        context = json.loads(user.split("Segment Context JSON: ", 1)[1].splitlines()[0])
+        source_ids = context["citation_source_ids"]
+        refs = f"[source:{source_ids[0]}]" if source_ids else ""
         if "segment_name=decision_summary" in user:
             return (
-                "## Decision Summary\nCursor has clear evidence. [source:cursor-source-0]\n\n"
+            f"## Decision Summary\nCursor has clear evidence. {refs}\n\n"
                 "## Competitive Findings\nCursor has visible evaluation signals. "
-                "[source:cursor-source-0]"
+            f"{refs}"
             )
         if "segment_name=user_research" in user:
             return (
                 "## User Review Themes\nEnterprise buyers cite rollout concerns. "
-                "[source:cursor-source-1]"
+            f"{refs}"
             )
         if "segment_name=competitor_deep_dives" in user:
             return (
                 "## Competitor Deep Dives\n### Cursor\n"
                 "Cursor has repository-aware workflows. "
-                "[source:cursor-source-2]"
+            f"{refs}"
             )
         if "segment_name=side_by_side_matrix" in user:
             return (
                 "## Side-by-Side Decision Matrix\nCursor compares favorably on "
-                "repository-aware workflows. [source:cursor-source-3]"
+            f"repository-aware workflows. {refs}"
             )
         if "segment_name=swot_analysis" in user:
             return (
                 "## SWOT Analysis\nStrengths include adoption signal. "
-                "[source:cursor-source-3]"
+            f"{refs}"
             )
         if "segment_name=business_implications" in user:
             return (
                 "## Business Implications\nCursor should be evaluated against "
-                "repository-aware workflow impact. [source:cursor-source-3]"
+            f"repository-aware workflow impact. {refs}"
             )
-        return "## Evidence Appendix\n- [source:cursor-source-0] Cursor source 0"
+        return f"## Evidence Appendix\n- {refs} Cursor source 0"
 
     monkeypatch.setattr(service, "_trace_llm_text", fake_trace_llm_text)
     monkeypatch.setattr(
@@ -9910,6 +9939,8 @@ def test_schema_contract_publication_internal_leak_repairs_target_section(
     record.detail.execution_mode = "real"
     record.detail.output_language = "zh-CN"
     record.detail.raw_sources = _structured_writer_raw_sources()
+    record.detail.plan.dimensions = ["pricing", "persona"]
+    record.detail.plan.competitors = ["Cursor", "Windsurf"]
     repaired_sections: list[tuple[str, ...]] = []
 
     async def fake_segmented_report(
@@ -10174,6 +10205,8 @@ def test_schema_contract_segment_scoped_redo_preserves_unjustified_recommendatio
     record.detail.execution_mode = "real"
     record.detail.output_language = "en-US"
     record.detail.raw_sources = _structured_writer_raw_sources()
+    record.detail.plan.dimensions = ["pricing", "persona"]
+    record.detail.raw_sources[-1].competitor = "Claude Code"
     record.detail.report_md = _schema_contract_segmented_en_markdown(
         note="Previous report must remain after recommendation drift.",
     )
@@ -13211,8 +13244,10 @@ async def test_writer_section_repair_iterates_budgeted_segment_payloads(
     assert not full_serialized
     assert len(calls) == 2
     assert all("Report Evidence Context JSON:" in user for user in calls)
-    assert '"repair_part": 1' in calls[0]
-    assert '"repair_part": 2' in calls[1]
+    context_1 = json.loads(calls[0].split("Report Evidence Context JSON: ")[1].splitlines()[0])
+    context_2 = json.loads(calls[1].split("Report Evidence Context JSON: ")[1].splitlines()[0])
+    assert context_1["repair_part"] == 1
+    assert context_2["repair_part"] == 2
     assert "Part 1 cites" in result
     assert "Part 2 cites" in result
     assert result.count("## Competitor Deep Dives") == 1
@@ -15682,6 +15717,7 @@ async def test_collect_qa_blocks_and_retries_collector_before_analyst() -> None:
         service._merge_competitor_kb_slice(
             record.detail, competitor, dimension, ["A costs $10. [source:pricing-1]"]
         )
+        _stamp_analyst_fixture(service, record, competitor, dimension)
 
     async def fake_comparator(record):  # noqa: ANN001, ANN202
         order.append("comparator")
@@ -15811,6 +15847,7 @@ async def test_weak_persona_collect_qa_retries_collector_before_analyst() -> Non
                 )
             ],
         )
+        _stamp_analyst_fixture(service, record, competitor, dimension)
 
     async def fake_comparator(record):  # noqa: ANN001, ANN202
         order.append("comparator")
@@ -15912,6 +15949,7 @@ async def test_real_pipeline_auto_runs_scoped_redo_for_qa_findings() -> None:
         service._merge_competitor_kb_slice(
             record.detail, competitor, dimension, [f"A {dimension} finding."]
         )
+        _stamp_analyst_fixture(service, record, competitor, dimension)
 
     async def fake_comparator(record):  # noqa: ANN001, ANN202
         record.detail.comparison_matrix = service._build_comparison_matrix(
@@ -16653,6 +16691,7 @@ async def test_real_pipeline_does_not_auto_redo_warn_only_findings() -> None:
         service._merge_competitor_kb_slice(
             record.detail, competitor, dimension, ["A pricing finding. [source:pricing-1]"]
         )
+        _stamp_analyst_fixture(service, record, competitor, dimension)
 
     async def fake_comparator(record):  # noqa: ANN001, ANN202
         record.detail.comparison_matrix = service._build_comparison_matrix(
@@ -16763,6 +16802,7 @@ async def test_real_pipeline_auto_redoes_warn_when_run_option_enabled() -> None:
         service._merge_competitor_kb_slice(
             record.detail, competitor, dimension, ["A pricing finding."]
         )
+        _stamp_analyst_fixture(service, record, competitor, dimension)
 
     async def fake_comparator(record):  # noqa: ANN001, ANN202
         record.detail.comparison_matrix = service._build_comparison_matrix(
@@ -16888,6 +16928,7 @@ async def test_collector_and_analyst_trace_spans_have_independent_contexts() -> 
         service._real_collector_branch_step(record, "pricing", "A"),
         service._real_collector_branch_step(record, "feature", "A"),
     )
+    await service._prepare_evidence_snapshot(record, phase="analysis")
     await asyncio.gather(
         service._real_analyst_branch_step(record, "pricing", "A"),
         service._real_analyst_branch_step(record, "feature", "A"),
@@ -20943,6 +20984,7 @@ async def test_reflector_blocks_writer_when_matrix_cell_lacks_source_ids() -> No
         summary=["A has a pricing cell but no source IDs."],
     )
 
+    await _stamp_matrix_fixture(service, record)
     await service._real_reflector_step(record)
 
     reflection = record.detail.reflections[-1]

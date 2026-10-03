@@ -147,13 +147,13 @@ def test_snapshot_survives_journal_reopen(tmp_path):
 
 **Files:** 修改 Analyst / Comparator / Reflector / Writer / QA 文件；必要接线 Planner / Collector；新建 `backend/tests/integration/test_agent_evidence_alignment.py`。
 
-- [ ] 用两产品 × 两维度固定回放拦截实际 LLM / 工具输入，断言 Analyst、Comparator、Reflector、Writer、QA 的 snapshot ID 一致，选中来源受职责约束。
-- [ ] Analyst 替换直接 raw_sources 提示输入为当前视图；ReAct、one-shot、fallback 与缓存命中均记录依赖。模型返回后先验证凭据，再合并结构化知识 / 卡片。
-- [ ] Comparator 检查分析产物依赖再比较，保存同口径和不可比较原因；Reflector 读取当前覆盖和冲突。
-- [ ] Writer 的 EvidencePack 投影使用固定快照，继续现有 SectionBrief、分段和引用 token；事实值和出处来自相同版本，不把模型补充的信息写回事实表。
-- [ ] QA 按报告引用 ID 回读固定快照；canonical 文档删除 / 版本变化 / 权限失效时创建具体 QCIssue 与已有 scoped redo 目标。无效来源不得因一次新的宽泛召回而被替换。
-- [ ] Planner 的历史线索仍标记 advisory；Collector 检索结果汇入候选清单，不能越过冻结入口直接修改下游快照。
-- [ ] 运行 writer_evidence_pack / analyst_claim_cards / comparator_decision_cards / report_reuse / source_currentness 回归，保存任务提交并审查。
+- [x] 用两产品 × 两维度固定回放拦截实际 LLM / 工具输入，断言 Analyst、Comparator、Reflector、Writer、QA 的 snapshot ID 一致，选中来源受职责约束。
+- [x] Analyst 替换直接 raw_sources 提示输入为当前视图；ReAct、one-shot、fallback 与缓存命中均记录依赖。模型返回后先验证凭据，再合并结构化知识 / 卡片。
+- [x] Comparator 检查分析产物依赖再比较，保存同口径和不可比较原因；Reflector 读取当前覆盖和冲突。
+- [x] Writer 的 EvidencePack 投影使用固定快照，继续现有 SectionBrief、分段和引用 token；事实值和出处来自相同版本，不把模型补充的信息写回事实表。
+- [x] QA 按报告引用 ID 回读固定快照；canonical 文档删除 / 版本变化 / 权限失效时创建具体 QCIssue 与已有 scoped redo 目标。无效来源不得因一次新的宽泛召回而被替换。
+- [x] Planner 的历史线索仍标记 advisory；Collector 检索结果汇入候选清单，不能越过冻结入口直接修改下游快照。
+- [x] 运行 writer_evidence_pack / analyst_claim_cards / comparator_decision_cards / report_reuse / source_currentness 回归，保存任务提交并审查。
 
 每个异步 Agent 的输入 / 提交边界统一为：
 

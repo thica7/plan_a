@@ -23,6 +23,7 @@ _AGENTS = {
     "collector",
     "collect_qa",
     "analyst",
+    "analyst_qa",
     "comparator",
     "reflector",
     "writer",
@@ -128,7 +129,9 @@ def _project_source(source: EvidenceSource, facts: tuple[EvidenceFact, ...]) -> 
         )
         row[fact.field] = fact.value
     payload["metadata"]["normalized_fields"] = [rows[key] for key in sorted(rows)]
-    return source.model_copy(update={"payload_json": canonical_json(payload)})
+    snippet = "\n".join(dict.fromkeys(fact.quote for fact in facts if fact.quote)) or source.snippet
+    payload["snippet"] = snippet
+    return source.model_copy(update={"snippet": snippet, "payload_json": canonical_json(payload)})
 
 
 def _build_view(

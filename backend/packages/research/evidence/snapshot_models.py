@@ -6,7 +6,14 @@ import json
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 if TYPE_CHECKING:
     from packages.schema.models import RawSource
@@ -77,7 +84,50 @@ class EvidenceSource(_FrozenRecord):
         """Decode a fresh safe projection; mutable descendants never alias history."""
         from packages.schema.models import RawSource
 
-        return RawSource.model_validate(json.loads(self.payload_json))
+        payload = json.loads(self.payload_json)
+        metadata = payload.get("metadata", {})
+        allowed = {
+            "normalized_fields",
+            "market",
+            "source_material_level",
+            "source_published_at",
+            "source_updated_at",
+            "source_fetched_at",
+            "fetched_at",
+            "last_verified_at",
+            "verification_status",
+            "kb_document_id",
+            "document_id",
+            "kb_document_version",
+            "document_version",
+            "kb_document_content_hash",
+            "kb_content_hash",
+            "kb_chunk_id",
+            "kb_chunk_ids",
+            "chunk_id",
+            "chunk_ids",
+            "source_role",
+            "fallback_synthetic",
+            "survey_interview_synthetic",
+            "community_evidence",
+            "kb_document_workspace_id",
+            "kb_document_project_id",
+            "kb_source_role",
+            "kb_document_status",
+        }
+        payload["metadata"] = {key: value for key, value in metadata.items() if key in allowed}
+        payload["snippet"] = self.snippet
+        return RawSource.model_validate(payload)
+
+
+class EvidenceArtifactDependency(_FrozenRecord):
+    """Bind a persisted stage artifact to its actual producer credentials."""
+
+    kind: str
+    competitor: str | None = None
+    dimension: str | None = None
+    consumption_ids: tuple[str, ...]
+    payload_hash: str
 
 
 class EvidenceFact(_FrozenRecord):
@@ -180,12 +230,27 @@ class EvidenceConsumption(_FrozenRecord):
     requested_source_ids: tuple[str, ...] | None = None
     fact_ids: tuple[str, ...] = ()
     max_bytes: int = Field(default=8192, ge=0)
+    view_max_bytes: int | None = Field(default=None, ge=1)
     estimated_bytes: int = Field(default=0, ge=0)
     estimated_tokens: int = Field(default=0, ge=0)
     status: Literal["started", "validated", "rejected", "reused"] = "started"
     validated_snapshot_id: str | None = None
     reused_from_snapshot_id: str | None = None
     created_at: datetime
+
+
+    @model_validator(mode="after")
+    def validate_view_budget(self) -> EvidenceConsumption:
+        if self.view_max_bytes is not None and self.view_max_bytes > self.max_bytes:
+            raise ValueError("evidence view budget exceeds stage budget")
+        return self
+
+    @model_serializer(mode="wrap")
+    def serialize_credential(self, handler):
+        payload = handler(self)
+        if self.view_max_bytes is None:
+            payload.pop("view_max_bytes", None)
+        return payload
 
 
 class StageEvidenceView(_FrozenRecord):

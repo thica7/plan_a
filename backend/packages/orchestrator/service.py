@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
+from uuid import uuid4
 
 from langgraph.types import Command, interrupt
 
@@ -280,6 +281,8 @@ def _compact_run_detail(detail: RunDetail) -> RunDetail:
 @dataclass
 class RunRecord:
     detail: RunDetail
+    evidence_origin: "RunRecord | None" = None
+    writer_preserved_report: bool = False
     events: list[RunEvent] = field(default_factory=list)
     subscribers: list[asyncio.Queue[RunEvent]] = field(default_factory=list)
     pending_interrupts: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -2817,7 +2820,7 @@ class RunService(
         message_payload = payload or {}
         validate_agent_message_payload(payload_schema, message_payload)
         message = AgentMessage(
-            id=stable_prefixed_id(
+            id=f"msg-draft-{uuid4().hex}" if record.evidence_origin else stable_prefixed_id(
                 "msg",
                 record.detail.id,
                 len(record.detail.agent_messages) + 1,
@@ -2833,6 +2836,8 @@ class RunService(
             trace_span_ids=trace_span_ids or [],
         )
         record.detail.agent_messages.append(message)
+        if record.evidence_origin:
+            return message
         if trace_span_ids is None:
             message.trace_span_ids = [self._append_agent_message_trace_span(record, message)]
         if self._trace_store is not None:
@@ -2865,6 +2870,8 @@ class RunService(
                     default=str,
                 ),
             )
+        if record.evidence_origin:
+            return message
         input_text = json.dumps(message.model_dump(mode="json"), ensure_ascii=False, default=str)
         output_text = json.dumps(
             {
@@ -3167,6 +3174,11 @@ class RunService(
         *,
         notify_release_gate: bool = False,
     ) -> EnterpriseRunProjection | None:
+        if notify_release_gate and any(issue.metadata.get("unpublishable_evidence")
+                                      for issue in record.detail.qa_findings):
+            record.detail.status = "completed_with_blockers"
+            self._persist_run(record.detail.id)
+            return None
         if self._enterprise_store is None:
             return None
 
@@ -4513,6 +4525,7 @@ class RunService(
         context: SubagentContext | None = None,
         metadata: dict[str, str | int | float | bool | None] | None = None,
     ) -> None:
+        record = self._evidence_live_record(record)
         started = time.perf_counter()
         if context is not None:
             context.add_tool_call(name, input_text)
