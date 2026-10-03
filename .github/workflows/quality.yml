@@ -34,6 +34,11 @@ jobs:
             backend/packages/knowledge/models.py \
             backend/packages/knowledge/repository.py \
             backend/packages/knowledge/retrieval.py \
+            backend/packages/research/evidence/snapshot.py \
+            backend/packages/research/evidence/snapshot_models.py \
+            backend/packages/research/evidence/views.py \
+            backend/packages/orchestrator/evidence_context.py \
+            backend/packages/agents/writer/evidence_alignment.py \
             backend/packages/llm/doubao_client.py \
             backend/packages/rag/knowledge_bridge.py \
             backend/packages/rag/structured_claims.py \
@@ -49,7 +54,16 @@ jobs:
             backend/tests/unit/test_report_quality.py \
             backend/tests/unit/test_retrieval_params.py \
             backend/tests/unit/test_secret_scan.py \
-            backend/tests/unit/test_structured_source_claims.py
+            backend/tests/unit/test_structured_source_claims.py \
+            backend/tests/unit/test_run_evidence_snapshot.py \
+            backend/tests/unit/test_stage_evidence_views.py \
+            backend/tests/unit/test_evidence_snapshot_scope.py \
+            backend/tests/unit/test_evidence_imports.py \
+            backend/tests/unit/test_evidence_snapshot_graph.py \
+            backend/tests/integration/test_agent_evidence_alignment.py \
+            backend/tests/integration/test_evidence_snapshot_repair.py \
+            backend/tests/unit/test_report_reuse.py \
+            backend/tests/unit/test_pm_decision_brief.py
 
       - name: Scan for accidental provider secrets
         run: python backend/scripts/scan_secrets.py
@@ -145,6 +159,19 @@ jobs:
             backend/tests/unit/test_rag_kb_eval_set.py \
             backend/tests/unit/test_rag_kb_collector_chain.py \
             backend/tests/unit/test_knowledge_evidence_bridge.py \
+            backend/tests/unit/test_run_evidence_snapshot.py \
+            backend/tests/unit/test_stage_evidence_views.py \
+            backend/tests/unit/test_evidence_snapshot_scope.py \
+            backend/tests/unit/test_evidence_imports.py \
+            backend/tests/unit/test_evidence_snapshot_graph.py \
+            backend/tests/integration/test_agent_evidence_alignment.py \
+            backend/tests/integration/test_evidence_snapshot_repair.py \
+            backend/tests/integration/test_redo_routing_contract.py \
+            backend/tests/unit/test_redo_seed_cases.py \
+            backend/tests/unit/test_kb_cache.py \
+            backend/tests/unit/test_retrieval_cache.py \
+            backend/tests/unit/test_report_reuse.py \
+            backend/tests/unit/test_pm_decision_brief.py \
             backend/tests/unit/test_structured_source_claims.py \
             backend/tests/unit/test_retrieval_params.py::test_sparse_mode_uses_sqlite_without_dense_vector_search \
             backend/tests/unit/test_retrieval_params.py::test_dense_mode_filters_hits_by_sqlite_document_status \
@@ -152,7 +179,7 @@ jobs:
             backend/tests/unit/test_run_service.py::test_collect_qa_flags_kb_live_source_contradiction \
             backend/tests/unit/test_run_service.py::test_collector_warm_starts_from_rag_kb \
             backend/tests/unit/test_run_service.py::test_collect_join_ingests_verified_raw_sources_into_kb \
-            backend/tests/unit/test_report_quality.py::test_writer_grounding_prompt_reuses_kb_only_via_source_tokens
+            backend/tests/unit/test_report_quality.py::test_writer_grounding_prompt_lists_all_sources_without_duplicating_full_snippets
 
   frontend-build:
     name: Frontend build

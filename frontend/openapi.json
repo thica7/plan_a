@@ -18397,6 +18397,505 @@
         ],
         "title": "EvalRunSummary"
       },
+      "EvidenceArtifactDependency": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "competitor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competitor"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "consumption_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Consumption Ids"
+          },
+          "payload_hash": {
+            "type": "string",
+            "title": "Payload Hash"
+          },
+          "upstream_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Hash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "consumption_ids",
+          "payload_hash"
+        ],
+        "title": "EvidenceArtifactDependency",
+        "description": "Bind a persisted stage artifact to its actual producer credentials."
+      },
+      "EvidenceConflict": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "market": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market"
+          },
+          "qualifiers_json": {
+            "type": "string",
+            "title": "Qualifiers Json",
+            "default": "{}"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fact Ids"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unresolved",
+              "unknown"
+            ],
+            "title": "Status",
+            "default": "unresolved"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": "inconsistent_values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "competitor",
+          "dimension",
+          "field",
+          "fact_ids",
+          "source_ids"
+        ],
+        "title": "EvidenceConflict"
+      },
+      "EvidenceConsumption": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "default": ""
+          },
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id",
+            "default": ""
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agent"
+          },
+          "snapshot_id": {
+            "type": "string",
+            "title": "Snapshot Id"
+          },
+          "snapshot_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Snapshot Version"
+          },
+          "dependency_hash": {
+            "type": "string",
+            "title": "Dependency Hash"
+          },
+          "competitor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competitor"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids",
+            "default": []
+          },
+          "requested_source_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Source Ids"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fact Ids",
+            "default": []
+          },
+          "max_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Max Bytes",
+            "default": 8192
+          },
+          "view_max_bytes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "View Max Bytes"
+          },
+          "estimated_bytes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Estimated Bytes",
+            "default": 0
+          },
+          "estimated_tokens": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Estimated Tokens",
+            "default": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "started",
+              "validated",
+              "rejected",
+              "reused"
+            ],
+            "title": "Status",
+            "default": "started"
+          },
+          "validated_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validated Snapshot Id"
+          },
+          "reused_from_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reused From Snapshot Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "agent",
+          "snapshot_id",
+          "snapshot_version",
+          "dependency_hash",
+          "created_at"
+        ],
+        "title": "EvidenceConsumption"
+      },
+      "EvidenceFact": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "semantic_id": {
+            "type": "string",
+            "title": "Semantic Id"
+          },
+          "evidence_item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Item Ids",
+            "default": []
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "value_json": {
+            "type": "string",
+            "title": "Value Json"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "market": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market"
+          },
+          "qualifiers_json": {
+            "type": "string",
+            "title": "Qualifiers Json",
+            "default": "{}"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote",
+            "default": ""
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "signal",
+              "unknown"
+            ],
+            "title": "Status",
+            "default": "unknown"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "semantic_id",
+          "source_id",
+          "competitor",
+          "dimension",
+          "field",
+          "value_json",
+          "confidence"
+        ],
+        "title": "EvidenceFact"
+      },
+      "EvidenceGap": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "fact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fact Id"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "competitor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Competitor"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "reason"
+        ],
+        "title": "EvidenceGap"
+      },
       "EvidenceGapFillDecisionEvent": {
         "properties": {
           "event_type": {
@@ -19394,6 +19893,258 @@
           "indexed_count"
         ],
         "title": "EvidenceSeedIngestResult"
+      },
+      "EvidenceSource": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "semantic_id": {
+            "type": "string",
+            "title": "Semantic Id"
+          },
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "covered_competitors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Covered Competitors",
+            "default": []
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet",
+            "default": ""
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "source",
+              "historical_report"
+            ],
+            "title": "Role",
+            "default": "source"
+          },
+          "market": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "active"
+          },
+          "verification_status": {
+            "type": "string",
+            "title": "Verification Status",
+            "default": "unknown"
+          },
+          "material_level": {
+            "type": "string",
+            "enum": [
+              "full_source",
+              "summary",
+              "search_summary",
+              "historical_report",
+              "kb_document",
+              "unknown"
+            ],
+            "title": "Material Level",
+            "default": "unknown"
+          },
+          "source_published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Published At"
+          },
+          "source_updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Updated At"
+          },
+          "source_fetched_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Fetched At"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "extracted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Extracted At"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "chunk_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Chunk Ids",
+            "default": []
+          },
+          "document_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Version"
+          },
+          "document_content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Content Hash"
+          },
+          "document_workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Workspace Id"
+          },
+          "document_project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Project Id"
+          },
+          "payload_json": {
+            "type": "string",
+            "title": "Payload Json"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "semantic_id",
+          "competitor",
+          "dimension",
+          "source_type",
+          "title",
+          "content_hash",
+          "confidence",
+          "extracted_at",
+          "payload_json"
+        ],
+        "title": "EvidenceSource"
       },
       "FeatureNode": {
         "properties": {
@@ -25928,6 +26679,55 @@
             "type": "array",
             "title": "Raw Sources"
           },
+          "evidence_snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/RunEvidenceSnapshot"
+            },
+            "type": "array",
+            "title": "Evidence Snapshots"
+          },
+          "evidence_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Snapshot Id"
+          },
+          "evidence_inputs_dirty": {
+            "type": "boolean",
+            "title": "Evidence Inputs Dirty",
+            "default": false
+          },
+          "evidence_writer_rewrite_required": {
+            "type": "boolean",
+            "title": "Evidence Writer Rewrite Required",
+            "default": false
+          },
+          "evidence_retired_source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Retired Source Ids"
+          },
+          "evidence_consumptions": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceConsumption"
+            },
+            "type": "array",
+            "title": "Evidence Consumptions"
+          },
+          "evidence_artifact_dependencies": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceArtifactDependency"
+            },
+            "type": "array",
+            "title": "Evidence Artifact Dependencies"
+          },
           "competitor_kbs": {
             "additionalProperties": {
               "$ref": "#/components/schemas/CompetitorKB"
@@ -26283,6 +27083,116 @@
           "message"
         ],
         "title": "RunEvent"
+      },
+      "RunEvidenceSnapshot": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "run_evidence_snapshot.v1",
+            "title": "Schema Version",
+            "default": "run_evidence_snapshot.v1"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "collect",
+              "analysis"
+            ],
+            "title": "Phase"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceSource"
+            },
+            "type": "array",
+            "title": "Sources",
+            "default": []
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceFact"
+            },
+            "type": "array",
+            "title": "Facts",
+            "default": []
+          },
+          "conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceConflict"
+            },
+            "type": "array",
+            "title": "Conflicts",
+            "default": []
+          },
+          "gaps": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceGap"
+            },
+            "type": "array",
+            "title": "Gaps",
+            "default": []
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "run_id",
+          "workspace_id",
+          "version",
+          "phase",
+          "content_hash",
+          "created_at"
+        ],
+        "title": "RunEvidenceSnapshot"
       },
       "RunMetrics": {
         "properties": {

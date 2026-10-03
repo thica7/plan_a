@@ -2,14 +2,14 @@
 
 日期：2026-10-03。用户已确认设计与实施计划。实施基线：`6b42b30`；分支：`codex/pastoral-desktop`。
 
-状态：正在实施，尚未完成第二阶段验收。本文仅记录实际完成和核验的工作，不把设计目标视为可用能力。
+状态：2026-10-04 完成第二阶段实现、独立规格 / 质量审查和完整本地验收。下方实施记录按时间保留当时的失败和待办；当前结果以任务表与“最终验收”为准。
 
 ## 实施环境与约束
 
 - 复用已有 linked worktree：`plan_a_pm_modes`，未创建新工作区。
 - Python 使用现有共享虚拟环境 `../plan_a/.venv/bin/python`；不新增依赖或下载模型。
 - 测试禁用本地 `.env`、使用临时数据库；不调用付费模型、搜索服务或新增真实报告。
-- 真实服务与运行数据升级安排在第二阶段完整回归后执行；本轮尚未执行服务重启或真实数据库变更。
+- 完整回归后已按备份和精确夹具保护条件恢复测试误写的知识库状态；没有重启服务或自动升级旧报告。
 - 不部署 HTTP Qdrant，不迁移旧未知归属资料；语义质量和完整联网报告仍需后续验收。
 
 ## 基线核查
@@ -27,7 +27,7 @@
 | 3. 图冻结时点与进程恢复 | 完成，616 项独立回归通过 | 第二轮通过，38 项核验 | 首轮通过，575 项核验 |
 | 4. Agent 输入与产物依赖 | 完成，837 项独立回归通过 | 第六轮通过，394 项回归及 22 项探针 | 第三轮通过，62 项集成及 22 项探针 |
 | 5. 更正、缓存与依赖失效 | 完成，919 项独立回归通过 | 第二轮通过，78 项回放及原探针 | 第二轮通过，78 项回放及原探针 |
-| 6. 完整验收与交付 | 待执行 | 待执行 | 待执行 |
+| 6. 完整验收与交付 | 完成，后端 2639 通过 / 1 跳过，前端 250 通过，构建 / API 同步通过 | 通过，108 项回归及隔离 RED / GREEN | 通过，693 项 CI 分片、186 项重点回归及最终集成核对 |
 
 ## 实际问题与处理
 
@@ -44,6 +44,7 @@
 - `68e81b4 feat: validate scoped evidence references and stage views`：Task 2 已保存本地提交，提交后工作区干净；402 项独立定向回归、规格 / 质量审查各 207 项通过。进入 Task3，完整第二阶段验收后统一推送。
 - `0d3eb76 feat: freeze evidence versions at workflow boundaries`：Task 3 已保存本地提交，提交后工作区干净；616 项独立定向回归、规格复审 38 项及质量审查 575 项通过。开始 Task4，完整第二阶段验收后统一推送。
 - `a08b0fc feat: align agent inputs and report provenance with evidence snapshots`：Task 4 已保存本地提交，提交后工作区干净；837 项独立回归、最终规格和质量复审通过。完整阶段验收后统一推送。
+- `5d34edf feat: invalidate changed evidence and reuse verified analysis producers`：Task 5 已保存本地提交，919 项独立回归、原质量探针与两级复审通过。继续 Task6；交付文档草稿由父代理维护。
 
 ## 任务 2 接线决策
 
@@ -205,4 +206,43 @@ COMPETISCOPE_LOAD_ENV_FILES=0 PYTHONPATH=backend ../plan_a/.venv/bin/python -m p
 
 ## 最终验收
 
-尚未执行。完成后记录八项设计验收、实际 Agent 输入回放、缓存 / 重做调用计数、文档版本失效、完整回归、API 同步、运行数据核对及交付提交。
+2026-10-04，Task6 使用原 `5d34edf` 作为基线，仅补测试隔离、兼容新 RunRecord 的旧测试夹具、CI 覆盖和生成 API。
+
+### 测试隔离与旧夹具
+
+`test_report_reuse.py` 增加模块级临时 KB fixture，以及调用五种真实历史 Collector 路径的子进程回放。先观察到子进程测试通过但默认知识库 sentinel 字节变化；补 fixture 后外层保护通过。独立规格审查在内存中撤销 fixture，再次观察到同一字节断言失败，恢复后通过。
+
+`test_pm_decision_brief.py` 的旧 SimpleNamespace 改为生产 RunRecord。决策简报现在独立包装进 prompt，原转义断言检查完整 prompt；仍检查证据段不包含未转义的用户引用 token，并保留允许的 source ID、用户输入非证据等断言。两个模块合计 **108 passed**，没有放宽生产校验。
+
+### 独立最终验证
+
+| 检查 | 实际结果 |
+| --- | --- |
+| 完整后端，临时 cwd / DB，关闭环境文件并移除宿主凭据 | **2639 passed、1 skipped，59.40 秒**；跳过项为缺 PostgreSQL RLS DSN；152 条既有 FastAPI 提示 |
+| 完整前端，关闭环境文件、恢复默认文件隔离 | **51 个文件、250 passed，17.34 秒** |
+| TypeScript 与生产构建 | `tsc -b`、Vite 构建通过，1986 个模块；Vite 1.94 秒 |
+| OpenAPI JSON / TypeScript | 在临时 cwd 重新导出、生成，与提交文件逐字节相同 |
+| CI 原 RAG 分片 | 独立质量审查 **693 passed，18.10 秒**；36 个选择器有效 |
+| 独立质量重点集成 | **186 passed，7.02 秒**；更正 / 退休来源 / 原生产者复用通过 |
+| CI focused Ruff | 通过；全阶段 34 个 Python 变更文件相对 `6b42b30` **新增诊断 0**，保留旧基线 |
+| 差异空白 / 凭据模式 | 通过；跟踪代码无命中，新构建的 4 个文件无长供应商凭据模式命中 |
+
+前端首轮出现 **32 failed、218 passed**。原因是本机临时配置启用 `singleThread`，Vitest 将同环境的多个文件批量交给共享 jsdom，导致 `app-locale` 的 localStorage 状态跨文件保留；独立单文件原已通过。仅将临时配置改为 1–2 个 worker，保留默认文件隔离后完整通过，未改页面、语言默认值或测试断言。构建首次临时配置引用了不存在的 React 插件入口；按已安装包 exports 改为 `dist/index.js` 后通过，产品配置未变。
+
+本机完整后端命令：
+
+```bash
+../plan_a/.venv/bin/python /private/tmp/plan_a_phase2_full_verify.py -q backend/tests --tb=short
+```
+
+runner 清除 API key / RLS 环境变量，设置 `COMPETISCOPE_LOAD_ENV_FILES=0` 和绝对 PYTHONPATH，在临时目录映射代码、排除真实 `runs/`、日志、备份和环境文件，并设置临时 KB_DB_PATH。前端临时配置使用 `envDir:false`、jsdom、原 setupFiles、`minThreads:1 / maxThreads:2`；构建沿用 React 插件和原 manualChunks。临时配置和 runner 未提交到仓库。
+
+八项行为目标的对应测试及结果见[第二阶段交付说明](2026-10-04-rag-stage-two-delivery.md#2-行为验收清单)。离线 A=2 / B=1 证明价格更正后只重新调用受影响分析分支，不能换算为真实供应商费用节省。
+
+### 真实运行数据核对
+
+完整回归和独立审查后，恢复脚本在事务内再次要求当前 134 条文档与恢复前备份逐字段相同，只恢复已确认受测试影响的一条资料的三项状态字段，并将两条测试资料归档。结果：原 **132 条资料所有字段一致**，**2 条测试资料归档保留、0 删除**，完整性 `ok`。
+
+恢复后六库新备份位于 `runs/backups/pre-rag-stage-two-20261003T184527Z/`，均通过完整性检查，核对期间原文件字节未变。124 条未知 workspace 的资料仍隔离；7 条旧运行只读载入、快照数为 0，没有自动将旧报告提升为已核验产物。
+
+HTTP Qdrant、真实中文 / 跨语言语义检索、完整联网报告和供应商费用仍未验收。当前最值得继续优化的是至少 50 条人工标注的真实产品调研查询及独立语义索引对比。

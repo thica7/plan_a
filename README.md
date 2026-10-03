@@ -183,6 +183,9 @@ reports in reusable evidence.
 [中文交付文档](docs/optimization/2026-10-03-rag-stage-one-delivery.md)；
 本地持久化验证不代表 HTTP Qdrant 部署或语义检索质量已验收。
 
+第二阶段共享证据快照、Agent 依赖、更正与缓存的当前交付状态见
+[第二阶段交付说明](docs/optimization/2026-10-04-rag-stage-two-delivery.md)。
+
 Supported capabilities include:
 
 - crawl source ingestion

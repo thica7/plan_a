@@ -1,4 +1,9 @@
+import os
+import sqlite3
+import subprocess
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -24,6 +29,44 @@ from packages.skills.registry import SkillRegistry
 from packages.tools.evidence_fetch import EvidenceFetchResult
 
 NOW = datetime(2026, 10, 2, 12)
+
+
+@pytest.fixture(autouse=True)
+def isolate_knowledge_db(monkeypatch, tmp_path):
+    monkeypatch.setenv("KB_DB_PATH", str(tmp_path / "knowledge.db"))
+
+
+def test_collector_history_tests_do_not_write_default_knowledge_db(tmp_path):
+    database = tmp_path / "runs" / "knowledge.db"
+    database.parent.mkdir()
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE sentinel (value TEXT NOT NULL)")
+        connection.execute("INSERT INTO sentinel VALUES ('preserve')")
+    original = database.read_bytes()
+
+    environment = os.environ.copy()
+    for name in list(environment):
+        if "API_KEY" in name or "APIKEY" in name or name.endswith("_DSN"):
+            environment.pop(name)
+    environment.pop("KB_DB_PATH", None)
+    environment["COMPETISCOPE_LOAD_ENV_FILES"] = "0"
+    environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[2])
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            f"{__file__}::test_complete_collector_branch_only_skips_optional_community_for_sufficient_quick_history",
+        ],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert database.read_bytes() == original
 
 
 def plan(name="Cursor 2.0", market="US", category="AI IDE", topic="AI coding"):

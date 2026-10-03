@@ -4494,6 +4494,193 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * EvidenceArtifactDependency
+         * @description Bind a persisted stage artifact to its actual producer credentials.
+         */
+        EvidenceArtifactDependency: {
+            /** Kind */
+            kind: string;
+            /** Competitor */
+            competitor?: string | null;
+            /** Dimension */
+            dimension?: string | null;
+            /** Consumption Ids */
+            consumption_ids: string[];
+            /** Payload Hash */
+            payload_hash: string;
+            /** Upstream Hash */
+            upstream_hash?: string | null;
+        };
+        /** EvidenceConflict */
+        EvidenceConflict: {
+            /** Id */
+            id: string;
+            /** Competitor */
+            competitor: string;
+            /** Dimension */
+            dimension: string;
+            /** Field */
+            field: string;
+            /** Unit */
+            unit?: string | null;
+            /** Market */
+            market?: string | null;
+            /**
+             * Qualifiers Json
+             * @default {}
+             */
+            qualifiers_json: string;
+            /** Fact Ids */
+            fact_ids: string[];
+            /** Source Ids */
+            source_ids: string[];
+            /**
+             * Status
+             * @default unresolved
+             * @enum {string}
+             */
+            status: "unresolved" | "unknown";
+            /**
+             * Reason
+             * @default inconsistent_values
+             */
+            reason: string;
+        };
+        /** EvidenceConsumption */
+        EvidenceConsumption: {
+            /** Id */
+            id: string;
+            /**
+             * Run Id
+             * @default
+             */
+            run_id: string;
+            /**
+             * Workspace Id
+             * @default
+             */
+            workspace_id: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** Agent */
+            agent: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Snapshot Version */
+            snapshot_version: number;
+            /** Dependency Hash */
+            dependency_hash: string;
+            /** Competitor */
+            competitor?: string | null;
+            /** Dimension */
+            dimension?: string | null;
+            /**
+             * Source Ids
+             * @default []
+             */
+            source_ids: string[];
+            /** Requested Source Ids */
+            requested_source_ids?: string[] | null;
+            /**
+             * Fact Ids
+             * @default []
+             */
+            fact_ids: string[];
+            /**
+             * Max Bytes
+             * @default 8192
+             */
+            max_bytes: number;
+            /** View Max Bytes */
+            view_max_bytes?: number | null;
+            /**
+             * Estimated Bytes
+             * @default 0
+             */
+            estimated_bytes: number;
+            /**
+             * Estimated Tokens
+             * @default 0
+             */
+            estimated_tokens: number;
+            /**
+             * Status
+             * @default started
+             * @enum {string}
+             */
+            status: "started" | "validated" | "rejected" | "reused";
+            /** Validated Snapshot Id */
+            validated_snapshot_id?: string | null;
+            /** Reused From Snapshot Id */
+            reused_from_snapshot_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** EvidenceFact */
+        EvidenceFact: {
+            /** Id */
+            id: string;
+            /** Semantic Id */
+            semantic_id: string;
+            /**
+             * Evidence Item Ids
+             * @default []
+             */
+            evidence_item_ids: string[];
+            /** Source Id */
+            source_id: string;
+            /** Competitor */
+            competitor: string;
+            /** Dimension */
+            dimension: string;
+            /** Field */
+            field: string;
+            /** Value Json */
+            value_json: string;
+            /** Unit */
+            unit?: string | null;
+            /** Market */
+            market?: string | null;
+            /**
+             * Qualifiers Json
+             * @default {}
+             */
+            qualifiers_json: string;
+            /**
+             * Quote
+             * @default
+             */
+            quote: string;
+            /**
+             * Status
+             * @default unknown
+             * @enum {string}
+             */
+            status: "supported" | "signal" | "unknown";
+            /** Confidence */
+            confidence: number;
+        };
+        /** EvidenceGap */
+        EvidenceGap: {
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string;
+            /** Source Id */
+            source_id?: string | null;
+            /** Fact Id */
+            fact_id?: string | null;
+            /** Document Id */
+            document_id?: string | null;
+            /** Competitor */
+            competitor?: string | null;
+            /** Dimension */
+            dimension?: string | null;
+        };
         /** EvidenceGapFillDecisionEvent */
         EvidenceGapFillDecisionEvent: {
             /**
@@ -4948,6 +5135,93 @@ export interface components {
             competitors?: string[];
             /** Dimensions */
             dimensions?: string[];
+        };
+        /** EvidenceSource */
+        EvidenceSource: {
+            /** Id */
+            id: string;
+            /** Semantic Id */
+            semantic_id: string;
+            /** Competitor */
+            competitor: string;
+            /**
+             * Covered Competitors
+             * @default []
+             */
+            covered_competitors: string[];
+            /** Dimension */
+            dimension: string;
+            /** Source Type */
+            source_type: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url?: string | null;
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Snippet
+             * @default
+             */
+            snippet: string;
+            /**
+             * Role
+             * @default source
+             * @enum {string}
+             */
+            role: "source" | "historical_report";
+            /** Market */
+            market?: string | null;
+            /** Confidence */
+            confidence: number;
+            /**
+             * Status
+             * @default active
+             */
+            status: string;
+            /**
+             * Verification Status
+             * @default unknown
+             */
+            verification_status: string;
+            /**
+             * Material Level
+             * @default unknown
+             * @enum {string}
+             */
+            material_level: "full_source" | "summary" | "search_summary" | "historical_report" | "kb_document" | "unknown";
+            /** Source Published At */
+            source_published_at?: string | null;
+            /** Source Updated At */
+            source_updated_at?: string | null;
+            /** Source Fetched At */
+            source_fetched_at?: string | null;
+            /** Last Verified At */
+            last_verified_at?: string | null;
+            /**
+             * Extracted At
+             * Format: date-time
+             */
+            extracted_at: string;
+            /** Document Id */
+            document_id?: string | null;
+            /** Chunk Id */
+            chunk_id?: string | null;
+            /**
+             * Chunk Ids
+             * @default []
+             */
+            chunk_ids: string[];
+            /** Document Version */
+            document_version?: number | null;
+            /** Document Content Hash */
+            document_content_hash?: string | null;
+            /** Document Workspace Id */
+            document_workspace_id?: string | null;
+            /** Document Project Id */
+            document_project_id?: string | null;
+            /** Payload Json */
+            payload_json: string;
         };
         /** FeatureNode */
         FeatureNode: {
@@ -7710,6 +7984,26 @@ export interface components {
             report_artifact?: components["schemas"]["ReportArtifactV2"] | null;
             /** Raw Sources */
             raw_sources?: components["schemas"]["RawSource"][];
+            /** Evidence Snapshots */
+            evidence_snapshots?: components["schemas"]["RunEvidenceSnapshot"][];
+            /** Evidence Snapshot Id */
+            evidence_snapshot_id?: string | null;
+            /**
+             * Evidence Inputs Dirty
+             * @default false
+             */
+            evidence_inputs_dirty: boolean;
+            /**
+             * Evidence Writer Rewrite Required
+             * @default false
+             */
+            evidence_writer_rewrite_required: boolean;
+            /** Evidence Retired Source Ids */
+            evidence_retired_source_ids?: string[];
+            /** Evidence Consumptions */
+            evidence_consumptions?: components["schemas"]["EvidenceConsumption"][];
+            /** Evidence Artifact Dependencies */
+            evidence_artifact_dependencies?: components["schemas"]["EvidenceArtifactDependency"][];
             /** Competitor Kbs */
             competitor_kbs?: {
                 [key: string]: components["schemas"]["CompetitorKB"];
@@ -7813,6 +8107,59 @@ export interface components {
              * Format: date-time
              */
             created_at?: string;
+        };
+        /** RunEvidenceSnapshot */
+        RunEvidenceSnapshot: {
+            /**
+             * Schema Version
+             * @default run_evidence_snapshot.v1
+             * @constant
+             */
+            schema_version: "run_evidence_snapshot.v1";
+            /** Id */
+            id: string;
+            /** Run Id */
+            run_id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** Version */
+            version: number;
+            /** Parent Id */
+            parent_id?: string | null;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "collect" | "analysis";
+            /**
+             * Sources
+             * @default []
+             */
+            sources: components["schemas"]["EvidenceSource"][];
+            /**
+             * Facts
+             * @default []
+             */
+            facts: components["schemas"]["EvidenceFact"][];
+            /**
+             * Conflicts
+             * @default []
+             */
+            conflicts: components["schemas"]["EvidenceConflict"][];
+            /**
+             * Gaps
+             * @default []
+             */
+            gaps: components["schemas"]["EvidenceGap"][];
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** RunMetrics */
         RunMetrics: {

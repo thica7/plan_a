@@ -21,7 +21,7 @@ from packages.config import Settings
 from packages.enterprise import EnterpriseMemoryStore
 from packages.i18n.language import report_label
 from packages.orchestrator.checkpointer import GraphCheckpointer
-from packages.orchestrator.service import RunService
+from packages.orchestrator.service import RunRecord, RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.decision_brief import decision_brief_prompt_context
 from packages.schema.models import AnalysisPlan, DecisionBrief, RawSource
@@ -782,7 +782,7 @@ async def test_planner_scope_and_discovery_get_user_decision_context() -> None:
 async def test_writer_segment_and_first_draft_prompts_get_user_decision_context() -> None:
     service = _service()
     detail = _detail(DecisionBrief(primary_job="Compare daily coding workflows"))
-    record = SimpleNamespace(detail=detail)
+    record = RunRecord(detail=detail)
     captured: list[str] = []
 
     async def capture_text(_record: object, **kwargs: object) -> str:
@@ -850,7 +850,7 @@ async def test_legacy_brief_is_escaped_in_actual_segment_context() -> None:
     service = _service()
     service._trace_llm_text = capture_text  # type: ignore[method-assign]
     await service._writer_segment_markdown(
-        SimpleNamespace(detail=detail),
+        RunRecord(detail=detail),
         segment=segment,
         timeout_seconds=1,
         language_guidance="English",
@@ -863,9 +863,9 @@ async def test_legacy_brief_is_escaped_in_actual_segment_context() -> None:
         "\n\nRequired sections", 1
     )[0]
 
-    assert "Review code" in segment_context
+    assert "Review code" in captured[0]
     assert "[source:source-pricing]" not in segment_context
-    assert "［source:source-pricing］" in segment_context
+    assert "［source:source-pricing］" in captured[0]
     assert "source-pricing" in segment_context
 
 
