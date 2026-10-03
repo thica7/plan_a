@@ -126,3 +126,4 @@ runs/backups/knowledge-pre-rag-stage-one-20261003T033554Z.db
 - [第一阶段计划](2026-10-02-rag-stage-one-plan.md)：具体任务与审查完成状态。
 - [第一阶段验收记录](2026-10-02-rag-stage-one-results.md)：测试证据、修复历史、数据核对与未验收项。
 - [RAG 架构](../rag-architecture.md)：实际启用能力与后续语义目标。
+- [第二阶段共享证据设计](2026-10-03-rag-shared-evidence-design.md)与[实施计划](2026-10-03-rag-shared-evidence-plan.md)：已完成方案细化，待确认实施。
