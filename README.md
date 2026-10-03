@@ -179,6 +179,10 @@ LLM-backed planning and writing, and evidence-grounded report generation.
 The project includes a knowledge ingestion and retrieval layer for grounding
 reports in reusable evidence.
 
+本次 RAG 第一阶段的交付范围、启动方式、资料隔离说明、测试结果和剩余问题见
+[中文交付文档](docs/optimization/2026-10-03-rag-stage-one-delivery.md)；
+本地持久化验证不代表 HTTP Qdrant 部署或语义检索质量已验收。
+
 Supported capabilities include:
 
 - crawl source ingestion
