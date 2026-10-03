@@ -1,0 +1,311 @@
+{
+  "origin_commit": "1f0bb1a",
+  "snapshots": {
+    "non_kb": {
+      "schema_version": "run_evidence_snapshot.v1",
+      "id": "evidence-snapshot-d0d9fbd9ce83f208117dee4b5699b700f96599c121a5e2a04289d53d5f9adb2b",
+      "run_id": "run-shared-evidence",
+      "workspace_id": "workspace-a",
+      "project_id": "project-a",
+      "version": 1,
+      "parent_id": null,
+      "phase": "analysis",
+      "sources": [
+        {
+          "id": "source-product-a-pricing",
+          "semantic_id": "evidence-source-7f1f176d3fef4d4a2763a349f16b03597896d61f41da7eacf9a413d4e36836d7",
+          "competitor": "Product A",
+          "covered_competitors": [],
+          "dimension": "pricing",
+          "source_type": "webpage_verified",
+          "title": "Product A pricing",
+          "url": "https://product-a.example/pricing",
+          "content_hash": "fixed-original-page-hash",
+          "snippet": "Original price evidence",
+          "role": "source",
+          "market": "CN",
+          "confidence": 0.8,
+          "status": "active",
+          "verification_status": "verified",
+          "material_level": "unknown",
+          "source_published_at": null,
+          "source_updated_at": null,
+          "source_fetched_at": null,
+          "last_verified_at": "2026-10-03T00:00:00Z",
+          "extracted_at": "2026-10-03T00:00:00Z",
+          "document_id": null,
+          "chunk_id": null,
+          "document_version": null,
+          "document_content_hash": null,
+          "document_workspace_id": null,
+          "document_project_id": null,
+          "payload_json": "{\"candidate_origin\":\"unknown\",\"competitor\":\"Product A\",\"confidence\":0.8,\"content_hash\":\"fixed-original-page-hash\",\"covered_competitors\":[],\"dimension\":\"pricing\",\"extracted_at\":\"2026-10-03T00:00:00+00:00\",\"failure_reason\":null,\"fetch_method\":\"\",\"id\":\"source-product-a-pricing\",\"metadata\":{\"last_verified_at\":\"2026-10-03T00:00:00+00:00\",\"market\":\"CN\",\"normalized_fields\":[{\"billing_cycle\":\"one_time\",\"competitor\":\"Product A\",\"confidence\":0.8,\"dimension\":\"pricing\",\"evidence_item_ids\":[\"item-product-a-price\"],\"kind\":\"pricing\",\"market\":\"CN\",\"price\":\"3999 CNY\",\"source_quote\":\"Base price: 3999 CNY\",\"source_url\":\"https://product-a.example/pricing\",\"tier_name\":\"Base\",\"unit\":\"CNY\"}],\"source_fetched_at\":null,\"source_material_level\":\"unknown\",\"source_published_at\":null,\"source_role\":\"source\",\"source_updated_at\":null},\"quality_score\":0.0,\"snippet\":\"Original price evidence\",\"source_type\":\"webpage_verified\",\"title\":\"Product A pricing\",\"url\":\"https://product-a.example/pricing\"}"
+        }
+      ],
+      "facts": [
+        {
+          "id": "evidence-fact-record-a97bcc93890a967badd9a2b5891deaf5d0e1021d1fe2b0ec84dcc5862061912f",
+          "semantic_id": "evidence-fact-c014f697cda94a763670ccd77f934f27377ee80f96fbf692f98fd094b1eb3643",
+          "evidence_item_ids": [
+            "item-product-a-price"
+          ],
+          "source_id": "source-product-a-pricing",
+          "competitor": "Product A",
+          "dimension": "pricing",
+          "field": "billing_cycle",
+          "value_json": "\"one_time\"",
+          "unit": "CNY",
+          "market": "CN",
+          "qualifiers_json": "{\"billing_cycle\":\"one_time\",\"tier_name\":\"Base\"}",
+          "quote": "Base price: 3999 CNY",
+          "status": "supported",
+          "confidence": 0.8
+        },
+        {
+          "id": "evidence-fact-record-67cf58b08eb2dd1178db75a3f0564c83d0b9fb8280c00e9b1bf4c15f6e8e1d71",
+          "semantic_id": "evidence-fact-af8a16c3e77431d6e3f2c3105ba18f13b9190e05714c6cac782711d8359ebb60",
+          "evidence_item_ids": [
+            "item-product-a-price"
+          ],
+          "source_id": "source-product-a-pricing",
+          "competitor": "Product A",
+          "dimension": "pricing",
+          "field": "price",
+          "value_json": "\"3999 CNY\"",
+          "unit": "CNY",
+          "market": "CN",
+          "qualifiers_json": "{\"billing_cycle\":\"one_time\",\"tier_name\":\"Base\"}",
+          "quote": "Base price: 3999 CNY",
+          "status": "supported",
+          "confidence": 0.8
+        },
+        {
+          "id": "evidence-fact-record-17d810a686d3c2ca82f10e3bb3a8b1456e0ba7a700d76adbaf792701705ec31f",
+          "semantic_id": "evidence-fact-dcdc8ab4021bc0ed8133d1e95adb5d012e7da9e3300dc839ecbe14aa8a84770e",
+          "evidence_item_ids": [
+            "item-product-a-price"
+          ],
+          "source_id": "source-product-a-pricing",
+          "competitor": "Product A",
+          "dimension": "pricing",
+          "field": "tier_name",
+          "value_json": "\"Base\"",
+          "unit": "CNY",
+          "market": "CN",
+          "qualifiers_json": "{\"billing_cycle\":\"one_time\",\"tier_name\":\"Base\"}",
+          "quote": "Base price: 3999 CNY",
+          "status": "supported",
+          "confidence": 0.8
+        }
+      ],
+      "conflicts": [],
+      "gaps": [],
+      "content_hash": "3b4d51646f3674fa8abf1896170131b13242d03ee16546a8760f68e6283192ef",
+      "created_at": "2026-10-03T12:56:59.595437Z"
+    },
+    "kb_no_chunk": {
+      "schema_version": "run_evidence_snapshot.v1",
+      "id": "evidence-snapshot-9dee1d2f498a5912c56f0a846f7934c083cde3250bf972b9af6f522be6c6deb1",
+      "run_id": "run-shared-evidence",
+      "workspace_id": "workspace-a",
+      "project_id": "project-a",
+      "version": 1,
+      "parent_id": null,
+      "phase": "analysis",
+      "sources": [
+        {
+          "id": "source-product-a-pricing",
+          "semantic_id": "evidence-source-f5151c0264df1a9d25b410ffe887870a8ebc9fe23598977726570a8f45b3981d",
+          "competitor": "Product A",
+          "covered_competitors": [],
+          "dimension": "pricing",
+          "source_type": "webpage_verified",
+          "title": "Canonical pricing",
+          "url": "https://product-a.example/pricing",
+          "content_hash": "fixed-original-page-hash",
+          "snippet": "Original price evidence",
+          "role": "source",
+          "market": "CN",
+          "confidence": 0.8,
+          "status": "active",
+          "verification_status": "verified",
+          "material_level": "kb_document",
+          "source_published_at": "2025-01-02T00:00:00Z",
+          "source_updated_at": null,
+          "source_fetched_at": "2026-10-03T00:00:00Z",
+          "last_verified_at": "2026-10-03T00:00:00Z",
+          "extracted_at": "2026-10-03T00:00:00Z",
+          "document_id": "document-a",
+          "chunk_id": null,
+          "document_version": 2,
+          "document_content_hash": "canonical-document-hash",
+          "document_workspace_id": "workspace-a",
+          "document_project_id": "project-a",
+          "payload_json": "{\"candidate_origin\":\"unknown\",\"competitor\":\"Product A\",\"confidence\":0.8,\"content_hash\":\"fixed-original-page-hash\",\"covered_competitors\":[],\"dimension\":\"pricing\",\"extracted_at\":\"2026-10-03T00:00:00+00:00\",\"failure_reason\":null,\"fetch_method\":\"\",\"id\":\"source-product-a-pricing\",\"metadata\":{\"kb_chunk_id\":null,\"kb_document_content_hash\":\"canonical-document-hash\",\"kb_document_id\":\"document-a\",\"kb_document_project_id\":\"project-a\",\"kb_document_status\":\"active\",\"kb_document_version\":2,\"kb_document_workspace_id\":\"workspace-a\",\"kb_source_role\":\"source\",\"last_verified_at\":\"2026-10-03T00:00:00+00:00\",\"market\":\"CN\",\"normalized_fields\":[{\"billing_cycle\":\"one_time\",\"competitor\":\"Product A\",\"confidence\":0.8,\"dimension\":\"pricing\",\"evidence_item_ids\":[\"item-product-a-price\"],\"kind\":\"pricing\",\"market\":\"CN\",\"price\":\"3999 CNY\",\"source_quote\":\"Base price: 3999 CNY\",\"source_url\":\"https://product-a.example/pricing\",\"tier_name\":\"Base\",\"unit\":\"CNY\"}],\"source_fetched_at\":\"2026-10-03T00:00:00+00:00\",\"source_material_level\":\"kb_document\",\"source_published_at\":\"2025-01-02T00:00:00+00:00\",\"source_role\":\"source\",\"source_updated_at\":null},\"quality_score\":0.0,\"snippet\":\"Original price evidence\",\"source_type\":\"webpage_verified\",\"title\":\"Canonical pricing\",\"url\":\"https://product-a.example/pricing\"}"
+        }
+      ],
+      "facts": [
+        {
+          "id": "evidence-fact-record-6c3d9c3a89d68f923aa9998711f673092d8a1750e2f088e078a208c7dfb93c25",
+          "semantic_id": "evidence-fact-67a7b4246d765a9e855bfdd512bc8de54acef477e268788d4f527f5f31d973ae",
+          "evidence_item_ids": [
+            "item-product-a-price"
+          ],
+          "source_id": "source-product-a-pricing",
+          "competitor": "Product A",
+          "dimension": "pricing",
+          "field": "billing_cycle",
+          "value_json": "\"one_time\"",
+          "unit": "CNY",
+          "market": "CN",
+          "qualifiers_json": "{\"billing_cycle\":\"one_time\",\"tier_name\":\"Base\"}",
+          "quote": "Base price: 3999 CNY",
+          "status": "supported",
+          "confidence": 0.8
+        },
+        {
+          "id": "evidence-fact-record-b95fc59747d7e10a1509ad3bb28afc53481f31a00c1c89d4dd9b8c670b81c24b",
+          "semantic_id": "evidence-fact-0ca38b1c2f333695690e2a0b6a20c822e01d29d0a0d4fe740ea597f0ecc534f8",
+          "evidence_item_ids": [
+            "item-product-a-price"
+          ],
+          "source_id": "source-product-a-pricing",
+          "competitor": "Product A",
+          "dimension": "pricing",
+          "field": "price",
+          "value_json": "\"3999 CNY\"",
+          "unit": "CNY",
+          "market": "CN",
+          "qualifiers_json": "{\"billing_cycle\":\"one_time\",\"tier_name\":\"Base\"}",
+          "quote": "Base price: 3999 CNY",
+          "status": "supported",
+          "confidence": 0.8
+        },
+        {
+          "id": "evidence-fact-record-50b36d807e257254700d29fff825b8cb907a69f6c72f28b8f4221ab3bbf4a0b6",
+          "semantic_id": "evidence-fact-128171666bc97a97320b6c542cdd09f4bc9a81a813d76fa53e903148198c4cb1",
+          "evidence_item_ids": [
+            "item-product-a-price"
+          ],
+          "source_id": "source-product-a-pricing",
+          "competitor": "Product A",
+          "dimension": "pricing",
+          "field": "tier_name",
+          "value_json": "\"Base\"",
+          "unit": "CNY",
+          "market": "CN",
+          "qualifiers_json": "{\"billing_cycle\":\"one_time\",\"tier_name\":\"Base\"}",
+          "quote": "Base price: 3999 CNY",
+          "status": "supported",
+          "confidence": 0.8
+        }
+      ],
+      "conflicts": [],
+      "gaps": [],
+      "content_hash": "caaa966d1bf0f13224de5e435dfeb937e8bd352df7f52b4219637976fe4116dc",
+      "created_at": "2026-10-03T12:56:59.595859Z"
+    },
+    "kb_single_chunk": {
+      "schema_version": "run_evidence_snapshot.v1",
+      "id": "evidence-snapshot-302c314c7b57bd4e13df94461fdda69168870009bb6aab657c66bc9b358f643e",
+      "run_id": "run-shared-evidence",
+      "workspace_id": "workspace-a",
+      "project_id": "project-a",
+      "version": 1,
+      "parent_id": null,
+      "phase": "analysis",
+      "sources": [
+        {
+          "id": "source-product-a-pricing",
+          "semantic_id": "evidence-source-021da748e7da021b011b58df1d03070ee4c37ee50ebb5b6e9fbe657739af2ff9",
+          "competitor": "Product A",
+          "covered_competitors": [],
+          "dimension": "pricing",
+          "source_type": "webpage_verified",
+          "title": "Canonical pricing",
+          "url": "https://product-a.example/pricing",
+          "content_hash": "fixed-original-page-hash",
+          "snippet": "Original price evidence",
+          "role": "source",
+          "market": "CN",
+          "confidence": 0.8,
+          "status": "active",
+          "verification_status": "verified",
+          "material_level": "kb_document",
+          "source_published_at": "2025-01-02T00:00:00Z",
+          "source_updated_at": null,
+          "source_fetched_at": "2026-10-03T00:00:00Z",
+          "last_verified_at": "2026-10-03T00:00:00Z",
+          "extracted_at": "2026-10-03T00:00:00Z",
+          "document_id": "document-a",
+          "chunk_id": "chunk-a",
+          "document_version": 2,
+          "document_content_hash": "canonical-document-hash",
+          "document_workspace_id": "workspace-a",
+          "document_project_id": "project-a",
+          "payload_json": "{\"candidate_origin\":\"unknown\",\"competitor\":\"Product A\",\"confidence\":0.8,\"content_hash\":\"fixed-original-page-hash\",\"covered_competitors\":[],\"dimension\":\"pricing\",\"extracted_at\":\"2026-10-03T00:00:00+00:00\",\"failure_reason\":null,\"fetch_method\":\"\",\"id\":\"source-product-a-pricing\",\"metadata\":{\"kb_chunk_id\":\"chunk-a\",\"kb_document_content_hash\":\"canonical-document-hash\",\"kb_document_id\":\"document-a\",\"kb_document_project_id\":\"project-a\",\"kb_document_status\":\"active\",\"kb_document_version\":2,\"kb_document_workspace_id\":\"workspace-a\",\"kb_source_role\":\"source\",\"last_verified_at\":\"2026-10-03T00:00:00+00:00\",\"market\":\"CN\",\"normalized_fields\":[{\"billing_cycle\":\"one_time\",\"competitor\":\"Product A\",\"confidence\":0.8,\"dimension\":\"pricing\",\"evidence_item_ids\":[\"item-product-a-price\"],\"kind\":\"pricing\",\"market\":\"CN\",\"price\":\"3999 CNY\",\"source_quote\":\"Base price: 3999 CNY\",\"source_url\":\"https://product-a.example/pricing\",\"tier_name\":\"Base\",\"unit\":\"CNY\"}],\"source_fetched_at\":\"2026-10-03T00:00:00+00:00\",\"source_material_level\":\"kb_document\",\"source_published_at\":\"2025-01-02T00:00:00+00:00\",\"source_role\":\"source\",\"source_updated_at\":null},\"quality_score\":0.0,\"snippet\":\"Original price evidence\",\"source_type\":\"webpage_verified\",\"title\":\"Canonical pricing\",\"url\":\"https://product-a.example/pricing\"}"
+        }
+      ],
+      "facts": [
+        {
+          "id": "evidence-fact-record-e9555728ea358c79265759e063be4caaf5c2dacd3fd451a7be7879e9bec6b792",
+          "semantic_id": "evidence-fact-69689b977f15d940cc22ef3969dfac367d98e71048d37c4ca1b5a6ac41f500b7",
+          "evidence_item_ids": [
+            "item-product-a-price"
+          ],
+          "source_id": "source-product-a-pricing",
+          "competitor": "Product A",
+          "dimension": "pricing",
+          "field": "billing_cycle",
+          "value_json": "\"one_time\"",
+          "unit": "CNY",
+          "market": "CN",
+          "qualifiers_json": "{\"billing_cycle\":\"one_time\",\"tier_name\":\"Base\"}",
+          "quote": "Base price: 3999 CNY",
+          "status": "supported",
+          "confidence": 0.8
+        },
+        {
+          "id": "evidence-fact-record-88368778dfcd390d4a558bae2be7161641f47d87b1ba013e0eea34cb4d98f926",
+          "semantic_id": "evidence-fact-a038c8704f28645f742c423f430511c25d62164d7f07ac2f5131c9ba2e0f2f88",
+          "evidence_item_ids": [
+            "item-product-a-price"
+          ],
+          "source_id": "source-product-a-pricing",
+          "competitor": "Product A",
+          "dimension": "pricing",
+          "field": "price",
+          "value_json": "\"3999 CNY\"",
+          "unit": "CNY",
+          "market": "CN",
+          "qualifiers_json": "{\"billing_cycle\":\"one_time\",\"tier_name\":\"Base\"}",
+          "quote": "Base price: 3999 CNY",
+          "status": "supported",
+          "confidence": 0.8
+        },
+        {
+          "id": "evidence-fact-record-79eb7c5d03086ec113ae780cf752243d627f49eeb3c43976b1d07aebc1cddae4",
+          "semantic_id": "evidence-fact-75e976a9c8c0a08ae3ec26994fcf8569ee4a86ae83145efeefbf76a5ba10c3f2",
+          "evidence_item_ids": [
+            "item-product-a-price"
+          ],
+          "source_id": "source-product-a-pricing",
+          "competitor": "Product A",
+          "dimension": "pricing",
+          "field": "tier_name",
+          "value_json": "\"Base\"",
+          "unit": "CNY",
+          "market": "CN",
+          "qualifiers_json": "{\"billing_cycle\":\"one_time\",\"tier_name\":\"Base\"}",
+          "quote": "Base price: 3999 CNY",
+          "status": "supported",
+          "confidence": 0.8
+        }
+      ],
+      "conflicts": [],
+      "gaps": [],
+      "content_hash": "1d589708bdcdaf3e1dcf7b46230cef53313666b553324099cc96de42139e39fe",
+      "created_at": "2026-10-03T12:56:59.596133Z"
+    }
+  }
+}

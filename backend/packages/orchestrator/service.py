@@ -79,6 +79,7 @@ from packages.observability import (
 from packages.orchestrator.audit import build_revision_record, convergence_ratio
 from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.demo_report import build_demo_report
+from packages.orchestrator.evidence_context import EvidenceContextMixin
 from packages.orchestrator.graph import (
     build_demo_analysis_graph,
     build_real_analysis_graph,
@@ -295,6 +296,7 @@ class RunRecord:
 
 
 class RunService(
+    EvidenceContextMixin,
     LLMExecutionMixin,
     SearchExecutionMixin,
     PlannerAgentMixin,

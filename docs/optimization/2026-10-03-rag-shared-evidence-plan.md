@@ -94,12 +94,13 @@ def test_fact_change_with_same_body_creates_new_snapshot():
 
 **Files:** 新建 views.py、evidence_context.py；修改 service.py 的 mixin 接线；新建 `backend/tests/unit/test_stage_evidence_views.py`、`test_evidence_snapshot_scope.py`。
 
-- [ ] 写失败用例：伪造 metadata 归属 / 版本、其他工作区、未知旧文档、错误完整型号、公共库显式 null、过期价格和未来日期；视图改动不污染快照；预算不能截断值或孤立引用。
-- [ ] 从 record.detail 构建 KnowledgeScope，在 canonical 仓库回读来源文档 / 分块；版本或 hash 不匹配成为具体缺口。重复 seal 和查询不得刷新来源时间。
-- [ ] 使用 `normalized_fields_from_source` 的现有字段适配；缺少支持原文或仅有历史观点时保留信号，不生成已核验事实。保留原 JSON 类型与 evidence_item_ids。
-- [ ] 实现 select_evidence_view，按产品 / 维度 / 明确引用筛选。quick / standard / deep 分别限制每段 8192 / 16384 / 24576 UTF-8 字节；超预算按完整事实与原文对分段或记录缺口，不静默丢出处。
-- [ ] _begin_evidence_use 保存实际选中 ID、snapshot ID、依赖 hash、估计上下文；_validate_evidence_use 重新校验当前依赖，阻止旧结果提交。
-- [ ] 定向测试转绿，运行第一阶段 storage / retrieval / reference 回归；保存任务提交并审查。
+- [x] 写失败用例：伪造 metadata 归属 / 版本、其他工作区、未知旧文档、错误完整型号、公共库显式 null、过期价格和未来日期；视图改动不污染快照；预算不能截断值或孤立引用。
+- [x] 从 record.detail 构建 KnowledgeScope，在 canonical 仓库回读来源文档 / 分块；版本或 hash 不匹配成为具体缺口。重复 seal 和查询不得刷新来源时间。
+- [x] 必要内部接线：公开 `seal_snapshot` 签名保持不变，共用私有封存 helper 接收服务器验证产生的逐来源拒绝项，随 gaps 进入摘要。不改 RawSource metadata、不事后改冻结快照；范围读取的 missing / out_of_scope / unknown 统一为 `canonical_document_unavailable`，不越权回读探测。
+- [x] 使用 `normalized_fields_from_source` 的现有字段适配；缺少支持原文或仅有历史观点时保留信号，不生成已核验事实。保留原 JSON 类型与 evidence_item_ids。
+- [x] 实现 select_evidence_view，按产品 / 维度 / 明确引用筛选。quick / standard / deep 分别限制每段 8192 / 16384 / 24576 UTF-8 字节；超预算按完整事实与原文对分段或记录缺口，不静默丢出处。
+- [x] _begin_evidence_use 保存实际选中 ID、snapshot ID、依赖 hash、估计上下文；_validate_evidence_use 重新校验当前依赖，阻止旧结果提交。
+- [x] 定向测试转绿，运行第一阶段 storage / retrieval / reference 回归；保存任务提交并审查。
 
 ```python
 def test_view_is_scoped_and_does_not_mutate_snapshot():

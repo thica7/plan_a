@@ -186,6 +186,39 @@ def _gap(source: RawSource, reason: str, document_id: str | None = None) -> Evid
     )
 
 
+def _document_reference(source: RawSource) -> tuple[str | None, str | None]:
+    references = [
+        source.metadata[key] for key in ("kb_document_id", "document_id") if key in source.metadata
+    ]
+    document_id = next(
+        (value.strip() for value in references if isinstance(value, str) and value.strip()), None
+    )
+    if document_id is None:
+        return None, None
+    if any(not isinstance(value, str) or not value.strip() for value in references):
+        return document_id, "canonical_reference_invalid"
+    if any(value.strip() != document_id for value in references):
+        return document_id, "canonical_reference_mismatch"
+    return document_id, None
+
+
+def _chunk_references(source: RawSource) -> tuple[tuple[str, ...], str | None]:
+    singles = [
+        source.metadata[key] for key in ("kb_chunk_id", "chunk_id") if key in source.metadata
+    ]
+    multiple = source.metadata.get("kb_chunk_ids", [])
+    if (
+        any(not isinstance(item, str) or not item.strip() for item in singles)
+        or not isinstance(multiple, list)
+        or any(not isinstance(item, str) or not item.strip() for item in multiple)
+    ):
+        return (), "chunk_reference_invalid"
+    normalized_singles = tuple(item.strip() for item in singles)
+    if len(set(normalized_singles)) > 1:
+        return (), "chunk_reference_mismatch"
+    return tuple(sorted(set((*normalized_singles, *(item.strip() for item in multiple))))), None
+
+
 def _document_problem(
     source: RawSource,
     document: KnowledgeDocument,
@@ -198,17 +231,27 @@ def _document_problem(
         return "scope_mismatch"
     if not document.is_active or document.status != "active":
         return "document_inactive"
-    reference_version = source.metadata.get("kb_document_version")
-    if (
-        type(reference_version) is not int
-        or reference_version < 1
-        or document.version != reference_version
+    reference_versions = [source.metadata.get("kb_document_version")]
+    if "document_version" in source.metadata:
+        reference_versions.append(source.metadata["document_version"])
+    if any(
+        type(value) is not int or value < 1 or value != document.version
+        for value in reference_versions
     ):
         return "version_mismatch"
-    reference_hash = source.metadata.get("kb_document_content_hash")
-    if reference_hash is None:
-        reference_hash = source.metadata.get("kb_content_hash")
-    if not document.content_hash or document.content_hash != reference_hash:
+    reference_hashes = [
+        source.metadata[key]
+        for key in ("kb_document_content_hash", "kb_content_hash")
+        if key in source.metadata
+    ]
+    if (
+        not document.content_hash
+        or not reference_hashes
+        or any(
+            not isinstance(value, str) or value != document.content_hash
+            for value in reference_hashes
+        )
+    ):
         return "hash_mismatch"
     if (
         _key(document.competitor or "") != _key(source.competitor)
@@ -226,6 +269,7 @@ def _source_record(
     detail: RunDetail,
     document: KnowledgeDocument | None,
     normalized: list[dict[str, object]],
+    chunk_ids: tuple[str, ...],
 ) -> EvidenceSource:
     metadata = source.metadata
     published = (
@@ -271,7 +315,13 @@ def _source_record(
     ):
         safe_metadata[name] = value.isoformat() if value else None
     safe_metadata["market"] = market
-    chunk_id = _text(metadata.get("kb_chunk_id")) or None if document else None
+    chunk_id = (
+        next(
+            (metadata[key].strip() for key in ("kb_chunk_id", "chunk_id") if key in metadata), None
+        )
+        if document
+        else None
+    )
     if document:
         safe_metadata.update(
             {
@@ -285,6 +335,8 @@ def _source_record(
                 "kb_document_status": document.status,
             }
         )
+        if chunk_ids:
+            safe_metadata["kb_chunk_ids"] = list(chunk_ids)
     source_type = document.source_type if document else source.source_type
     projection = {
         "id": source.id,
@@ -314,6 +366,8 @@ def _source_record(
         document.id if document else None,
         chunk_id,
     ]
+    if chunk_ids:
+        identity.append(chunk_ids)
     return EvidenceSource(
         id=source.id,
         semantic_id=_identity("evidence-source", identity),
@@ -338,6 +392,7 @@ def _source_record(
         extracted_at=extracted,
         document_id=document.id if document else None,
         chunk_id=chunk_id,
+        chunk_ids=chunk_ids,
         document_version=document.version if document else None,
         document_content_hash=document.content_hash if document else None,
         document_workspace_id=document.workspace_id if document else None,
@@ -453,7 +508,7 @@ def _conflicts(facts: tuple[EvidenceFact, ...]) -> tuple[EvidenceConflict, ...]:
 
 
 def _contract(snapshot: RunEvidenceSnapshot) -> dict[str, object]:
-    return snapshot.model_dump(
+    contract = snapshot.model_dump(
         mode="json",
         exclude={
             "id",
@@ -463,6 +518,11 @@ def _contract(snapshot: RunEvidenceSnapshot) -> dict[str, object]:
             "content_hash",
         },
     )
+    # The empty additive v1 field retains Task 1's canonical bytes.
+    for source in contract["sources"]:
+        if not source["chunk_ids"]:
+            source.pop("chunk_ids")
+    return contract
 
 
 def _snapshot_id(snapshot: RunEvidenceSnapshot) -> str:
@@ -510,6 +570,19 @@ def seal_snapshot(
     canonical_documents: Mapping[str, KnowledgeDocument],
 ) -> RunEvidenceSnapshot:
     """Seal admitted fields; invalid canonical references become explicit rejection gaps."""
+    return _seal_snapshot(
+        detail, phase=phase, canonical_documents=canonical_documents, rejected_sources={}
+    )
+
+
+def _seal_snapshot(
+    detail: RunDetail,
+    *,
+    phase: EvidencePhase,
+    canonical_documents: Mapping[str, KnowledgeDocument],
+    rejected_sources: Mapping[str, EvidenceGap],
+) -> RunEvidenceSnapshot:
+    """Shared sealing path, including server-validated reference rejection records."""
     if phase not in {"collect", "analysis"}:
         raise ValueError("evidence snapshot phase must be collect or analysis")
     for document_id, document in canonical_documents.items():
@@ -528,16 +601,21 @@ def seal_snapshot(
     planned = {_key(item) for item in detail.plan.competitors}
     sources, facts, gaps = [], [], []
     for raw in detail.raw_sources:
+        if raw.id in rejected_sources:
+            rejected = rejected_sources[raw.id]
+            if not isinstance(rejected, EvidenceGap) or rejected.source_id != raw.id:
+                raise ValueError("invalid server evidence rejection identity")
+            gaps.append(rejected)
+            continue
         covered = {_key(item) for item in raw.covered_competitors}
         allowed = covered | ({_key(raw.competitor)} if _key(raw.competitor) in planned else set())
         if not allowed or not allowed <= planned or not covered <= planned:
             gaps.append(_gap(raw, "identity_mismatch"))
             continue
-        document_id = (
-            _text(raw.metadata.get("kb_document_id"))
-            or _text(raw.metadata.get("document_id"))
-            or None
-        )
+        document_id, reference_problem = _document_reference(raw)
+        if reference_problem:
+            gaps.append(_gap(raw, reference_problem, document_id))
+            continue
         is_kb = (
             bool(_KB_REFERENCE_KEYS & raw.metadata.keys())
             or raw.metadata.get("kb_retrieved") is True
@@ -556,8 +634,14 @@ def seal_snapshot(
             if reason:
                 gaps.append(_gap(raw, reason, document_id))
                 continue
+            chunk_ids, reason = _chunk_references(raw)
+            if reason:
+                gaps.append(_gap(raw, reason, document_id))
+                continue
+        else:
+            chunk_ids = ()
         normalized = _fields(raw, allowed, document)
-        source = _source_record(raw, detail, document, normalized)
+        source = _source_record(raw, detail, document, normalized, chunk_ids)
         sources.append(source)
         facts.extend(_facts(source, normalized))
     source_records = tuple(

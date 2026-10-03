@@ -58,6 +58,7 @@ class EvidenceSource(_FrozenRecord):
     extracted_at: datetime
     document_id: str | None = None
     chunk_id: str | None = None
+    chunk_ids: tuple[str, ...] = ()
     document_version: int | None = Field(default=None, ge=1)
     document_content_hash: str | None = None
     document_workspace_id: str | None = None
@@ -166,6 +167,9 @@ class RunEvidenceSnapshot(_FrozenRecord):
 
 class EvidenceConsumption(_FrozenRecord):
     id: str
+    run_id: str = ""
+    workspace_id: str = ""
+    project_id: str | None = None
     agent: str
     snapshot_id: str
     snapshot_version: int = Field(ge=1)
@@ -173,6 +177,7 @@ class EvidenceConsumption(_FrozenRecord):
     competitor: str | None = None
     dimension: str | None = None
     source_ids: tuple[str, ...] = ()
+    requested_source_ids: tuple[str, ...] | None = None
     fact_ids: tuple[str, ...] = ()
     max_bytes: int = Field(default=8192, ge=0)
     estimated_bytes: int = Field(default=0, ge=0)
@@ -187,6 +192,9 @@ class StageEvidenceView(_FrozenRecord):
     """Task 2 selects these fields and supplies bounded prompt serialization."""
 
     agent: str
+    run_id: str
+    workspace_id: str
+    project_id: str | None = None
     snapshot_id: str
     snapshot_version: int = Field(ge=1)
     content_hash: str
@@ -202,6 +210,33 @@ class StageEvidenceView(_FrozenRecord):
     max_bytes: int = Field(default=8192, ge=0)
     estimated_bytes: int = Field(default=0, ge=0)
     estimated_tokens: int = Field(default=0, ge=0)
+    token_estimation_method: Literal["utf8_bytes_plus_256"] = "utf8_bytes_plus_256"
+
+    def to_prompt_json(self) -> str:
+        """Serialize typed evidence data, excluding mutable compatibility payloads."""
+        payload = self.model_dump(mode="json", exclude={"sources", "facts", "conflicts"})
+        payload["sources"] = [
+            source.model_dump(mode="json", exclude={"payload_json"}) for source in self.sources
+        ]
+        payload["facts"] = [
+            {
+                **fact.model_dump(mode="json", exclude={"value_json", "qualifiers_json"}),
+                "value": fact.value,
+                "qualifiers": fact.qualifiers,
+            }
+            for fact in self.facts
+        ]
+        payload["conflicts"] = [
+            {
+                **conflict.model_dump(mode="json", exclude={"qualifiers_json"}),
+                "qualifiers": conflict.qualifiers,
+            }
+            for conflict in self.conflicts
+        ]
+        rendered = canonical_json(payload)
+        if len(rendered.encode("utf-8")) > self.max_bytes:
+            raise ValueError("evidence view exceeds its byte budget")
+        return rendered
 
 
 class EvidenceChanges(_FrozenRecord):
