@@ -606,6 +606,9 @@ def _seal_snapshot(
     planned = {_key(item) for item in detail.plan.competitors}
     sources, facts, gaps = [], [], []
     for raw in detail.raw_sources:
+        if raw.id in detail.evidence_retired_source_ids:
+            gaps.append(_gap(raw, "source_retired_by_server"))
+            continue
         if raw.id in rejected_sources:
             rejected = rejected_sources[raw.id]
             if not isinstance(rejected, EvidenceGap) or rejected.source_id != raw.id:

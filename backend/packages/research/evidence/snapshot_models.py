@@ -128,6 +128,7 @@ class EvidenceArtifactDependency(_FrozenRecord):
     dimension: str | None = None
     consumption_ids: tuple[str, ...]
     payload_hash: str
+    upstream_hash: str | None = None
 
 
 class EvidenceFact(_FrozenRecord):

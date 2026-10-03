@@ -17,6 +17,7 @@ from packages.research.evidence.snapshot import (
     _gap,
     _seal_snapshot,
     _verify,
+    changed_evidence,
     current_snapshot,
 )
 from packages.research.evidence.snapshot_models import (
@@ -74,6 +75,19 @@ class EvidenceContextMixin:
     def _evidence_artifact_hash(payload: object) -> str:
         return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
 
+    def _artifact_upstream_hash(self, detail, kind):
+        if kind == "writer":
+            return self._analysis_artifacts_hash(detail)
+        if kind in {"comparator", "reflector"}:
+            return self._evidence_artifact_hash({
+                "analysts": [self._analyst_evidence_artifact_payload(detail, product, dimension)
+                             for product in detail.plan.competitors
+                             for dimension in detail.plan.dimensions],
+                "comparison": self._comparator_evidence_artifact_payload(detail)
+                              if kind == "reflector" else None,
+            })
+        return None
+
     def _record_evidence_artifact(
         self,
         record: RunRecord,
@@ -91,6 +105,7 @@ class EvidenceContextMixin:
             dimension=dimension,
             consumption_ids=tuple(use.id for use in uses),
             payload_hash=self._evidence_artifact_hash(payload),
+            upstream_hash=self._artifact_upstream_hash(record.detail, kind),
         )
         record.detail.evidence_artifact_dependencies = [
             item
@@ -120,6 +135,9 @@ class EvidenceContextMixin:
             None,
         )
         if dependency is None or dependency.payload_hash != self._evidence_artifact_hash(payload):
+            return False
+        expected_upstream = self._artifact_upstream_hash(record.detail, kind)
+        if expected_upstream is not None and dependency.upstream_hash != expected_upstream:
             return False
         for use_id in dependency.consumption_ids:
             use = next(
@@ -270,6 +288,8 @@ class EvidenceContextMixin:
             != self._evidence_artifact_hash(self._writer_evidence_artifact_payload(record.detail))
         ):
             return False
+        if dependency.upstream_hash != self._artifact_upstream_hash(record.detail, "writer"):
+            return False
         for use_id in dependency.consumption_ids:
             use = next(
                 (item for item in record.detail.evidence_consumptions if item.id == use_id), None
@@ -353,6 +373,13 @@ class EvidenceContextMixin:
         self, record: RunRecord, *, phase: EvidencePhase
     ) -> RunEvidenceSnapshot:
         detail = record.detail
+        previous = current_snapshot(detail)
+        if phase == "analysis":
+            # Collect snapshots are provisional and cannot be the analysis reuse baseline.
+            previous = next(
+                (item for item in reversed(detail.evidence_snapshots) if item.phase == "analysis"),
+                None,
+            )
         scope = KnowledgeScope(
             workspace_id=detail.workspace_id,
             project_id=detail.project_id,
@@ -405,8 +432,46 @@ class EvidenceContextMixin:
         snapshot = _seal_snapshot(
             detail, phase=phase, canonical_documents=documents, rejected_sources=rejected
         )
+        detail.evidence_inputs_dirty = False
+        if previous is not None and snapshot.phase == "analysis" and previous.id != snapshot.id:
+            changes = changed_evidence(previous, snapshot)
+            if (changes.added_sources or changes.removed_sources or changes.changed_sources
+                    or changes.added_facts or changes.removed_facts or changes.changed_facts):
+                self._reconcile_evidence_artifacts(record)
         self._persist_run(detail.id)
         return snapshot
+
+    def _reconcile_evidence_artifacts(self, record):
+        """Validate actual producer credentials before reusing accepted stage outputs."""
+        detail = record.detail
+        if not (detail.competitor_kbs or detail.competitor_knowledge
+                or detail.evidence_artifact_dependencies or detail.claim_card_bundles
+                or detail.comparison_matrix or detail.reflections):
+            if detail.report_md or detail.report_artifact:
+                detail.evidence_writer_rewrite_required = True
+                detail.section_briefs = []
+            return
+        for product in detail.plan.competitors:
+            for dimension in detail.plan.dimensions:
+                payload = self._analyst_evidence_artifact_payload(detail, product, dimension)
+                if not self._evidence_artifact_valid(
+                    record, kind="analyst", payload=payload, competitor=product, dimension=dimension
+                ):
+                    self._clear_competitor_dimension_output(detail, product, dimension)
+                    detail.claim_card_bundles = [item for item in detail.claim_card_bundles
+                        if (item.competitor, item.dimension) != (product, dimension)]
+        if not self._evidence_artifact_valid(
+            record, kind="comparator", payload=self._comparator_evidence_artifact_payload(detail)
+        ):
+            detail.comparison_matrix = None
+            detail.decision_card_bundle = None
+            detail.reflections = []
+        if not self._evidence_artifact_valid(
+            record, kind="writer", payload=self._writer_evidence_artifact_payload(detail)
+        ):
+            # Without complete per-section producer dependencies, redo the whole report.
+            detail.section_briefs = []
+            detail.evidence_writer_rewrite_required = True
 
     @staticmethod
     def _current_evidence_snapshot(record: RunRecord) -> RunEvidenceSnapshot:
@@ -430,6 +495,8 @@ class EvidenceContextMixin:
         source_ids: Iterable[str] | None = None,
     ) -> tuple[StageEvidenceView, EvidenceConsumption]:
         record = self._evidence_live_record(record)
+        if record.detail.evidence_inputs_dirty:
+            raise EvidenceUseRejectedError("evidence inputs require accepted resealing")
         snapshot = self._current_evidence_snapshot(record)
         if agent == "qa":
             snapshot = self._final_qa_snapshot(record)
@@ -476,6 +543,8 @@ class EvidenceContextMixin:
         ) != use.model_dump(exclude={"status", "validated_snapshot_id"}):
             raise EvidenceUseRejectedError("unknown or changed evidence credential")
         try:
+            if record.detail.evidence_inputs_dirty:
+                raise EvidenceUseRejectedError("evidence inputs changed before resealing")
             if (
                 use.run_id != record.detail.id
                 or use.workspace_id != record.detail.workspace_id

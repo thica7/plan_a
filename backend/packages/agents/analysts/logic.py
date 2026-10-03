@@ -447,10 +447,23 @@ class AnalystAgentMixin:
             cache_entry = self._kb_cache.get(competitor, dimension, cache_content_hash)
             if (
                 cache_entry is not None
+                and cache_entry.producer_snapshot_id
+                and cache_entry.producer_consumption_ids
+                and all(any(item.id == producer_id and item.status in {"validated", "reused"}
+                            and item.snapshot_id == cache_entry.producer_snapshot_id
+                            and item.dependency_hash == view.dependency_hash
+                            and item.agent == "analyst"
+                            and (item.competitor, item.dimension) == (competitor, dimension)
+                            for item in detail.evidence_consumptions)
+                        for producer_id in cache_entry.producer_consumption_ids)
                 and cache_entry.evidence_dependency_hash == view.dependency_hash
             ):
                 if use is not None:
                     self._validate_evidence_use(record, use)
+                producers = [item for item in detail.evidence_consumptions
+                             if item.id in cache_entry.producer_consumption_ids]
+                for producer in producers:
+                    self._validate_evidence_use(record, producer)
                 self._apply_kb_cache_entry(detail, cache_entry)
                 self._emit_claim_card_bundle(
                     record,
@@ -465,7 +478,7 @@ class AnalystAgentMixin:
                 detail.evidence_consumptions = [reused if item.id == use.id else item
                                                 for item in detail.evidence_consumptions]
                 self._record_evidence_artifact(record, kind="analyst", competitor=competitor,
-                    dimension=dimension, uses=[reused],
+                    dimension=dimension, uses=producers,
                     payload=self._analyst_evidence_artifact_payload(detail, competitor, dimension))
                 self._append_agent_message(
                     record,
@@ -1099,19 +1112,31 @@ class AnalystAgentMixin:
         return " ".join(cleaned.split())
 
     def _kb_cache_content_hash(self, detail: RunDetail, competitor: str, dimension: str) -> str:
-        sources = self._sources_for_competitor_dimension(detail, competitor, dimension)
-        if not sources:
+        snapshot = current_snapshot(detail)
+        if snapshot is None or snapshot.phase != "analysis" or detail.evidence_inputs_dirty:
             return ""
-        basis = [
-            {
-                "id": source.id,
-                "content_hash": source.content_hash,
-                "source_type": source.source_type,
-                "url": str(source.url) if source.url else "",
-            }
-            for source in sorted(sources, key=lambda item: item.id)
-        ]
-        return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:24]
+        if (snapshot.run_id, snapshot.workspace_id, snapshot.project_id) != (
+            detail.id, detail.workspace_id, detail.project_id
+        ):
+            raise EvidenceUseRejectedError("cache evidence scope mismatch")
+        view = select_evidence_view(
+            snapshot, agent="analyst", competitor=competitor, dimension=dimension,
+            max_bytes={"quick": 8192, "standard": 16384, "deep": 24576}.get(
+                detail.plan.research_depth, 8192
+            ),
+        )
+        if not view.sources:
+            return ""
+        basis = {
+            "workspace_id": detail.workspace_id, "project_id": detail.project_id,
+            "competitor": competitor, "dimension": dimension,
+            "target_product": detail.plan.target_product.model_dump(mode="json")
+                              if detail.plan.target_product else None,
+            "dependency_hash": view.dependency_hash,
+            "sources": [item.model_dump(mode="json") for item in view.sources],
+            "facts": [item.model_dump(mode="json") for item in view.facts],
+        }
+        return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()
 
     def _apply_kb_cache_entry(self, detail: RunDetail, entry: KBCacheEntry) -> None:
         valid_source_ids = self._source_ids_for_competitor_dimension(
@@ -1208,6 +1233,7 @@ class AnalystAgentMixin:
             confidence=kb.confidence,
             knowledge=knowledge,
             producer_snapshot_id=evidence_use.snapshot_id if evidence_use else None,
+            producer_consumption_ids=(evidence_use.id,) if evidence_use else (),
             evidence_dependency_hash=evidence_use.dependency_hash if evidence_use else None,
         )
         self._kb_cache.put(entry)

@@ -20,6 +20,7 @@ class KBCacheEntry(BaseModel):
     confidence: float = 0.0
     knowledge: CompetitorKnowledge
     producer_snapshot_id: str | None = None
+    producer_consumption_ids: tuple[str, ...] = ()
     evidence_dependency_hash: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

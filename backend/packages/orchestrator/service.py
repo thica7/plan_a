@@ -774,6 +774,8 @@ class RunService(
                 competitor=source.competitor,
                 source_ids=[source.id],
             )
+        if sources:
+            detail.evidence_inputs_dirty = True
         result = result.model_copy(update={"source_ids": added_source_ids})
         self._trace_local_tool(
             record,
@@ -2534,6 +2536,7 @@ class RunService(
             else:
                 self._clear_dimension_outputs(detail, dimension)
         elif scope.kind == "full":
+            detail.evidence_inputs_dirty = True
             detail.raw_sources = []
             detail.competitor_kbs = {}
             detail.competitor_knowledge = {}
@@ -2569,7 +2572,11 @@ class RunService(
                 )
             )
             if should_remove:
+                removed_source_ids.add(source.id)
+                detail.evidence_inputs_dirty = True
                 if source.id in preserve_source_ids:
+                    if source.id not in detail.evidence_retired_source_ids:
+                        detail.evidence_retired_source_ids.append(source.id)
                     metadata = {
                         **source.metadata,
                         "redo_preserved_for_existing_citation": True,

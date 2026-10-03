@@ -279,6 +279,9 @@ class RunDetail(RunSummary):
     raw_sources: list[RawSource] = Field(default_factory=list)
     evidence_snapshots: list[RunEvidenceSnapshot] = Field(default_factory=list)
     evidence_snapshot_id: str | None = None
+    evidence_inputs_dirty: bool = False
+    evidence_writer_rewrite_required: bool = False
+    evidence_retired_source_ids: list[str] = Field(default_factory=list)
     evidence_consumptions: list[EvidenceConsumption] = Field(default_factory=list)
     evidence_artifact_dependencies: list[EvidenceArtifactDependency] = Field(default_factory=list)
     competitor_kbs: dict[str, CompetitorKB] = Field(default_factory=dict)

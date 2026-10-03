@@ -171,13 +171,13 @@ self._validate_evidence_use(record, use)
 
 **Files:** 修改 evidence_context.py、service.py `_prepare_redo_scope_inputs`、Analyst `_kb_cache_content_hash` 及已有 structured repair 接线；新建 `backend/tests/integration/test_evidence_snapshot_repair.py`。
 
-- [ ] 写失败用例：价格值变化而正文 hash 不变；其他产品功能不变；决策变化使引用该决策的章节失效；新版本之后完成的旧分支拒绝提交。
-- [ ] Analyst 缓存加入可信范围和选中证据依赖摘要；不把整个全局快照 ID 当成唯一缓存身份。
-- [ ] 比对 changed_evidence，检查 EvidenceConsumption 与 ClaimCardBundle / SectionBrief 的来源依赖。变化使相关分支、决策、章节失效；未变产物可复用并记录原生成快照和当前验证结果。
-- [ ] 依赖缺失时保守重做对应阶段；无法证明章节范围时保留整份 Writer 重写，不伪造定向修复完成。
-- [ ] 补采生成新快照后再调度受影响分析；只改文案的 writer_only 使用同一证据快照。已有报告引用的旧来源保留审计身份，不进入当前可发布事实。
-- [ ] 回放用调用计数证明未变 Analyst 未重新调用，变更分支确实使用新事实；运行 test_redo_routing_contract.py、test_redo_seed_cases.py 与 run_service 回归。
-- [ ] 保存任务提交并完成两级审查。
+- [x] 写失败用例：价格值变化而正文 hash 不变；其他产品功能不变；决策变化使引用该决策的章节失效；新版本之后完成的旧分支拒绝提交。
+- [x] Analyst 缓存加入可信范围和选中证据依赖摘要；不把整个全局快照 ID 当成唯一缓存身份。
+- [x] 比对 changed_evidence，检查 EvidenceConsumption 与 ClaimCardBundle / SectionBrief 的来源依赖。变化使相关分支、决策、章节失效；未变产物可复用并记录原生成快照和当前验证结果。
+- [x] 依赖缺失时保守重做对应阶段；无法证明章节范围时保留整份 Writer 重写，不伪造定向修复完成。
+- [x] 补采生成新快照后再调度受影响分析；只改文案的 writer_only 使用同一证据快照。已有报告引用的旧来源保留审计身份，不进入当前可发布事实。
+- [x] 回放用调用计数证明未变 Analyst 未重新调用，变更分支确实使用新事实；运行 test_redo_routing_contract.py、test_redo_seed_cases.py 与 run_service 回归。
+- [x] 保存任务提交并完成两级审查。
 
 回放的验收断言为：
 

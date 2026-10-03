@@ -1245,6 +1245,7 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
                 or pending_redo.redo_scope.kind in upstream_redo_stages
             )
         )
+        upstream_data_changed = upstream_data_changed or detail.evidence_writer_rewrite_required
         if redo_issues or upstream_data_changed:
             repair_plan = build_writer_repair_plan(
                 detail,

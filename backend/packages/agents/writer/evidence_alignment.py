@@ -23,6 +23,10 @@ class WriterEvidenceAlignmentMixin:
             None,
         )
         previous_payload = self._writer_evidence_artifact_payload(record.detail)
+        if previous_dependency is not None and not self._evidence_artifact_valid(
+            record, kind="writer", payload=previous_payload
+        ):
+            record.detail.evidence_writer_rewrite_required = True
         start_ids = {item.id for item in record.detail.evidence_consumptions}
         views = []
         for competitor in record.detail.plan.competitors:
@@ -118,6 +122,9 @@ class WriterEvidenceAlignmentMixin:
                 uses=[] if draft.writer_preserved_report else uses,
                 payload=self._writer_evidence_artifact_payload(record.detail),
             )
+        if not draft.writer_preserved_report:
+            record.detail.evidence_writer_rewrite_required = False
+            self._persist_run(record.detail.id)
         await self.emit(
             record.detail.id,
             "report_updated",

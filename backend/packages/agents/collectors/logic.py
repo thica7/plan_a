@@ -608,6 +608,20 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             rejection_diagnostics=admission_diagnostics,
         )
         await self._persist_captured_sources_to_kb(record, detail, sources, result, context)
+        readmitted_ids = {
+            source.id for source in sources
+            if source.id in detail.evidence_retired_source_ids
+        }
+        if readmitted_ids:
+            # These sources passed the server's capture and admission pipeline again.
+            detail.raw_sources = [
+                source for source in detail.raw_sources if source.id not in readmitted_ids
+            ]
+            detail.evidence_retired_source_ids = [
+                source_id for source_id in detail.evidence_retired_source_ids
+                if source_id not in readmitted_ids
+            ]
+            detail.evidence_inputs_dirty = True
         self._trace_local_tool(
             record,
             agent="collector",
@@ -915,6 +929,8 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             else (*detail.raw_sources, *batch_sources)
         )
         for source in existing_sources:
+            if source.id in detail.evidence_retired_source_ids:
+                continue
             if source.dimension != dimension or not self._source_matches_competitor(
                 source, competitor
             ):

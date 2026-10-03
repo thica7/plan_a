@@ -196,6 +196,13 @@ def build_writer_repair_plan(
     upstream_data_changed: bool = False,
 ) -> WriterRepairPlan:
     protectable = _previous_report_is_protectable(detail)
+    if detail.evidence_writer_rewrite_required or (
+        upstream_data_changed and detail.evidence_snapshots
+    ):
+        return WriterRepairPlan(
+            mode="full", reason="evidence upstream dependencies require full report regeneration",
+            previous_report_protectable=False, anti_regression_required=False,
+        )
     if upstream_data_changed:
         return _upstream_data_changed_repair_plan(detail, issues, protectable)
     if (
