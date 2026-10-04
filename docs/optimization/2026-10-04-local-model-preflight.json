@@ -1,0 +1,41 @@
+{
+  "network": "offline flags and local-only loaders",
+  "device": "cpu",
+  "external_model_calls": 0,
+  "results": [
+    {
+      "requested_provider": "local-sentence-transformer",
+      "effective_provider": "local-sentence-transformer",
+      "model_version": "BAAI/bge-m3@5617a9f61b028005a4858fdac845db406aefb181",
+      "model_id": "BAAI/bge-m3",
+      "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+      "degraded": false,
+      "reason": null,
+      "device": "cpu",
+      "max_length": 512,
+      "batch_size": 4,
+      "load_time_ms": 2632.6700001955032,
+      "inference_calls": 2,
+      "dimensions": 1024,
+      "prefix": {
+        "query": "",
+        "document": ""
+      }
+    },
+    {
+      "requested_provider": "local-cross-encoder",
+      "effective_provider": "local-cross-encoder",
+      "model_version": "BAAI/bge-reranker-v2-m3@953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+      "model_id": "BAAI/bge-reranker-v2-m3",
+      "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+      "degraded": false,
+      "reason": null,
+      "device": "cpu",
+      "max_length": 512,
+      "batch_size": 4,
+      "load_time_ms": 325.4247079603374,
+      "inference_calls": 1
+    }
+  ],
+  "note": "E5 independently passed earlier; this artifact records BGE model checks only."
+}

@@ -1,0 +1,1009 @@
+{
+  "scope": "four published frozen comparisons only; excludes preflight, superseded replays and failed attempts",
+  "external_model_calls": 0,
+  "arm_count": 32,
+  "model_calls": 640,
+  "initialization_calls": 8,
+  "benchmark_calls": 632,
+  "whole_rag_verified": false,
+  "answer_generated": false,
+  "ragas_status": "not_run",
+  "comparisons": {
+    "e5-candidate": {
+      "file": "2026-10-04-local-comparison-e5-candidate.json",
+      "sha256": "9123b64dfbbf6c72e9a00343b5c4ddc3b760c872ccee6d50a278fd184ffed775",
+      "code_revision": "b23caa888cac066461f152585dc15b7f01b4cf71",
+      "model_calls": 182,
+      "peak_rss_bytes": 2466955264,
+      "peak_rss_scope": {
+        "scope": "process_lifetime",
+        "includes_embedding_and_reranker": true,
+        "resident_model_ids": [
+          "intfloat/multilingual-e5-small",
+          "BAAI/bge-reranker-v2-m3"
+        ]
+      },
+      "arms": {
+        "raw_sparse": {
+          "recall_at_k": 0.0,
+          "recall_at_1": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 1.2485422194004059,
+          "p95_ms": 11.340499855577946,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 7,
+              "retrieval_noise_count": 0
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "raw_dense": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 10.645875241607428,
+          "p95_ms": 12.966209091246128,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 3,
+              "retrieval_noise_count": 7
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "raw_hybrid": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 11.379791889339685,
+          "p95_ms": 11.885249987244606,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 3,
+              "retrieval_noise_count": 7
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "raw_hybrid_rerank": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 148.0060419999063,
+          "p95_ms": 188.8665407896042,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 3,
+              "retrieval_noise_count": 7
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "structured_sparse": {
+          "recall_at_k": 0.0,
+          "recall_at_1": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 1.1654580011963844,
+          "p95_ms": 1.4665829949080944,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 7,
+              "retrieval_noise_count": 0
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "structured_dense": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 10.341249871999025,
+          "p95_ms": 11.247749906033278,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 3,
+              "retrieval_noise_count": 7
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "structured_hybrid": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 11.52462512254715,
+          "p95_ms": 12.009416706860065,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 3,
+              "retrieval_noise_count": 7
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "structured_hybrid_rerank": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 145.1013325713575,
+          "p95_ms": 164.17204216122627,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 3,
+              "retrieval_noise_count": 7
+            }
+          },
+          "source_date_unknown": 13
+        }
+      }
+    },
+    "e5-reviewed": {
+      "file": "2026-10-04-local-comparison-e5-reviewed.json",
+      "sha256": "d1b5ea0335c2fd951b1a890ad11294d49b3332855cc9a4cbbf5cb1a5d96a088e",
+      "code_revision": "b23caa888cac066461f152585dc15b7f01b4cf71",
+      "model_calls": 138,
+      "peak_rss_bytes": 2485649408,
+      "peak_rss_scope": {
+        "scope": "process_lifetime",
+        "includes_embedding_and_reranker": true,
+        "resident_model_ids": [
+          "intfloat/multilingual-e5-small",
+          "BAAI/bge-reranker-v2-m3"
+        ]
+      },
+      "arms": {
+        "raw_sparse": {
+          "recall_at_k": 0.0,
+          "recall_at_1": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 0.9395410306751728,
+          "p95_ms": 9.416958317160606,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "raw_dense": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 0.8,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 11.944290716201067,
+          "p95_ms": 12.250457890331745,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "raw_hybrid": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 0.8,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 11.226832866668701,
+          "p95_ms": 11.832624673843384,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "raw_hybrid_rerank": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 0.8,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 257.63650005683303,
+          "p95_ms": 264.1527079977095,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "structured_sparse": {
+          "recall_at_k": 0.0,
+          "recall_at_1": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 0.9477082639932632,
+          "p95_ms": 1.1085420846939087,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "structured_dense": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 0.8,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 10.545041877776384,
+          "p95_ms": 11.71558303758502,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "structured_hybrid": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 0.8,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 11.109083890914917,
+          "p95_ms": 11.832333635538816,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "structured_hybrid_rerank": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 0.8,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 254.09304210916162,
+          "p95_ms": 262.8830000758171,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        }
+      }
+    },
+    "bge-m3-candidate": {
+      "file": "2026-10-04-local-comparison-bge-m3-candidate.json",
+      "sha256": "be325b40d4930c4f364a59a0d86e03400c68aa9c10f0f8d4fac3430e7cf01dfa",
+      "code_revision": "b23caa888cac066461f152585dc15b7f01b4cf71",
+      "model_calls": 182,
+      "peak_rss_bytes": 3430957056,
+      "peak_rss_scope": {
+        "scope": "process_lifetime",
+        "includes_embedding_and_reranker": true,
+        "resident_model_ids": [
+          "BAAI/bge-m3",
+          "BAAI/bge-reranker-v2-m3"
+        ]
+      },
+      "arms": {
+        "raw_sparse": {
+          "recall_at_k": 0.0,
+          "recall_at_1": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 1.153416931629181,
+          "p95_ms": 10.890583042055368,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 7,
+              "retrieval_noise_count": 0
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "raw_dense": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 90.60274995863438,
+          "p95_ms": 93.73758314177394,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 3,
+              "retrieval_noise_count": 7
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "raw_hybrid": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 92.32187503948808,
+          "p95_ms": 102.89600025862455,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 3,
+              "retrieval_noise_count": 7
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "raw_hybrid_rerank": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 226.65483318269253,
+          "p95_ms": 244.96029084548354,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 3,
+              "retrieval_noise_count": 7
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "structured_sparse": {
+          "recall_at_k": 0.0,
+          "recall_at_1": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 1.2102080509066582,
+          "p95_ms": 1.4599589630961418,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 7,
+              "retrieval_noise_count": 0
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "structured_dense": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 90.50845913589,
+          "p95_ms": 92.39916689693928,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 3,
+              "retrieval_noise_count": 7
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "structured_hybrid": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 92.24045882001519,
+          "p95_ms": 94.72608380019665,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 3,
+              "retrieval_noise_count": 7
+            }
+          },
+          "source_date_unknown": 13
+        },
+        "structured_hybrid_rerank": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 13,
+          "answer_query_count": 5,
+          "p50_ms": 223.63500017672777,
+          "p95_ms": 267.25954096764326,
+          "eligible_source_counts": {
+            "product-research-002": 2,
+            "product-research-008": 2,
+            "product-research-009": 0,
+            "product-research-016": 0,
+            "product-research-020": 0,
+            "product-research-022": 2,
+            "product-research-023": 2,
+            "product-research-024": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 1,
+            "product-research-038": 1,
+            "product-research-046": 0
+          },
+          "outcomes": {
+            "clarify": {
+              "query_count": 1,
+              "retrieval_empty": 1,
+              "retrieval_noise_count": 0
+            },
+            "insufficient": {
+              "query_count": 7,
+              "retrieval_empty": 3,
+              "retrieval_noise_count": 7
+            }
+          },
+          "source_date_unknown": 13
+        }
+      }
+    },
+    "bge-m3-reviewed": {
+      "file": "2026-10-04-local-comparison-bge-m3-reviewed.json",
+      "sha256": "0bfa45d0984ac735c69d108f398bde69953832b25efe559ff40c6249bd0b2fc6",
+      "code_revision": "b23caa888cac066461f152585dc15b7f01b4cf71",
+      "model_calls": 138,
+      "peak_rss_bytes": 3521380352,
+      "peak_rss_scope": {
+        "scope": "process_lifetime",
+        "includes_embedding_and_reranker": true,
+        "resident_model_ids": [
+          "BAAI/bge-m3",
+          "BAAI/bge-reranker-v2-m3"
+        ]
+      },
+      "arms": {
+        "raw_sparse": {
+          "recall_at_k": 0.0,
+          "recall_at_1": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 0.8695423603057861,
+          "p95_ms": 10.895541869103909,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "raw_dense": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 0.8,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 89.73837504163384,
+          "p95_ms": 91.62691608071327,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "raw_hybrid": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 0.8,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 90.51475021988153,
+          "p95_ms": 91.66150027886033,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "raw_hybrid_rerank": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 0.8,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 341.2962080910802,
+          "p95_ms": 387.4940420500934,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "structured_sparse": {
+          "recall_at_k": 0.0,
+          "recall_at_1": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 0.9485422633588314,
+          "p95_ms": 1.1202921159565449,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "structured_dense": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 0.8,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 89.67833407223225,
+          "p95_ms": 90.77120758593082,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "structured_hybrid": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 0.8,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 91.02841559797525,
+          "p95_ms": 93.20616722106934,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        },
+        "structured_hybrid_rerank": {
+          "recall_at_k": 1.0,
+          "recall_at_1": 0.8,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0,
+          "query_count": 5,
+          "answer_query_count": 5,
+          "p50_ms": 329.4011252000928,
+          "p95_ms": 342.3051661811769,
+          "eligible_source_counts": {
+            "product-research-008": 3,
+            "product-research-023": 2,
+            "product-research-026": 2,
+            "product-research-028": 2,
+            "product-research-030": 2
+          },
+          "outcomes": {},
+          "source_date_unknown": 15
+        }
+      }
+    }
+  },
+  "reviewed_dataset": {
+    "counts": {
+      "queries": 5,
+      "unlabeled": 0,
+      "candidate": 0,
+      "reviewed": 5,
+      "source_date_unknown": 15,
+      "included": 5
+    },
+    "sources": 16,
+    "reasons": [
+      "source_date_unknown"
+    ],
+    "non_blind": true,
+    "canonical_superseded_source_count": 5
+  }
+}

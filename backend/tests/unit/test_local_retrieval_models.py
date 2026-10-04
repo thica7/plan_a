@@ -5,6 +5,8 @@ import sys
 from types import ModuleType
 
 import pytest
+
+# isort: split
 from packages.knowledge.local_models import LocalEmbeddingProvider, LocalRerankerProvider
 from packages.knowledge.product_benchmark import provider_readiness
 

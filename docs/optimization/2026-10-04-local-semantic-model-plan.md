@@ -61,9 +61,10 @@ assert not report['semantic_quality_verified']
 
 ## Task 4：冻结比较与交付
 
-- [ ] 运行两embedding的raw/structured × sparse/dense/hybrid/hybrid+rerank，旧候选诊断和新审核范围均保存；top5/pool20固定，不按结果调参。模型串行，截断512、CPUfloat32、独立进程RSS记录。
-- [ ] 统计召回/覆盖/排序与误召回，明确资料补证影响不能归因模型；先比较同一corpus同一问题，再区分新旧版本。
-- [ ] 完整隔离后端与06d785a增量Ruff，最终fresh审查、密钥扫描和diff检查；提交推送并核对远端HEAD；不以5题或本机模型调用替代全RAG验收。
+- [x] 运行两embedding的raw/structured × sparse/dense/hybrid/hybrid+rerank，旧候选诊断和新审核范围均保存，共32组；top5/pool20固定，不按结果调参。模型串行，截断512、CPUfloat32、独立进程RSS记录。新资料消除5个canonical重复，并拆分字段来源后重新回放；旧基线保持原SHA。
+- [x] 统计召回/覆盖/排序及缺证据题的返回资料，明确资料补证影响不能归因模型；同corpus下两模型R@5相同，精排无指标增益。新审核小池2–3资料，Top1文档recall上限80%；缺证据候选返回资料不等于实际误答，下一轮需审核部分回答边界。
+- [x] 完整隔离后端2825 passed/1 skipped/152 warnings，06d785a增量Ruff六个Python文件新增0；最终fresh交付审查通过，模型及资料指纹一致，22个明确交付文件密钥扫描通过，diff检查通过。不以5题或本机模型调用替代全RAG验收。
+- [ ] 提交推送并核对远端HEAD。
 
 ```bash
 ../plan_a/.venv/bin/python /private/tmp/plan_a_phase2_full_verify.py -q backend/tests --tb=short

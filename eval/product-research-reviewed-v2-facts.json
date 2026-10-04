@@ -1,0 +1,191 @@
+{
+  "dataset_version": "reviewed-v2",
+  "reviewed_by": "project_user",
+  "reviewed_at": "2026-10-04T09:29:42Z",
+  "review_source": "user_message_2026-10-04",
+  "facts": {
+    "008": {
+      "support_duration_years": 7,
+      "support_start_basis": "first availability on US Google Store",
+      "support_until_month": "2030-10",
+      "support_until_origin": "derived_from_policy_and_release_month",
+      "has_exact_day": false,
+      "exact_day": null,
+      "field_sources": {
+        "support_duration_years": [
+          "https://support.google.com/pixelphone/answer/4457705?hl=en"
+        ],
+        "support_start_basis": [
+          "https://support.google.com/pixelphone/answer/4457705?hl=en"
+        ],
+        "support_until_month": [
+          "https://support.google.com/pixelphone/answer/4457705?hl=en",
+          "https://support.google.com/pixelphone/answer/15738422?hl=en"
+        ]
+      }
+    },
+    "023": {
+      "covered_dimensions": [
+        "billing_interval",
+        "renewal",
+        "relative_cost",
+        "seat_count"
+      ],
+      "billing_intervals": [
+        "monthly",
+        "annual"
+      ],
+      "annual_relative_cost": "less",
+      "price_amount_supported": false,
+      "price_matrix": [],
+      "amount_question_status": "missing_entity_price",
+      "missing_price_fields": [
+        "plan",
+        "currency",
+        "amount",
+        "tax_scope"
+      ],
+      "old_report_amount_is_current_evidence": false
+    },
+    "026": {
+      "price_matrix": [
+        {
+          "plan": "Professional",
+          "seat_type": "Full",
+          "billing_interval": "annual",
+          "currency": "USD",
+          "amount": 16,
+          "amount_period": "month",
+          "unit": "per_seat",
+          "tax_scope": "unknown",
+          "verified_at": "2026-10-04T09:29:42Z",
+          "annual_amount_is_monthly_equivalent": true
+        },
+        {
+          "plan": "Professional",
+          "seat_type": "Full",
+          "billing_interval": "monthly",
+          "currency": "USD",
+          "amount": 20,
+          "amount_period": "month",
+          "unit": "per_seat",
+          "tax_scope": "unknown",
+          "verified_at": "2026-10-04T09:29:42Z",
+          "annual_amount_is_monthly_equivalent": false
+        },
+        {
+          "plan": "Professional",
+          "seat_type": "Dev",
+          "billing_interval": "annual",
+          "currency": "USD",
+          "amount": 12,
+          "amount_period": "month",
+          "unit": "per_seat",
+          "tax_scope": "unknown",
+          "verified_at": "2026-10-04T09:29:42Z",
+          "annual_amount_is_monthly_equivalent": true
+        },
+        {
+          "plan": "Professional",
+          "seat_type": "Dev",
+          "billing_interval": "monthly",
+          "currency": "USD",
+          "amount": 15,
+          "amount_period": "month",
+          "unit": "per_seat",
+          "tax_scope": "unknown",
+          "verified_at": "2026-10-04T09:29:42Z",
+          "annual_amount_is_monthly_equivalent": false
+        },
+        {
+          "plan": "Professional",
+          "seat_type": "Collab",
+          "billing_interval": "annual",
+          "currency": "USD",
+          "amount": 3,
+          "amount_period": "month",
+          "unit": "per_seat",
+          "tax_scope": "unknown",
+          "verified_at": "2026-10-04T09:29:42Z",
+          "annual_amount_is_monthly_equivalent": true
+        },
+        {
+          "plan": "Professional",
+          "seat_type": "Collab",
+          "billing_interval": "monthly",
+          "currency": "USD",
+          "amount": 5,
+          "amount_period": "month",
+          "unit": "per_seat",
+          "tax_scope": "unknown",
+          "verified_at": "2026-10-04T09:29:42Z",
+          "annual_amount_is_monthly_equivalent": false
+        }
+      ],
+      "price_amount_supported": true,
+      "price_scope": "public website USD display",
+      "tax_scope": "unknown",
+      "billing_controls_observed": [
+        "Annual selected",
+        "Monthly selected"
+      ]
+    },
+    "028": {
+      "capabilities": [
+        "advanced_inspection",
+        "codegen",
+        "asset_download",
+        "version_comparison",
+        "design_handoff"
+      ],
+      "preconditions": {
+        "operator": "AND",
+        "plan_level": [
+          "Professional",
+          "Organization",
+          "Enterprise"
+        ],
+        "seat_type": [
+          "Full",
+          "Dev"
+        ]
+      },
+      "constraint_applies_to": "full Dev Mode capability",
+      "basic_viewer_inspection_not_ruled_out": true
+    },
+    "030": {
+      "visibility_limit": {
+        "free_days": 90,
+        "paid_days": null,
+        "paid_scope": "no free-plan 90-day cap; only retained data is accessible"
+      },
+      "retention_action": {
+        "free_options": [
+          "rolling_delete_after_1_year",
+          "delete_after_90_days"
+        ],
+        "paid_default": "retain_for_workspace_lifetime",
+        "paid_custom_timeline_supported": true
+      },
+      "free_default_configuration_verified": false,
+      "message_channel_override_supported": true,
+      "exceptions": [
+        "Enterprise-sponsored Slack Connect messages may have different retention"
+      ],
+      "scope": "ordinary workspace message history; settings and exceptions must be checked",
+      "field_sources": {
+        "visibility_limit.free_days": [
+          "https://slack.com/help/articles/27204752526611-Feature-limitations-on-the-free-version-of-Slack"
+        ],
+        "retention_action": [
+          "https://slack.com/intl/en-gb/help/articles/203457187-Customise-data-retention-in-Slack"
+        ]
+      }
+    }
+  },
+  "limits": [
+    "No customer-specific tax/final bill verified.",
+    "Free Slack actual default setting is not certified by generic documentation.",
+    "Official supplemental limits are not blanket approval of newly authored test questions."
+  ]
+}

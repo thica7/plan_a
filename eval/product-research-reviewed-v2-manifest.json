@@ -1,0 +1,36 @@
+{
+  "dataset_version": "reviewed-v2",
+  "baseline_commit": "06d785a",
+  "old_inputs_sha256": {
+    "product-research-corpus.jsonl": "ef36f9d26c57ac4b801869319a165d7b079d60aa2e2dde19f450733046f292f5",
+    "product-research-queries-draft.jsonl": "f9da9a5a9a7753cd7d89ba9ede84e44fa456614ec01475ce1986206bd0fc15c7",
+    "product-research-labels.jsonl": "80e995549deb649480270bbc85c7122c538fc43cc5f362a0a028796c0230f8cf"
+  },
+  "new_inputs_sha256": {
+    "product-research-reviewed-v2-corpus.jsonl": "199323e2e17fd37c7433c3f49571ecd60df50064503fe729293447a7eb97290e",
+    "product-research-reviewed-v2-queries.jsonl": "de76a769653c2a195644233dfd54cf62550a2651c6aaea038c47824e69147156",
+    "product-research-reviewed-v2-labels.jsonl": "2adf22ca5169e5ddd7f4a723ecb874eb73553361a15b5ade9497be7392fa748a"
+  },
+  "supplemental_facts_sha256": "9a9cca6b1b140fdabe88652df6bf088251a4e3c1a7fe5dd93a4dcf80ee13c9f6",
+  "reviewed_query_ids": [
+    "product-research-008",
+    "product-research-023",
+    "product-research-026",
+    "product-research-028",
+    "product-research-030"
+  ],
+  "human_reviewed": 5,
+  "old_sources": 14,
+  "retained_old_sources": 9,
+  "superseded_sources": {
+    "google-pixel8-updates-us": "google-pixel8-updates-us-v2",
+    "notion-billing-global": "notion-billing-global-v2",
+    "figma-pricing-global": "figma-pricing-global-v2",
+    "figma-devmode-global": "figma-devmode-global-v2",
+    "slack-free-history-global": "slack-free-history-global-v2"
+  },
+  "canonical_deduplication_note": "Five old excerpts share official URL/product/market/role with the replacement summaries. They remain in the immutable original corpus, but are not co-indexed as separately active documents in reviewed-v2. This fixes ingestion identity, not retrieval result tuning.",
+  "new_sources": 7,
+  "query_text_unchanged": true,
+  "exposure_note": "These five questions and source gaps were already inspected. This small reviewed dataset is not a blind holdout or a generalization certificate."
+}
