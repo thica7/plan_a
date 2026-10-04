@@ -1,0 +1,805 @@
+{
+  "mode": "candidate-diagnostic",
+  "dataset": {
+    "queries": 50,
+    "unlabeled": 37,
+    "candidate": 13,
+    "reviewed": 0,
+    "source_date_unknown": 13,
+    "included": 13
+  },
+  "dataset_reasons": [
+    "source_date_unknown"
+  ],
+  "semantic_quality_verified": false,
+  "provider": {
+    "requested_provider": "unconfigured",
+    "effective_provider": "unconfigured",
+    "model_version": null,
+    "dimensions": null,
+    "index_version": null,
+    "degraded": false,
+    "semantic_ready": false,
+    "semantic_quality_verified": false,
+    "reason": "real semantic model unavailable"
+  },
+  "reranker": {
+    "effective_provider": "unconfigured"
+  },
+  "model_calls": 0,
+  "queries": [
+    {
+      "query_id": "product-research-002",
+      "original_query": "截至研究日，iPhone 15不同容量的官方价格与促销价格应该怎样区分？",
+      "expected_outcome": "insufficient",
+      "review_status": "candidate",
+      "category": "消费电子",
+      "language": "mixed",
+      "market": "中国大陆",
+      "product": "iPhone 15",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": null,
+      "proofs": [
+        {
+          "source_id": "apple-iphone15-launch-cn-20230912",
+          "start": 0,
+          "end": 53,
+          "quote": "起售价分别为 RMB 5,999 或每月 RMB 250 和 RMB 6,999 或每月 RMB 292。",
+          "content_hash": "959adea9d67205cdd6d8ee6925d9da62b4016a3b963e3e3538d7bfd597c59c50",
+          "retrieved": false,
+          "quote_matches_saved_excerpt": true,
+          "quote_in_retrieved_excerpt": false
+        }
+      ],
+      "date_exclusions": [],
+      "missing_source_ids": [
+        "apple-iphone15-launch-cn-20230912"
+      ],
+      "failure_reasons": [
+        "proof_source_not_retrieved",
+        "proof_excerpt_not_retrieved"
+      ],
+      "retrieval_empty": true,
+      "retrieval_noise_count": 0,
+      "latency_ms": 8.096457924693823,
+      "ragas_input": {
+        "query": "截至研究日，iPhone 15不同容量的官方价格与促销价格应该怎样区分？",
+        "response": null,
+        "reference_facts": [
+          "发布时价格不能直接代表研究日的在售价和促销价。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    },
+    {
+      "query_id": "product-research-008",
+      "original_query": "Pixel 8的软件支持承诺是否有明确截止时间，旧评测能否用于当前报告？",
+      "expected_outcome": "answer",
+      "review_status": "candidate",
+      "category": "消费电子",
+      "language": "mixed",
+      "market": "美国",
+      "product": "Pixel 8",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": {
+        "relevant_count": 1,
+        "retrieved_count": 0,
+        "matched_count": 0,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "proofs": [
+        {
+          "source_id": "google-pixel8-updates-us",
+          "start": 0,
+          "end": 78,
+          "quote": "Pixel 8 and later phones will get updates for 7 years\n\nGoogle Store in the US.",
+          "content_hash": "eaf9d7b26e7aee2aaa479a0638a76b886d8ece4062d95b2cb645e05e4c949295",
+          "retrieved": false,
+          "quote_matches_saved_excerpt": true,
+          "quote_in_retrieved_excerpt": false
+        }
+      ],
+      "date_exclusions": [],
+      "missing_source_ids": [
+        "google-pixel8-updates-us"
+      ],
+      "failure_reasons": [
+        "proof_source_not_retrieved",
+        "proof_excerpt_not_retrieved"
+      ],
+      "retrieval_empty": true,
+      "retrieval_noise_count": null,
+      "latency_ms": 1.265666913241148,
+      "ragas_input": {
+        "query": "Pixel 8的软件支持承诺是否有明确截止时间，旧评测能否用于当前报告？",
+        "response": null,
+        "reference_facts": [
+          "Pixel 8 获得 7 年更新，起点是美国 Google Store 首次上市；旧评测不能代替当前官方支持说明。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    },
+    {
+      "query_id": "product-research-009",
+      "original_query": "美国版Pixel 8资料中哪些功能不能直接推断在中国大陆可用？",
+      "expected_outcome": "insufficient",
+      "review_status": "candidate",
+      "category": "消费电子",
+      "language": "mixed",
+      "market": "中国大陆",
+      "product": "Pixel 8",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": null,
+      "proofs": [],
+      "date_exclusions": [],
+      "missing_source_ids": [],
+      "failure_reasons": [],
+      "retrieval_empty": true,
+      "retrieval_noise_count": 0,
+      "latency_ms": 1.0642497800290585,
+      "ragas_input": {
+        "query": "美国版Pixel 8资料中哪些功能不能直接推断在中国大陆可用？",
+        "response": null,
+        "reference_facts": [
+          "美国版功能受地域和运营商影响，不能自动套用中国大陆。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    },
+    {
+      "query_id": "product-research-016",
+      "original_query": "DJI Mini 4 Pro的续航与图传数据有哪些测试条件或脚注？",
+      "expected_outcome": "insufficient",
+      "review_status": "candidate",
+      "category": "消费电子",
+      "language": "mixed",
+      "market": "中国大陆",
+      "product": "DJI Mini 4 Pro",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": null,
+      "proofs": [],
+      "date_exclusions": [],
+      "missing_source_ids": [],
+      "failure_reasons": [],
+      "retrieval_empty": true,
+      "retrieval_noise_count": 0,
+      "latency_ms": 1.1346661485731602,
+      "ragas_input": {
+        "query": "DJI Mini 4 Pro的续航与图传数据有哪些测试条件或脚注？",
+        "response": null,
+        "reference_facts": [
+          "尚缺中国大陆原规格页的完整续航、图传测试条件和脚注。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    },
+    {
+      "query_id": "product-research-020",
+      "original_query": "我想调研iphone duo。是否有足够官方资料确认产品身份，还是应先向用户澄清？",
+      "expected_outcome": "clarify",
+      "review_status": "candidate",
+      "category": "消费电子",
+      "language": "mixed",
+      "market": "未确定",
+      "product": "iphone duo",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": null,
+      "proofs": [],
+      "date_exclusions": [],
+      "missing_source_ids": [],
+      "failure_reasons": [],
+      "retrieval_empty": true,
+      "retrieval_noise_count": 0,
+      "latency_ms": 1.0950416326522827,
+      "ragas_input": {
+        "query": "我想调研iphone duo。是否有足够官方资料确认产品身份，还是应先向用户澄清？",
+        "response": null,
+        "reference_facts": [
+          "需要用户给出官网链接或完整型号，才能确认 iphone duo 指代。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    },
+    {
+      "query_id": "product-research-022",
+      "original_query": "Notion不同套餐的成员、访客与功能限制，应从哪些原始表格和脚注核实？",
+      "expected_outcome": "insufficient",
+      "review_status": "candidate",
+      "category": "SaaS",
+      "language": "mixed",
+      "market": "全球",
+      "product": "Notion",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": null,
+      "proofs": [
+        {
+          "source_id": "notion-guests-global",
+          "start": 0,
+          "end": 82,
+          "quote": "Remember that guests can be added to individual pages, not to an entire workspace.",
+          "content_hash": "9c2431e521c24ed5cfe62356ba9926621e108a97d37cd7bd27943054b68ba397",
+          "retrieved": false,
+          "quote_matches_saved_excerpt": true,
+          "quote_in_retrieved_excerpt": false
+        }
+      ],
+      "date_exclusions": [],
+      "missing_source_ids": [
+        "notion-guests-global"
+      ],
+      "failure_reasons": [
+        "proof_source_not_retrieved",
+        "proof_excerpt_not_retrieved"
+      ],
+      "retrieval_empty": true,
+      "retrieval_noise_count": 0,
+      "latency_ms": 1.0682917200028896,
+      "ragas_input": {
+        "query": "Notion不同套餐的成员、访客与功能限制，应从哪些原始表格和脚注核实？",
+        "response": null,
+        "reference_facts": [
+          "访客只能访问受邀页面；资料不足以核实全部套餐成员与访客限制。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    },
+    {
+      "query_id": "product-research-023",
+      "original_query": "Notion按月与按年报价如何区分，能否用旧报告中的价格回答当前问题？",
+      "expected_outcome": "answer",
+      "review_status": "candidate",
+      "category": "SaaS",
+      "language": "mixed",
+      "market": "全球",
+      "product": "Notion",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": {
+        "relevant_count": 1,
+        "retrieved_count": 0,
+        "matched_count": 0,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "proofs": [
+        {
+          "source_id": "notion-billing-global",
+          "start": 0,
+          "end": 90,
+          "quote": "You can choose to pay for Notion on a yearly or monthly basis.\n\nYearly billing costs less.",
+          "content_hash": "8a7ffe028c528ea2357a884cacf4c056985e2ea17bd6c7a68618504aca736dba",
+          "retrieved": false,
+          "quote_matches_saved_excerpt": true,
+          "quote_in_retrieved_excerpt": false
+        }
+      ],
+      "date_exclusions": [],
+      "missing_source_ids": [
+        "notion-billing-global"
+      ],
+      "failure_reasons": [
+        "proof_source_not_retrieved",
+        "proof_excerpt_not_retrieved"
+      ],
+      "retrieval_empty": true,
+      "retrieval_noise_count": null,
+      "latency_ms": 1.0442081838846207,
+      "ragas_input": {
+        "query": "Notion按月与按年报价如何区分，能否用旧报告中的价格回答当前问题？",
+        "response": null,
+        "reference_facts": [
+          "Notion 支持月付和年付，官方说明年付费用更低；旧报价需重新核实。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    },
+    {
+      "query_id": "product-research-024",
+      "original_query": "如果资料只说明Notion的笔记功能，能否断言它满足某行业的全部合规要求？",
+      "expected_outcome": "insufficient",
+      "review_status": "candidate",
+      "category": "SaaS",
+      "language": "mixed",
+      "market": "全球",
+      "product": "Notion",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": null,
+      "proofs": [],
+      "date_exclusions": [],
+      "missing_source_ids": [],
+      "failure_reasons": [],
+      "retrieval_empty": true,
+      "retrieval_noise_count": 0,
+      "latency_ms": 1.07466708868742,
+      "ragas_input": {
+        "query": "如果资料只说明Notion的笔记功能，能否断言它满足某行业的全部合规要求？",
+        "response": null,
+        "reference_facts": [
+          "笔记能力资料不足以证明某行业全部合规要求；需要明确行业、地区和要求。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    },
+    {
+      "query_id": "product-research-026",
+      "original_query": "Figma不同席位和套餐的收费口径应如何拆开，避免把一种席位价格套用于所有用户？",
+      "expected_outcome": "answer",
+      "review_status": "candidate",
+      "category": "SaaS",
+      "language": "mixed",
+      "market": "全球",
+      "product": "Figma",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": {
+        "relevant_count": 1,
+        "retrieved_count": 0,
+        "matched_count": 0,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "proofs": [
+        {
+          "source_id": "figma-pricing-global",
+          "start": 0,
+          "end": 93,
+          "quote": "Prices in USD\n\nProfessional\nMonthly Annual\nFull seat\n$16/mo\nDev seat\n$12/mo\nCollab seat\n$3/mo",
+          "content_hash": "f63c5eded0e60c4f14b3b9bd8edd5211d8c03b2b4cee65fd29de60c9a13e371c",
+          "retrieved": false,
+          "quote_matches_saved_excerpt": true,
+          "quote_in_retrieved_excerpt": false
+        }
+      ],
+      "date_exclusions": [],
+      "missing_source_ids": [
+        "figma-pricing-global"
+      ],
+      "failure_reasons": [
+        "proof_source_not_retrieved",
+        "proof_excerpt_not_retrieved"
+      ],
+      "retrieval_empty": true,
+      "retrieval_noise_count": null,
+      "latency_ms": 1.1494997888803482,
+      "ragas_input": {
+        "query": "Figma不同席位和套餐的收费口径应如何拆开，避免把一种席位价格套用于所有用户？",
+        "response": null,
+        "reference_facts": [
+          "Professional 的 Full、Dev、Collab 是不同席位，需分别记录价格和计费周期。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    },
+    {
+      "query_id": "product-research-028",
+      "original_query": "Find original evidence for Figma design handoff capabilities，输出中文并保留出处。",
+      "expected_outcome": "answer",
+      "review_status": "candidate",
+      "category": "SaaS",
+      "language": "mixed",
+      "market": "全球",
+      "product": "Figma",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": {
+        "relevant_count": 1,
+        "retrieved_count": 0,
+        "matched_count": 0,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "proofs": [
+        {
+          "source_id": "figma-devmode-global",
+          "start": 0,
+          "end": 155,
+          "quote": "inspecting designs, viewing properties and generated code, downloading assets, comparing changes, and managing design handoff.\n\nAvailable on all paid plans",
+          "content_hash": "bd43724abb0254597d647e1007535925db98d64ea0a9a3f05b811a90498b2313",
+          "retrieved": false,
+          "quote_matches_saved_excerpt": true,
+          "quote_in_retrieved_excerpt": false
+        }
+      ],
+      "date_exclusions": [],
+      "missing_source_ids": [
+        "figma-devmode-global"
+      ],
+      "failure_reasons": [
+        "proof_source_not_retrieved",
+        "proof_excerpt_not_retrieved"
+      ],
+      "retrieval_empty": true,
+      "retrieval_noise_count": null,
+      "latency_ms": 0.8757077157497406,
+      "ragas_input": {
+        "query": "Find original evidence for Figma design handoff capabilities，输出中文并保留出处。",
+        "response": null,
+        "reference_facts": [
+          "Dev Mode 支持设计检查、生成代码查看、资产下载、版本比较与交付；适用于付费计划。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    },
+    {
+      "query_id": "product-research-030",
+      "original_query": "Slack的消息保留能力是否随套餐变化，资料中的限制条件在哪里？",
+      "expected_outcome": "answer",
+      "review_status": "candidate",
+      "category": "SaaS",
+      "language": "mixed",
+      "market": "全球",
+      "product": "Slack",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": {
+        "relevant_count": 1,
+        "retrieved_count": 0,
+        "matched_count": 0,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "proofs": [
+        {
+          "source_id": "slack-free-history-global",
+          "start": 0,
+          "end": 110,
+          "quote": "90 days of message and file history\n\nall data in your workspace that's more than one year old will be deleted.",
+          "content_hash": "60ecd1bc7142d5414027e89043e16be26b51e632f7986bb540b5606db865baf0",
+          "retrieved": false,
+          "quote_matches_saved_excerpt": true,
+          "quote_in_retrieved_excerpt": false
+        }
+      ],
+      "date_exclusions": [],
+      "missing_source_ids": [
+        "slack-free-history-global"
+      ],
+      "failure_reasons": [
+        "proof_source_not_retrieved",
+        "proof_excerpt_not_retrieved"
+      ],
+      "retrieval_empty": true,
+      "retrieval_noise_count": null,
+      "latency_ms": 0.9985421784222126,
+      "ragas_input": {
+        "query": "Slack的消息保留能力是否随套餐变化，资料中的限制条件在哪里？",
+        "response": null,
+        "reference_facts": [
+          "Slack 免费版的可见消息/文件历史为 90 天；超过一年的工作区数据删除，二者应区分。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    },
+    {
+      "query_id": "product-research-038",
+      "original_query": "Shopify套餐费、支付费用与第三方应用费用如何分别核实？",
+      "expected_outcome": "insufficient",
+      "review_status": "candidate",
+      "category": "SaaS",
+      "language": "mixed",
+      "market": "美国",
+      "product": "Shopify",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": null,
+      "proofs": [
+        {
+          "source_id": "shopify-thirdparty-fees-us",
+          "start": 0,
+          "end": 144,
+          "quote": "Third-party transaction fees may apply when you use a third-party payment provider (instead of Shopify Payments). The rate depends on your plan.",
+          "content_hash": "c13942ec54e1f910a714421c03339b2c349197bac2333b638ea99b45534274da",
+          "retrieved": false,
+          "quote_matches_saved_excerpt": true,
+          "quote_in_retrieved_excerpt": false
+        }
+      ],
+      "date_exclusions": [],
+      "missing_source_ids": [
+        "shopify-thirdparty-fees-us"
+      ],
+      "failure_reasons": [
+        "proof_source_not_retrieved",
+        "proof_excerpt_not_retrieved"
+      ],
+      "retrieval_empty": true,
+      "retrieval_noise_count": 0,
+      "latency_ms": 0.9417086839675903,
+      "ragas_input": {
+        "query": "Shopify套餐费、支付费用与第三方应用费用如何分别核实？",
+        "response": null,
+        "reference_facts": [
+          "第三方支付交易费随套餐变化；尚缺美国口径的完整套餐、支付和应用费用组合。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    },
+    {
+      "query_id": "product-research-046",
+      "original_query": "没有足够可靠配送时效数据时，能否直接判断饿了么比竞品更快？",
+      "expected_outcome": "insufficient",
+      "review_status": "candidate",
+      "category": "生活服务",
+      "language": "cjk",
+      "market": "上海",
+      "product": "饿了么",
+      "as_of": "2026-10-04",
+      "hits": [],
+      "metrics": null,
+      "proofs": [],
+      "date_exclusions": [],
+      "missing_source_ids": [],
+      "failure_reasons": [],
+      "retrieval_empty": true,
+      "retrieval_noise_count": 0,
+      "latency_ms": 1.019416842609644,
+      "ragas_input": {
+        "query": "没有足够可靠配送时效数据时，能否直接判断饿了么比竞品更快？",
+        "response": null,
+        "reference_facts": [
+          "没有可靠配送时效对照时，不能判断饿了么比竞品更快。"
+        ],
+        "review_status": "candidate",
+        "retrieved_source_ids": [],
+        "contexts": []
+      }
+    }
+  ],
+  "modes": {
+    "sparse": {
+      "status": "completed",
+      "top_k": 5,
+      "query_count": 13,
+      "answer_query_count": 5,
+      "recall_at_k": 0.0,
+      "mrr": 0.0,
+      "ndcg_at_k": 0.0
+    },
+    "dense": {
+      "status": "not_run",
+      "reason": "offline run has no vector index or model execution"
+    },
+    "rrf": {
+      "status": "not_run",
+      "reason": "offline run has no vector index or model execution"
+    },
+    "rrf_rerank": {
+      "status": "not_run",
+      "reason": "offline run has no vector index or model execution"
+    }
+  },
+  "outcomes": {
+    "clarify": {
+      "query_count": 1,
+      "retrieval_empty": 1,
+      "retrieval_noise_count": 0
+    },
+    "insufficient": {
+      "query_count": 7,
+      "retrieval_empty": 7,
+      "retrieval_noise_count": 0
+    }
+  },
+  "groups": {
+    "category": {
+      "消费电子": {
+        "query_count": 5,
+        "answer_query_count": 1,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "SaaS": {
+        "query_count": 7,
+        "answer_query_count": 4,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "生活服务": {
+        "query_count": 1,
+        "answer_query_count": 0,
+        "recall_at_k": null,
+        "mrr": null,
+        "ndcg_at_k": null
+      }
+    },
+    "language": {
+      "mixed": {
+        "query_count": 12,
+        "answer_query_count": 5,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "cjk": {
+        "query_count": 1,
+        "answer_query_count": 0,
+        "recall_at_k": null,
+        "mrr": null,
+        "ndcg_at_k": null
+      }
+    },
+    "market": {
+      "中国大陆": {
+        "query_count": 3,
+        "answer_query_count": 0,
+        "recall_at_k": null,
+        "mrr": null,
+        "ndcg_at_k": null
+      },
+      "美国": {
+        "query_count": 2,
+        "answer_query_count": 1,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "未确定": {
+        "query_count": 1,
+        "answer_query_count": 0,
+        "recall_at_k": null,
+        "mrr": null,
+        "ndcg_at_k": null
+      },
+      "全球": {
+        "query_count": 6,
+        "answer_query_count": 4,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "上海": {
+        "query_count": 1,
+        "answer_query_count": 0,
+        "recall_at_k": null,
+        "mrr": null,
+        "ndcg_at_k": null
+      }
+    },
+    "product": {
+      "iPhone 15": {
+        "query_count": 1,
+        "answer_query_count": 0,
+        "recall_at_k": null,
+        "mrr": null,
+        "ndcg_at_k": null
+      },
+      "Pixel 8": {
+        "query_count": 2,
+        "answer_query_count": 1,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "DJI Mini 4 Pro": {
+        "query_count": 1,
+        "answer_query_count": 0,
+        "recall_at_k": null,
+        "mrr": null,
+        "ndcg_at_k": null
+      },
+      "iphone duo": {
+        "query_count": 1,
+        "answer_query_count": 0,
+        "recall_at_k": null,
+        "mrr": null,
+        "ndcg_at_k": null
+      },
+      "Notion": {
+        "query_count": 3,
+        "answer_query_count": 1,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "Figma": {
+        "query_count": 2,
+        "answer_query_count": 2,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "Slack": {
+        "query_count": 1,
+        "answer_query_count": 1,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      },
+      "Shopify": {
+        "query_count": 1,
+        "answer_query_count": 0,
+        "recall_at_k": null,
+        "mrr": null,
+        "ndcg_at_k": null
+      },
+      "饿了么": {
+        "query_count": 1,
+        "answer_query_count": 0,
+        "recall_at_k": null,
+        "mrr": null,
+        "ndcg_at_k": null
+      }
+    },
+    "as_of": {
+      "2026-10-04": {
+        "query_count": 13,
+        "answer_query_count": 5,
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0
+      }
+    }
+  },
+  "index_ingest_ms": 30.08525026962161,
+  "retrieval_latency_ms": {
+    "p50": 1.0682917200028896,
+    "p95": 8.096457924693823
+  },
+  "sqlite_file_bytes": 221184,
+  "peak_rss_bytes": 89620480,
+  "factual_quality": {
+    "status": "not_run",
+    "reason": "no generated answer or human adjudication"
+  },
+  "clarification_behavior": {
+    "status": "not_run",
+    "reason": "no answer model executed"
+  },
+  "refusal_behavior": {
+    "status": "not_run",
+    "reason": "no answer model executed"
+  },
+  "ragas": {
+    "status": "not_run",
+    "reason": "no model response or reviewed reference for answer scoring"
+  },
+  "snapshot": {
+    "scope": {
+      "workspace_id": "product-eval-offline",
+      "project_id": "fixed-corpus"
+    },
+    "source_roles": [
+      "source"
+    ],
+    "date_rule": "exclude dates after as_of; undated sources require fetched_at <= as_of"
+  }
+}

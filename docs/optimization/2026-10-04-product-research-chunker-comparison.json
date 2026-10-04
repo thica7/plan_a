@@ -1,0 +1,147 @@
+{
+  "evaluation_kind": "candidate_offline_chunker_retrieval_comparison",
+  "baseline_chunker_commit": "751a9c2",
+  "baseline_and_current_share": "all corpus sources, original queries, filters and labels",
+  "mode": "sparse",
+  "top_k": 5,
+  "dataset": {
+    "queries": 50,
+    "unlabeled": 37,
+    "candidate": 13,
+    "reviewed": 0,
+    "source_date_unknown": 13,
+    "included": 13
+  },
+  "model_calls": 0,
+  "semantic_quality_verified": false,
+  "legacy_metrics": {
+    "status": "completed",
+    "top_k": 5,
+    "query_count": 13,
+    "answer_query_count": 5,
+    "recall_at_k": 0.0,
+    "mrr": 0.0,
+    "ndcg_at_k": 0.0
+  },
+  "structured_metrics": {
+    "status": "completed",
+    "top_k": 5,
+    "query_count": 13,
+    "answer_query_count": 5,
+    "recall_at_k": 0.0,
+    "mrr": 0.0,
+    "ndcg_at_k": 0.0
+  },
+  "per_query": [
+    {
+      "query_id": "product-research-002",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    },
+    {
+      "query_id": "product-research-008",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    },
+    {
+      "query_id": "product-research-009",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    },
+    {
+      "query_id": "product-research-016",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    },
+    {
+      "query_id": "product-research-020",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    },
+    {
+      "query_id": "product-research-022",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    },
+    {
+      "query_id": "product-research-023",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    },
+    {
+      "query_id": "product-research-024",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    },
+    {
+      "query_id": "product-research-026",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    },
+    {
+      "query_id": "product-research-028",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    },
+    {
+      "query_id": "product-research-030",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    },
+    {
+      "query_id": "product-research-038",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    },
+    {
+      "query_id": "product-research-046",
+      "original_query_unchanged": true,
+      "legacy_source_ids": [],
+      "structured_source_ids": [],
+      "metrics_unchanged": true,
+      "proof_excerpt_coverage_unchanged": true
+    }
+  ],
+  "limits": [
+    "Candidate labels have no human review; metrics are diagnostic only.",
+    "Short saved excerpts do not validate full-page extraction.",
+    "Identical chunk inputs do not demonstrate retrieval improvement.",
+    "Latency differences between these small runs are not a performance claim."
+  ]
+}
