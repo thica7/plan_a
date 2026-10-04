@@ -1,0 +1,3 @@
+{"query_id": "intent-tuning-002", "intent": {"fact_queries": ["export", "refund"], "output_language": "中文", "require_citations": true}}
+{"query_id": "intent-tuning-003", "intent": {"fact_queries": ["warranty"], "required_terms": ["months"]}}
+{"query_id": "intent-tuning-007", "intent": {"fact_queries": ["export"], "required_terms": ["quantumtunneling"]}}

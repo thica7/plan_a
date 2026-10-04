@@ -48,8 +48,8 @@ assert response.diagnostics['query_plan']['queries'] == ('export', 'refund')
 
 **Files:** 修改backend/packages/knowledge/product_benchmark.py和backend/tests/unit/test_product_research_benchmark.py；新增独立tuning意图JSONL和对照结果，不改原evaluation三文件。
 
-- [ ] RED：默认raw使用原问题；structured去完整格式后缀，intent可做两事实；原问题/标签不变；重复ID、未知ID、答案字段及raw+intent拒绝。
-- [ ] API增加intent_policy='raw'、可空intent_plan_path；CLI增加--intent-policy raw|structured、--intent-plan。文件格式为每行query_id及intent对象，只按RetrievalIntent校验；记录真实query_plan和每条实际FTS表达式，保留现有指标及未执行模型状态。
+- [x] RED：默认raw使用原问题；structured去完整格式后缀，intent可做两事实；原问题/标签不变；重复ID、未知ID、答案字段及raw+intent拒绝。
+- [x] API增加intent_policy='raw'、可空intent_plan_path；CLI增加--intent-policy raw|structured、--intent-plan。文件格式为每行query_id及intent对象，只按RetrievalIntent校验；记录真实query_plan和每条实际FTS表达式，保留现有指标及未执行模型状态。
 
 ```python
 raw = await run_product_benchmark(*paths, mode='tuning-diagnostic', intent_policy='raw')
@@ -60,7 +60,7 @@ assert raw['queries'][0]['original_query'] == structured['queries'][0]['original
 assert not structured['semantic_quality_verified']
 ```
 
-- [ ] 独立虚构问题GREEN，SPEC、QUALITY后冻结；原候选仅跑一次raw/structured对照，保留输入hash，不迎合gold。旧词典不改。
+- [x] 独立虚构问题GREEN，SPEC、QUALITY后冻结；原候选仅跑一次raw/structured对照，保留输入hash，不迎合gold。旧词典不改。
 
 ## 任务3：官方核查与交付
 

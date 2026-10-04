@@ -112,6 +112,10 @@ async def test_sparse_uses_original_query_and_sql_filters_shared_corpus(
     report = await run_product_benchmark(*paths, top_k=5)
     result = report["queries"][0]
     assert result["original_query"] == "Battery capacity"
+    assert report["intent_policy"] == "raw"
+    assert report["intent_plan_sha256"] is None
+    assert result["query_plan"]["queries"] == ("Battery capacity",)
+    assert [plan["query"] for plan in result["lexical_plans"]] == ["Battery capacity"]
     assert [hit["source_id"] for hit in result["hits"]] == ["good"]
     assert result["metrics"]["recall_at_k"] == 1
     context = result["ragas_input"]["contexts"][0]
@@ -401,3 +405,149 @@ async def test_basic_iso_fetched_date_is_normalized_for_as_of_sql(tmp_path: Path
 )
 def test_nonsemantic_provider_is_not_ready(status):
     assert provider_readiness(status)["semantic_ready"] is False
+
+
+@pytest.mark.asyncio
+async def test_structured_format_suffix_searches_factual_query(tmp_path: Path):
+    paths = _files(tmp_path, [_source("good")])
+    query = json.loads(paths[1].read_text())
+    query["query"] = "Battery capacity; answer in Chinese and include citations"
+    paths[1].write_text(json.dumps(query) + "\n")
+    raw = await run_product_benchmark(*paths)
+    structured = await run_product_benchmark(*paths, intent_policy="structured")
+    row = structured["queries"][0]
+    assert raw["queries"][0]["query_plan"]["queries"] == (query["query"],)
+    assert row["original_query"] == row["ragas_input"]["query"] == query["query"]
+    assert row["query_plan"]["origin"] == "format_suffix"
+    assert row["query_plan"]["queries"] == ("Battery capacity",)
+    assert [plan["query"] for plan in row["lexical_plans"]] == ["Battery capacity"]
+    assert row["lexical_plan"]["legacy_original"] is True
+    assert [hit["source_id"] for hit in row["hits"]] == ["good"]
+    assert row["fact_query_results"][0]["query"] == "Battery capacity"
+
+
+@pytest.mark.asyncio
+async def test_explicit_two_facts_report_actual_groups_and_proofs(tmp_path: Path):
+    first = _source("good")
+    second = _source("warranty")
+    second["text"] = "Warranty coverage is 24 months."
+    second["content_hash"] = hashlib.sha256(second["text"].encode()).hexdigest()
+    paths = _files(tmp_path, [first, second])
+    query = json.loads(paths[1].read_text())
+    query["query"] = "Battery capacity and warranty coverage; answer in Chinese"
+    paths[1].write_text(json.dumps(query) + "\n")
+    label = json.loads(paths[2].read_text())
+    label["proofs"].append({"source_id": "warranty", "start": 21, "end": 30,
+                            "quote": "24 months"})
+    label["expected_facts"] = ["Secret expected fact never used as a query"]
+    paths[2].write_text(json.dumps(label) + "\n")
+    intent_path = tmp_path / "intents.jsonl"
+    intent_path.write_text(json.dumps({"query_id": "q1", "intent": {
+        "fact_queries": ["Battery capacity", "Warranty coverage"]}}) + "\n")
+    report = await run_product_benchmark(
+        *paths, intent_policy="structured", intent_plan_path=intent_path
+    )
+    row = report["queries"][0]
+    assert report["intent_plan_sha256"] == hashlib.sha256(intent_path.read_bytes()).hexdigest()
+    assert row["query_plan"]["origin"] == "explicit"
+    assert row["query_plan"]["queries"] == ("Battery capacity", "Warranty coverage")
+    assert [plan["query"] for plan in row["lexical_plans"]] == list(row["query_plan"]["queries"])
+    assert {hit["source_id"] for hit in row["hits"]} == {"good", "warranty"}
+    assert row["metrics"]["recall_at_k"] == row["proof_excerpt_recall"] == 1
+    assert {item["query"] for item in row["fact_query_results"]} == set(
+        row["query_plan"]["queries"]
+    )
+    assert {chunk_id for group in row["fact_query_results"] for chunk_id in group["chunk_ids"]} == {
+        hit["chunk_id"] for hit in row["hits"]
+    }
+    assert all("Secret expected fact" not in item for item in row["query_plan"]["queries"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rows,error", [
+    ([{"query_id": "q1", "intent": {"fact_queries": ["Battery"]}, "expected_facts": []}], "keys"),
+    ([{"query_id": "q1", "intent": {"fact_queries": ["Battery"], "source_id": "good"}}], "intent"),
+    ([{"query_id": "unknown", "intent": {"fact_queries": ["Battery"]}}], "query_id"),
+    ([{"query_id": " ", "intent": {"fact_queries": ["Battery"]}}], "query_id"),
+    ([{"query_id": "q1", "intent": {"fact_queries": ["Battery"]}},
+      {"query_id": "q1", "intent": {"fact_queries": ["Battery"]}}], "duplicate"),
+])
+async def test_intent_plan_rejects_invalid_rows(tmp_path: Path, rows: list[dict], error: str):
+    paths = _files(tmp_path, [_source("good")])
+    intent_path = tmp_path / "intents.jsonl"
+    intent_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    with pytest.raises(ValueError, match=error):
+        await run_product_benchmark(
+            *paths, intent_policy="structured", intent_plan_path=intent_path
+        )
+
+
+@pytest.mark.asyncio
+async def test_raw_rejects_intent_plan(tmp_path: Path):
+    paths = _files(tmp_path, [_source("good")])
+    plan = tmp_path / "intents.jsonl"
+    plan.write_text('{"query_id":"q1","intent":{"fact_queries":["Battery"]}}\n')
+    with pytest.raises(ValueError, match="raw"):
+        await run_product_benchmark(*paths, intent_plan_path=plan)
+
+
+def test_cli_accepts_structured_intent_file(tmp_path: Path, monkeypatch):
+    paths = _files(tmp_path, [_source("good")])
+    plan = tmp_path / "intents.jsonl"
+    plan.write_text('{"query_id":"q1","intent":{"fact_queries":["Battery capacity"]}}\n')
+    output = tmp_path / "report.json"
+    monkeypatch.setattr(sys, "argv", [
+        "benchmark", "--corpus", str(paths[0]), "--queries", str(paths[1]),
+        "--labels", str(paths[2]), "--intent-policy", "structured",
+        "--intent-plan", str(plan), "--output", str(output),
+    ])
+    assert main() == 0
+    report = json.loads(output.read_text())
+    assert report["intent_policy"] == "structured"
+    assert report["queries"][0]["query_plan"]["origin"] == "explicit"
+
+
+@pytest.mark.asyncio
+async def test_intent_plan_rejects_nonselected_purpose(tmp_path: Path):
+    paths = _files(tmp_path, [_source("good")])
+    query = json.loads(paths[1].read_text())
+    label = json.loads(paths[2].read_text())
+    paths[1].write_text(json.dumps(query) + "\n" + json.dumps({
+        **query, "id": "q2", "purpose": "tuning",
+    }) + "\n")
+    paths[2].write_text(json.dumps(label) + "\n" + json.dumps({
+        **label, "query_id": "q2",
+    }) + "\n")
+    plan = tmp_path / "intents.jsonl"
+    plan.write_text('{"query_id":"q2","intent":{"fact_queries":["Battery"]}}\n')
+    with pytest.raises(ValueError, match="query_id"):
+        await run_product_benchmark(
+            *paths, mode="candidate-diagnostic", intent_policy="structured",
+            intent_plan_path=plan,
+        )
+
+
+@pytest.mark.asyncio
+async def test_retrieval_latency_excludes_lexical_report_generation(
+    tmp_path: Path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from packages.knowledge import product_benchmark
+
+    paths = _files(tmp_path, [_source("good")])
+    clock = {"value": 0}
+    original = product_benchmark._lexical_plan
+
+    def counted_plan(*args):
+        clock["value"] += 1
+        return original(*args)
+
+    monkeypatch.setattr(product_benchmark, "_lexical_plan", counted_plan)
+    monkeypatch.setattr(
+        product_benchmark, "time",
+        SimpleNamespace(perf_counter=lambda: clock["value"]),
+    )
+    report = await run_product_benchmark(*paths)
+    assert clock["value"] == 2
+    assert report["queries"][0]["latency_ms"] == 0

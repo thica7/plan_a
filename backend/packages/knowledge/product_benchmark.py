@@ -15,10 +15,12 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from . import lexical
 from .eval import RetrievalLabel, evaluate_query
 from .ingestion import IngestionPipeline
-from .models import DocumentCreate, RetrievalRequest
+from .models import DocumentCreate, RetrievalIntent, RetrievalRequest
 from .product_eval_data import DatasetValidationError, load_dataset
 from .repository import KnowledgeRepository
 from .retrieval import QueryRewriter, RetrievalService
@@ -156,6 +158,47 @@ def _group(rows: list[dict[str, Any]], field: str) -> dict[str, dict[str, Any]]:
     return output
 
 
+def _load_intent_plans(
+    path: Path, selected_ids: set[str]
+) -> tuple[dict[str, RetrievalIntent], str]:
+    content = path.read_bytes()
+    plans: dict[str, RetrievalIntent] = {}
+    for line_number, line in enumerate(content.decode("utf-8").splitlines(), 1):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"intent plan line {line_number}: invalid JSON") from exc
+        if not isinstance(row, dict) or set(row) != {"query_id", "intent"}:
+            raise ValueError(
+                f"intent plan line {line_number}: expected only query_id and intent keys"
+            )
+        query_id = row["query_id"]
+        if not isinstance(query_id, str) or not query_id.strip() or query_id not in selected_ids:
+            raise ValueError(f"intent plan line {line_number}: unknown or blank query_id")
+        if query_id in plans:
+            raise ValueError(f"intent plan line {line_number}: duplicate query_id")
+        if not isinstance(row["intent"], dict):
+            raise ValueError(f"intent plan line {line_number}: intent must be an object")
+        try:
+            plans[query_id] = RetrievalIntent.model_validate(row["intent"])
+        except ValidationError as exc:
+            raise ValueError(f"intent plan line {line_number}: invalid intent: {exc}") from exc
+    return plans, hashlib.sha256(content).hexdigest()
+
+
+def _lexical_plan(query: str, product: str, policy: str, version: str) -> dict[str, Any]:
+    plan = lexical.build_lexical_plan(query, [product])
+    return {
+        "query": query,
+        "version": version,
+        "strict_query": KnowledgeRepository._to_fts_query(query),
+        "fallback_query": plan.fallback_query if policy == "bounded" else None,
+        "concepts": plan.concepts if policy == "bounded" else [],
+        "literals": plan.literals if policy == "bounded" else [],
+        "disabled_reason": plan.disabled_reason if policy == "bounded" else "policy_disabled",
+    }
+
+
 async def run_product_benchmark(
     corpus_path: str | Path,
     queries_path: str | Path,
@@ -163,15 +206,21 @@ async def run_product_benchmark(
     *,
     mode: str = "formal",
     lexical_policy: str = "bounded",
+    intent_policy: str = "raw",
+    intent_plan_path: Path | str | None = None,
     top_k: int = 5,
     embedding_provider: Any = None,
     reranker_provider: Any = None,
 ) -> dict[str, Any]:
-    """Run FTS once per labeled query over a single offline corpus snapshot."""
+    """Run scoped offline sparse retrieval over a single fixed corpus snapshot."""
     if mode not in {"formal", "candidate-diagnostic", "tuning-diagnostic"}:
         raise ValueError("mode must be formal, candidate-diagnostic, or tuning-diagnostic")
     if lexical_policy not in {"strict", "bounded"}:
         raise ValueError("lexical_policy must be strict or bounded")
+    if intent_policy not in {"raw", "structured"}:
+        raise ValueError("intent_policy must be raw or structured")
+    if intent_policy == "raw" and intent_plan_path is not None:
+        raise ValueError("raw intent_policy cannot include an intent plan")
     if not 1 <= top_k <= 100:
         raise ValueError("top_k must be between 1 and 100")
     dataset = load_dataset(
@@ -190,6 +239,10 @@ async def run_product_benchmark(
     }
     if not selected:
         raise ValueError(f"no {selected_purpose} labels available for {mode}")
+    intent_plans, intent_plan_sha256 = (
+        _load_intent_plans(Path(intent_plan_path), set(selected))
+        if intent_plan_path is not None else ({}, None)
+    )
     purpose_excluded = sum(
         dataset.queries[query_id]["purpose"] != selected_purpose for query_id in all_labels
     )
@@ -272,16 +325,10 @@ async def run_product_benchmark(
             db_bytes = db_path.stat().st_size
             for query_id, label in selected.items():
                 query = dataset.queries[query_id]
-                plan = lexical.build_lexical_plan(query["query"], [query["product"]])
                 lexical_plan = {
-                    "version": policy_version,
-                    "strict_query": repo._to_fts_query(query["query"]),
-                    "fallback_query": plan.fallback_query if lexical_policy == "bounded" else None,
-                    "concepts": plan.concepts if lexical_policy == "bounded" else [],
-                    "literals": plan.literals if lexical_policy == "bounded" else [],
-                    "disabled_reason": (
-                        plan.disabled_reason if lexical_policy == "bounded" else "policy_disabled"
-                    ),
+                    **_lexical_plan(query["query"], query["product"], lexical_policy,
+                                    policy_version),
+                    "legacy_original": True,
                 }
                 repo.as_of = date.fromisoformat(query["as_of"])
                 date_exclusions = [
@@ -304,6 +351,8 @@ async def run_product_benchmark(
                 )
                 request = RetrievalRequest(
                     query=query["query"],
+                    intent_policy=intent_policy,
+                    retrieval_intent=intent_plans.get(query_id),
                     competitors=[query["product"]],
                     market=query["market"],
                     source_roles=["source"],
@@ -319,6 +368,11 @@ async def run_product_benchmark(
                 began = time.perf_counter()
                 response = await service.retrieve(request)
                 latency_ms = (time.perf_counter() - began) * 1000
+                query_plan = response.diagnostics["query_plan"]
+                lexical_plans = [
+                    _lexical_plan(search_query, query["product"], lexical_policy, policy_version)
+                    for search_query in query_plan["queries"]
+                ]
                 latencies.append(latency_ms)
                 hits = []
                 for rank, hit in enumerate(response.hits, 1):
@@ -399,6 +453,9 @@ async def run_product_benchmark(
                         "query_id": query_id,
                         "original_query": query["query"],
                         "lexical_plan": lexical_plan,
+                        "lexical_plans": lexical_plans,
+                        "query_plan": query_plan,
+                        "fact_query_results": response.diagnostics.get("fact_query_results", []),
                         "expected_outcome": label["expected_outcome"],
                         "review_status": label["review_status"],
                         "category": query.get("category"),
@@ -464,6 +521,8 @@ async def run_product_benchmark(
         "dataset": dataset_counts,
         "dataset_reasons": dataset_reasons,
         "lexical_policy": lexical_policy_report,
+        "intent_policy": intent_policy,
+        "intent_plan_sha256": intent_plan_sha256,
         "semantic_quality_verified": False,
         "provider": provider,
         "reranker": reranker_status or {"effective_provider": "unconfigured"},
@@ -542,6 +601,8 @@ def main() -> int:
         default="formal",
     )
     parser.add_argument("--lexical-policy", choices=["strict", "bounded"], default="bounded")
+    parser.add_argument("--intent-policy", choices=["raw", "structured"], default="raw")
+    parser.add_argument("--intent-plan", type=Path)
     parser.add_argument("--corpus", type=Path, default=_ROOT / "eval/product-research-corpus.jsonl")
     parser.add_argument(
         "--queries", type=Path, default=_ROOT / "eval/product-research-queries-draft.jsonl"
@@ -555,6 +616,7 @@ def main() -> int:
             run_product_benchmark(
                 args.corpus, args.queries, args.labels, mode=args.mode,
                 lexical_policy=args.lexical_policy, top_k=args.top_k,
+                intent_policy=args.intent_policy, intent_plan_path=args.intent_plan,
             )
         )
     except DatasetValidationError as exc:
