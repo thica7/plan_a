@@ -1,0 +1,5173 @@
+{
+  "evaluation_kind": "offline_bounded_lexical_policy_comparison",
+  "implementation_baseline": "7527bd2",
+  "frozen_planner_source_sha256": "aba48f1e0891516446dde72ff8170167c2c998d86d2afe156b1b42b78c82b62c",
+  "input_file_sha256": {
+    "eval/product-research-tuning-corpus.jsonl": "6d196a8489282b614b9f279e0796a7f23bb95fd39609cffabef7e39cbdf93f27",
+    "eval/product-research-tuning-queries.jsonl": "30f5e2c1c5a3be182f157948ac04f36e0dabcb7d1f07436ce9be5b85cdae0d9a",
+    "eval/product-research-tuning-labels.jsonl": "18b8103bb9300be14e7a800c380f71b39c1be2a89430317d49990731fa974cab",
+    "eval/product-research-corpus.jsonl": "ef36f9d26c57ac4b801869319a165d7b079d60aa2e2dde19f450733046f292f5",
+    "eval/product-research-queries-draft.jsonl": "f9da9a5a9a7753cd7d89ba9ede84e44fa456614ec01475ce1986206bd0fc15c7",
+    "eval/product-research-labels.jsonl": "80e995549deb649480270bbc85c7122c538fc43cc5f362a0a028796c0230f8cf"
+  },
+  "model_calls": 0,
+  "semantic_quality_verified": false,
+  "limits": [
+    "Synthetic tuning contracts are fictional; they do not certify semantic quality.",
+    "Original candidate evaluation labels have no human review.",
+    "Term aliases are limited, not a general translator or embedding model.",
+    "No answer generation, Ragas, dense retrieval or real reranker was executed.",
+    "Non-answer hit count is not judged factual false-positive rate."
+  ],
+  "tuning-diagnostic": {
+    "results": {
+      "strict": {
+        "mode": "tuning-diagnostic",
+        "selected_purpose": "tuning",
+        "selected_label_count": 14,
+        "purpose_excluded_label_count": 0,
+        "dataset": {
+          "queries": 14,
+          "unlabeled": 0,
+          "candidate": 14,
+          "reviewed": 0,
+          "included": 14,
+          "labels_loaded": 14
+        },
+        "dataset_reasons": [],
+        "lexical_policy": {
+          "name": "strict",
+          "version": "strict-terms-v1",
+          "fallback_enabled": false,
+          "planner_source_sha256": "aba48f1e0891516446dde72ff8170167c2c998d86d2afe156b1b42b78c82b62c"
+        },
+        "semantic_quality_verified": false,
+        "provider": {
+          "requested_provider": "unconfigured",
+          "effective_provider": "unconfigured",
+          "model_version": null,
+          "dimensions": null,
+          "index_version": null,
+          "degraded": false,
+          "semantic_ready": false,
+          "semantic_quality_verified": false,
+          "reason": "real semantic model unavailable"
+        },
+        "reranker": {
+          "effective_provider": "unconfigured"
+        },
+        "model_calls": 0,
+        "queries": [
+          {
+            "query_id": "lexical-tuning-001",
+            "original_query": "请问 AuroraCam X 保修有效期多久？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"请问\" \"auroracam\" \"x\" \"保修\" \"修有\" \"有效\" \"效期\" \"期多\" \"多久\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "CN",
+            "product": "AuroraCam X",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "camera-warranty-cn",
+                "start": 0,
+                "end": 16,
+                "quote": "保修有效期为两年，支持免费维修。",
+                "content_hash": "cde8123a7e66bab4932d4f2ec704ef55104e15b1621b7494d9c3cdb6f5781ee4",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "camera-warranty-cn"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 6.648041773587465,
+            "ragas_input": {
+              "query": "请问 AuroraCam X 保修有效期多久？",
+              "response": null,
+              "reference_facts": [
+                "保修有效期为两年，支持免费维修。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-002",
+            "original_query": "AuroraCam X 保修有效期多久？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"auroracam\" \"x\" \"保修\" \"修有\" \"有效\" \"效期\" \"期多\" \"多久\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "US",
+            "product": "AuroraCam X",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "camera-warranty-us",
+                "start": 0,
+                "end": 34,
+                "quote": "Warranty coverage lasts 24 months.",
+                "content_hash": "d29018975ae993c9184028c8bfc5dbf513e34726c5cf97a1d078098b011b9fa1",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [
+              {
+                "source_id": "future-source",
+                "reason": "source_date_after_as_of"
+              }
+            ],
+            "missing_source_ids": [
+              "camera-warranty-us"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 0.8125826716423035,
+            "ragas_input": {
+              "query": "AuroraCam X 保修有效期多久？",
+              "response": null,
+              "reference_facts": [
+                "Warranty coverage lasts 24 months."
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-003",
+            "original_query": "Tell me about AuroraCam X warranty period.",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"tell\" \"me\" \"about\" \"auroracam\" \"x\" \"warranty\" \"period\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "latin",
+            "market": "CN",
+            "product": "AuroraCam X",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "camera-warranty-cn",
+                "start": 0,
+                "end": 16,
+                "quote": "保修有效期为两年，支持免费维修。",
+                "content_hash": "cde8123a7e66bab4932d4f2ec704ef55104e15b1621b7494d9c3cdb6f5781ee4",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "camera-warranty-cn"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 0.8137919940054417,
+            "ragas_input": {
+              "query": "Tell me about AuroraCam X warranty period.",
+              "response": null,
+              "reference_facts": [
+                "保修有效期为两年，支持免费维修。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-004",
+            "original_query": "请问 AuroraCam X 配送多久？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"请问\" \"auroracam\" \"x\" \"配送\" \"送多\" \"多久\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "US",
+            "product": "AuroraCam X",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "camera-shipping-us",
+                "start": 0,
+                "end": 39,
+                "quote": "Delivery usually takes 5 business days.",
+                "content_hash": "eea7a6aec1bc115b24f58a24a9885cc6870d6647b6779e67c80230176659bf97",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [
+              {
+                "source_id": "future-source",
+                "reason": "source_date_after_as_of"
+              }
+            ],
+            "missing_source_ids": [
+              "camera-shipping-us"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 0.7926248945295811,
+            "ragas_input": {
+              "query": "请问 AuroraCam X 配送多久？",
+              "response": null,
+              "reference_facts": [
+                "Delivery usually takes 5 business days."
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-005",
+            "original_query": "请问 NimbusNote 能导出吗？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"请问\" \"nimbusnote\" \"能导\" \"导出\" \"出吗\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "GLOBAL",
+            "product": "NimbusNote",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "note-export",
+                "start": 0,
+                "end": 27,
+                "quote": "Export files as CSV or PDF.",
+                "content_hash": "e2f134782b06aba9a2320576193fa4f04209581d28cb87cbc1ff210fa9ccfd31",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "note-export"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 0.6749583408236504,
+            "ragas_input": {
+              "query": "请问 NimbusNote 能导出吗？",
+              "response": null,
+              "reference_facts": [
+                "Export files as CSV or PDF."
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-006",
+            "original_query": "请问 NimbusNote 有哪些访客功能？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"请问\" \"nimbusnote\" \"有哪\" \"哪些\" \"些访\" \"访客\" \"客功\" \"功能\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "GLOBAL",
+            "product": "NimbusNote",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "note-guests",
+                "start": 0,
+                "end": 37,
+                "quote": "Guests can access only invited pages.",
+                "content_hash": "6506e9db94d58dc53ab374879502160309a0dc1b9b9088835b2fc48cb2544153",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "note-guests"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 0.7340423762798309,
+            "ragas_input": {
+              "query": "请问 NimbusNote 有哪些访客功能？",
+              "response": null,
+              "reference_facts": [
+                "Guests can access only invited pages."
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-007",
+            "original_query": "NimbusNote 月付与年付的计费差异是什么？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"nimbusnote\" \"月付\" \"付与\" \"与年\" \"年付\" \"付的\" \"的计\" \"计费\" \"费差\" \"差异\" \"异是\" \"是什\" \"什么\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "GLOBAL",
+            "product": "NimbusNote",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "note-billing",
+                "start": 0,
+                "end": 45,
+                "quote": "Subscriptions are billed monthly or annually.",
+                "content_hash": "983312504ad928196ef0bbd10ac9d1650a3b1b0535d873077051a8c4ee7651a6",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "note-billing"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 0.7797502912580967,
+            "ragas_input": {
+              "query": "NimbusNote 月付与年付的计费差异是什么？",
+              "response": null,
+              "reference_facts": [
+                "Subscriptions are billed monthly or annually."
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-008",
+            "original_query": "Can NimbusNote refund?",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"can\" \"nimbusnote\" \"refund\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "latin",
+            "market": "GLOBAL",
+            "product": "NimbusNote",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "note-refund",
+                "start": 0,
+                "end": 37,
+                "quote": "Refunds are available within 14 days.",
+                "content_hash": "05c105fcbfeaed9aa1e6a529c16056347955f38db482a96fa5968fca24114af6",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "note-refund"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 0.6461250595748425,
+            "ragas_input": {
+              "query": "Can NimbusNote refund?",
+              "response": null,
+              "reference_facts": [
+                "Refunds are available within 14 days."
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-009",
+            "original_query": "Can MapleBoard export?",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"can\" \"mapleboard\" \"export\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "latin",
+            "market": "GLOBAL",
+            "product": "MapleBoard",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "board-export-cn",
+                "start": 0,
+                "end": 20,
+                "quote": "可以导出 CSV，项目附件不会一起导出。",
+                "content_hash": "c69366c55b909d4f6fd5a3b7032edf236fc59af9ed092306b7716b649eba67c7",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "board-export-cn"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 0.6326669827103615,
+            "ragas_input": {
+              "query": "Can MapleBoard export?",
+              "response": null,
+              "reference_facts": [
+                "可以导出 CSV，项目附件不会一起导出。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-010",
+            "original_query": "MapleBoard 价格和隐私是什么？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"mapleboard\" \"价格\" \"格和\" \"和隐\" \"隐私\" \"私是\" \"是什\" \"什么\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "GLOBAL",
+            "product": "MapleBoard",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 0.7037501782178879,
+            "ragas_input": {
+              "query": "MapleBoard 价格和隐私是什么？",
+              "response": null,
+              "reference_facts": [],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-011",
+            "original_query": "AuroraCam X warranty 36 months",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"auroracam\" \"x\" \"warranty\" \"36\" \"months\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "latin",
+            "market": "US",
+            "product": "AuroraCam X",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [
+              {
+                "source_id": "future-source",
+                "reason": "source_date_after_as_of"
+              }
+            ],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 0.6473329849541187,
+            "ragas_input": {
+              "query": "AuroraCam X warranty 36 months",
+              "response": null,
+              "reference_facts": [],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-012",
+            "original_query": "NimbusNote quantum tunneling",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"nimbusnote\" \"quantum\" \"tunneling\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "latin",
+            "market": "GLOBAL",
+            "product": "NimbusNote",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 0.5986657924950123,
+            "ragas_input": {
+              "query": "NimbusNote quantum tunneling",
+              "response": null,
+              "reference_facts": [],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-013",
+            "original_query": "AuroraCam Y 保修多久？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"auroracam\" \"y\" \"保修\" \"修多\" \"多久\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "US",
+            "product": "AuroraCam X",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [
+              {
+                "source_id": "future-source",
+                "reason": "source_date_after_as_of"
+              }
+            ],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 0.6364998407661915,
+            "ragas_input": {
+              "query": "AuroraCam Y 保修多久？",
+              "response": null,
+              "reference_facts": [],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-014",
+            "original_query": "请问是什么？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"请问\" \"问是\" \"是什\" \"什么\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "cjk",
+            "market": "GLOBAL",
+            "product": "NimbusNote",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 0.6156251765787601,
+            "ragas_input": {
+              "query": "请问是什么？",
+              "response": null,
+              "reference_facts": [],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          }
+        ],
+        "modes": {
+          "sparse": {
+            "status": "completed",
+            "top_k": 5,
+            "query_count": 14,
+            "answer_query_count": 9,
+            "recall_at_k": 0.0,
+            "mrr": 0.0,
+            "ndcg_at_k": 0.0,
+            "mean_proof_excerpt_recall": 0.0,
+            "mean_non_gold_source_count": 0
+          },
+          "dense": {
+            "status": "not_run",
+            "reason": "offline run has no vector index or model execution"
+          },
+          "rrf": {
+            "status": "not_run",
+            "reason": "offline run has no vector index or model execution"
+          },
+          "rrf_rerank": {
+            "status": "not_run",
+            "reason": "offline run has no vector index or model execution"
+          }
+        },
+        "outcomes": {
+          "insufficient": {
+            "query_count": 5,
+            "retrieval_empty": 5,
+            "retrieval_noise_count": 0
+          }
+        },
+        "groups": {
+          "category": {
+            "synthetic_contract": {
+              "query_count": 14,
+              "answer_query_count": 9,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            }
+          },
+          "language": {
+            "mixed": {
+              "query_count": 8,
+              "answer_query_count": 6,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "latin": {
+              "query_count": 5,
+              "answer_query_count": 3,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "cjk": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            }
+          },
+          "market": {
+            "CN": {
+              "query_count": 2,
+              "answer_query_count": 2,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "US": {
+              "query_count": 4,
+              "answer_query_count": 2,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "GLOBAL": {
+              "query_count": 8,
+              "answer_query_count": 5,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            }
+          },
+          "product": {
+            "AuroraCam X": {
+              "query_count": 6,
+              "answer_query_count": 4,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "NimbusNote": {
+              "query_count": 6,
+              "answer_query_count": 4,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "MapleBoard": {
+              "query_count": 2,
+              "answer_query_count": 1,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            }
+          },
+          "as_of": {
+            "2026-10-04": {
+              "query_count": 14,
+              "answer_query_count": 9,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            }
+          }
+        },
+        "index_ingest_ms": 27.032750193029642,
+        "retrieval_latency_ms": {
+          "p50": 0.6893542595207691,
+          "p95": 6.648041773587465
+        },
+        "sqlite_file_bytes": 217088,
+        "peak_rss_bytes": 89358336,
+        "factual_quality": {
+          "status": "not_run",
+          "reason": "no generated answer or human adjudication"
+        },
+        "clarification_behavior": {
+          "status": "not_run",
+          "reason": "no answer model executed"
+        },
+        "refusal_behavior": {
+          "status": "not_run",
+          "reason": "no answer model executed"
+        },
+        "ragas": {
+          "status": "not_run",
+          "reason": "no model response or reviewed reference for answer scoring"
+        },
+        "snapshot": {
+          "scope": {
+            "workspace_id": "product-eval-offline",
+            "project_id": "fixed-corpus"
+          },
+          "source_roles": [
+            "source"
+          ],
+          "date_rule": "exclude dates after as_of; undated sources require fetched_at <= as_of"
+        }
+      },
+      "bounded": {
+        "mode": "tuning-diagnostic",
+        "selected_purpose": "tuning",
+        "selected_label_count": 14,
+        "purpose_excluded_label_count": 0,
+        "dataset": {
+          "queries": 14,
+          "unlabeled": 0,
+          "candidate": 14,
+          "reviewed": 0,
+          "included": 14,
+          "labels_loaded": 14
+        },
+        "dataset_reasons": [],
+        "lexical_policy": {
+          "name": "bounded",
+          "version": "lexical-v1",
+          "fallback_enabled": true,
+          "planner_source_sha256": "aba48f1e0891516446dde72ff8170167c2c998d86d2afe156b1b42b78c82b62c"
+        },
+        "semantic_quality_verified": false,
+        "provider": {
+          "requested_provider": "unconfigured",
+          "effective_provider": "unconfigured",
+          "model_version": null,
+          "dimensions": null,
+          "index_version": null,
+          "degraded": false,
+          "semantic_ready": false,
+          "semantic_quality_verified": false,
+          "reason": "real semantic model unavailable"
+        },
+        "reranker": {
+          "effective_provider": "unconfigured"
+        },
+        "model_calls": 0,
+        "queries": [
+          {
+            "query_id": "lexical-tuning-001",
+            "original_query": "请问 AuroraCam X 保修有效期多久？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"请问\" \"auroracam\" \"x\" \"保修\" \"修有\" \"有效\" \"效期\" \"期多\" \"多久\"",
+              "fallback_query": "(\"保修 修期\" OR \"保修\" OR \"质保\" OR \"warranty\" OR \"warranties\") AND (\"有效 效期\" OR \"期限\" OR \"时长\" OR \"period\" OR \"duration\" OR \"lasts\")",
+              "concepts": [
+                "warranty",
+                "duration"
+              ],
+              "literals": [],
+              "disabled_reason": null
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "CN",
+            "product": "AuroraCam X",
+            "as_of": "2026-10-04",
+            "hits": [
+              {
+                "rank": 1,
+                "source_id": "camera-warranty-cn",
+                "document_id": "335d8a5c-9ee5-4f27-a82d-3160eb5b14e0",
+                "chunk_id": "7aa8d800-88f8-5858-a396-39f31dd97039",
+                "document_version": 1,
+                "content_hash": "cde8123a7e66bab4932d4f2ec704ef55104e15b1621b7494d9c3cdb6f5781ee4",
+                "document_content_hash": "cde8123a7e66bab4",
+                "chunk_content_hash": "cde8123a7e66bab4",
+                "market": "CN",
+                "role": "source",
+                "product": "AuroraCam X",
+                "workspace_id": "product-eval-offline",
+                "project_id": "fixed-corpus",
+                "excerpt_start": 0,
+                "excerpt_end": 16,
+                "metadata": {
+                  "lexical_retrieval": {
+                    "version": "lexical-v1",
+                    "path": "fallback_body",
+                    "concepts": [
+                      "warranty",
+                      "duration"
+                    ]
+                  }
+                }
+              }
+            ],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 1,
+              "matched_count": 1,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "proofs": [
+              {
+                "source_id": "camera-warranty-cn",
+                "start": 0,
+                "end": 16,
+                "quote": "保修有效期为两年，支持免费维修。",
+                "content_hash": "cde8123a7e66bab4932d4f2ec704ef55104e15b1621b7494d9c3cdb6f5781ee4",
+                "retrieved": true,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": true
+              }
+            ],
+            "proof_excerpt_recall": 1.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": false,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.58987520262599,
+            "ragas_input": {
+              "query": "请问 AuroraCam X 保修有效期多久？",
+              "response": null,
+              "reference_facts": [
+                "保修有效期为两年，支持免费维修。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [
+                "camera-warranty-cn"
+              ],
+              "contexts": [
+                {
+                  "source_id": "camera-warranty-cn",
+                  "content_hash": "cde8123a7e66bab4932d4f2ec704ef55104e15b1621b7494d9c3cdb6f5781ee4",
+                  "excerpt_start": 0,
+                  "excerpt_end": 16
+                }
+              ]
+            }
+          },
+          {
+            "query_id": "lexical-tuning-002",
+            "original_query": "AuroraCam X 保修有效期多久？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"auroracam\" \"x\" \"保修\" \"修有\" \"有效\" \"效期\" \"期多\" \"多久\"",
+              "fallback_query": "(\"保修 修期\" OR \"保修\" OR \"质保\" OR \"warranty\" OR \"warranties\") AND (\"有效 效期\" OR \"期限\" OR \"时长\" OR \"period\" OR \"duration\" OR \"lasts\")",
+              "concepts": [
+                "warranty",
+                "duration"
+              ],
+              "literals": [],
+              "disabled_reason": null
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "US",
+            "product": "AuroraCam X",
+            "as_of": "2026-10-04",
+            "hits": [
+              {
+                "rank": 1,
+                "source_id": "camera-warranty-us",
+                "document_id": "96c2f9be-d66c-474a-8add-517fdf39ed29",
+                "chunk_id": "7065ee20-2bb4-57eb-825d-8b2df3899865",
+                "document_version": 1,
+                "content_hash": "d29018975ae993c9184028c8bfc5dbf513e34726c5cf97a1d078098b011b9fa1",
+                "document_content_hash": "d29018975ae993c9",
+                "chunk_content_hash": "d29018975ae993c9",
+                "market": "US",
+                "role": "source",
+                "product": "AuroraCam X",
+                "workspace_id": "product-eval-offline",
+                "project_id": "fixed-corpus",
+                "excerpt_start": 0,
+                "excerpt_end": 34,
+                "metadata": {
+                  "lexical_retrieval": {
+                    "version": "lexical-v1",
+                    "path": "fallback_body",
+                    "concepts": [
+                      "warranty",
+                      "duration"
+                    ]
+                  }
+                }
+              }
+            ],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 1,
+              "matched_count": 1,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "proofs": [
+              {
+                "source_id": "camera-warranty-us",
+                "start": 0,
+                "end": 34,
+                "quote": "Warranty coverage lasts 24 months.",
+                "content_hash": "d29018975ae993c9184028c8bfc5dbf513e34726c5cf97a1d078098b011b9fa1",
+                "retrieved": true,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": true
+              }
+            ],
+            "proof_excerpt_recall": 1.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [
+              {
+                "source_id": "future-source",
+                "reason": "source_date_after_as_of"
+              }
+            ],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": false,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.3501248322427273,
+            "ragas_input": {
+              "query": "AuroraCam X 保修有效期多久？",
+              "response": null,
+              "reference_facts": [
+                "Warranty coverage lasts 24 months."
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [
+                "camera-warranty-us"
+              ],
+              "contexts": [
+                {
+                  "source_id": "camera-warranty-us",
+                  "content_hash": "d29018975ae993c9184028c8bfc5dbf513e34726c5cf97a1d078098b011b9fa1",
+                  "excerpt_start": 0,
+                  "excerpt_end": 34
+                }
+              ]
+            }
+          },
+          {
+            "query_id": "lexical-tuning-003",
+            "original_query": "Tell me about AuroraCam X warranty period.",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"tell\" \"me\" \"about\" \"auroracam\" \"x\" \"warranty\" \"period\"",
+              "fallback_query": "(\"保修 修期\" OR \"保修\" OR \"质保\" OR \"warranty\" OR \"warranties\") AND (\"有效 效期\" OR \"期限\" OR \"时长\" OR \"period\" OR \"duration\" OR \"lasts\")",
+              "concepts": [
+                "warranty",
+                "duration"
+              ],
+              "literals": [],
+              "disabled_reason": null
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "latin",
+            "market": "CN",
+            "product": "AuroraCam X",
+            "as_of": "2026-10-04",
+            "hits": [
+              {
+                "rank": 1,
+                "source_id": "camera-warranty-cn",
+                "document_id": "335d8a5c-9ee5-4f27-a82d-3160eb5b14e0",
+                "chunk_id": "7aa8d800-88f8-5858-a396-39f31dd97039",
+                "document_version": 1,
+                "content_hash": "cde8123a7e66bab4932d4f2ec704ef55104e15b1621b7494d9c3cdb6f5781ee4",
+                "document_content_hash": "cde8123a7e66bab4",
+                "chunk_content_hash": "cde8123a7e66bab4",
+                "market": "CN",
+                "role": "source",
+                "product": "AuroraCam X",
+                "workspace_id": "product-eval-offline",
+                "project_id": "fixed-corpus",
+                "excerpt_start": 0,
+                "excerpt_end": 16,
+                "metadata": {
+                  "lexical_retrieval": {
+                    "version": "lexical-v1",
+                    "path": "fallback_body",
+                    "concepts": [
+                      "warranty",
+                      "duration"
+                    ]
+                  }
+                }
+              }
+            ],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 1,
+              "matched_count": 1,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "proofs": [
+              {
+                "source_id": "camera-warranty-cn",
+                "start": 0,
+                "end": 16,
+                "quote": "保修有效期为两年，支持免费维修。",
+                "content_hash": "cde8123a7e66bab4932d4f2ec704ef55104e15b1621b7494d9c3cdb6f5781ee4",
+                "retrieved": true,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": true
+              }
+            ],
+            "proof_excerpt_recall": 1.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": false,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.3379999436438084,
+            "ragas_input": {
+              "query": "Tell me about AuroraCam X warranty period.",
+              "response": null,
+              "reference_facts": [
+                "保修有效期为两年，支持免费维修。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [
+                "camera-warranty-cn"
+              ],
+              "contexts": [
+                {
+                  "source_id": "camera-warranty-cn",
+                  "content_hash": "cde8123a7e66bab4932d4f2ec704ef55104e15b1621b7494d9c3cdb6f5781ee4",
+                  "excerpt_start": 0,
+                  "excerpt_end": 16
+                }
+              ]
+            }
+          },
+          {
+            "query_id": "lexical-tuning-004",
+            "original_query": "请问 AuroraCam X 配送多久？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"请问\" \"auroracam\" \"x\" \"配送\" \"送多\" \"多久\"",
+              "fallback_query": "(\"配送\" OR \"发货\" OR \"shipping\" OR \"delivery\")",
+              "concepts": [
+                "shipping"
+              ],
+              "literals": [],
+              "disabled_reason": null
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "US",
+            "product": "AuroraCam X",
+            "as_of": "2026-10-04",
+            "hits": [
+              {
+                "rank": 1,
+                "source_id": "camera-shipping-us",
+                "document_id": "86cbe6a3-6f21-418e-946a-935884c0da79",
+                "chunk_id": "1106b1e5-b2f1-5a07-a4b7-c69002e6d253",
+                "document_version": 1,
+                "content_hash": "eea7a6aec1bc115b24f58a24a9885cc6870d6647b6779e67c80230176659bf97",
+                "document_content_hash": "eea7a6aec1bc115b",
+                "chunk_content_hash": "eea7a6aec1bc115b",
+                "market": "US",
+                "role": "source",
+                "product": "AuroraCam X",
+                "workspace_id": "product-eval-offline",
+                "project_id": "fixed-corpus",
+                "excerpt_start": 0,
+                "excerpt_end": 39,
+                "metadata": {
+                  "lexical_retrieval": {
+                    "version": "lexical-v1",
+                    "path": "fallback_body",
+                    "concepts": [
+                      "shipping"
+                    ]
+                  }
+                }
+              }
+            ],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 1,
+              "matched_count": 1,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "proofs": [
+              {
+                "source_id": "camera-shipping-us",
+                "start": 0,
+                "end": 39,
+                "quote": "Delivery usually takes 5 business days.",
+                "content_hash": "eea7a6aec1bc115b24f58a24a9885cc6870d6647b6779e67c80230176659bf97",
+                "retrieved": true,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": true
+              }
+            ],
+            "proof_excerpt_recall": 1.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [
+              {
+                "source_id": "future-source",
+                "reason": "source_date_after_as_of"
+              }
+            ],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": false,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.2325001880526543,
+            "ragas_input": {
+              "query": "请问 AuroraCam X 配送多久？",
+              "response": null,
+              "reference_facts": [
+                "Delivery usually takes 5 business days."
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [
+                "camera-shipping-us"
+              ],
+              "contexts": [
+                {
+                  "source_id": "camera-shipping-us",
+                  "content_hash": "eea7a6aec1bc115b24f58a24a9885cc6870d6647b6779e67c80230176659bf97",
+                  "excerpt_start": 0,
+                  "excerpt_end": 39
+                }
+              ]
+            }
+          },
+          {
+            "query_id": "lexical-tuning-005",
+            "original_query": "请问 NimbusNote 能导出吗？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"请问\" \"nimbusnote\" \"能导\" \"导出\" \"出吗\"",
+              "fallback_query": "(\"导出\" OR \"export\" OR \"exports\" OR \"exporting\")",
+              "concepts": [
+                "export"
+              ],
+              "literals": [],
+              "disabled_reason": null
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "GLOBAL",
+            "product": "NimbusNote",
+            "as_of": "2026-10-04",
+            "hits": [
+              {
+                "rank": 1,
+                "source_id": "note-export",
+                "document_id": "dbad6bb1-8293-4cd7-a36b-65ddd57f0a81",
+                "chunk_id": "8afcf79a-ccd8-5017-b5c0-2fa9b45fa835",
+                "document_version": 1,
+                "content_hash": "e2f134782b06aba9a2320576193fa4f04209581d28cb87cbc1ff210fa9ccfd31",
+                "document_content_hash": "e2f134782b06aba9",
+                "chunk_content_hash": "e2f134782b06aba9",
+                "market": "GLOBAL",
+                "role": "source",
+                "product": "NimbusNote",
+                "workspace_id": "product-eval-offline",
+                "project_id": "fixed-corpus",
+                "excerpt_start": 0,
+                "excerpt_end": 27,
+                "metadata": {
+                  "lexical_retrieval": {
+                    "version": "lexical-v1",
+                    "path": "fallback_body",
+                    "concepts": [
+                      "export"
+                    ]
+                  }
+                }
+              }
+            ],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 1,
+              "matched_count": 1,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "proofs": [
+              {
+                "source_id": "note-export",
+                "start": 0,
+                "end": 27,
+                "quote": "Export files as CSV or PDF.",
+                "content_hash": "e2f134782b06aba9a2320576193fa4f04209581d28cb87cbc1ff210fa9ccfd31",
+                "retrieved": true,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": true
+              }
+            ],
+            "proof_excerpt_recall": 1.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": false,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.2163752689957619,
+            "ragas_input": {
+              "query": "请问 NimbusNote 能导出吗？",
+              "response": null,
+              "reference_facts": [
+                "Export files as CSV or PDF."
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [
+                "note-export"
+              ],
+              "contexts": [
+                {
+                  "source_id": "note-export",
+                  "content_hash": "e2f134782b06aba9a2320576193fa4f04209581d28cb87cbc1ff210fa9ccfd31",
+                  "excerpt_start": 0,
+                  "excerpt_end": 27
+                }
+              ]
+            }
+          },
+          {
+            "query_id": "lexical-tuning-006",
+            "original_query": "请问 NimbusNote 有哪些访客功能？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"请问\" \"nimbusnote\" \"有哪\" \"哪些\" \"些访\" \"访客\" \"客功\" \"功能\"",
+              "fallback_query": "(\"访客\" OR \"来宾\" OR \"guest\" OR \"guests\")",
+              "concepts": [
+                "guest"
+              ],
+              "literals": [],
+              "disabled_reason": null
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "GLOBAL",
+            "product": "NimbusNote",
+            "as_of": "2026-10-04",
+            "hits": [
+              {
+                "rank": 1,
+                "source_id": "note-guests",
+                "document_id": "7162da2d-a95a-4903-9b40-587c9beccacc",
+                "chunk_id": "9963ba18-ffdc-54fd-bfd2-2be7881d91aa",
+                "document_version": 1,
+                "content_hash": "6506e9db94d58dc53ab374879502160309a0dc1b9b9088835b2fc48cb2544153",
+                "document_content_hash": "6506e9db94d58dc5",
+                "chunk_content_hash": "6506e9db94d58dc5",
+                "market": "GLOBAL",
+                "role": "source",
+                "product": "NimbusNote",
+                "workspace_id": "product-eval-offline",
+                "project_id": "fixed-corpus",
+                "excerpt_start": 0,
+                "excerpt_end": 37,
+                "metadata": {
+                  "lexical_retrieval": {
+                    "version": "lexical-v1",
+                    "path": "fallback_body",
+                    "concepts": [
+                      "guest"
+                    ]
+                  }
+                }
+              }
+            ],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 1,
+              "matched_count": 1,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "proofs": [
+              {
+                "source_id": "note-guests",
+                "start": 0,
+                "end": 37,
+                "quote": "Guests can access only invited pages.",
+                "content_hash": "6506e9db94d58dc53ab374879502160309a0dc1b9b9088835b2fc48cb2544153",
+                "retrieved": true,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": true
+              }
+            ],
+            "proof_excerpt_recall": 1.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": false,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.1465419083833694,
+            "ragas_input": {
+              "query": "请问 NimbusNote 有哪些访客功能？",
+              "response": null,
+              "reference_facts": [
+                "Guests can access only invited pages."
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [
+                "note-guests"
+              ],
+              "contexts": [
+                {
+                  "source_id": "note-guests",
+                  "content_hash": "6506e9db94d58dc53ab374879502160309a0dc1b9b9088835b2fc48cb2544153",
+                  "excerpt_start": 0,
+                  "excerpt_end": 37
+                }
+              ]
+            }
+          },
+          {
+            "query_id": "lexical-tuning-007",
+            "original_query": "NimbusNote 月付与年付的计费差异是什么？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"nimbusnote\" \"月付\" \"付与\" \"与年\" \"年付\" \"付的\" \"的计\" \"计费\" \"费差\" \"差异\" \"异是\" \"是什\" \"什么\"",
+              "fallback_query": "(\"月付\" OR \"月费\" OR \"monthly\" OR \"per month\") AND (\"年付\" OR \"年费\" OR \"annual\" OR \"annually\" OR \"yearly\") AND (\"计费\" OR \"账单\" OR \"billing\" OR \"billed\")",
+              "concepts": [
+                "monthly",
+                "annual",
+                "billing"
+              ],
+              "literals": [],
+              "disabled_reason": null
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "GLOBAL",
+            "product": "NimbusNote",
+            "as_of": "2026-10-04",
+            "hits": [
+              {
+                "rank": 1,
+                "source_id": "note-billing",
+                "document_id": "092a51df-356f-420d-b0bd-6b84df833c8b",
+                "chunk_id": "db19d35e-44c2-5568-8b65-59d02e1f0ff0",
+                "document_version": 1,
+                "content_hash": "983312504ad928196ef0bbd10ac9d1650a3b1b0535d873077051a8c4ee7651a6",
+                "document_content_hash": "983312504ad92819",
+                "chunk_content_hash": "983312504ad92819",
+                "market": "GLOBAL",
+                "role": "source",
+                "product": "NimbusNote",
+                "workspace_id": "product-eval-offline",
+                "project_id": "fixed-corpus",
+                "excerpt_start": 0,
+                "excerpt_end": 45,
+                "metadata": {
+                  "lexical_retrieval": {
+                    "version": "lexical-v1",
+                    "path": "fallback_body",
+                    "concepts": [
+                      "monthly",
+                      "annual",
+                      "billing"
+                    ]
+                  }
+                }
+              }
+            ],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 1,
+              "matched_count": 1,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "proofs": [
+              {
+                "source_id": "note-billing",
+                "start": 0,
+                "end": 45,
+                "quote": "Subscriptions are billed monthly or annually.",
+                "content_hash": "983312504ad928196ef0bbd10ac9d1650a3b1b0535d873077051a8c4ee7651a6",
+                "retrieved": true,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": true
+              }
+            ],
+            "proof_excerpt_recall": 1.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": false,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.352833118289709,
+            "ragas_input": {
+              "query": "NimbusNote 月付与年付的计费差异是什么？",
+              "response": null,
+              "reference_facts": [
+                "Subscriptions are billed monthly or annually."
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [
+                "note-billing"
+              ],
+              "contexts": [
+                {
+                  "source_id": "note-billing",
+                  "content_hash": "983312504ad928196ef0bbd10ac9d1650a3b1b0535d873077051a8c4ee7651a6",
+                  "excerpt_start": 0,
+                  "excerpt_end": 45
+                }
+              ]
+            }
+          },
+          {
+            "query_id": "lexical-tuning-008",
+            "original_query": "Can NimbusNote refund?",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"can\" \"nimbusnote\" \"refund\"",
+              "fallback_query": "(\"退款\" OR \"refund\" OR \"refunds\")",
+              "concepts": [
+                "refund"
+              ],
+              "literals": [],
+              "disabled_reason": null
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "latin",
+            "market": "GLOBAL",
+            "product": "NimbusNote",
+            "as_of": "2026-10-04",
+            "hits": [
+              {
+                "rank": 1,
+                "source_id": "note-refund",
+                "document_id": "cb40a480-9a15-4a55-9fa9-2cfc6dc32bc9",
+                "chunk_id": "15185ba0-60ff-50ac-8f0a-66358502a397",
+                "document_version": 1,
+                "content_hash": "05c105fcbfeaed9aa1e6a529c16056347955f38db482a96fa5968fca24114af6",
+                "document_content_hash": "05c105fcbfeaed9a",
+                "chunk_content_hash": "05c105fcbfeaed9a",
+                "market": "GLOBAL",
+                "role": "source",
+                "product": "NimbusNote",
+                "workspace_id": "product-eval-offline",
+                "project_id": "fixed-corpus",
+                "excerpt_start": 0,
+                "excerpt_end": 37,
+                "metadata": {
+                  "lexical_retrieval": {
+                    "version": "lexical-v1",
+                    "path": "fallback_body",
+                    "concepts": [
+                      "refund"
+                    ]
+                  }
+                }
+              }
+            ],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 1,
+              "matched_count": 1,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "proofs": [
+              {
+                "source_id": "note-refund",
+                "start": 0,
+                "end": 37,
+                "quote": "Refunds are available within 14 days.",
+                "content_hash": "05c105fcbfeaed9aa1e6a529c16056347955f38db482a96fa5968fca24114af6",
+                "retrieved": true,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": true
+              }
+            ],
+            "proof_excerpt_recall": 1.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": false,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.0268338955938816,
+            "ragas_input": {
+              "query": "Can NimbusNote refund?",
+              "response": null,
+              "reference_facts": [
+                "Refunds are available within 14 days."
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [
+                "note-refund"
+              ],
+              "contexts": [
+                {
+                  "source_id": "note-refund",
+                  "content_hash": "05c105fcbfeaed9aa1e6a529c16056347955f38db482a96fa5968fca24114af6",
+                  "excerpt_start": 0,
+                  "excerpt_end": 37
+                }
+              ]
+            }
+          },
+          {
+            "query_id": "lexical-tuning-009",
+            "original_query": "Can MapleBoard export?",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"can\" \"mapleboard\" \"export\"",
+              "fallback_query": "(\"导出\" OR \"export\" OR \"exports\" OR \"exporting\")",
+              "concepts": [
+                "export"
+              ],
+              "literals": [],
+              "disabled_reason": null
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "latin",
+            "market": "GLOBAL",
+            "product": "MapleBoard",
+            "as_of": "2026-10-04",
+            "hits": [
+              {
+                "rank": 1,
+                "source_id": "board-export-cn",
+                "document_id": "429d1cde-3f82-4568-b62c-4644fde9cb3e",
+                "chunk_id": "32407ac1-8c91-5e28-bcbf-32267018124c",
+                "document_version": 1,
+                "content_hash": "c69366c55b909d4f6fd5a3b7032edf236fc59af9ed092306b7716b649eba67c7",
+                "document_content_hash": "c69366c55b909d4f",
+                "chunk_content_hash": "c69366c55b909d4f",
+                "market": "GLOBAL",
+                "role": "source",
+                "product": "MapleBoard",
+                "workspace_id": "product-eval-offline",
+                "project_id": "fixed-corpus",
+                "excerpt_start": 0,
+                "excerpt_end": 20,
+                "metadata": {
+                  "lexical_retrieval": {
+                    "version": "lexical-v1",
+                    "path": "fallback_body",
+                    "concepts": [
+                      "export"
+                    ]
+                  }
+                }
+              }
+            ],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 1,
+              "matched_count": 1,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "proofs": [
+              {
+                "source_id": "board-export-cn",
+                "start": 0,
+                "end": 20,
+                "quote": "可以导出 CSV，项目附件不会一起导出。",
+                "content_hash": "c69366c55b909d4f6fd5a3b7032edf236fc59af9ed092306b7716b649eba67c7",
+                "retrieved": true,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": true
+              }
+            ],
+            "proof_excerpt_recall": 1.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": false,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.0581659153103828,
+            "ragas_input": {
+              "query": "Can MapleBoard export?",
+              "response": null,
+              "reference_facts": [
+                "可以导出 CSV，项目附件不会一起导出。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [
+                "board-export-cn"
+              ],
+              "contexts": [
+                {
+                  "source_id": "board-export-cn",
+                  "content_hash": "c69366c55b909d4f6fd5a3b7032edf236fc59af9ed092306b7716b649eba67c7",
+                  "excerpt_start": 0,
+                  "excerpt_end": 20
+                }
+              ]
+            }
+          },
+          {
+            "query_id": "lexical-tuning-010",
+            "original_query": "MapleBoard 价格和隐私是什么？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"mapleboard\" \"价格\" \"格和\" \"和隐\" \"隐私\" \"私是\" \"是什\" \"什么\"",
+              "fallback_query": "(\"价格\" OR \"定价\" OR \"price\" OR \"prices\" OR \"pricing\") AND (\"隐私\" OR \"privacy\")",
+              "concepts": [
+                "pricing",
+                "privacy"
+              ],
+              "literals": [],
+              "disabled_reason": null
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "GLOBAL",
+            "product": "MapleBoard",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.016000285744667,
+            "ragas_input": {
+              "query": "MapleBoard 价格和隐私是什么？",
+              "response": null,
+              "reference_facts": [],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-011",
+            "original_query": "AuroraCam X warranty 36 months",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"auroracam\" \"x\" \"warranty\" \"36\" \"months\"",
+              "fallback_query": "(\"保修 修期\" OR \"保修\" OR \"质保\" OR \"warranty\" OR \"warranties\") AND \"36\" AND \"months\"",
+              "concepts": [
+                "warranty"
+              ],
+              "literals": [
+                "36",
+                "months"
+              ],
+              "disabled_reason": null
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "latin",
+            "market": "US",
+            "product": "AuroraCam X",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [
+              {
+                "source_id": "future-source",
+                "reason": "source_date_after_as_of"
+              }
+            ],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 0.9722081013023853,
+            "ragas_input": {
+              "query": "AuroraCam X warranty 36 months",
+              "response": null,
+              "reference_facts": [],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-012",
+            "original_query": "NimbusNote quantum tunneling",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"nimbusnote\" \"quantum\" \"tunneling\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [
+                "quantum",
+                "tunneling"
+              ],
+              "disabled_reason": "no_concepts"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "latin",
+            "market": "GLOBAL",
+            "product": "NimbusNote",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 0.6891246885061264,
+            "ragas_input": {
+              "query": "NimbusNote quantum tunneling",
+              "response": null,
+              "reference_facts": [],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-013",
+            "original_query": "AuroraCam Y 保修多久？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"auroracam\" \"y\" \"保修\" \"修多\" \"多久\"",
+              "fallback_query": "(\"保修 修期\" OR \"保修\" OR \"质保\" OR \"warranty\" OR \"warranties\") AND \"auroracam\" AND \"y\"",
+              "concepts": [
+                "warranty"
+              ],
+              "literals": [
+                "auroracam",
+                "y"
+              ],
+              "disabled_reason": null
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "mixed",
+            "market": "US",
+            "product": "AuroraCam X",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [
+              {
+                "source_id": "future-source",
+                "reason": "source_date_after_as_of"
+              }
+            ],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 0.9714160114526749,
+            "ragas_input": {
+              "query": "AuroraCam Y 保修多久？",
+              "response": null,
+              "reference_facts": [],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "lexical-tuning-014",
+            "original_query": "请问是什么？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"请问\" \"问是\" \"是什\" \"什么\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "question_only"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "synthetic_contract",
+            "language": "cjk",
+            "market": "GLOBAL",
+            "product": "NimbusNote",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 0.28695911169052124,
+            "ragas_input": {
+              "query": "请问是什么？",
+              "response": null,
+              "reference_facts": [],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          }
+        ],
+        "modes": {
+          "sparse": {
+            "status": "completed",
+            "top_k": 5,
+            "query_count": 14,
+            "answer_query_count": 9,
+            "recall_at_k": 1.0,
+            "mrr": 1.0,
+            "ndcg_at_k": 1.0,
+            "mean_proof_excerpt_recall": 1.0,
+            "mean_non_gold_source_count": 0
+          },
+          "dense": {
+            "status": "not_run",
+            "reason": "offline run has no vector index or model execution"
+          },
+          "rrf": {
+            "status": "not_run",
+            "reason": "offline run has no vector index or model execution"
+          },
+          "rrf_rerank": {
+            "status": "not_run",
+            "reason": "offline run has no vector index or model execution"
+          }
+        },
+        "outcomes": {
+          "insufficient": {
+            "query_count": 5,
+            "retrieval_empty": 5,
+            "retrieval_noise_count": 0
+          }
+        },
+        "groups": {
+          "category": {
+            "synthetic_contract": {
+              "query_count": 14,
+              "answer_query_count": 9,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            }
+          },
+          "language": {
+            "mixed": {
+              "query_count": 8,
+              "answer_query_count": 6,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "latin": {
+              "query_count": 5,
+              "answer_query_count": 3,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "cjk": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            }
+          },
+          "market": {
+            "CN": {
+              "query_count": 2,
+              "answer_query_count": 2,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "US": {
+              "query_count": 4,
+              "answer_query_count": 2,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "GLOBAL": {
+              "query_count": 8,
+              "answer_query_count": 5,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            }
+          },
+          "product": {
+            "AuroraCam X": {
+              "query_count": 6,
+              "answer_query_count": 4,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "NimbusNote": {
+              "query_count": 6,
+              "answer_query_count": 4,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            },
+            "MapleBoard": {
+              "query_count": 2,
+              "answer_query_count": 1,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            }
+          },
+          "as_of": {
+            "2026-10-04": {
+              "query_count": 14,
+              "answer_query_count": 9,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0
+            }
+          }
+        },
+        "index_ingest_ms": 26.520125102251768,
+        "retrieval_latency_ms": {
+          "p50": 1.1023539118468761,
+          "p95": 1.58987520262599
+        },
+        "sqlite_file_bytes": 217088,
+        "peak_rss_bytes": 89554944,
+        "factual_quality": {
+          "status": "not_run",
+          "reason": "no generated answer or human adjudication"
+        },
+        "clarification_behavior": {
+          "status": "not_run",
+          "reason": "no answer model executed"
+        },
+        "refusal_behavior": {
+          "status": "not_run",
+          "reason": "no answer model executed"
+        },
+        "ragas": {
+          "status": "not_run",
+          "reason": "no model response or reviewed reference for answer scoring"
+        },
+        "snapshot": {
+          "scope": {
+            "workspace_id": "product-eval-offline",
+            "project_id": "fixed-corpus"
+          },
+          "source_roles": [
+            "source"
+          ],
+          "date_rule": "exclude dates after as_of; undated sources require fetched_at <= as_of"
+        }
+      }
+    },
+    "per_query_comparison": [
+      {
+        "query_id": "lexical-tuning-001",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [
+          "camera-warranty-cn"
+        ],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 1.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-002",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [
+          "camera-warranty-us"
+        ],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 1.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-003",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [
+          "camera-warranty-cn"
+        ],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 1.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-004",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [
+          "camera-shipping-us"
+        ],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 1.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-005",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [
+          "note-export"
+        ],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 1.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-006",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [
+          "note-guests"
+        ],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 1.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-007",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [
+          "note-billing"
+        ],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 1.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-008",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [
+          "note-refund"
+        ],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 1.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-009",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [
+          "board-export-cn"
+        ],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 1,
+          "matched_count": 1,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_k": 1.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 1.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-010",
+        "expected_outcome": "insufficient",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-011",
+        "expected_outcome": "insufficient",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-012",
+        "expected_outcome": "insufficient",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-013",
+        "expected_outcome": "insufficient",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "lexical-tuning-014",
+        "expected_outcome": "insufficient",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [],
+        "bounded_failure_reasons": []
+      }
+    ]
+  },
+  "candidate-diagnostic": {
+    "results": {
+      "strict": {
+        "mode": "candidate-diagnostic",
+        "selected_purpose": "evaluation",
+        "selected_label_count": 13,
+        "purpose_excluded_label_count": 0,
+        "dataset": {
+          "queries": 50,
+          "unlabeled": 37,
+          "candidate": 13,
+          "reviewed": 0,
+          "source_date_unknown": 13,
+          "included": 13,
+          "labels_loaded": 13
+        },
+        "dataset_reasons": [
+          "source_date_unknown"
+        ],
+        "lexical_policy": {
+          "name": "strict",
+          "version": "strict-terms-v1",
+          "fallback_enabled": false,
+          "planner_source_sha256": "aba48f1e0891516446dde72ff8170167c2c998d86d2afe156b1b42b78c82b62c"
+        },
+        "semantic_quality_verified": false,
+        "provider": {
+          "requested_provider": "unconfigured",
+          "effective_provider": "unconfigured",
+          "model_version": null,
+          "dimensions": null,
+          "index_version": null,
+          "degraded": false,
+          "semantic_ready": false,
+          "semantic_quality_verified": false,
+          "reason": "real semantic model unavailable"
+        },
+        "reranker": {
+          "effective_provider": "unconfigured"
+        },
+        "model_calls": 0,
+        "queries": [
+          {
+            "query_id": "product-research-002",
+            "original_query": "截至研究日，iPhone 15不同容量的官方价格与促销价格应该怎样区分？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"截至\" \"至研\" \"研究\" \"究日\" \"iphone\" \"15\" \"不同\" \"同容\" \"容量\" \"量的\" \"的官\" \"官方\" \"方价\" \"价格\" \"格与\" \"与促\" \"促销\" \"销价\" \"价格\" \"格应\" \"应该\" \"该怎\" \"怎样\" \"样区\" \"区分\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "消费电子",
+            "language": "mixed",
+            "market": "中国大陆",
+            "product": "iPhone 15",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [
+              {
+                "source_id": "apple-iphone15-launch-cn-20230912",
+                "start": 0,
+                "end": 53,
+                "quote": "起售价分别为 RMB 5,999 或每月 RMB 250 和 RMB 6,999 或每月 RMB 292。",
+                "content_hash": "959adea9d67205cdd6d8ee6925d9da62b4016a3b963e3e3538d7bfd597c59c50",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "apple-iphone15-launch-cn-20230912"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.2716660276055336,
+            "ragas_input": {
+              "query": "截至研究日，iPhone 15不同容量的官方价格与促销价格应该怎样区分？",
+              "response": null,
+              "reference_facts": [
+                "发布时价格不能直接代表研究日的在售价和促销价。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-008",
+            "original_query": "Pixel 8的软件支持承诺是否有明确截止时间，旧评测能否用于当前报告？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"pixel\" \"8\" \"的软\" \"软件\" \"件支\" \"支持\" \"持承\" \"承诺\" \"诺是\" \"是否\" \"否有\" \"有明\" \"明确\" \"确截\" \"截止\" \"止时\" \"时间\" \"旧评\" \"评测\" \"测能\" \"能否\" \"否用\" \"用于\" \"于当\" \"当前\" \"前报\" \"报告\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "消费电子",
+            "language": "mixed",
+            "market": "美国",
+            "product": "Pixel 8",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "google-pixel8-updates-us",
+                "start": 0,
+                "end": 78,
+                "quote": "Pixel 8 and later phones will get updates for 7 years\n\nGoogle Store in the US.",
+                "content_hash": "eaf9d7b26e7aee2aaa479a0638a76b886d8ece4062d95b2cb645e05e4c949295",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "google-pixel8-updates-us"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.1930419132113457,
+            "ragas_input": {
+              "query": "Pixel 8的软件支持承诺是否有明确截止时间，旧评测能否用于当前报告？",
+              "response": null,
+              "reference_facts": [
+                "Pixel 8 获得 7 年更新，起点是美国 Google Store 首次上市；旧评测不能代替当前官方支持说明。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-009",
+            "original_query": "美国版Pixel 8资料中哪些功能不能直接推断在中国大陆可用？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"美国\" \"国版\" \"pixel\" \"8\" \"资料\" \"料中\" \"中哪\" \"哪些\" \"些功\" \"功能\" \"能不\" \"不能\" \"能直\" \"直接\" \"接推\" \"推断\" \"断在\" \"在中\" \"中国\" \"国大\" \"大陆\" \"陆可\" \"可用\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "消费电子",
+            "language": "mixed",
+            "market": "中国大陆",
+            "product": "Pixel 8",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.0089580900967121,
+            "ragas_input": {
+              "query": "美国版Pixel 8资料中哪些功能不能直接推断在中国大陆可用？",
+              "response": null,
+              "reference_facts": [
+                "美国版功能受地域和运营商影响，不能自动套用中国大陆。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-016",
+            "original_query": "DJI Mini 4 Pro的续航与图传数据有哪些测试条件或脚注？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"dji\" \"mini\" \"4\" \"pro\" \"的续\" \"续航\" \"航与\" \"与图\" \"图传\" \"传数\" \"数据\" \"据有\" \"有哪\" \"哪些\" \"些测\" \"测试\" \"试条\" \"条件\" \"件或\" \"或脚\" \"脚注\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "消费电子",
+            "language": "mixed",
+            "market": "中国大陆",
+            "product": "DJI Mini 4 Pro",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 0.9813751094043255,
+            "ragas_input": {
+              "query": "DJI Mini 4 Pro的续航与图传数据有哪些测试条件或脚注？",
+              "response": null,
+              "reference_facts": [
+                "尚缺中国大陆原规格页的完整续航、图传测试条件和脚注。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-020",
+            "original_query": "我想调研iphone duo。是否有足够官方资料确认产品身份，还是应先向用户澄清？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"我想\" \"想调\" \"调研\" \"iphone\" \"duo\" \"是否\" \"否有\" \"有足\" \"足够\" \"够官\" \"官方\" \"方资\" \"资料\" \"料确\" \"确认\" \"认产\" \"产品\" \"品身\" \"身份\" \"还是\" \"是应\" \"应先\" \"先向\" \"向用\" \"用户\" \"户澄\" \"澄清\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "clarify",
+            "review_status": "candidate",
+            "category": "消费电子",
+            "language": "mixed",
+            "market": "未确定",
+            "product": "iphone duo",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.0430831462144852,
+            "ragas_input": {
+              "query": "我想调研iphone duo。是否有足够官方资料确认产品身份，还是应先向用户澄清？",
+              "response": null,
+              "reference_facts": [
+                "需要用户给出官网链接或完整型号，才能确认 iphone duo 指代。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-022",
+            "original_query": "Notion不同套餐的成员、访客与功能限制，应从哪些原始表格和脚注核实？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"notion\" \"不同\" \"同套\" \"套餐\" \"餐的\" \"的成\" \"成员\" \"访客\" \"客与\" \"与功\" \"功能\" \"能限\" \"限制\" \"应从\" \"从哪\" \"哪些\" \"些原\" \"原始\" \"始表\" \"表格\" \"格和\" \"和脚\" \"脚注\" \"注核\" \"核实\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "全球",
+            "product": "Notion",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [
+              {
+                "source_id": "notion-guests-global",
+                "start": 0,
+                "end": 82,
+                "quote": "Remember that guests can be added to individual pages, not to an entire workspace.",
+                "content_hash": "9c2431e521c24ed5cfe62356ba9926621e108a97d37cd7bd27943054b68ba397",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "notion-guests-global"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.0411660186946392,
+            "ragas_input": {
+              "query": "Notion不同套餐的成员、访客与功能限制，应从哪些原始表格和脚注核实？",
+              "response": null,
+              "reference_facts": [
+                "访客只能访问受邀页面；资料不足以核实全部套餐成员与访客限制。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-023",
+            "original_query": "Notion按月与按年报价如何区分，能否用旧报告中的价格回答当前问题？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"notion\" \"按月\" \"月与\" \"与按\" \"按年\" \"年报\" \"报价\" \"价如\" \"如何\" \"何区\" \"区分\" \"能否\" \"否用\" \"用旧\" \"旧报\" \"报告\" \"告中\" \"中的\" \"的价\" \"价格\" \"格回\" \"回答\" \"答当\" \"当前\" \"前问\" \"问题\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "全球",
+            "product": "Notion",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "notion-billing-global",
+                "start": 0,
+                "end": 90,
+                "quote": "You can choose to pay for Notion on a yearly or monthly basis.\n\nYearly billing costs less.",
+                "content_hash": "8a7ffe028c528ea2357a884cacf4c056985e2ea17bd6c7a68618504aca736dba",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "notion-billing-global"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.066083088517189,
+            "ragas_input": {
+              "query": "Notion按月与按年报价如何区分，能否用旧报告中的价格回答当前问题？",
+              "response": null,
+              "reference_facts": [
+                "Notion 支持月付和年付，官方说明年付费用更低；旧报价需重新核实。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-024",
+            "original_query": "如果资料只说明Notion的笔记功能，能否断言它满足某行业的全部合规要求？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"如果\" \"果资\" \"资料\" \"料只\" \"只说\" \"说明\" \"notion\" \"的笔\" \"笔记\" \"记功\" \"功能\" \"能否\" \"否断\" \"断言\" \"言它\" \"它满\" \"满足\" \"足某\" \"某行\" \"行业\" \"业的\" \"的全\" \"全部\" \"部合\" \"合规\" \"规要\" \"要求\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "全球",
+            "product": "Notion",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.0485411621630192,
+            "ragas_input": {
+              "query": "如果资料只说明Notion的笔记功能，能否断言它满足某行业的全部合规要求？",
+              "response": null,
+              "reference_facts": [
+                "笔记能力资料不足以证明某行业全部合规要求；需要明确行业、地区和要求。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-026",
+            "original_query": "Figma不同席位和套餐的收费口径应如何拆开，避免把一种席位价格套用于所有用户？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"figma\" \"不同\" \"同席\" \"席位\" \"位和\" \"和套\" \"套餐\" \"餐的\" \"的收\" \"收费\" \"费口\" \"口径\" \"径应\" \"应如\" \"如何\" \"何拆\" \"拆开\" \"避免\" \"免把\" \"把一\" \"一种\" \"种席\" \"席位\" \"位价\" \"价格\" \"格套\" \"套用\" \"用于\" \"于所\" \"所有\" \"有用\" \"用户\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "全球",
+            "product": "Figma",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "figma-pricing-global",
+                "start": 0,
+                "end": 93,
+                "quote": "Prices in USD\n\nProfessional\nMonthly Annual\nFull seat\n$16/mo\nDev seat\n$12/mo\nCollab seat\n$3/mo",
+                "content_hash": "f63c5eded0e60c4f14b3b9bd8edd5211d8c03b2b4cee65fd29de60c9a13e371c",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "figma-pricing-global"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.1575408279895782,
+            "ragas_input": {
+              "query": "Figma不同席位和套餐的收费口径应如何拆开，避免把一种席位价格套用于所有用户？",
+              "response": null,
+              "reference_facts": [
+                "Professional 的 Full、Dev、Collab 是不同席位，需分别记录价格和计费周期。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-028",
+            "original_query": "Find original evidence for Figma design handoff capabilities，输出中文并保留出处。",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"find\" \"original\" \"evidence\" \"for\" \"figma\" \"design\" \"handoff\" \"capabilities\" \"输出\" \"出中\" \"中文\" \"文并\" \"并保\" \"保留\" \"留出\" \"出处\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "全球",
+            "product": "Figma",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "figma-devmode-global",
+                "start": 0,
+                "end": 155,
+                "quote": "inspecting designs, viewing properties and generated code, downloading assets, comparing changes, and managing design handoff.\n\nAvailable on all paid plans",
+                "content_hash": "bd43724abb0254597d647e1007535925db98d64ea0a9a3f05b811a90498b2313",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "figma-devmode-global"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 0.8773333393037319,
+            "ragas_input": {
+              "query": "Find original evidence for Figma design handoff capabilities，输出中文并保留出处。",
+              "response": null,
+              "reference_facts": [
+                "Dev Mode 支持设计检查、生成代码查看、资产下载、版本比较与交付；适用于付费计划。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-030",
+            "original_query": "Slack的消息保留能力是否随套餐变化，资料中的限制条件在哪里？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"slack\" \"的消\" \"消息\" \"息保\" \"保留\" \"留能\" \"能力\" \"力是\" \"是否\" \"否随\" \"随套\" \"套餐\" \"餐变\" \"变化\" \"资料\" \"料中\" \"中的\" \"的限\" \"限制\" \"制条\" \"条件\" \"件在\" \"在哪\" \"哪里\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "全球",
+            "product": "Slack",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "slack-free-history-global",
+                "start": 0,
+                "end": 110,
+                "quote": "90 days of message and file history\n\nall data in your workspace that's more than one year old will be deleted.",
+                "content_hash": "60ecd1bc7142d5414027e89043e16be26b51e632f7986bb540b5606db865baf0",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "slack-free-history-global"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 0.9926659986376762,
+            "ragas_input": {
+              "query": "Slack的消息保留能力是否随套餐变化，资料中的限制条件在哪里？",
+              "response": null,
+              "reference_facts": [
+                "Slack 免费版的可见消息/文件历史为 90 天；超过一年的工作区数据删除，二者应区分。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-038",
+            "original_query": "Shopify套餐费、支付费用与第三方应用费用如何分别核实？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"shopify\" \"套餐\" \"餐费\" \"支付\" \"付费\" \"费用\" \"用与\" \"与第\" \"第三\" \"三方\" \"方应\" \"应用\" \"用费\" \"费用\" \"用如\" \"如何\" \"何分\" \"分别\" \"别核\" \"核实\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "美国",
+            "product": "Shopify",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [
+              {
+                "source_id": "shopify-thirdparty-fees-us",
+                "start": 0,
+                "end": 144,
+                "quote": "Third-party transaction fees may apply when you use a third-party payment provider (instead of Shopify Payments). The rate depends on your plan.",
+                "content_hash": "c13942ec54e1f910a714421c03339b2c349197bac2333b638ea99b45534274da",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "shopify-thirdparty-fees-us"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 0.8979998528957367,
+            "ragas_input": {
+              "query": "Shopify套餐费、支付费用与第三方应用费用如何分别核实？",
+              "response": null,
+              "reference_facts": [
+                "第三方支付交易费随套餐变化；尚缺美国口径的完整套餐、支付和应用费用组合。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-046",
+            "original_query": "没有足够可靠配送时效数据时，能否直接判断饿了么比竞品更快？",
+            "lexical_plan": {
+              "version": "strict-terms-v1",
+              "strict_query": "\"没有\" \"有足\" \"足够\" \"够可\" \"可靠\" \"靠配\" \"配送\" \"送时\" \"时效\" \"效数\" \"数据\" \"据时\" \"能否\" \"否直\" \"直接\" \"接判\" \"判断\" \"断饿\" \"饿了\" \"了么\" \"么比\" \"比竞\" \"竞品\" \"品更\" \"更快\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [],
+              "disabled_reason": "policy_disabled"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "生活服务",
+            "language": "cjk",
+            "market": "上海",
+            "product": "饿了么",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 0.9854170493781567,
+            "ragas_input": {
+              "query": "没有足够可靠配送时效数据时，能否直接判断饿了么比竞品更快？",
+              "response": null,
+              "reference_facts": [
+                "没有可靠配送时效对照时，不能判断饿了么比竞品更快。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          }
+        ],
+        "modes": {
+          "sparse": {
+            "status": "completed",
+            "top_k": 5,
+            "query_count": 13,
+            "answer_query_count": 5,
+            "recall_at_k": 0.0,
+            "mrr": 0.0,
+            "ndcg_at_k": 0.0,
+            "mean_proof_excerpt_recall": 0.0,
+            "mean_non_gold_source_count": 0
+          },
+          "dense": {
+            "status": "not_run",
+            "reason": "offline run has no vector index or model execution"
+          },
+          "rrf": {
+            "status": "not_run",
+            "reason": "offline run has no vector index or model execution"
+          },
+          "rrf_rerank": {
+            "status": "not_run",
+            "reason": "offline run has no vector index or model execution"
+          }
+        },
+        "outcomes": {
+          "clarify": {
+            "query_count": 1,
+            "retrieval_empty": 1,
+            "retrieval_noise_count": 0
+          },
+          "insufficient": {
+            "query_count": 7,
+            "retrieval_empty": 7,
+            "retrieval_noise_count": 0
+          }
+        },
+        "groups": {
+          "category": {
+            "消费电子": {
+              "query_count": 5,
+              "answer_query_count": 1,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "SaaS": {
+              "query_count": 7,
+              "answer_query_count": 4,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "生活服务": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            }
+          },
+          "language": {
+            "mixed": {
+              "query_count": 12,
+              "answer_query_count": 5,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "cjk": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            }
+          },
+          "market": {
+            "中国大陆": {
+              "query_count": 3,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            },
+            "美国": {
+              "query_count": 2,
+              "answer_query_count": 1,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "未确定": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            },
+            "全球": {
+              "query_count": 6,
+              "answer_query_count": 4,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "上海": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            }
+          },
+          "product": {
+            "iPhone 15": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            },
+            "Pixel 8": {
+              "query_count": 2,
+              "answer_query_count": 1,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "DJI Mini 4 Pro": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            },
+            "iphone duo": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            },
+            "Notion": {
+              "query_count": 3,
+              "answer_query_count": 1,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "Figma": {
+              "query_count": 2,
+              "answer_query_count": 2,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "Slack": {
+              "query_count": 1,
+              "answer_query_count": 1,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "Shopify": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            },
+            "饿了么": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            }
+          },
+          "as_of": {
+            "2026-10-04": {
+              "query_count": 13,
+              "answer_query_count": 5,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            }
+          }
+        },
+        "index_ingest_ms": 27.276709210127592,
+        "retrieval_latency_ms": {
+          "p50": 1.0411660186946392,
+          "p95": 1.2716660276055336
+        },
+        "sqlite_file_bytes": 221184,
+        "peak_rss_bytes": 89882624,
+        "factual_quality": {
+          "status": "not_run",
+          "reason": "no generated answer or human adjudication"
+        },
+        "clarification_behavior": {
+          "status": "not_run",
+          "reason": "no answer model executed"
+        },
+        "refusal_behavior": {
+          "status": "not_run",
+          "reason": "no answer model executed"
+        },
+        "ragas": {
+          "status": "not_run",
+          "reason": "no model response or reviewed reference for answer scoring"
+        },
+        "snapshot": {
+          "scope": {
+            "workspace_id": "product-eval-offline",
+            "project_id": "fixed-corpus"
+          },
+          "source_roles": [
+            "source"
+          ],
+          "date_rule": "exclude dates after as_of; undated sources require fetched_at <= as_of"
+        }
+      },
+      "bounded": {
+        "mode": "candidate-diagnostic",
+        "selected_purpose": "evaluation",
+        "selected_label_count": 13,
+        "purpose_excluded_label_count": 0,
+        "dataset": {
+          "queries": 50,
+          "unlabeled": 37,
+          "candidate": 13,
+          "reviewed": 0,
+          "source_date_unknown": 13,
+          "included": 13,
+          "labels_loaded": 13
+        },
+        "dataset_reasons": [
+          "source_date_unknown"
+        ],
+        "lexical_policy": {
+          "name": "bounded",
+          "version": "lexical-v1",
+          "fallback_enabled": true,
+          "planner_source_sha256": "aba48f1e0891516446dde72ff8170167c2c998d86d2afe156b1b42b78c82b62c"
+        },
+        "semantic_quality_verified": false,
+        "provider": {
+          "requested_provider": "unconfigured",
+          "effective_provider": "unconfigured",
+          "model_version": null,
+          "dimensions": null,
+          "index_version": null,
+          "degraded": false,
+          "semantic_ready": false,
+          "semantic_quality_verified": false,
+          "reason": "real semantic model unavailable"
+        },
+        "reranker": {
+          "effective_provider": "unconfigured"
+        },
+        "model_calls": 0,
+        "queries": [
+          {
+            "query_id": "product-research-002",
+            "original_query": "截至研究日，iPhone 15不同容量的官方价格与促销价格应该怎样区分？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"截至\" \"至研\" \"研究\" \"究日\" \"iphone\" \"15\" \"不同\" \"同容\" \"容量\" \"量的\" \"的官\" \"官方\" \"方价\" \"价格\" \"格与\" \"与促\" \"促销\" \"销价\" \"价格\" \"格应\" \"应该\" \"该怎\" \"怎样\" \"样区\" \"区分\"",
+              "fallback_query": null,
+              "concepts": [
+                "capacity",
+                "pricing"
+              ],
+              "literals": [
+                "截至",
+                "至研",
+                "研究",
+                "究日",
+                "不同",
+                "的官",
+                "官方",
+                "与促",
+                "促销",
+                "应该",
+                "该怎",
+                "怎样",
+                "样区",
+                "区分"
+              ],
+              "disabled_reason": "too_many_literals"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "消费电子",
+            "language": "mixed",
+            "market": "中国大陆",
+            "product": "iPhone 15",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [
+              {
+                "source_id": "apple-iphone15-launch-cn-20230912",
+                "start": 0,
+                "end": 53,
+                "quote": "起售价分别为 RMB 5,999 或每月 RMB 250 和 RMB 6,999 或每月 RMB 292。",
+                "content_hash": "959adea9d67205cdd6d8ee6925d9da62b4016a3b963e3e3538d7bfd597c59c50",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "apple-iphone15-launch-cn-20230912"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.3890829868614674,
+            "ragas_input": {
+              "query": "截至研究日，iPhone 15不同容量的官方价格与促销价格应该怎样区分？",
+              "response": null,
+              "reference_facts": [
+                "发布时价格不能直接代表研究日的在售价和促销价。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-008",
+            "original_query": "Pixel 8的软件支持承诺是否有明确截止时间，旧评测能否用于当前报告？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"pixel\" \"8\" \"的软\" \"软件\" \"件支\" \"支持\" \"持承\" \"承诺\" \"诺是\" \"是否\" \"否有\" \"有明\" \"明确\" \"确截\" \"截止\" \"止时\" \"时间\" \"旧评\" \"评测\" \"测能\" \"能否\" \"否用\" \"用于\" \"于当\" \"当前\" \"前报\" \"报告\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [
+                "的软",
+                "软件",
+                "件支",
+                "支持",
+                "持承",
+                "承诺",
+                "诺是",
+                "是否",
+                "否有",
+                "有明",
+                "明确",
+                "确截",
+                "截止",
+                "止时",
+                "时间",
+                "旧评",
+                "评测",
+                "测能",
+                "能否",
+                "否用",
+                "用于",
+                "于当",
+                "当前",
+                "前报",
+                "报告"
+              ],
+              "disabled_reason": "too_many_literals"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "消费电子",
+            "language": "mixed",
+            "market": "美国",
+            "product": "Pixel 8",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "google-pixel8-updates-us",
+                "start": 0,
+                "end": 78,
+                "quote": "Pixel 8 and later phones will get updates for 7 years\n\nGoogle Store in the US.",
+                "content_hash": "eaf9d7b26e7aee2aaa479a0638a76b886d8ece4062d95b2cb645e05e4c949295",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "google-pixel8-updates-us"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.21329165995121,
+            "ragas_input": {
+              "query": "Pixel 8的软件支持承诺是否有明确截止时间，旧评测能否用于当前报告？",
+              "response": null,
+              "reference_facts": [
+                "Pixel 8 获得 7 年更新，起点是美国 Google Store 首次上市；旧评测不能代替当前官方支持说明。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-009",
+            "original_query": "美国版Pixel 8资料中哪些功能不能直接推断在中国大陆可用？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"美国\" \"国版\" \"pixel\" \"8\" \"资料\" \"料中\" \"中哪\" \"哪些\" \"些功\" \"功能\" \"能不\" \"不能\" \"能直\" \"直接\" \"接推\" \"推断\" \"断在\" \"在中\" \"中国\" \"国大\" \"大陆\" \"陆可\" \"可用\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [
+                "美国",
+                "国版",
+                "资料",
+                "料中",
+                "中哪",
+                "哪些",
+                "些功",
+                "功能",
+                "能不",
+                "不能",
+                "能直",
+                "直接",
+                "接推",
+                "推断",
+                "断在",
+                "在中",
+                "中国",
+                "国大",
+                "大陆",
+                "陆可",
+                "可用"
+              ],
+              "disabled_reason": "too_many_literals"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "消费电子",
+            "language": "mixed",
+            "market": "中国大陆",
+            "product": "Pixel 8",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.1082501150667667,
+            "ragas_input": {
+              "query": "美国版Pixel 8资料中哪些功能不能直接推断在中国大陆可用？",
+              "response": null,
+              "reference_facts": [
+                "美国版功能受地域和运营商影响，不能自动套用中国大陆。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-016",
+            "original_query": "DJI Mini 4 Pro的续航与图传数据有哪些测试条件或脚注？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"dji\" \"mini\" \"4\" \"pro\" \"的续\" \"续航\" \"航与\" \"与图\" \"图传\" \"传数\" \"数据\" \"据有\" \"有哪\" \"哪些\" \"些测\" \"测试\" \"试条\" \"条件\" \"件或\" \"或脚\" \"脚注\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [
+                "的续",
+                "续航",
+                "航与",
+                "与图",
+                "图传",
+                "传数",
+                "数据",
+                "据有",
+                "有哪",
+                "哪些",
+                "些测",
+                "测试",
+                "试条",
+                "条件",
+                "件或",
+                "或脚",
+                "脚注"
+              ],
+              "disabled_reason": "too_many_literals"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "消费电子",
+            "language": "mixed",
+            "market": "中国大陆",
+            "product": "DJI Mini 4 Pro",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.0408749803900719,
+            "ragas_input": {
+              "query": "DJI Mini 4 Pro的续航与图传数据有哪些测试条件或脚注？",
+              "response": null,
+              "reference_facts": [
+                "尚缺中国大陆原规格页的完整续航、图传测试条件和脚注。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-020",
+            "original_query": "我想调研iphone duo。是否有足够官方资料确认产品身份，还是应先向用户澄清？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"我想\" \"想调\" \"调研\" \"iphone\" \"duo\" \"是否\" \"否有\" \"有足\" \"足够\" \"够官\" \"官方\" \"方资\" \"资料\" \"料确\" \"确认\" \"认产\" \"产品\" \"品身\" \"身份\" \"还是\" \"是应\" \"应先\" \"先向\" \"向用\" \"用户\" \"户澄\" \"澄清\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [
+                "我想",
+                "想调",
+                "调研",
+                "是否",
+                "否有",
+                "有足",
+                "足够",
+                "够官",
+                "官方",
+                "方资",
+                "资料",
+                "料确",
+                "确认",
+                "认产",
+                "产品",
+                "品身",
+                "身份",
+                "还是",
+                "是应",
+                "应先",
+                "先向",
+                "向用",
+                "用户",
+                "户澄",
+                "澄清"
+              ],
+              "disabled_reason": "too_many_literals"
+            },
+            "expected_outcome": "clarify",
+            "review_status": "candidate",
+            "category": "消费电子",
+            "language": "mixed",
+            "market": "未确定",
+            "product": "iphone duo",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.1950829066336155,
+            "ragas_input": {
+              "query": "我想调研iphone duo。是否有足够官方资料确认产品身份，还是应先向用户澄清？",
+              "response": null,
+              "reference_facts": [
+                "需要用户给出官网链接或完整型号，才能确认 iphone duo 指代。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-022",
+            "original_query": "Notion不同套餐的成员、访客与功能限制，应从哪些原始表格和脚注核实？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"notion\" \"不同\" \"同套\" \"套餐\" \"餐的\" \"的成\" \"成员\" \"访客\" \"客与\" \"与功\" \"功能\" \"能限\" \"限制\" \"应从\" \"从哪\" \"哪些\" \"些原\" \"原始\" \"始表\" \"表格\" \"格和\" \"和脚\" \"脚注\" \"注核\" \"核实\"",
+              "fallback_query": null,
+              "concepts": [
+                "plans",
+                "guest"
+              ],
+              "literals": [
+                "不同",
+                "的成",
+                "成员",
+                "与功",
+                "功能",
+                "能限",
+                "限制",
+                "应从",
+                "从哪",
+                "哪些",
+                "些原",
+                "原始",
+                "始表",
+                "表格",
+                "格和",
+                "和脚",
+                "脚注",
+                "注核",
+                "核实"
+              ],
+              "disabled_reason": "too_many_literals"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "全球",
+            "product": "Notion",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [
+              {
+                "source_id": "notion-guests-global",
+                "start": 0,
+                "end": 82,
+                "quote": "Remember that guests can be added to individual pages, not to an entire workspace.",
+                "content_hash": "9c2431e521c24ed5cfe62356ba9926621e108a97d37cd7bd27943054b68ba397",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "notion-guests-global"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.126541756093502,
+            "ragas_input": {
+              "query": "Notion不同套餐的成员、访客与功能限制，应从哪些原始表格和脚注核实？",
+              "response": null,
+              "reference_facts": [
+                "访客只能访问受邀页面；资料不足以核实全部套餐成员与访客限制。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-023",
+            "original_query": "Notion按月与按年报价如何区分，能否用旧报告中的价格回答当前问题？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"notion\" \"按月\" \"月与\" \"与按\" \"按年\" \"年报\" \"报价\" \"价如\" \"如何\" \"何区\" \"区分\" \"能否\" \"否用\" \"用旧\" \"旧报\" \"报告\" \"告中\" \"中的\" \"的价\" \"价格\" \"格回\" \"回答\" \"答当\" \"当前\" \"前问\" \"问题\"",
+              "fallback_query": null,
+              "concepts": [
+                "pricing"
+              ],
+              "literals": [
+                "按月",
+                "月与",
+                "与按",
+                "按年",
+                "年报",
+                "报价",
+                "价如",
+                "如何",
+                "何区",
+                "区分",
+                "能否",
+                "否用",
+                "用旧",
+                "旧报",
+                "报告",
+                "告中",
+                "中的",
+                "回答",
+                "答当",
+                "当前",
+                "前问",
+                "问题"
+              ],
+              "disabled_reason": "too_many_literals"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "全球",
+            "product": "Notion",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "notion-billing-global",
+                "start": 0,
+                "end": 90,
+                "quote": "You can choose to pay for Notion on a yearly or monthly basis.\n\nYearly billing costs less.",
+                "content_hash": "8a7ffe028c528ea2357a884cacf4c056985e2ea17bd6c7a68618504aca736dba",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "notion-billing-global"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.2779589742422104,
+            "ragas_input": {
+              "query": "Notion按月与按年报价如何区分，能否用旧报告中的价格回答当前问题？",
+              "response": null,
+              "reference_facts": [
+                "Notion 支持月付和年付，官方说明年付费用更低；旧报价需重新核实。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-024",
+            "original_query": "如果资料只说明Notion的笔记功能，能否断言它满足某行业的全部合规要求？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"如果\" \"果资\" \"资料\" \"料只\" \"只说\" \"说明\" \"notion\" \"的笔\" \"笔记\" \"记功\" \"功能\" \"能否\" \"否断\" \"断言\" \"言它\" \"它满\" \"满足\" \"足某\" \"某行\" \"行业\" \"业的\" \"的全\" \"全部\" \"部合\" \"合规\" \"规要\" \"要求\"",
+              "fallback_query": null,
+              "concepts": [],
+              "literals": [
+                "如果",
+                "果资",
+                "资料",
+                "料只",
+                "只说",
+                "说明",
+                "的笔",
+                "笔记",
+                "记功",
+                "功能",
+                "能否",
+                "否断",
+                "断言",
+                "言它",
+                "它满",
+                "满足",
+                "足某",
+                "某行",
+                "行业",
+                "业的",
+                "的全",
+                "全部",
+                "部合",
+                "合规",
+                "规要",
+                "要求"
+              ],
+              "disabled_reason": "too_many_literals"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "全球",
+            "product": "Notion",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.2331251055002213,
+            "ragas_input": {
+              "query": "如果资料只说明Notion的笔记功能，能否断言它满足某行业的全部合规要求？",
+              "response": null,
+              "reference_facts": [
+                "笔记能力资料不足以证明某行业全部合规要求；需要明确行业、地区和要求。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-026",
+            "original_query": "Figma不同席位和套餐的收费口径应如何拆开，避免把一种席位价格套用于所有用户？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"figma\" \"不同\" \"同席\" \"席位\" \"位和\" \"和套\" \"套餐\" \"餐的\" \"的收\" \"收费\" \"费口\" \"口径\" \"径应\" \"应如\" \"如何\" \"何拆\" \"拆开\" \"避免\" \"免把\" \"把一\" \"一种\" \"种席\" \"席位\" \"位价\" \"价格\" \"格套\" \"套用\" \"用于\" \"于所\" \"所有\" \"有用\" \"用户\"",
+              "fallback_query": null,
+              "concepts": [
+                "seat",
+                "plans",
+                "pricing"
+              ],
+              "literals": [
+                "不同",
+                "的收",
+                "收费",
+                "费口",
+                "口径",
+                "径应",
+                "应如",
+                "如何",
+                "何拆",
+                "拆开",
+                "避免",
+                "免把",
+                "把一",
+                "一种",
+                "套用",
+                "用于",
+                "于所",
+                "所有",
+                "有用",
+                "用户"
+              ],
+              "disabled_reason": "too_many_literals"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "全球",
+            "product": "Figma",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "figma-pricing-global",
+                "start": 0,
+                "end": 93,
+                "quote": "Prices in USD\n\nProfessional\nMonthly Annual\nFull seat\n$16/mo\nDev seat\n$12/mo\nCollab seat\n$3/mo",
+                "content_hash": "f63c5eded0e60c4f14b3b9bd8edd5211d8c03b2b4cee65fd29de60c9a13e371c",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "figma-pricing-global"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.4673750847578049,
+            "ragas_input": {
+              "query": "Figma不同席位和套餐的收费口径应如何拆开，避免把一种席位价格套用于所有用户？",
+              "response": null,
+              "reference_facts": [
+                "Professional 的 Full、Dev、Collab 是不同席位，需分别记录价格和计费周期。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-028",
+            "original_query": "Find original evidence for Figma design handoff capabilities，输出中文并保留出处。",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"find\" \"original\" \"evidence\" \"for\" \"figma\" \"design\" \"handoff\" \"capabilities\" \"输出\" \"出中\" \"中文\" \"文并\" \"并保\" \"保留\" \"留出\" \"出处\"",
+              "fallback_query": "(\"交付\" OR \"handoff\") AND (\"保留\" OR \"留存\" OR \"retention\" OR \"retained\") AND \"find\" AND \"original\" AND \"evidence\" AND \"design\" AND \"capabilities\" AND \"输出\" AND \"出中\" AND \"中文\" AND \"文并\" AND \"出处\"",
+              "concepts": [
+                "handoff",
+                "retention"
+              ],
+              "literals": [
+                "find",
+                "original",
+                "evidence",
+                "design",
+                "capabilities",
+                "输出",
+                "出中",
+                "中文",
+                "文并",
+                "出处"
+              ],
+              "disabled_reason": null
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "全球",
+            "product": "Figma",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "figma-devmode-global",
+                "start": 0,
+                "end": 155,
+                "quote": "inspecting designs, viewing properties and generated code, downloading assets, comparing changes, and managing design handoff.\n\nAvailable on all paid plans",
+                "content_hash": "bd43724abb0254597d647e1007535925db98d64ea0a9a3f05b811a90498b2313",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "figma-devmode-global"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.37404166162014,
+            "ragas_input": {
+              "query": "Find original evidence for Figma design handoff capabilities，输出中文并保留出处。",
+              "response": null,
+              "reference_facts": [
+                "Dev Mode 支持设计检查、生成代码查看、资产下载、版本比较与交付；适用于付费计划。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-030",
+            "original_query": "Slack的消息保留能力是否随套餐变化，资料中的限制条件在哪里？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"slack\" \"的消\" \"消息\" \"息保\" \"保留\" \"留能\" \"能力\" \"力是\" \"是否\" \"否随\" \"随套\" \"套餐\" \"餐变\" \"变化\" \"资料\" \"料中\" \"中的\" \"的限\" \"限制\" \"制条\" \"条件\" \"件在\" \"在哪\" \"哪里\"",
+              "fallback_query": null,
+              "concepts": [
+                "retention",
+                "plans"
+              ],
+              "literals": [
+                "的消",
+                "消息",
+                "能力",
+                "力是",
+                "是否",
+                "否随",
+                "变化",
+                "资料",
+                "料中",
+                "中的",
+                "的限",
+                "限制",
+                "制条",
+                "条件",
+                "件在",
+                "在哪",
+                "哪里"
+              ],
+              "disabled_reason": "too_many_literals"
+            },
+            "expected_outcome": "answer",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "全球",
+            "product": "Slack",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": {
+              "relevant_count": 1,
+              "retrieved_count": 0,
+              "matched_count": 0,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "proofs": [
+              {
+                "source_id": "slack-free-history-global",
+                "start": 0,
+                "end": 110,
+                "quote": "90 days of message and file history\n\nall data in your workspace that's more than one year old will be deleted.",
+                "content_hash": "60ecd1bc7142d5414027e89043e16be26b51e632f7986bb540b5606db865baf0",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": 0.0,
+            "non_gold_source_count": 0,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "slack-free-history-global"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": null,
+            "latency_ms": 1.0891249403357506,
+            "ragas_input": {
+              "query": "Slack的消息保留能力是否随套餐变化，资料中的限制条件在哪里？",
+              "response": null,
+              "reference_facts": [
+                "Slack 免费版的可见消息/文件历史为 90 天；超过一年的工作区数据删除，二者应区分。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-038",
+            "original_query": "Shopify套餐费、支付费用与第三方应用费用如何分别核实？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"shopify\" \"套餐\" \"餐费\" \"支付\" \"付费\" \"费用\" \"用与\" \"与第\" \"第三\" \"三方\" \"方应\" \"应用\" \"用费\" \"费用\" \"用如\" \"如何\" \"何分\" \"分别\" \"别核\" \"核实\"",
+              "fallback_query": null,
+              "concepts": [
+                "plans"
+              ],
+              "literals": [
+                "费",
+                "支付",
+                "付费",
+                "费用",
+                "用与",
+                "与第",
+                "第三",
+                "三方",
+                "方应",
+                "应用",
+                "用费",
+                "费用",
+                "用如",
+                "如何",
+                "何分",
+                "分别",
+                "别核",
+                "核实"
+              ],
+              "disabled_reason": "too_many_literals"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "SaaS",
+            "language": "mixed",
+            "market": "美国",
+            "product": "Shopify",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [
+              {
+                "source_id": "shopify-thirdparty-fees-us",
+                "start": 0,
+                "end": 144,
+                "quote": "Third-party transaction fees may apply when you use a third-party payment provider (instead of Shopify Payments). The rate depends on your plan.",
+                "content_hash": "c13942ec54e1f910a714421c03339b2c349197bac2333b638ea99b45534274da",
+                "retrieved": false,
+                "quote_matches_saved_excerpt": true,
+                "quote_in_retrieved_excerpt": false
+              }
+            ],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [
+              "shopify-thirdparty-fees-us"
+            ],
+            "failure_reasons": [
+              "proof_source_not_retrieved",
+              "proof_excerpt_not_retrieved"
+            ],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.026791986078024,
+            "ragas_input": {
+              "query": "Shopify套餐费、支付费用与第三方应用费用如何分别核实？",
+              "response": null,
+              "reference_facts": [
+                "第三方支付交易费随套餐变化；尚缺美国口径的完整套餐、支付和应用费用组合。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          },
+          {
+            "query_id": "product-research-046",
+            "original_query": "没有足够可靠配送时效数据时，能否直接判断饿了么比竞品更快？",
+            "lexical_plan": {
+              "version": "lexical-v1",
+              "strict_query": "\"没有\" \"有足\" \"足够\" \"够可\" \"可靠\" \"靠配\" \"配送\" \"送时\" \"时效\" \"效数\" \"数据\" \"据时\" \"能否\" \"否直\" \"直接\" \"接判\" \"判断\" \"断饿\" \"饿了\" \"了么\" \"么比\" \"比竞\" \"竞品\" \"品更\" \"更快\"",
+              "fallback_query": null,
+              "concepts": [
+                "shipping"
+              ],
+              "literals": [
+                "没有",
+                "有足",
+                "足够",
+                "够可",
+                "可靠",
+                "时效",
+                "效数",
+                "数据",
+                "据时",
+                "能否",
+                "否直",
+                "直接",
+                "接判",
+                "判断",
+                "比竞",
+                "竞品",
+                "品更",
+                "更快"
+              ],
+              "disabled_reason": "too_many_literals"
+            },
+            "expected_outcome": "insufficient",
+            "review_status": "candidate",
+            "category": "生活服务",
+            "language": "cjk",
+            "market": "上海",
+            "product": "饿了么",
+            "as_of": "2026-10-04",
+            "hits": [],
+            "metrics": null,
+            "proofs": [],
+            "proof_excerpt_recall": null,
+            "non_gold_source_count": null,
+            "date_exclusions": [],
+            "missing_source_ids": [],
+            "failure_reasons": [],
+            "retrieval_empty": true,
+            "retrieval_noise_count": 0,
+            "latency_ms": 1.092416699975729,
+            "ragas_input": {
+              "query": "没有足够可靠配送时效数据时，能否直接判断饿了么比竞品更快？",
+              "response": null,
+              "reference_facts": [
+                "没有可靠配送时效对照时，不能判断饿了么比竞品更快。"
+              ],
+              "review_status": "candidate",
+              "retrieved_source_ids": [],
+              "contexts": []
+            }
+          }
+        ],
+        "modes": {
+          "sparse": {
+            "status": "completed",
+            "top_k": 5,
+            "query_count": 13,
+            "answer_query_count": 5,
+            "recall_at_k": 0.0,
+            "mrr": 0.0,
+            "ndcg_at_k": 0.0,
+            "mean_proof_excerpt_recall": 0.0,
+            "mean_non_gold_source_count": 0
+          },
+          "dense": {
+            "status": "not_run",
+            "reason": "offline run has no vector index or model execution"
+          },
+          "rrf": {
+            "status": "not_run",
+            "reason": "offline run has no vector index or model execution"
+          },
+          "rrf_rerank": {
+            "status": "not_run",
+            "reason": "offline run has no vector index or model execution"
+          }
+        },
+        "outcomes": {
+          "clarify": {
+            "query_count": 1,
+            "retrieval_empty": 1,
+            "retrieval_noise_count": 0
+          },
+          "insufficient": {
+            "query_count": 7,
+            "retrieval_empty": 7,
+            "retrieval_noise_count": 0
+          }
+        },
+        "groups": {
+          "category": {
+            "消费电子": {
+              "query_count": 5,
+              "answer_query_count": 1,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "SaaS": {
+              "query_count": 7,
+              "answer_query_count": 4,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "生活服务": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            }
+          },
+          "language": {
+            "mixed": {
+              "query_count": 12,
+              "answer_query_count": 5,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "cjk": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            }
+          },
+          "market": {
+            "中国大陆": {
+              "query_count": 3,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            },
+            "美国": {
+              "query_count": 2,
+              "answer_query_count": 1,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "未确定": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            },
+            "全球": {
+              "query_count": 6,
+              "answer_query_count": 4,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "上海": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            }
+          },
+          "product": {
+            "iPhone 15": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            },
+            "Pixel 8": {
+              "query_count": 2,
+              "answer_query_count": 1,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "DJI Mini 4 Pro": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            },
+            "iphone duo": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            },
+            "Notion": {
+              "query_count": 3,
+              "answer_query_count": 1,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "Figma": {
+              "query_count": 2,
+              "answer_query_count": 2,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "Slack": {
+              "query_count": 1,
+              "answer_query_count": 1,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            },
+            "Shopify": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            },
+            "饿了么": {
+              "query_count": 1,
+              "answer_query_count": 0,
+              "recall_at_k": null,
+              "mrr": null,
+              "ndcg_at_k": null
+            }
+          },
+          "as_of": {
+            "2026-10-04": {
+              "query_count": 13,
+              "answer_query_count": 5,
+              "recall_at_k": 0.0,
+              "mrr": 0.0,
+              "ndcg_at_k": 0.0
+            }
+          }
+        },
+        "index_ingest_ms": 26.921791955828667,
+        "retrieval_latency_ms": {
+          "p50": 1.1950829066336155,
+          "p95": 1.4673750847578049
+        },
+        "sqlite_file_bytes": 221184,
+        "peak_rss_bytes": 89997312,
+        "factual_quality": {
+          "status": "not_run",
+          "reason": "no generated answer or human adjudication"
+        },
+        "clarification_behavior": {
+          "status": "not_run",
+          "reason": "no answer model executed"
+        },
+        "refusal_behavior": {
+          "status": "not_run",
+          "reason": "no answer model executed"
+        },
+        "ragas": {
+          "status": "not_run",
+          "reason": "no model response or reviewed reference for answer scoring"
+        },
+        "snapshot": {
+          "scope": {
+            "workspace_id": "product-eval-offline",
+            "project_id": "fixed-corpus"
+          },
+          "source_roles": [
+            "source"
+          ],
+          "date_rule": "exclude dates after as_of; undated sources require fetched_at <= as_of"
+        }
+      }
+    },
+    "per_query_comparison": [
+      {
+        "query_id": "product-research-002",
+        "expected_outcome": "insufficient",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ]
+      },
+      {
+        "query_id": "product-research-008",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 0.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ]
+      },
+      {
+        "query_id": "product-research-009",
+        "expected_outcome": "insufficient",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "product-research-016",
+        "expected_outcome": "insufficient",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "product-research-020",
+        "expected_outcome": "clarify",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "product-research-022",
+        "expected_outcome": "insufficient",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ]
+      },
+      {
+        "query_id": "product-research-023",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 0.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ]
+      },
+      {
+        "query_id": "product-research-024",
+        "expected_outcome": "insufficient",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [],
+        "bounded_failure_reasons": []
+      },
+      {
+        "query_id": "product-research-026",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 0.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ]
+      },
+      {
+        "query_id": "product-research-028",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 0.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ]
+      },
+      {
+        "query_id": "product-research-030",
+        "expected_outcome": "answer",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "bounded_metrics": {
+          "relevant_count": 1,
+          "retrieved_count": 0,
+          "matched_count": 0,
+          "recall_at_k": 0.0,
+          "mrr": 0.0,
+          "ndcg_at_k": 0.0
+        },
+        "strict_proof_excerpt_recall": 0.0,
+        "bounded_proof_excerpt_recall": 0.0,
+        "strict_non_gold_source_count": 0,
+        "bounded_non_gold_source_count": 0,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ]
+      },
+      {
+        "query_id": "product-research-038",
+        "expected_outcome": "insufficient",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ],
+        "bounded_failure_reasons": [
+          "proof_source_not_retrieved",
+          "proof_excerpt_not_retrieved"
+        ]
+      },
+      {
+        "query_id": "product-research-046",
+        "expected_outcome": "insufficient",
+        "original_query_unchanged": true,
+        "strict_source_ids": [],
+        "bounded_source_ids": [],
+        "strict_metrics": null,
+        "bounded_metrics": null,
+        "strict_proof_excerpt_recall": null,
+        "bounded_proof_excerpt_recall": null,
+        "strict_non_gold_source_count": null,
+        "bounded_non_gold_source_count": null,
+        "strict_failure_reasons": [],
+        "bounded_failure_reasons": []
+      }
+    ]
+  },
+  "input_files_unchanged": true
+}
