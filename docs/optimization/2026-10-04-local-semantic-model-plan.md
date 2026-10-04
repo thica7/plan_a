@@ -25,7 +25,7 @@ assert provider.status()['inference_calls'] == 2
 ```
 
 - [x] 最小实现：SentenceTransformer与CrossEncoder懒导入；明确路径/版本、CPUfloat32、batch4/max_length512；加载耗时和calls，模型失败抛出异常。
-- [x] 隔离测试、owned Ruff、SPEC和QUALITY通过后提交准备完成；父独验21项，E5真实离线加载通过，另两模型前置检查进行中。
+- [x] 隔离测试、owned Ruff、SPEC和QUALITY通过，提交70927be；父独验21项，三个模型均通过真实离线加载及推理前置检查。
 
 ```bash
 ../plan_a/.venv/bin/python /private/tmp/plan_a_phase2_full_verify.py -q backend/tests/unit/test_local_retrieval_models.py --tb=short
@@ -35,7 +35,7 @@ assert provider.status()['inference_calls'] == 2
 
 **Files:** 修改backend/packages/knowledge/product_benchmark.py、backend/tests/unit/test_product_research_benchmark.py；新backend/scripts/compare_local_retrieval_models.py及对应unit测试。
 
-- [ ] RED：sparse默认无模型，dense/hybrid实际索引和搜索；hash/uninitialized/degraded拒绝；rerank显式启用；as_of/scope/role/canonical和proof指标保持；模型调用数和模式状态准确。
+- [x] RED：sparse默认无模型，dense/hybrid实际索引和搜索；hash/uninitialized/degraded拒绝；rerank显式启用；as_of/scope/role/canonical和proof指标保持；模型调用数和模式状态准确。
 
 ```python
 report = await run_product_benchmark(*paths, retrieval_mode='hybrid',
@@ -47,17 +47,17 @@ assert report['model_calls'] > 0
 assert not report['semantic_quality_verified']
 ```
 
-- [ ] 实现显式参数retrieval_mode/candidate_top_k/enable_rerank，临时Qdrant本地client、生产索引与检索服务；状态运行后读取、实际模型计数；旧默认和未执行模式保留。
-- [ ] CLI以本地模型manifest/run参数执行一模型一进程的固定对照；清API凭据/禁.env、下载离线分开；保存输入/代码/模型hash、逐query及warm/cold资源口径，不让标签构造查询。
-- [ ] 合成数据回归、SPEC后QUALITY冻结，不根据旧候选调词。
+- [x] 实现显式参数retrieval_mode/candidate_top_k/enable_rerank，临时Qdrant本地client、生产索引与检索服务；状态运行后读取、实际模型计数；旧默认和未执行模式保留。
+- [x] CLI以本地模型manifest/run参数执行一模型一进程的固定对照；清API凭据/禁.env、下载离线分开；保存输入/代码/模型hash、逐query及进程生命周期资源口径，不让标签构造查询。
+- [x] 合成数据回归、SPEC后QUALITY冻结，不根据旧候选调词。复审修复manifest文件全集/类型、关键代码冻结、rerank状态、RSS口径和sparse旧参数兼容；父独验79项通过，唯一warning为Qdrant本地exact search。
 
 ## Task 3：下载与审核资料
 
 **Files:** 新eval/product-research-reviewed-v2-{corpus,queries,labels}.jsonl、facts.json及manifest；docs/optimization官方核查续记、下载manifest、依赖版本锁和交付文档。
 
-- [ ] 创建/private/tmp独立venv，官方PyPI依赖安装并记录freeze；官方HF固定revision选择safetensors下载到/private/tmp/plan-a-rag-models，核对model_id/revision/文件hash；记录实际大小和设备。不发送用户资料到模型API。
-- [ ] 重新核验Figma周期开关和各官方来源；新资料记录短引用/摘要和未知时间，人审project_user、本轮时间、限制范围，保留旧hash；结构化Pixel期限、Notion缺价、Figma六项金额/双条件、Slack两属性。
-- [ ] load_dataset(require_reviewed=True)验5条审核及proof坐标/hash，不修改旧label或自动审核新造题；合成资料与正式新版本分开。
+- [x] 创建/private/tmp独立venv，官方PyPI依赖安装并记录freeze；官方HF固定revision下载到/private/tmp/plan-a-rag-models，核对model_id/revision/文件hash；BGE-M3以weights_only受限读取原bin并转safetensors。下载5,079,353,199 bytes，含转换本机文件7,350,417,655 bytes；Python3.11.15、arm64、24GiB、CPU。未发送用户资料到模型API。
+- [x] 重新核验Figma周期开关和各官方来源；新资料记录短引用/摘要和未知时间，人审project_user、本轮时间、限制范围，保留旧hash；结构化Pixel期限、Notion缺价、Figma六项金额/双条件、Slack两属性。官方更细限制及生产价格拦截未验收见人审验收文档。
+- [x] load_dataset(require_reviewed=True)验5条审核及proof坐标/hash；父独验新旧所有资料SHA、五题原文不变及六项价格字段。未修改旧label或自动审核新造题；合成资料与正式新版本分开。
 
 ## Task 4：冻结比较与交付
 

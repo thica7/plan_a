@@ -253,9 +253,7 @@ async def test_strict_and_bounded_share_raw_query_but_recall_differs():
         root / f"eval/product-research-tuning-{kind}.jsonl"
         for kind in ("corpus", "queries", "labels")
     ]
-    strict = await run_product_benchmark(
-        *paths, mode="tuning-diagnostic", lexical_policy="strict"
-    )
+    strict = await run_product_benchmark(*paths, mode="tuning-diagnostic", lexical_policy="strict")
     bounded = await run_product_benchmark(
         *paths, mode="tuning-diagnostic", lexical_policy="bounded"
     )
@@ -270,10 +268,12 @@ async def test_strict_and_bounded_share_raw_query_but_recall_differs():
     answer_ids = {f"lexical-tuning-{index:03d}" for index in range(1, 10)}
     insufficient_ids = {f"lexical-tuning-{index:03d}" for index in range(10, 15)}
     for rows in (by_id_strict, by_id_bounded):
-        assert {query_id for query_id, row in rows.items()
-                if row["expected_outcome"] == "answer"} == answer_ids
-        assert {query_id for query_id, row in rows.items()
-                if row["expected_outcome"] == "insufficient"} == insufficient_ids
+        assert {
+            query_id for query_id, row in rows.items() if row["expected_outcome"] == "answer"
+        } == answer_ids
+        assert {
+            query_id for query_id, row in rows.items() if row["expected_outcome"] == "insufficient"
+        } == insufficient_ids
         assert set(rows) == answer_ids | insufficient_ids
     assert any(
         by_id_bounded[query_id]["metrics"]["recall_at_k"]
@@ -290,17 +290,18 @@ async def test_strict_and_bounded_share_raw_query_but_recall_differs():
     assert bounded["queries"][0]["lexical_plan"]["fallback_query"]
     assert all(
         hit["metadata"]["lexical_retrieval"] is None
-        for row in strict["queries"] for hit in row["hits"]
+        for row in strict["queries"]
+        for hit in row["hits"]
     )
     assert (
-        bounded["queries"][0]["hits"][0]["metadata"]["lexical_retrieval"]["path"]
-        == "fallback_body"
+        bounded["queries"][0]["hits"][0]["metadata"]["lexical_retrieval"]["path"] == "fallback_body"
     )
     assert bounded["factual_quality"]["status"] == "not_run"
     assert all(
         rows[query_id]["proof_excerpt_recall"] is None
         and rows[query_id]["non_gold_source_count"] is None
-        for rows in (by_id_strict, by_id_bounded) for query_id in insufficient_ids
+        for rows in (by_id_strict, by_id_bounded)
+        for query_id in insufficient_ids
     )
 
 
@@ -437,13 +438,19 @@ async def test_explicit_two_facts_report_actual_groups_and_proofs(tmp_path: Path
     query["query"] = "Battery capacity and warranty coverage; answer in Chinese"
     paths[1].write_text(json.dumps(query) + "\n")
     label = json.loads(paths[2].read_text())
-    label["proofs"].append({"source_id": "warranty", "start": 21, "end": 30,
-                            "quote": "24 months"})
+    label["proofs"].append({"source_id": "warranty", "start": 21, "end": 30, "quote": "24 months"})
     label["expected_facts"] = ["Secret expected fact never used as a query"]
     paths[2].write_text(json.dumps(label) + "\n")
     intent_path = tmp_path / "intents.jsonl"
-    intent_path.write_text(json.dumps({"query_id": "q1", "intent": {
-        "fact_queries": ["Battery capacity", "Warranty coverage"]}}) + "\n")
+    intent_path.write_text(
+        json.dumps(
+            {
+                "query_id": "q1",
+                "intent": {"fact_queries": ["Battery capacity", "Warranty coverage"]},
+            }
+        )
+        + "\n"
+    )
     report = await run_product_benchmark(
         *paths, intent_policy="structured", intent_plan_path=intent_path
     )
@@ -464,14 +471,28 @@ async def test_explicit_two_facts_report_actual_groups_and_proofs(tmp_path: Path
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("rows,error", [
-    ([{"query_id": "q1", "intent": {"fact_queries": ["Battery"]}, "expected_facts": []}], "keys"),
-    ([{"query_id": "q1", "intent": {"fact_queries": ["Battery"], "source_id": "good"}}], "intent"),
-    ([{"query_id": "unknown", "intent": {"fact_queries": ["Battery"]}}], "query_id"),
-    ([{"query_id": " ", "intent": {"fact_queries": ["Battery"]}}], "query_id"),
-    ([{"query_id": "q1", "intent": {"fact_queries": ["Battery"]}},
-      {"query_id": "q1", "intent": {"fact_queries": ["Battery"]}}], "duplicate"),
-])
+@pytest.mark.parametrize(
+    "rows,error",
+    [
+        (
+            [{"query_id": "q1", "intent": {"fact_queries": ["Battery"]}, "expected_facts": []}],
+            "keys",
+        ),
+        (
+            [{"query_id": "q1", "intent": {"fact_queries": ["Battery"], "source_id": "good"}}],
+            "intent",
+        ),
+        ([{"query_id": "unknown", "intent": {"fact_queries": ["Battery"]}}], "query_id"),
+        ([{"query_id": " ", "intent": {"fact_queries": ["Battery"]}}], "query_id"),
+        (
+            [
+                {"query_id": "q1", "intent": {"fact_queries": ["Battery"]}},
+                {"query_id": "q1", "intent": {"fact_queries": ["Battery"]}},
+            ],
+            "duplicate",
+        ),
+    ],
+)
 async def test_intent_plan_rejects_invalid_rows(tmp_path: Path, rows: list[dict], error: str):
     paths = _files(tmp_path, [_source("good")])
     intent_path = tmp_path / "intents.jsonl"
@@ -496,11 +517,25 @@ def test_cli_accepts_structured_intent_file(tmp_path: Path, monkeypatch):
     plan = tmp_path / "intents.jsonl"
     plan.write_text('{"query_id":"q1","intent":{"fact_queries":["Battery capacity"]}}\n')
     output = tmp_path / "report.json"
-    monkeypatch.setattr(sys, "argv", [
-        "benchmark", "--corpus", str(paths[0]), "--queries", str(paths[1]),
-        "--labels", str(paths[2]), "--intent-policy", "structured",
-        "--intent-plan", str(plan), "--output", str(output),
-    ])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "benchmark",
+            "--corpus",
+            str(paths[0]),
+            "--queries",
+            str(paths[1]),
+            "--labels",
+            str(paths[2]),
+            "--intent-policy",
+            "structured",
+            "--intent-plan",
+            str(plan),
+            "--output",
+            str(output),
+        ],
+    )
     assert main() == 0
     report = json.loads(output.read_text())
     assert report["intent_policy"] == "structured"
@@ -512,25 +547,42 @@ async def test_intent_plan_rejects_nonselected_purpose(tmp_path: Path):
     paths = _files(tmp_path, [_source("good")])
     query = json.loads(paths[1].read_text())
     label = json.loads(paths[2].read_text())
-    paths[1].write_text(json.dumps(query) + "\n" + json.dumps({
-        **query, "id": "q2", "purpose": "tuning",
-    }) + "\n")
-    paths[2].write_text(json.dumps(label) + "\n" + json.dumps({
-        **label, "query_id": "q2",
-    }) + "\n")
+    paths[1].write_text(
+        json.dumps(query)
+        + "\n"
+        + json.dumps(
+            {
+                **query,
+                "id": "q2",
+                "purpose": "tuning",
+            }
+        )
+        + "\n"
+    )
+    paths[2].write_text(
+        json.dumps(label)
+        + "\n"
+        + json.dumps(
+            {
+                **label,
+                "query_id": "q2",
+            }
+        )
+        + "\n"
+    )
     plan = tmp_path / "intents.jsonl"
     plan.write_text('{"query_id":"q2","intent":{"fact_queries":["Battery"]}}\n')
     with pytest.raises(ValueError, match="query_id"):
         await run_product_benchmark(
-            *paths, mode="candidate-diagnostic", intent_policy="structured",
+            *paths,
+            mode="candidate-diagnostic",
+            intent_policy="structured",
             intent_plan_path=plan,
         )
 
 
 @pytest.mark.asyncio
-async def test_retrieval_latency_excludes_lexical_report_generation(
-    tmp_path: Path, monkeypatch
-):
+async def test_retrieval_latency_excludes_lexical_report_generation(tmp_path: Path, monkeypatch):
     from types import SimpleNamespace
 
     from packages.knowledge import product_benchmark
@@ -545,9 +597,237 @@ async def test_retrieval_latency_excludes_lexical_report_generation(
 
     monkeypatch.setattr(product_benchmark, "_lexical_plan", counted_plan)
     monkeypatch.setattr(
-        product_benchmark, "time",
+        product_benchmark,
+        "time",
         SimpleNamespace(perf_counter=lambda: clock["value"]),
     )
     report = await run_product_benchmark(*paths)
     assert clock["value"] == 2
     assert report["queries"][0]["latency_ms"] == 0
+
+
+class _TinyEmbedding:
+    model_version = "tiny@" + "a" * 40
+    dimensions = 2
+
+    def __init__(self):
+        self.inference_calls = 0
+        self.queries = []
+        self.documents = []
+
+    def status(self):
+        return {
+            "requested_provider": "local-test",
+            "effective_provider": "local-test",
+            "model_version": self.model_version,
+            "dimensions": 2,
+            "degraded": False,
+            "inference_calls": self.inference_calls,
+        }
+
+    def embed_documents(self, texts):
+        self.inference_calls += 1
+        self.documents.extend(texts)
+        return [[1.0, 0.0] if "5000" in text else [0.0, 1.0] for text in texts]
+
+    def embed_query(self, text):
+        self.inference_calls += 1
+        self.queries.append(text)
+        return [1.0, 0.0]
+
+
+class _TinyReranker:
+    model_version = "rerank@" + "b" * 40
+
+    def __init__(self):
+        self.inference_calls = 0
+
+    def status(self):
+        return {
+            "requested_provider": "local-test",
+            "effective_provider": "local-test",
+            "model_version": self.model_version,
+            "degraded": False,
+            "inference_calls": self.inference_calls,
+        }
+
+    def rerank(self, query, texts):
+        self.inference_calls += 1
+        return [1.0 if "5000" in text else 0.0 for text in texts]
+
+
+@pytest.mark.asyncio
+async def test_dense_indexes_and_searches_real_qdrant_with_query_encoding(tmp_path):
+    sources = [_source("good"), _source("wrong-product", product="Phone B")]
+    sources[1]["text"] = "Other model battery is 6000 mAh."
+    sources[1]["content_hash"] = hashlib.sha256(sources[1]["text"].encode()).hexdigest()
+    paths = _files(tmp_path, sources)
+    provider = _TinyEmbedding()
+    report = await run_product_benchmark(
+        *paths, retrieval_mode="dense", embedding_provider=provider
+    )
+    row = report["queries"][0]
+    assert [hit["source_id"] for hit in row["hits"]] == ["good"]
+    assert provider.queries == ["Battery capacity"]
+    assert provider.documents
+    assert row["retrieval_diagnostics"]["effective_mode"] == "dense"
+    assert report["modes"]["dense"]["status"] == "completed"
+    assert report["modes"]["sparse"]["status"] == "not_run"
+    assert report["index"]["model_version"] == provider.model_version
+    assert report["embedding_model_calls"] == provider.inference_calls
+    assert row["eligible_source_count"] == 1
+    assert row["metrics"]["recall_at_1"] == 1
+
+
+@pytest.mark.asyncio
+async def test_hybrid_rerank_calls_provider_and_reports_actual_arm(tmp_path):
+    paths = _files(tmp_path, [_source("good")])
+    embedding, reranker = _TinyEmbedding(), _TinyReranker()
+    report = await run_product_benchmark(
+        *paths,
+        retrieval_mode="hybrid",
+        embedding_provider=embedding,
+        reranker_provider=reranker,
+        enable_rerank=True,
+    )
+    assert reranker.inference_calls == 1
+    assert report["modes"]["rrf_rerank"]["status"] == "completed"
+    assert report["modes"]["rrf"]["status"] == "not_run"
+    assert report["reranker_model_calls"] == 1
+    assert report["model_calls"] == embedding.inference_calls + 1
+
+
+@pytest.mark.asyncio
+async def test_real_modes_reject_unready_providers_and_invalid_pool(tmp_path):
+    paths = _files(tmp_path, [_source("good")])
+    for kwargs, message in [
+        ({"retrieval_mode": "bad"}, "retrieval_mode"),
+        (
+            {
+                "retrieval_mode": "dense",
+                "embedding_provider": _TinyEmbedding(),
+                "candidate_top_k": 1,
+                "top_k": 5,
+            },
+            "candidate_top_k",
+        ),
+        ({"retrieval_mode": "dense"}, "embedding_provider"),
+        (
+            {
+                "retrieval_mode": "dense",
+                "embedding_provider": _TinyEmbedding(),
+                "enable_rerank": True,
+            },
+            "reranker_provider",
+        ),
+    ]:
+        with pytest.raises(ValueError, match=message):
+            await run_product_benchmark(*paths, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_hybrid_canonical_rejection_is_reported_without_model_failure(tmp_path, monkeypatch):
+    from packages.knowledge.retrieval import RetrievalService
+
+    paths = _files(tmp_path, [_source("good")])
+    original = RetrievalService._refresh_canonical_hits
+
+    async def reject_dense(self, hits, request, *, dense=False):
+        if dense:
+            return []
+        return await original(self, hits, request, dense=dense)
+
+    monkeypatch.setattr(RetrievalService, "_refresh_canonical_hits", reject_dense)
+    report = await run_product_benchmark(
+        *paths, retrieval_mode="hybrid", embedding_provider=_TinyEmbedding()
+    )
+    diagnostics = report["queries"][0]["retrieval_diagnostics"]
+    assert diagnostics["effective_mode"] == "sparse"
+    assert "canonical document validation" in diagnostics["reason"]
+
+
+@pytest.mark.asyncio
+async def test_hybrid_embedding_failure_is_not_reported_as_completed(tmp_path):
+    paths = _files(tmp_path, [_source("good")])
+    provider = _TinyEmbedding()
+
+    def fail_query(text):
+        raise RuntimeError("simulated vector failure")
+
+    provider.embed_query = fail_query
+    with pytest.raises(RuntimeError, match="Dense retrieval unavailable"):
+        await run_product_benchmark(*paths, retrieval_mode="hybrid", embedding_provider=provider)
+
+
+@pytest.mark.asyncio
+async def test_rerank_rejects_hash_disguised_as_initialized(tmp_path):
+    paths = _files(tmp_path, [_source("good")])
+    reranker = _TinyReranker()
+    reranker.model_version = "hash-rerank-v1"
+    with pytest.raises(ValueError, match="reranker_provider"):
+        await run_product_benchmark(
+            *paths,
+            retrieval_mode="hybrid",
+            embedding_provider=_TinyEmbedding(),
+            reranker_provider=reranker,
+            enable_rerank=True,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("effective", [None, "", "unconfigured", "none"])
+async def test_rerank_rejects_noninitialized_status_names(tmp_path, effective):
+    paths = _files(tmp_path, [_source("good")])
+    reranker = _TinyReranker()
+    original = reranker.status
+    reranker.status = lambda: {
+        **original(),
+        "requested_provider": effective,
+        "effective_provider": effective,
+    }
+    with pytest.raises(ValueError, match="reranker_provider"):
+        await run_product_benchmark(
+            *paths,
+            retrieval_mode="hybrid",
+            embedding_provider=_TinyEmbedding(),
+            reranker_provider=reranker,
+            enable_rerank=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_rerank_rechecks_status_after_inference(tmp_path):
+    paths = _files(tmp_path, [_source("good")])
+    reranker = _TinyReranker()
+    original = reranker.status
+    reranker.status = lambda: (
+        {**original(), "effective_provider": "uninitialized"}
+        if reranker.inference_calls
+        else original()
+    )
+    with pytest.raises(RuntimeError, match="Reranker provider"):
+        await run_product_benchmark(
+            *paths,
+            retrieval_mode="hybrid",
+            embedding_provider=_TinyEmbedding(),
+            reranker_provider=reranker,
+            enable_rerank=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_benchmark_rss_is_process_lifetime_scope(tmp_path):
+    paths = _files(tmp_path, [_source("good")])
+    report = await run_product_benchmark(*paths)
+    assert report["peak_rss_scope"]["scope"] == "process_lifetime"
+    assert report["peak_rss_scope"]["includes_embedding_and_reranker"] is False
+    assert report["model_calls_scope"] == "arm_delta_excluding_initialization"
+
+
+@pytest.mark.asyncio
+async def test_sparse_preserves_top_k_above_default_candidate_pool(tmp_path):
+    paths = _files(tmp_path, [_source("good")])
+    report = await run_product_benchmark(*paths, top_k=21)
+    assert report["modes"]["sparse"]["status"] == "completed"
+    assert report["modes"]["sparse"]["top_k"] == 21
+    assert report["queries"][0]["metrics"]["recall_at_k"] == 1
