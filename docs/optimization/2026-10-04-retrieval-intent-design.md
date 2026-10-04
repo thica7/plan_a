@@ -32,6 +32,6 @@ benchmark 默认 intent_policy=raw，保留旧基线；显式 structured 可执�
 
 ## 模型与验收
 
-本机没有 torch / sentence-transformers / FlagEmbedding / transformers 或模型缓存。若继续离线，真实模型比较记录未执行；若允许下载，另明确依赖、版本、缓存与设备后实施，不以 hash 冒充语义模型。Qdrant HTTP 和真实 Postgres 既有未验收状态不变。
+当前项目虚拟环境未安装 torch / sentence-transformers / FlagEmbedding / transformers，默认 Hugging Face 缓存目录也不存在；检查未覆盖全机器的其他环境。若继续离线，真实模型比较记录未执行；若允许下载，另明确依赖、版本、缓存与设备后实施，不以 hash 冒充语义模型。Qdrant HTTP 和真实 Postgres 既有未验收状态不变。
 
 采用真实临时SQLite失败测试、最小实现、SPEC后QUALITY、独立完整后端回归、增量Ruff、密钥模式扫描与diff check。按已有授权推送现有分支，交付区分入口合同、候选召回、真实模型与正式人审质量。
