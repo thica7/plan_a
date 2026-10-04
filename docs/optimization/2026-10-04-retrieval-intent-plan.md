@@ -68,7 +68,7 @@ assert not structured['semantic_quality_verified']
 
 - [x] 整理5条重新访问的官方证据，区分AI核查与人审；每页只保存短引用，日期未知明确记录；Pixel截止月份为推算，动态价格不冒充开关已核实。
 - [x] 依赖和缓存已检查；根据用户范围执行真实模型比较或记录未运行，不用hash代替。下载范围问题未回复，本轮记录未运行，不下载。
-- [ ] 隔离完整回归、b1cb4d2增量Ruff、最终审查、提交文件扫描和diff check后提交，按已有授权推送分支并核对远端HEAD。
+- [x] 隔离完整回归、b1cb4d2增量Ruff、最终审查、提交文件扫描和diff check后提交，按已有授权推送分支并核对远端HEAD。离线交付 ba92616 已与远端核对一致；真实模型及正式RAG验收的剩余事项见交付文档。
 
 ```bash
 ../plan_a/.venv/bin/python /private/tmp/plan_a_phase2_full_verify.py -q backend/tests --tb=short
