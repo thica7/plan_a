@@ -1,0 +1,79 @@
+{
+  "provider": {
+    "requested_provider": "hash",
+    "effective_provider": "hash",
+    "model_version": "hash-embedding-v1",
+    "dimensions": 64,
+    "degraded": false,
+    "reason": null
+  },
+  "reranker": {
+    "requested_provider": "hash",
+    "effective_provider": "hash",
+    "model_version": "hash-reranker-v1",
+    "degraded": false,
+    "reason": null
+  },
+  "model_calls": 0,
+  "reference_date": "2026-06-15T00:00:00+00:00",
+  "datasets": [
+    "rag-kb-quality-gate-eval.jsonl",
+    "rag-retrieval-eval.jsonl"
+  ],
+  "index_recovery": {
+    "same_chunk_ids": true,
+    "status": "ready"
+  },
+  "evaluation_kind": "synthetic_contract_regression",
+  "semantic_quality_verified": false,
+  "modes": {
+    "sparse": {
+      "top_k": 3,
+      "query_count": 14,
+      "recall_at_k": 0.8571428571428571,
+      "mrr": 0.7142857142857143,
+      "ndcg_at_k": 0.7516942153061308,
+      "latency_ms": {
+        "mean": 2.0676428186041966,
+        "p50": 1.097541768103838,
+        "p95": 14.518416952341795,
+        "max": 14.518416952341795
+      },
+      "citation_correctness": 1.0,
+      "stale_source_misuse": 0,
+      "scope_leaks": 0
+    },
+    "hybrid": {
+      "top_k": 3,
+      "query_count": 14,
+      "recall_at_k": 0.9285714285714286,
+      "mrr": 0.8928571428571429,
+      "ndcg_at_k": 0.902209268112247,
+      "latency_ms": {
+        "mean": 2.140949247404933,
+        "p50": 1.8779789097607136,
+        "p95": 5.780374631285667,
+        "max": 5.780374631285667
+      },
+      "citation_correctness": 1.0,
+      "stale_source_misuse": 0,
+      "scope_leaks": 0
+    },
+    "rerank": {
+      "top_k": 3,
+      "query_count": 14,
+      "recall_at_k": 0.9285714285714286,
+      "mrr": 0.8571428571428571,
+      "ndcg_at_k": 0.8758471076530654,
+      "latency_ms": {
+        "mean": 1.9253958016633987,
+        "p50": 1.870270585641265,
+        "p95": 3.6983750760555267,
+        "max": 3.6983750760555267
+      },
+      "citation_correctness": 1.0,
+      "stale_source_misuse": 0,
+      "scope_leaks": 0
+    }
+  }
+}

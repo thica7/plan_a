@@ -16,8 +16,8 @@ from .embeddings import EmbeddingProvider
 from .models import DocumentCreate, KnowledgeChunk, KnowledgeDocument
 from .repository import KnowledgeRepository
 
-# Simple token-count approximation (chars / 4)
-_CHAR_TOKEN_RATIO = 4
+# Offline estimate only; UTF-8 bytes account for unspaced multilingual text.
+_BYTES_PER_ESTIMATED_TOKEN = 4
 _DEFAULT_CHUNK_SIZE = 1000  # characters
 _DEFAULT_CHUNK_OVERLAP = 200
 _DEFAULT_EMBEDDING_MODEL = "custom-embedding"
@@ -322,10 +322,7 @@ class IngestionPipeline:
 
     @staticmethod
     def _estimate_tokens(text: str) -> int:
-        word_count = len(re.findall(r"\w+", text))
-        if word_count:
-            return max(1, int(word_count * 1.3))
-        return max(1, len(text) // _CHAR_TOKEN_RATIO)
+        return max(1, math.ceil(len(text.encode("utf-8")) / _BYTES_PER_ESTIMATED_TOKEN))
 
 
 async def _maybe_await(value: Any) -> Any:
