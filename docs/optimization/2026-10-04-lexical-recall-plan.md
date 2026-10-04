@@ -47,9 +47,9 @@ assert plan.fallback_query is None if plan.disabled_reason else bool(plan.fallba
 
 **Files:** 修改 `backend/packages/knowledge/product_benchmark.py` 与其测试；新建三个 `eval/product-research-tuning-{corpus,queries,labels}.jsonl`，均虚构、候选、tuning。不改原三份 evaluation 文件。
 
-- [ ] 锁定共同合成资料与问题：保修中英双向、导出、退款、访客、月付 / 年付计费、同产品不同主题，另有未知主题与不满足数字限制题；加入错误型号、市场、历史角色、未来资料干扰。文本和来源 ID 唯一，避免入库去重 / 归档冲突。
-- [ ] RED：当前模式不能纳入 tuning；验证新模式不会跑 evaluation，原 formal 不能纳入 tuning 或 candidate。使用真实 SQLite，禁止修改原问题。
-- [ ] 添加 `mode=tuning-diagnostic` 与 `lexical_policy=strict|bounded` 参数、CLI 两项 choices；前者只选择 tuning，后者传到 `_BenchmarkRepository(..., lexical_fallback=...)`。记录 purpose_selected / purpose_excluded、词典版本 / hash、每题原 query 和实际 hit 路径。
+- [x] 锁定共同合成资料与问题：保修中英双向、导出、退款、访客、月付 / 年付计费、同产品不同主题，另有未知主题与不满足数字限制题；加入错误型号、市场、历史角色、未来资料干扰。文本和来源 ID 唯一，避免入库去重 / 归档冲突。
+- [x] RED：当前模式不能纳入 tuning；验证新模式不会跑 evaluation，原 formal 不能纳入 tuning 或 candidate。使用真实 SQLite，禁止修改原问题。
+- [x] 添加 `mode=tuning-diagnostic` 与 `lexical_policy=strict|bounded` 参数、CLI 两项 choices；前者只选择 tuning，后者传到 `_BenchmarkRepository(..., lexical_fallback=...)`。记录 purpose_selected / purpose_excluded、词典版本 / hash、每题原 query 和实际 hit 路径。
 
 关键调用：
 
@@ -60,16 +60,16 @@ assert baseline['model_calls'] == bounded['model_calls'] == 0
 assert not bounded['semantic_quality_verified']
 ```
 
-- [ ] 答案题增记支持原文片段覆盖率与按来源去重的非 gold 来源数，仍不与 doc 主指标混算；澄清 / 数据不足的候选命中数不是模型行为或真实误报率。
-- [ ] GREEN + SPEC + QUALITY 后提交。保存相同 corpus / query / labels 的两政策结果与逐题来源序列；合成资料报告明确不能当语义验收。
-- [ ] 词典冻结后对原 13 条 evaluation 候选运行两政策一次，不依据其结果改词典或 gold，指标不要求达到预设数。
+- [x] 答案题增记支持原文片段覆盖率与按来源去重的非 gold 来源数，仍不与 doc 主指标混算；澄清 / 数据不足的候选命中数不是模型行为或真实误报率。
+- [x] GREEN + SPEC + QUALITY 后提交。保存相同 corpus / query / labels 的两政策结果与逐题来源序列；合成资料报告明确不能当语义验收。
+- [x] 词典冻结后对原 13 条 evaluation 候选运行两政策一次，不依据其结果改词典或 gold，指标不要求达到预设数。
 
 ## 任务 3：人工审核准备、验收与交付
 
 **Files:** 新建 `docs/optimization/2026-10-04-product-research-review-sheet.md`、召回对照 JSON 与召回交付 Markdown；更新本计划实际状态。
 
-- [ ] 生成 008 / 023 / 026 / 028 / 030 审核单，列原问题、候选事实、proof 原文、官方地址、市场 / 日期和完整性待确认项；不填人审身份或把执行许可当审核。
-- [ ] 冻结实现后在禁环境文件、清宿主付费凭据、临时 cwd / DB 下执行完整后端回归；进程管理测试需要的 ps 权限仅用于测试自身临时进程。
+- [x] 生成 008 / 023 / 026 / 028 / 030 审核单，列原问题、候选事实、proof 原文、官方地址、市场 / 日期和完整性待确认项；不填人审身份或把执行许可当审核。
+- [x] 冻结实现后在禁环境文件、清宿主付费凭据、临时 cwd / DB 下执行完整后端回归；进程管理测试需要的 ps 权限仅用于测试自身临时进程。
 - [ ] 对比基线 `7527bd2` 的增量 Ruff，完整提交文件密钥扫描和 diff check；最终集成审查通过后提交交付文档与结果。
 - [ ] 按已有授权推送现有分支并核对远端 HEAD；报告实际改进、失败及下一步，不宣称正式语义 / 事实质量通过。
 

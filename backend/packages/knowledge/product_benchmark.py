@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import resource
 import statistics
@@ -14,6 +15,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from . import lexical
 from .eval import RetrievalLabel, evaluate_query
 from .ingestion import IngestionPipeline
 from .models import DocumentCreate, RetrievalRequest
@@ -160,25 +162,55 @@ async def run_product_benchmark(
     labels_path: str | Path,
     *,
     mode: str = "formal",
+    lexical_policy: str = "bounded",
     top_k: int = 5,
     embedding_provider: Any = None,
     reranker_provider: Any = None,
 ) -> dict[str, Any]:
     """Run FTS once per labeled query over a single offline corpus snapshot."""
-    if mode not in {"formal", "candidate-diagnostic"}:
-        raise ValueError("mode must be formal or candidate-diagnostic")
+    if mode not in {"formal", "candidate-diagnostic", "tuning-diagnostic"}:
+        raise ValueError("mode must be formal, candidate-diagnostic, or tuning-diagnostic")
+    if lexical_policy not in {"strict", "bounded"}:
+        raise ValueError("lexical_policy must be strict or bounded")
     if not 1 <= top_k <= 100:
         raise ValueError("top_k must be between 1 and 100")
     dataset = load_dataset(
         corpus_path, queries_path, labels_path, require_reviewed=mode == "formal"
     )
+    all_labels = (
+        load_dataset(corpus_path, queries_path, labels_path, require_reviewed=False).labels
+        if mode == "formal"
+        else dataset.labels
+    )
+    selected_purpose = "tuning" if mode == "tuning-diagnostic" else "evaluation"
     selected = {
         query_id: label
         for query_id, label in dataset.labels.items()
-        if dataset.queries[query_id]["purpose"] == "evaluation"
+        if dataset.queries[query_id]["purpose"] == selected_purpose
     }
-    if mode == "candidate-diagnostic" and not selected:
-        raise ValueError("no evaluation labels available for candidate diagnostic")
+    if not selected:
+        raise ValueError(f"no {selected_purpose} labels available for {mode}")
+    purpose_excluded = sum(
+        dataset.queries[query_id]["purpose"] != selected_purpose for query_id in all_labels
+    )
+    dataset_counts = {**dataset.counts, "included": len(selected), "labels_loaded": len(all_labels)}
+    dataset_reasons = list(dataset.reasons)
+    if purpose_excluded:
+        excluded_purpose = "evaluation" if selected_purpose == "tuning" else "tuning"
+        reason = f"{excluded_purpose}_excluded"
+        if reason not in dataset_reasons:
+            dataset_reasons.append(reason)
+    policy_version = (
+        lexical.build_lexical_plan("", []).version
+        if lexical_policy == "bounded"
+        else "strict-terms-v1"
+    )
+    lexical_policy_report = {
+        "name": lexical_policy,
+        "version": policy_version,
+        "fallback_enabled": lexical_policy == "bounded",
+        "planner_source_sha256": hashlib.sha256(Path(lexical.__file__).read_bytes()).hexdigest(),
+    }
     provider_status = embedding_provider.status() if embedding_provider is not None else None
     provider = provider_readiness(provider_status)
     reranker_status = reranker_provider.status() if reranker_provider is not None else None
@@ -188,7 +220,9 @@ async def run_product_benchmark(
     started = time.perf_counter()
     with tempfile.TemporaryDirectory(prefix="product-eval-") as directory:
         db_path = Path(directory) / "corpus.db"
-        async with _BenchmarkRepository(str(db_path)) as repo:
+        async with _BenchmarkRepository(
+            str(db_path), lexical_fallback=lexical_policy == "bounded"
+        ) as repo:
             pipeline = IngestionPipeline(repo, vector_store)
             doc_ids: dict[str, str] = {}
             for source in dataset.sources.values():
@@ -238,6 +272,17 @@ async def run_product_benchmark(
             db_bytes = db_path.stat().st_size
             for query_id, label in selected.items():
                 query = dataset.queries[query_id]
+                plan = lexical.build_lexical_plan(query["query"], [query["product"]])
+                lexical_plan = {
+                    "version": policy_version,
+                    "strict_query": repo._to_fts_query(query["query"]),
+                    "fallback_query": plan.fallback_query if lexical_policy == "bounded" else None,
+                    "concepts": plan.concepts if lexical_policy == "bounded" else [],
+                    "literals": plan.literals if lexical_policy == "bounded" else [],
+                    "disabled_reason": (
+                        plan.disabled_reason if lexical_policy == "bounded" else "policy_disabled"
+                    ),
+                }
                 repo.as_of = date.fromisoformat(query["as_of"])
                 date_exclusions = [
                     {"source_id": source["id"], "reason": "source_date_after_as_of"}
@@ -308,6 +353,9 @@ async def run_product_benchmark(
                             "project_id": hit.project_id,
                             "excerpt_start": offset if offset >= 0 else None,
                             "excerpt_end": offset + len(hit.text) if offset >= 0 else None,
+                            "metadata": {
+                                "lexical_retrieval": hit.metadata.get("lexical_retrieval")
+                            },
                         }
                     )
                 proof_ids = list(dict.fromkeys(proof["source_id"] for proof in label["proofs"]))
@@ -350,6 +398,7 @@ async def run_product_benchmark(
                     {
                         "query_id": query_id,
                         "original_query": query["query"],
+                        "lexical_plan": lexical_plan,
                         "expected_outcome": label["expected_outcome"],
                         "review_status": label["review_status"],
                         "category": query.get("category"),
@@ -360,6 +409,17 @@ async def run_product_benchmark(
                         "hits": hits,
                         "metrics": metrics,
                         "proofs": proof_checks,
+                        "proof_excerpt_recall": (
+                            sum(proof["quote_in_retrieved_excerpt"] for proof in proof_checks)
+                            / len(proof_checks)
+                            if label["expected_outcome"] == "answer"
+                            else None
+                        ),
+                        "non_gold_source_count": (
+                            len(retrieved - set(proof_ids))
+                            if label["expected_outcome"] == "answer"
+                            else None
+                        ),
                         "date_exclusions": date_exclusions,
                         "missing_source_ids": [sid for sid in proof_ids if sid not in retrieved],
                         "failure_reasons": failure_reasons,
@@ -398,8 +458,12 @@ async def run_product_benchmark(
     rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return {
         "mode": mode,
-        "dataset": dataset.counts,
-        "dataset_reasons": dataset.reasons,
+        "selected_purpose": selected_purpose,
+        "selected_label_count": len(selected),
+        "purpose_excluded_label_count": purpose_excluded,
+        "dataset": dataset_counts,
+        "dataset_reasons": dataset_reasons,
+        "lexical_policy": lexical_policy_report,
         "semantic_quality_verified": False,
         "provider": provider,
         "reranker": reranker_status or {"effective_provider": "unconfigured"},
@@ -414,6 +478,16 @@ async def run_product_benchmark(
                 "recall_at_k": mean("recall_at_k"),
                 "mrr": mean("mrr"),
                 "ndcg_at_k": mean("ndcg_at_k"),
+                "mean_proof_excerpt_recall": (
+                    statistics.mean(row["proof_excerpt_recall"] for row in rows
+                                    if row["proof_excerpt_recall"] is not None)
+                    if scored else None
+                ),
+                "mean_non_gold_source_count": (
+                    statistics.mean(row["non_gold_source_count"] for row in rows
+                                    if row["non_gold_source_count"] is not None)
+                    if scored else None
+                ),
             },
             **{
                 name: {
@@ -463,7 +537,11 @@ async def run_product_benchmark(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=["formal", "candidate-diagnostic"], default="formal")
+    parser.add_argument(
+        "--mode", choices=["formal", "candidate-diagnostic", "tuning-diagnostic"],
+        default="formal",
+    )
+    parser.add_argument("--lexical-policy", choices=["strict", "bounded"], default="bounded")
     parser.add_argument("--corpus", type=Path, default=_ROOT / "eval/product-research-corpus.jsonl")
     parser.add_argument(
         "--queries", type=Path, default=_ROOT / "eval/product-research-queries-draft.jsonl"
@@ -475,7 +553,8 @@ def main() -> int:
     try:
         report = asyncio.run(
             run_product_benchmark(
-                args.corpus, args.queries, args.labels, mode=args.mode, top_k=args.top_k
+                args.corpus, args.queries, args.labels, mode=args.mode,
+                lexical_policy=args.lexical_policy, top_k=args.top_k,
             )
         )
     except DatasetValidationError as exc:

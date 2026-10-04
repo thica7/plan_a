@@ -200,7 +200,125 @@ async def test_title_match_does_not_claim_quote_retrieval(tmp_path: Path):
     assert hit["document_content_hash"] == source["content_hash"][:16]
     assert hit["content_hash"] == source["content_hash"]
     assert row["proofs"][0]["quote_in_retrieved_excerpt"] is False
+    assert row["proof_excerpt_recall"] == 0
     assert "proof_excerpt_not_retrieved" in row["failure_reasons"]
+
+
+@pytest.mark.asyncio
+async def test_tuning_selects_only_tuning_labels_and_reports_exclusions(tmp_path: Path):
+    paths = _files(tmp_path, [_source("good")], status="candidate")
+    query = json.loads(paths[1].read_text())
+    label = json.loads(paths[2].read_text())
+    tuning = {**query, "id": "q2", "purpose": "tuning"}
+    paths[1].write_text(json.dumps(query) + "\n" + json.dumps(tuning) + "\n")
+    paths[2].write_text(json.dumps(label) + "\n" + json.dumps({**label, "query_id": "q2"}) + "\n")
+    report = await run_product_benchmark(*paths, mode="tuning-diagnostic")
+    assert [row["query_id"] for row in report["queries"]] == ["q2"]
+    assert report["selected_purpose"] == "tuning"
+    assert report["selected_label_count"] == 1
+    assert report["purpose_excluded_label_count"] == 1
+    assert report["dataset"]["included"] == 1
+    assert report["dataset"]["labels_loaded"] == 2
+    assert "evaluation_excluded" in report["dataset_reasons"]
+    evaluation = await run_product_benchmark(*paths, mode="candidate-diagnostic")
+    assert [row["query_id"] for row in evaluation["queries"]] == ["q1"]
+    assert evaluation["purpose_excluded_label_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_formal_rejects_only_tuning_reviewed_labels(tmp_path: Path):
+    paths = _files(tmp_path, [_source("good")])
+    query = json.loads(paths[1].read_text())
+    query["purpose"] = "tuning"
+    paths[1].write_text(json.dumps(query) + "\n")
+    with pytest.raises(DatasetValidationError, match="no reviewed labels"):
+        await run_product_benchmark(*paths)
+
+
+@pytest.mark.asyncio
+async def test_tuning_does_not_fall_back_to_evaluation(tmp_path: Path):
+    paths = _files(tmp_path, [_source("good")], status="candidate")
+    with pytest.raises(ValueError, match="no tuning labels"):
+        await run_product_benchmark(*paths, mode="tuning-diagnostic")
+
+
+@pytest.mark.asyncio
+async def test_strict_and_bounded_share_raw_query_but_recall_differs():
+    root = Path(__file__).resolve().parents[3]
+    paths = [
+        root / f"eval/product-research-tuning-{kind}.jsonl"
+        for kind in ("corpus", "queries", "labels")
+    ]
+    strict = await run_product_benchmark(
+        *paths, mode="tuning-diagnostic", lexical_policy="strict"
+    )
+    bounded = await run_product_benchmark(
+        *paths, mode="tuning-diagnostic", lexical_policy="bounded"
+    )
+    assert strict["model_calls"] == bounded["model_calls"] == 0
+    assert strict["selected_label_count"] == bounded["selected_label_count"] == 14
+    assert all(
+        a["original_query"] == b["original_query"]
+        for a, b in zip(strict["queries"], bounded["queries"], strict=True)
+    )
+    by_id_strict = {row["query_id"]: row for row in strict["queries"]}
+    by_id_bounded = {row["query_id"]: row for row in bounded["queries"]}
+    answer_ids = {f"lexical-tuning-{index:03d}" for index in range(1, 10)}
+    insufficient_ids = {f"lexical-tuning-{index:03d}" for index in range(10, 15)}
+    for rows in (by_id_strict, by_id_bounded):
+        assert {query_id for query_id, row in rows.items()
+                if row["expected_outcome"] == "answer"} == answer_ids
+        assert {query_id for query_id, row in rows.items()
+                if row["expected_outcome"] == "insufficient"} == insufficient_ids
+        assert set(rows) == answer_ids | insufficient_ids
+    assert any(
+        by_id_bounded[query_id]["metrics"]["recall_at_k"]
+        > by_id_strict[query_id]["metrics"]["recall_at_k"]
+        for query_id in answer_ids
+    )
+    for query_id in insufficient_ids:
+        for rows in (by_id_strict, by_id_bounded):
+            assert rows[query_id]["hits"] == []
+            assert rows[query_id]["metrics"] is None
+    assert strict["lexical_policy"]["fallback_enabled"] is False
+    assert bounded["lexical_policy"]["fallback_enabled"] is True
+    assert strict["queries"][0]["lexical_plan"]["fallback_query"] is None
+    assert bounded["queries"][0]["lexical_plan"]["fallback_query"]
+    assert all(
+        hit["metadata"]["lexical_retrieval"] is None
+        for row in strict["queries"] for hit in row["hits"]
+    )
+    assert (
+        bounded["queries"][0]["hits"][0]["metadata"]["lexical_retrieval"]["path"]
+        == "fallback_body"
+    )
+    assert bounded["factual_quality"]["status"] == "not_run"
+    assert all(
+        rows[query_id]["proof_excerpt_recall"] is None
+        and rows[query_id]["non_gold_source_count"] is None
+        for rows in (by_id_strict, by_id_bounded) for query_id in insufficient_ids
+    )
+
+
+@pytest.mark.asyncio
+async def test_non_gold_source_count_deduplicates_multiple_chunks(tmp_path: Path):
+    good = _source("good")
+    other = _source("other")
+    other["text"] = "Battery capacity is 6000 mAh. " * 100
+    other["content_hash"] = hashlib.sha256(other["text"].encode()).hexdigest()
+    paths = _files(tmp_path, [good, other])
+    report = await run_product_benchmark(*paths, top_k=5)
+    row = report["queries"][0]
+    assert sum(hit["source_id"] == "other" for hit in row["hits"]) >= 2
+    assert row["non_gold_source_count"] == 1
+    assert row["metrics"]["recall_at_k"] == 1
+
+
+@pytest.mark.asyncio
+async def test_invalid_lexical_policy_is_rejected(tmp_path: Path):
+    paths = _files(tmp_path, [_source("good")])
+    with pytest.raises(ValueError, match="lexical_policy"):
+        await run_product_benchmark(*paths, lexical_policy="unbounded")
 
 
 @pytest.mark.asyncio
