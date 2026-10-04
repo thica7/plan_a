@@ -14,20 +14,20 @@
 
 **Files:** 新建 backend/packages/knowledge/query_intent.py、backend/tests/unit/test_retrieval_intent.py；修改 models.py、retrieval.py、backend/packages/tools/rag_retrieve.py；工具测试在 test_collector_knowledge_scope.py 增加。
 
-- [ ] RED：格式后缀不参与匹配、原问题不变；事实中的中文支持/消息保留/引用功能不删，未知格式保留；raw不拆分；空值、上限与额外授权字段拒绝。
+- [x] RED：格式后缀不参与匹配、原问题不变；事实中的中文支持/消息保留/引用功能不删，未知格式保留；raw不拆分；空值、上限与额外授权字段拒绝。
 
 ```python
 request = RetrievalRequest(query='AuroraCam X warranty；输出中文并保留出处',
                            mode='sparse', enable_query_rewrite=False)
 plan = resolve_retrieval_plan(request)
 assert plan.original_query == request.query
-assert plan.queries == ['AuroraCam X warranty']
+assert plan.queries == ('AuroraCam X warranty',)
 assert plan.output_language == '中文'
 assert plan.require_citations
 ```
 
-- [ ] 实现RetrievalIntent和请求字段、纯函数计划。required_terms与非产品名数字保留；诊断记录origin/version；不从答案或来源构造查询。
-- [ ] 真SQLite验证两事实、数字限制、错误scope/market/role、缓存隔离。changed plan绕过LLM rewrite，每条搜索沿用过滤，RRF去重，精排使用事实查询，返回原query，分组只记录最终保留chunk。
+- [x] 实现RetrievalIntent和请求字段、纯函数计划。required_terms与非产品名数字保留；诊断记录origin/version；不从答案或来源构造查询。
+- [x] 真SQLite验证两事实、数字限制、错误scope/market/role、缓存隔离。changed plan绕过LLM rewrite，每条搜索沿用过滤，RRF去重，精排使用事实查询，返回原query，分组只记录最终保留chunk。
 
 ```python
 request = RetrievalRequest(query='NimbusNote export and refund；answer in Chinese',
@@ -35,10 +35,10 @@ request = RetrievalRequest(query='NimbusNote export and refund；answer in Chine
     workspace_id='ws', competitors=['NimbusNote'], mode='sparse')
 response = await service.retrieve(request)
 assert response.query == request.query
-assert response.diagnostics['query_plan']['queries'] == ['export', 'refund']
+assert response.diagnostics['query_plan']['queries'] == ('export', 'refund')
 ```
 
-- [ ] RAG tool传入intent和policy；不改变服务注入scope。GREEN、Ruff、SPEC、QUALITY后提交。
+- [x] RAG tool传入intent和policy；不改变服务注入scope。GREEN、Ruff、SPEC、QUALITY后提交。
 
 ```bash
 ../plan_a/.venv/bin/python /private/tmp/plan_a_phase2_full_verify.py -q backend/tests/unit/test_retrieval_intent.py backend/tests/unit/test_query_rewriting.py backend/tests/unit/test_retrieval_cache.py backend/tests/unit/test_knowledge_scope_retrieval.py backend/tests/unit/test_collector_knowledge_scope.py --tb=short

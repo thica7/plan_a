@@ -185,6 +185,27 @@ class RetrievalHit(_SourceContext):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class RetrievalIntent(BaseModel):
+    """Caller-declared facts and presentation preferences, without scope authority."""
+
+    model_config = {"extra": "forbid"}
+
+    fact_queries: list[str] = Field(min_length=1, max_length=5)
+    required_terms: list[str] = Field(default_factory=list, max_length=10)
+    output_language: str | None = Field(default=None, max_length=40)
+    require_citations: bool = False
+
+    @field_validator("fact_queries", "required_terms")
+    @classmethod
+    def validate_terms(cls, values: list[str], info) -> list[str]:
+        limit = 500 if info.field_name == "fact_queries" else 80
+        if any(not value.strip() or len(value) > limit for value in values):
+            raise ValueError(
+                f"{info.field_name} entries must be nonblank and at most {limit} characters"
+            )
+        return values
+
+
 class RetrievalRequest(_ScopedContext):
     include_workspace_library: bool = False
     market: str | None = None
@@ -199,6 +220,8 @@ class RetrievalRequest(_ScopedContext):
         return scope
 
     query: str = Field(min_length=1, max_length=2_000)
+    intent_policy: Literal["raw", "structured"] = "structured"
+    retrieval_intent: RetrievalIntent | None = None
     preset: str | None = None
     competitors: list[str] = Field(default_factory=list, max_length=50)
     dimensions: list[str] = Field(default_factory=list, max_length=50)
@@ -211,6 +234,12 @@ class RetrievalRequest(_ScopedContext):
     enable_query_rewrite: bool = True
     num_rewrites: int = Field(default=3, ge=0, le=5)
     mode: Literal["dense", "hybrid", "sparse"] = "hybrid"
+
+    @model_validator(mode="after")
+    def validate_intent_policy(self):
+        if self.intent_policy == "raw" and self.retrieval_intent is not None:
+            raise ValueError("raw intent_policy cannot include retrieval_intent")
+        return self
 
 
 class RetrievalResponse(BaseModel):

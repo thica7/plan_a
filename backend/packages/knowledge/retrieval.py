@@ -9,6 +9,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Any
@@ -20,6 +21,7 @@ from packages.llm import DoubaoClient
 
 from .embeddings import EmbeddingProvider
 from .models import KnowledgeScope, RetrievalHit, RetrievalRequest, RetrievalResponse
+from .query_intent import PLAN_VERSION, RetrievalPlan, resolve_retrieval_plan
 from .repository import KnowledgeRepository
 from .reranker import RerankerProvider
 
@@ -280,12 +282,14 @@ class RetrievalService:
 
     async def retrieve(self, request: RetrievalRequest) -> RetrievalResponse:
         request = apply_retrieval_preset(request)
+        plan = resolve_retrieval_plan(request)
         self._reset_observability_counts()
         started_at = time.monotonic()
         cache_hit = False
 
-        if request.enable_query_rewrite and request.num_rewrites > 0:
-            response = await self._retrieve_with_rewrites(request)
+        planned_search = plan.origin in {"explicit", "format_suffix"}
+        if not planned_search and request.enable_query_rewrite and request.num_rewrites > 0:
+            response = await self._retrieve_with_rewrites(request, plan)
         else:
             cache_key = self._response_cache_key(request)
             cached = self._retrieval_cache.get(cache_key)
@@ -303,8 +307,13 @@ class RetrievalService:
                 cache_hit = True
                 response = cached.model_copy(deep=True)
             else:
-                response = await self._retrieve_without_rewrites(request)
+                response = (await self._retrieve_with_plan(request, plan) if planned_search
+                            else await self._retrieve_without_rewrites(request))
+                groups = response.diagnostics.get("_fact_query_results", [])
                 response.diagnostics = self._diagnostics(request)
+                response.diagnostics["query_plan"] = asdict(plan)
+                if planned_search:
+                    response.diagnostics["fact_query_results"] = groups
                 if response.hits and not response.diagnostics.get("degraded"):
                     self._retrieval_cache.set(
                         self._response_cache_key(request), response.model_copy(deep=True)
@@ -316,10 +325,38 @@ class RetrievalService:
             cache_hit=cache_hit,
         )
         if not cache_hit:
-            response.diagnostics = self._diagnostics(request)
+            actual_plan = response.diagnostics.get("query_plan", asdict(plan))
+            diagnostics = self._diagnostics(request)
+            diagnostics["query_plan"] = actual_plan
+            if planned_search:
+                diagnostics["fact_query_results"] = response.diagnostics.get(
+                    "fact_query_results", []
+                )
+            response.diagnostics = diagnostics
+        elif "query_plan" not in response.diagnostics:
+            response.diagnostics["query_plan"] = asdict(plan)
         for hit in response.hits:
             hit.metadata = {**hit.metadata, "retrieval": response.diagnostics}
         return response
+
+    async def _retrieve_with_plan(
+        self, request: RetrievalRequest, plan: RetrievalPlan
+    ) -> RetrievalResponse:
+        ranked_lists = [await self._search_once(query, request) for query in plan.queries]
+        fused = (_rrf_fuse_ranked_lists(ranked_lists) if len(ranked_lists) > 1
+                 else ranked_lists[0])
+        fused = _filter_hits_by_request(fused, request)
+        fused = self._filter_by_score_threshold(fused)
+        factual_query = " ".join(plan.queries)
+        top = await self._post_process(factual_query, fused, request)
+        retained = {hit.chunk_id for hit in top}
+        groups = [
+            {"query": query, "chunk_ids": [hit.chunk_id for hit in hits
+                                            if hit.chunk_id in retained]}
+            for query, hits in zip(plan.queries, ranked_lists, strict=True)
+        ]
+        return RetrievalResponse(hits=top, query=plan.original_query, total=len(fused),
+                                 diagnostics={"_fact_query_results": groups})
 
     def _diagnostics(self, request: RetrievalRequest) -> dict[str, Any]:
         embedding = self._embedding_provider.status() if self._embedding_provider is not None else {
@@ -336,7 +373,9 @@ class RetrievalService:
                 "index": index_status() if callable(index_status) else None,
                 "degraded": bool(reasons), "reason": "; ".join(reasons) or None}
 
-    async def _retrieve_with_rewrites(self, request: RetrievalRequest) -> RetrievalResponse:
+    async def _retrieve_with_rewrites(
+        self, request: RetrievalRequest, plan: RetrievalPlan
+    ) -> RetrievalResponse:
         rewrites = await self._query_rewriter.rewrite(
             request.query,
             num_rewrites=request.num_rewrites,
@@ -350,7 +389,9 @@ class RetrievalService:
         fused = _filter_hits_by_request(fused, request)
         fused = self._filter_by_score_threshold(fused)
         top = await self._post_process(request.query, fused, request)
-        return RetrievalResponse(hits=top, query=request.query, total=len(fused))
+        actual_plan = {**asdict(plan), "origin": "rewritten", "queries": tuple(queries)}
+        return RetrievalResponse(hits=top, query=request.query, total=len(fused),
+                                 diagnostics={"query_plan": actual_plan})
 
     async def _retrieve_without_rewrites(self, request: RetrievalRequest) -> RetrievalResponse:
         fused = await self._search_once(request.query, request)
@@ -714,7 +755,7 @@ class RetrievalService:
             os.getenv("KB_INDEX_VERSION", "v1"),
             getattr(self._reranker_provider, "model_version", None), self._rerank_model,
         )
-        return f"{self._cache_key(request)}:{identity!r}"
+        return f"{PLAN_VERSION}:{self._cache_key(request)}:{identity!r}"
 
     def _reset_observability_counts(self) -> None:
         self._dense_error: str | None = None

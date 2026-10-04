@@ -183,6 +183,31 @@ async def test_tools_fail_closed_without_scope_and_do_not_create_unknown_documen
 
 
 @pytest.mark.asyncio
+async def test_rag_tool_passes_caller_intent_with_server_scope(tmp_path, monkeypatch):
+    from packages.knowledge.models import RetrievalResponse
+    from packages.knowledge.retrieval import RetrievalService
+
+    monkeypatch.setenv("KB_DB_PATH", str(tmp_path / "kb.db"))
+    captured = []
+
+    async def retrieve(self, request):
+        captured.append(request)
+        return RetrievalResponse(query=request.query, hits=[], total=0)
+
+    monkeypatch.setattr(RetrievalService, "retrieve", retrieve)
+    await rag_retrieve.rag_retrieve_tool.ainvoke(dict(
+        query="battery；输出中文并保留出处", competitors=[], dimensions=[], top_k=3,
+        mode="sparse", workspace_id="ws-a", project_id="project-a",
+        retrieval_intent={"fact_queries": ["battery capacity"], "require_citations": True},
+        intent_policy="structured",
+    ))
+    assert captured[0].workspace_id == "ws-a"
+    assert captured[0].project_id == "project-a"
+    assert captured[0].retrieval_intent.fact_queries == ["battery capacity"]
+    assert captured[0].intent_policy == "structured"
+
+
+@pytest.mark.asyncio
 async def test_zero_fact_confidence_is_not_upgraded_by_retrieval_score(monkeypatch):
     service, detail = service_and_detail()
 

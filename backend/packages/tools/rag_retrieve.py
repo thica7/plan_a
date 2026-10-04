@@ -10,7 +10,7 @@ from ..knowledge.embeddings import (
     EmbeddingProvider,
     get_embedding_provider_from_env,
 )
-from ..knowledge.models import KnowledgeScope, RetrievalRequest, SourceRole
+from ..knowledge.models import KnowledgeScope, RetrievalIntent, RetrievalRequest, SourceRole
 from ..knowledge.repository import KnowledgeRepository
 from ..knowledge.retrieval import RetrievalService
 
@@ -38,6 +38,8 @@ async def rag_retrieve_tool(
     market: str | None = None,
     source_roles: list[SourceRole] | None = None,
     max_age_days: int | None = None,
+    retrieval_intent: RetrievalIntent | None = None,
+    intent_policy: str = "structured",
 ) -> list[dict[str, object]]:
     """Retrieve relevant knowledge chunks for a competitive analysis query."""
     # The server caller supplies this boundary; this tool is not an authentication layer.
@@ -83,6 +85,8 @@ async def rag_retrieve_tool(
                 market=market,
                 source_roles=source_roles or [],
                 max_age_days=max_age_days,
+                retrieval_intent=retrieval_intent,
+                intent_policy=intent_policy,
             )
         )
         return [hit.model_dump(mode="json") for hit in response.hits]
