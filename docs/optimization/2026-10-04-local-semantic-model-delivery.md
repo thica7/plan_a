@@ -86,3 +86,9 @@ Qdrant HTTP、独立PostgreSQL服务和完整联网发现竞品流程仍未验�
 - [E5旧候选诊断](2026-10-04-local-comparison-e5-candidate.json)、[E5审核资料](2026-10-04-local-comparison-e5-reviewed.json)
 - [BGE-M3旧候选诊断](2026-10-04-local-comparison-bge-m3-candidate.json)、[BGE-M3审核资料](2026-10-04-local-comparison-bge-m3-reviewed.json)
 - [模型下载清单](2026-10-04-local-model-download-manifest.json)、[依赖版本](2026-10-04-local-model-requirements.txt)、[真实加载前置检查](2026-10-04-local-model-preflight.json)
+
+## GitHub交付记录
+
+交付提交 `8ae717bb50e706fe4da3692cb31bfb870ee03a52` 已推送到 [codex/pastoral-desktop](https://github.com/thica7/plan_a/tree/codex/pastoral-desktop)，本地与远端SHA核对一致，核对时工作树干净。初次推送遇到TLS连接失败，使用仅对本次命令生效的HTTP/1.1重试成功，没有修改全局网络配置。后续只补充本文与计划的完成记录；真实评测代码冻结点仍为b23caa8。
+
+已跟踪及暂存文件密钥扫描通过；模型权重、独立venv和真实数据库未提交。
