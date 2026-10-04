@@ -82,7 +82,8 @@ class IngestionPipeline:
         chunks = await self._repo.get_chunks_for_document(stored.id)
         if not chunks:
             chunks = self._chunk_text(
-                stored.text, stored.id, content_hash, "", crawl_run_id=crawl_run_id
+                stored.text, stored.id, content_hash, "", crawl_run_id=crawl_run_id,
+                structure=stored.metadata, markdown=stored.markdown,
             )
             await self._repo.insert_chunks(chunks)
         index_version = os.getenv("KB_INDEX_VERSION", "v1")
@@ -114,7 +115,10 @@ class IngestionPipeline:
             raise ValueError("Only active or stale documents can be reindexed")
         chunks = await self._repo.get_chunks_for_document(document_id)
         if not chunks:
-            chunks = self._chunk_text(stored.text, stored.id, stored.content_hash, "")
+            chunks = self._chunk_text(
+                stored.text, stored.id, stored.content_hash, "",
+                structure=stored.metadata, markdown=stored.markdown,
+            )
             await self._repo.insert_chunks(chunks)
         if chunks:
             await self._index_chunks(
@@ -229,6 +233,8 @@ class IngestionPipeline:
         embedding_model: str = _DEFAULT_EMBEDDING_MODEL,
         *,
         crawl_run_id: str | None = None,
+        structure: dict[str, Any] | None = None,
+        markdown: str = "",
     ) -> list[KnowledgeChunk]:
         """Split text into paragraph-aware chunks."""
         if not text:
@@ -236,12 +242,43 @@ class IngestionPipeline:
 
         chunks: list[KnowledgeChunk] = []
         idx = 0
-        current_parts: list[str] = []
-        current_size = 0
+        headings = [
+            {"level": len(match.group(1)), "text": match.group(2).strip()}
+            for line in markdown.splitlines()
+            if (match := re.match(r"^(#{1,6})\s+(.+?)\s*$", line))
+        ] or (structure or {}).get("headings", [])
+        heading_positions: list[tuple[int, dict[str, Any]]] = []
+        cursor = 0
+        for heading in headings:
+            value = heading.get("text", "")
+            match = re.search(rf"(?m)^{re.escape(value)}$", text[cursor:]) if value else None
+            pos = cursor + match.start() if match else -1
+            if pos >= 0:
+                heading_positions.append((pos, heading))
+                cursor = pos + len(value)
+        heading_starts = {position for position, _ in heading_positions}
 
-        def append_chunk(chunk_text: str) -> None:
+        def append_chunk(chunk_text: str, start: int, extra: dict[str, Any] | None = None) -> None:
             nonlocal idx
             if chunk_text.strip():
+                metadata: dict[str, Any] = {"structure": "unknown"}
+                heading_path: list[dict[str, Any]] = []
+                for position, heading in heading_positions:
+                    if position <= start:
+                        level = heading.get("level", 1)
+                        while heading_path and heading_path[-1].get("level", 1) >= level:
+                            heading_path.pop()
+                        heading_path.append(heading)
+                    else:
+                        break
+                if heading_path:
+                    metadata.update({
+                        "heading": heading_path[-1],
+                        "heading_path": heading_path,
+                        "structure": "body",
+                    })
+                if extra:
+                    metadata.update(extra)
                 chunk_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{document_id}:{idx}"))
                 chunks.append(
                     KnowledgeChunk(
@@ -253,60 +290,140 @@ class IngestionPipeline:
                         embedding_model=embedding_model,
                         content_hash=hashlib.sha256(chunk_text.encode()).hexdigest()[:16],
                         crawl_run_id=crawl_run_id,
+                        metadata=metadata,
                     )
                 )
                 idx += 1
 
-        def flush_current() -> None:
-            nonlocal current_parts, current_size
-            if current_parts:
-                append_chunk("\n\n".join(current_parts))
-                current_parts = []
-                current_size = 0
+        def append_plain(start: int, end: int) -> None:
+            segment = text[start:end]
+            paragraph_spans: list[tuple[int, int]] = []
+            boundary = start
+            for match in re.finditer(r"\n\s*\n", segment):
+                paragraph_spans.append((boundary, start + match.start()))
+                boundary = start + match.end()
+            paragraph_spans.append((boundary, end))
+            current_start: int | None = None
+            current_end = 0
 
-        paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
-        for paragraph in paragraphs:
-            if len(paragraph) > self._chunk_size:
-                flush_current()
-                for chunk_text in self._split_long_paragraph(paragraph):
-                    append_chunk(chunk_text)
+            def flush() -> None:
+                nonlocal current_start
+                if current_start is not None:
+                    append_chunk(text[current_start:current_end], current_start)
+                    current_start = None
+
+            for paragraph_start, paragraph_end in paragraph_spans:
+                while paragraph_start < paragraph_end and text[paragraph_start].isspace():
+                    paragraph_start += 1
+                while paragraph_end > paragraph_start and text[paragraph_end - 1].isspace():
+                    paragraph_end -= 1
+                if paragraph_start == paragraph_end:
+                    continue
+                if paragraph_start in heading_starts and current_start is not None:
+                    flush()
+                if paragraph_end - paragraph_start > self._chunk_size:
+                    flush()
+                    for piece in self._split_long_paragraph(text[paragraph_start:paragraph_end]):
+                        position = text.find(piece, paragraph_start, paragraph_end)
+                        append_chunk(piece, position)
+                    continue
+                if current_start is not None and paragraph_end - current_start > self._chunk_size:
+                    flush()
+                if current_start is None:
+                    current_start = paragraph_start
+                current_end = paragraph_end
+            flush()
+
+        tables = (structure or {}).get("tables", [])
+        offset = 0
+        for table in tables:
+            table_text = table.get("text") if isinstance(table, dict) else None
+            if not isinstance(table_text, str) or not table_text:
                 continue
-
-            projected_size = current_size + len(paragraph) + (2 if current_parts else 0)
-            if current_parts and projected_size > self._chunk_size:
-                flush_current()
-            current_parts.append(paragraph)
-            current_size += len(paragraph) + (2 if len(current_parts) > 1 else 0)
-
-        flush_current()
+            position = text.find(table_text, offset)
+            if position < 0:
+                continue
+            table_start = position
+            previous_end = position
+            while previous_end > offset and text[previous_end - 1].isspace():
+                previous_end -= 1
+            previous_break = text.rfind("\n\n", offset, previous_end)
+            previous_start = previous_break + 2 if previous_break >= 0 else offset
+            if (
+                previous_start < previous_end
+                and not any(previous_start <= head < position for head in heading_starts)
+            ):
+                table_start = previous_start
+            table_end = position + len(table_text)
+            next_start = table_end
+            while next_start < len(text) and text[next_start].isspace():
+                next_start += 1
+            next_break = text.find("\n\n", next_start)
+            next_end = next_break if next_break >= 0 else len(text)
+            if (
+                next_start < next_end
+                and not any(next_start <= head < next_end for head in heading_starts)
+                and not any(
+                    isinstance(other, dict) and other.get("text") == text[next_start:next_end]
+                    for other in tables
+                )
+            ):
+                table_end = next_end
+            append_plain(offset, table_start)
+            chunk_text = text[table_start:table_end]
+            table_metadata: dict[str, Any] = {
+                "structure": "table", "overflow": len(chunk_text) > self._chunk_size,
+            }
+            if len(chunk_text) > self._chunk_size:
+                table_metadata["overflow_chars"] = len(chunk_text) - self._chunk_size
+            if table.get("structure_gap"):
+                table_metadata["structure_gap"] = table["structure_gap"]
+            if table.get("structure_gaps"):
+                table_metadata["structure_gaps"] = table["structure_gaps"]
+            append_chunk(chunk_text, table_start, table_metadata)
+            offset = table_end
+        append_plain(offset, len(text))
 
         return chunks
 
     def _split_long_paragraph(self, paragraph: str) -> list[str]:
-        sentences = [s.strip() for s in re.split(r"(?<=[.!?。！？])\s+", paragraph) if s.strip()]
-        if len(sentences) <= 1:
+        boundaries = [
+            match.end() for match in re.finditer(r"[!?。！？]|(?<!\d)\.(?!\d)", paragraph)
+            if paragraph[match.start()] in "。！？"
+            or match.end() == len(paragraph)
+            or not paragraph[match.end()].isascii()
+            or paragraph[match.end()].isspace()
+        ]
+        if not boundaries:
             return self._split_by_character_window(paragraph)
-
+        spans: list[tuple[int, int]] = []
+        start = 0
+        for boundary in boundaries:
+            if boundary > start:
+                spans.append((start, boundary))
+            start = boundary
+            while start < len(paragraph) and paragraph[start].isspace():
+                start += 1
+        if start < len(paragraph):
+            spans.append((start, len(paragraph)))
         chunks: list[str] = []
-        current: list[str] = []
-        current_size = 0
-        for sentence in sentences:
-            if len(sentence) > self._chunk_size:
-                if current:
-                    chunks.append(" ".join(current))
-                    current = []
-                    current_size = 0
-                chunks.extend(self._split_by_character_window(sentence))
+        current_start: int | None = None
+        current_end = 0
+        for start, end in spans:
+            if end - start > self._chunk_size:
+                if current_start is not None:
+                    chunks.append(paragraph[current_start:current_end])
+                    current_start = None
+                chunks.extend(self._split_by_character_window(paragraph[start:end]))
                 continue
-            projected_size = current_size + len(sentence) + (1 if current else 0)
-            if current and projected_size > self._chunk_size:
-                chunks.append(" ".join(current))
-                current = []
-                current_size = 0
-            current.append(sentence)
-            current_size += len(sentence) + (1 if len(current) > 1 else 0)
-        if current:
-            chunks.append(" ".join(current))
+            if current_start is not None and end - current_start > self._chunk_size:
+                chunks.append(paragraph[current_start:current_end])
+                current_start = None
+            if current_start is None:
+                current_start = start
+            current_end = end
+        if current_start is not None:
+            chunks.append(paragraph[current_start:current_end])
         return chunks
 
     def _split_by_character_window(self, text: str) -> list[str]:

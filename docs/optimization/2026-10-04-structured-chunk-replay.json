@@ -1,0 +1,712 @@
+{
+  "evaluation_kind": "offline_chunk_replay",
+  "baseline_commit": "751a9c2",
+  "source_count": 14,
+  "candidate_labels": 13,
+  "human_reviewed": 0,
+  "semantic_quality_verified": false,
+  "model_calls": 0,
+  "profiles": [
+    {
+      "chunk_size_characters": 1000,
+      "chunk_overlap_characters": 0,
+      "per_source": [
+        {
+          "source_id": "apple-iphone15-spec-cn",
+          "saved_characters": 70,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "bbfff63cb525579dee67e384524c088d6ff7478d62ac6ef5f823a8f65282b9ae"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "bbfff63cb525579dee67e384524c088d6ff7478d62ac6ef5f823a8f65282b9ae"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "apple-iphone15-launch-cn-20230912",
+          "saved_characters": 53,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "959adea9d67205cdd6d8ee6925d9da62b4016a3b963e3e3538d7bfd597c59c50"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "959adea9d67205cdd6d8ee6925d9da62b4016a3b963e3e3538d7bfd597c59c50"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "apple-iphone15pro-spec-us",
+          "saved_characters": 74,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "24033440ec02e82afb1cfebd859fe61923c5b825a078d183cbb4fe6fcf91098a"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "24033440ec02e82afb1cfebd859fe61923c5b825a078d183cbb4fe6fcf91098a"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "google-pixel8-updates-us",
+          "saved_characters": 78,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "eaf9d7b26e7aee2aaa479a0638a76b886d8ece4062d95b2cb645e05e4c949295"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "eaf9d7b26e7aee2aaa479a0638a76b886d8ece4062d95b2cb645e05e4c949295"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "google-pixel8-spec-us",
+          "saved_characters": 109,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "858243639c48374312a8536d6c0c0556a8e5b9e3fb1837eedb31d43039103493"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "858243639c48374312a8536d6c0c0556a8e5b9e3fb1837eedb31d43039103493"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "dji-mini4pro-spec-de",
+          "saved_characters": 176,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "ed33ce8243d43f532889668842bdfce220702a35fa90759f13f99e43d7aa1b4b"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "ed33ce8243d43f532889668842bdfce220702a35fa90759f13f99e43d7aa1b4b"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "notion-pricing-eu",
+          "saved_characters": 80,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "83eceedb134c6a5fffb12a3d7d4fa6790cb7321d40b6154e7e77b4555aa92106"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "83eceedb134c6a5fffb12a3d7d4fa6790cb7321d40b6154e7e77b4555aa92106"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "notion-billing-global",
+          "saved_characters": 90,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "8a7ffe028c528ea2357a884cacf4c056985e2ea17bd6c7a68618504aca736dba"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "8a7ffe028c528ea2357a884cacf4c056985e2ea17bd6c7a68618504aca736dba"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "notion-guests-global",
+          "saved_characters": 82,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "9c2431e521c24ed5cfe62356ba9926621e108a97d37cd7bd27943054b68ba397"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "9c2431e521c24ed5cfe62356ba9926621e108a97d37cd7bd27943054b68ba397"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "figma-pricing-global",
+          "saved_characters": 93,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "f63c5eded0e60c4f14b3b9bd8edd5211d8c03b2b4cee65fd29de60c9a13e371c"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "f63c5eded0e60c4f14b3b9bd8edd5211d8c03b2b4cee65fd29de60c9a13e371c"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "figma-devmode-global",
+          "saved_characters": 155,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "bd43724abb0254597d647e1007535925db98d64ea0a9a3f05b811a90498b2313"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "bd43724abb0254597d647e1007535925db98d64ea0a9a3f05b811a90498b2313"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "slack-free-history-global",
+          "saved_characters": 110,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "60ecd1bc7142d5414027e89043e16be26b51e632f7986bb540b5606db865baf0"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "60ecd1bc7142d5414027e89043e16be26b51e632f7986bb540b5606db865baf0"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "shopify-thirdparty-fees-us",
+          "saved_characters": 144,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "c13942ec54e1f910a714421c03339b2c349197bac2333b638ea99b45534274da"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "c13942ec54e1f910a714421c03339b2c349197bac2333b638ea99b45534274da"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "shopify-billing-global",
+          "saved_characters": 113,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "c1da3c7ed62af0f2c162db32a7488a692ea2574fa0efbae2c2dab371b7d2e5c1"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "c1da3c7ed62af0f2c162db32a7488a692ea2574fa0efbae2c2dab371b7d2e5c1"
+            ]
+          },
+          "changed": false
+        }
+      ],
+      "changed_sources": 0
+    },
+    {
+      "chunk_size_characters": 80,
+      "chunk_overlap_characters": 0,
+      "per_source": [
+        {
+          "source_id": "apple-iphone15-spec-cn",
+          "saved_characters": 70,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "bbfff63cb525579dee67e384524c088d6ff7478d62ac6ef5f823a8f65282b9ae"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "bbfff63cb525579dee67e384524c088d6ff7478d62ac6ef5f823a8f65282b9ae"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "apple-iphone15-launch-cn-20230912",
+          "saved_characters": 53,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "959adea9d67205cdd6d8ee6925d9da62b4016a3b963e3e3538d7bfd597c59c50"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "959adea9d67205cdd6d8ee6925d9da62b4016a3b963e3e3538d7bfd597c59c50"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "apple-iphone15pro-spec-us",
+          "saved_characters": 74,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "24033440ec02e82afb1cfebd859fe61923c5b825a078d183cbb4fe6fcf91098a"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "24033440ec02e82afb1cfebd859fe61923c5b825a078d183cbb4fe6fcf91098a"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "google-pixel8-updates-us",
+          "saved_characters": 78,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "eaf9d7b26e7aee2aaa479a0638a76b886d8ece4062d95b2cb645e05e4c949295"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 1,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "eaf9d7b26e7aee2aaa479a0638a76b886d8ece4062d95b2cb645e05e4c949295"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "google-pixel8-spec-us",
+          "saved_characters": 109,
+          "legacy": {
+            "chunk_count": 2,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "fbbb71c471871c5f812241e803dbbf2b2a70193719eb05835e29b569010d4310",
+              "743a3229406c061344b98860e52214ad2221e0de0319a50ecc881f721f744560"
+            ]
+          },
+          "structured": {
+            "chunk_count": 2,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "fbbb71c471871c5f812241e803dbbf2b2a70193719eb05835e29b569010d4310",
+              "743a3229406c061344b98860e52214ad2221e0de0319a50ecc881f721f744560"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "dji-mini4pro-spec-de",
+          "saved_characters": 176,
+          "legacy": {
+            "chunk_count": 4,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "03d642054b4f69769721dd25292471f2d975ce4b63a42b403ffd8bfa46c8d649",
+              "129d24b4502cb10d1d636090a8d43ece7462dc11c35179c15aecc0c5cc22c0b2",
+              "9055c551a69fd1dd96508312f55803864103f505a1a4c88dfacb2453b2abe54e",
+              "2500b95c4eac119699b55140ba8bfd0c939828a7c0bdf97904048579e929173c"
+            ]
+          },
+          "structured": {
+            "chunk_count": 4,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "03d642054b4f69769721dd25292471f2d975ce4b63a42b403ffd8bfa46c8d649",
+              "129d24b4502cb10d1d636090a8d43ece7462dc11c35179c15aecc0c5cc22c0b2",
+              "9055c551a69fd1dd96508312f55803864103f505a1a4c88dfacb2453b2abe54e",
+              "2500b95c4eac119699b55140ba8bfd0c939828a7c0bdf97904048579e929173c"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "notion-pricing-eu",
+          "saved_characters": 80,
+          "legacy": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "83eceedb134c6a5fffb12a3d7d4fa6790cb7321d40b6154e7e77b4555aa92106"
+            ]
+          },
+          "structured": {
+            "chunk_count": 1,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "83eceedb134c6a5fffb12a3d7d4fa6790cb7321d40b6154e7e77b4555aa92106"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "notion-billing-global",
+          "saved_characters": 90,
+          "legacy": {
+            "chunk_count": 2,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "d56686feb862ac0faffbaada88778f817cf4f3fc0e4a4646f07965d91795195c",
+              "26db8c541fe77971847a6b71453233441bf772fb2951614522d2e216827176a4"
+            ]
+          },
+          "structured": {
+            "chunk_count": 2,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "d56686feb862ac0faffbaada88778f817cf4f3fc0e4a4646f07965d91795195c",
+              "26db8c541fe77971847a6b71453233441bf772fb2951614522d2e216827176a4"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "notion-guests-global",
+          "saved_characters": 82,
+          "legacy": {
+            "chunk_count": 2,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "f0880bffff1bcb75ad5ede6c524fe00a1bf61d2f7986a131958c8f1bab5a875a",
+              "4b237bf5b4c1ddd9abaa359dfdf4cbbd86f16b8571427e935f006e7c9291c48c"
+            ]
+          },
+          "structured": {
+            "chunk_count": 2,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "f0880bffff1bcb75ad5ede6c524fe00a1bf61d2f7986a131958c8f1bab5a875a",
+              "4b237bf5b4c1ddd9abaa359dfdf4cbbd86f16b8571427e935f006e7c9291c48c"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "figma-pricing-global",
+          "saved_characters": 93,
+          "legacy": {
+            "chunk_count": 2,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "e4bddee289108c3c7b8f7fb982b5b37f0f0b900e0678919f4709c11f82d5d2c3",
+              "ebb9c9025a2fe11677794918324ed54cc9a0c1a61a3f4c016cbbcb035054ea4e"
+            ]
+          },
+          "structured": {
+            "chunk_count": 2,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "e4bddee289108c3c7b8f7fb982b5b37f0f0b900e0678919f4709c11f82d5d2c3",
+              "ebb9c9025a2fe11677794918324ed54cc9a0c1a61a3f4c016cbbcb035054ea4e"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "figma-devmode-global",
+          "saved_characters": 155,
+          "legacy": {
+            "chunk_count": 3,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "28ec3581268edefd832602a01d021a6ac944def6c9c548dac875ce00671118d1",
+              "72fdbddce560d85fe9a6e6e1bf555a53fa9d7f73a373b85d94fb977fd336b004",
+              "f00eeda090b106e80bd4f4a0d7f883f1aea1ff2a97e358886c082c99796f52ab"
+            ]
+          },
+          "structured": {
+            "chunk_count": 3,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "28ec3581268edefd832602a01d021a6ac944def6c9c548dac875ce00671118d1",
+              "72fdbddce560d85fe9a6e6e1bf555a53fa9d7f73a373b85d94fb977fd336b004",
+              "f00eeda090b106e80bd4f4a0d7f883f1aea1ff2a97e358886c082c99796f52ab"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "slack-free-history-global",
+          "saved_characters": 110,
+          "legacy": {
+            "chunk_count": 2,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "e11ca4afceb73b1f23f43436990d330b1ab2305d8335c46e5990d42b5c757049",
+              "65d7f1685df3463ecf562d7719d56ee14a6d090f53c1cbfb760ac77c9112447c"
+            ]
+          },
+          "structured": {
+            "chunk_count": 2,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "e11ca4afceb73b1f23f43436990d330b1ab2305d8335c46e5990d42b5c757049",
+              "65d7f1685df3463ecf562d7719d56ee14a6d090f53c1cbfb760ac77c9112447c"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "shopify-thirdparty-fees-us",
+          "saved_characters": 144,
+          "legacy": {
+            "chunk_count": 3,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "4b8c5598c994dea75890fa2f3449543a7483c5bd225589144037a8d4d6fe5c06",
+              "ca009eaf127105e0a7f81e5cc84cbd1ab830eb75bf75dd38cecb96a537c4327a",
+              "5ccd90768df42af6d4e5af1b76ac0b08426e212b29b799ca8e406ef9be310f50"
+            ]
+          },
+          "structured": {
+            "chunk_count": 3,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 1,
+            "chunk_hashes": [
+              "4b8c5598c994dea75890fa2f3449543a7483c5bd225589144037a8d4d6fe5c06",
+              "ca009eaf127105e0a7f81e5cc84cbd1ab830eb75bf75dd38cecb96a537c4327a",
+              "5ccd90768df42af6d4e5af1b76ac0b08426e212b29b799ca8e406ef9be310f50"
+            ]
+          },
+          "changed": false
+        },
+        {
+          "source_id": "shopify-billing-global",
+          "saved_characters": 113,
+          "legacy": {
+            "chunk_count": 2,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "06a2dfeed9ff8c923f46de7b35559ce316f3bfeb712a156cbc858de4fd56da2f",
+              "ea1e9ccea66101a41765dd6fb978c020e68ad6206a87f6459428355687911ce6"
+            ]
+          },
+          "structured": {
+            "chunk_count": 2,
+            "all_chunk_text_is_saved_substring": true,
+            "entire_proofs_fitting_a_chunk": 0,
+            "proof_count": 0,
+            "chunk_hashes": [
+              "06a2dfeed9ff8c923f46de7b35559ce316f3bfeb712a156cbc858de4fd56da2f",
+              "ea1e9ccea66101a41765dd6fb978c020e68ad6206a87f6459428355687911ce6"
+            ]
+          },
+          "changed": false
+        }
+      ],
+      "changed_sources": 0
+    }
+  ],
+  "sentence_boundary_fixture": {
+    "legacy": [
+      "基础套餐每月29.9元。包含",
+      "权限管理与审计日志。仅限中国",
+      "大陆市场。"
+    ],
+    "structured": [
+      "基础套餐每月29.9元。",
+      "包含权限管理与审计日志。",
+      "仅限中国大陆市场。"
+    ]
+  },
+  "limits": [
+    "Short excerpts do not validate full-page table extraction.",
+    "Whole-proof fit only describes chunk boundaries; it is not factual accuracy.",
+    "No existing document or index was rebuilt."
+  ]
+}
