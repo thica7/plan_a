@@ -14,7 +14,7 @@
 - 术语表只含通用概念：battery、capacity、warranty、duration、refund、shipping、export、license、subscription、billing、monthly、annual、pricing、plans、guest、seat、update、security、history、retention、deletion、handoff、privacy。没有品牌、价格、年限、来源 ID 或查询 ID。
 - 同概念的中英文别名用 OR；不同概念和保留下来的未知词 / 数字用 AND。匹配别名时先长词、英文完整词边界，避免 `annual` 匹配 `biannual`、`seat` 匹配 `seattle`。
 - 只从查询中移除明确给定产品范围的完整产品名片段，不按词集合删除型号数字；查询中另行出现的数字仍保留。没有产品范围时不猜测品牌，未知关键词继续限制正文召回。
-- 最多 8 个概念、12 个未知词项；超过边界关闭补召回并报告原因，不能默默截掉限制条件。问句停用词只处理固定语气 / 问法，例如“请问”“是什么”“多少”“多久”“的”及英文 what/how/the/can 等；未识别的内容不得随意删除。
+- 最多 8 个概念、12 个未知词项；超过边界关闭补召回并报告原因，不能默默截掉限制条件。问句停用词只处理固定语气 / 问法，例如“请问”“是什么”“多少”“多久”“的”及英文 what/how/the/can 等；中文只剥离完全由固定问法组成的连续片段，不能在“智能”“性能”等未知名词内部删字。
 - 补召回只搜索正文；严格标题匹配仍保留，但排名低于正文，不能借产品标题把首段当支持事实。相同状态下严格正文优先于补召回正文；已有 stale 折权保留。
 - 记录版本与命中路径（strict_body / fallback_body / title）。诊断标记不进入来源授权或事实置信度；正文、hash、版本与源 metadata 不写回。RetrievalService 仍回查 canonical 文档和块，只保留仓库生成的这项检索诊断。
 - 支持显式 `lexical_fallback=False` 的仓库用于严格基线 / 回滚；默认启用。现有 tokenizer、索引、Qdrant、快照、分块及 rewrite API 不变。

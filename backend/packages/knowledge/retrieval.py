@@ -498,8 +498,11 @@ class RetrievalService:
                 ):
                     continue
             metadata = dict(getattr(document, "metadata", hit.metadata))
+            metadata.pop("lexical_retrieval", None)
             if vector_index is not None:
                 metadata["vector_index"] = vector_index
+            if not dense and isinstance(hit.metadata.get("lexical_retrieval"), dict):
+                metadata["lexical_retrieval"] = hit.metadata["lexical_retrieval"]
             filtered.append(
                 hit.model_copy(
                     update={

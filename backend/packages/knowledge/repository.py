@@ -19,6 +19,7 @@ from packages.sqlite_locks import (
     write_lock_for,
 )
 
+from .lexical import build_lexical_plan
 from .models import (
     DocumentCreate,
     KnowledgeChunk,
@@ -244,8 +245,9 @@ class CrawlSourceUnavailableError(ValueError):
 class KnowledgeRepository:
     """Async SQLite repository for knowledge base metadata."""
 
-    def __init__(self, db_path: str | None = None) -> None:
+    def __init__(self, db_path: str | None = None, *, lexical_fallback: bool = True) -> None:
         self._db_path = db_path or os.getenv("KB_DB_PATH", "runs/knowledge.db")
+        self._lexical_fallback = lexical_fallback
         self._db: aiosqlite.Connection | None = None
 
     @property
@@ -830,6 +832,9 @@ class KnowledgeRepository:
     ) -> list[KnowledgeDocument]:
         """Full-text keyword search via SQLite FTS5."""
         db = self._connection
+        plan = build_lexical_plan(query, competitors) if self._lexical_fallback else None
+        if plan is not None and plan.disabled_reason == "question_only":
+            return []
         match_query = self._to_fts_query(query)
         if not match_query:
             return []
@@ -838,7 +843,7 @@ class KnowledgeRepository:
             "d.status IN ('active', 'stale')",
             "d.is_active = 1",
         ]
-        params: list[Any] = [match_query]
+        params: list[Any] = []
         if competitors:
             placeholders = ", ".join("?" for _ in competitors)
             clauses.append(f"kb_casefold(d.competitor) IN ({placeholders})")
@@ -849,9 +854,9 @@ class KnowledgeRepository:
             params.extend(item.casefold() for item in dimensions)
         self._add_scope_filters(clauses, params, scope=scope, market=market,
                                 source_roles=source_roles, max_age_days=max_age_days, prefix="d.")
-        params.append(limit)
-        async with db.execute(
-            f"""
+        async def fetch(match: str, count: int) -> list[KnowledgeDocument]:
+            async with db.execute(
+                f"""
             SELECT d.*
             FROM documents_fts
             JOIN documents d ON d.rowid = documents_fts.rowid
@@ -859,10 +864,23 @@ class KnowledgeRepository:
             ORDER BY bm25(documents_fts)
             LIMIT ?
             """,
-            params,
-        ) as cur:
-            rows = await cur.fetchall()
-            return [self._row_to_document(r) for r in rows]
+                [match, *params, count],
+            ) as cur:
+                return [self._row_to_document(row) for row in await cur.fetchall()]
+
+        strict = await fetch(match_query, limit)
+        if plan is None:
+            return strict
+        found = {doc.id for doc in strict}
+        results = list(strict)
+        if len(results) < limit and plan.fallback_query:
+            for doc in await fetch(plan.fallback_query, limit):
+                if doc.id not in found:
+                    found.add(doc.id)
+                    results.append(doc)
+                if len(results) >= limit:
+                    break
+        return results
 
     async def search_chunks(
         self, query: str, limit: int = 20, *,
@@ -874,6 +892,9 @@ class KnowledgeRepository:
         dimensions: list[str] | None = None,
     ) -> list[RetrievalHit]:
         """Recall matching chunks; title-only matches contribute the first chunk."""
+        plan = build_lexical_plan(query, competitors) if self._lexical_fallback else None
+        if plan is not None and plan.disabled_reason == "question_only":
+            return []
         match_query = self._to_fts_query(query)
         if not match_query:
             return []
@@ -887,12 +908,8 @@ class KnowledgeRepository:
                                 source_roles=source_roles, max_age_days=max_age_days, prefix="d.")
         where = " AND ".join(filters)
         hits: dict[str, RetrievalHit] = {}
-        for table, match, join, extra in (
-            ("chunks_fts", match_query, "c.rowid = chunks_fts.rowid", ""),
-            ("documents_fts", f"title : ({match_query})", "d.rowid = documents_fts.rowid",
-             "AND c.chunk_index = (SELECT MIN(c2.chunk_index) "
-             "FROM chunks c2 WHERE c2.document_id = d.id)"),
-        ):
+
+        async def fetch(table: str, match: str, join: str, extra: str, path: str) -> None:
             async with self._connection.execute(
                 f"""SELECT d.*, c.id AS hit_chunk_id, c.text AS hit_text,
                            bm25({table}) AS fts_rank
@@ -906,9 +923,22 @@ class KnowledgeRepository:
                 rows = await cur.fetchall()
             for rank, row in enumerate(rows, 1):
                 doc = self._row_to_document(row)
+                weight = self.get_document_weight(doc)
+                if plan is None:
+                    score = weight / rank
+                    metadata = {**doc.metadata}
+                    metadata.pop("lexical_retrieval", None)
+                else:
+                    score = weight * (
+                        (0.75 + 0.25 / rank) if path == "strict_body" else
+                        (0.5 + 0.25 / rank) if path == "fallback_body" else 0.1 / rank
+                    )
+                    metadata = {**doc.metadata, "lexical_retrieval": {
+                        "version": plan.version, "path": path, "concepts": plan.concepts,
+                    }}
                 hit = RetrievalHit(
                     chunk_id=row["hit_chunk_id"], document_id=doc.id, text=row["hit_text"],
-                    score=self.get_document_weight(doc) / rank,
+                    score=score,
                     url=doc.url, title=doc.title, competitor=doc.competitor,
                     dimension=doc.dimension, source_type=doc.source_type,
                     workspace_id=doc.workspace_id, project_id=doc.project_id,
@@ -917,10 +947,20 @@ class KnowledgeRepository:
                     source_updated_at=doc.source_updated_at,
                     last_verified_at=doc.last_verified_at, document_version=doc.version,
                     content_hash=doc.content_hash, fetched_at=doc.fetched_at,
-                    last_seen_at=doc.last_seen_at, status=doc.status, metadata=doc.metadata,
+                    last_seen_at=doc.last_seen_at, status=doc.status, metadata=metadata,
                 )
-                if hit.chunk_id not in hits:
+                if hit.chunk_id not in hits or (
+                    plan is not None and hit.score > hits[hit.chunk_id].score
+                ):
                     hits[hit.chunk_id] = hit
+        await fetch("chunks_fts", match_query, "c.rowid = chunks_fts.rowid", "", "strict_body")
+        if plan is not None and len(hits) < limit and plan.fallback_query:
+            await fetch("chunks_fts", plan.fallback_query, "c.rowid = chunks_fts.rowid",
+                        "", "fallback_body")
+        await fetch("documents_fts", f"title : ({match_query})",
+                    "d.rowid = documents_fts.rowid",
+                    "AND c.chunk_index = (SELECT MIN(c2.chunk_index) "
+                    "FROM chunks c2 WHERE c2.document_id = d.id)", "title")
         return sorted(hits.values(), key=lambda hit: hit.score, reverse=True)[:limit]
 
     async def get_document_by_content_hash(

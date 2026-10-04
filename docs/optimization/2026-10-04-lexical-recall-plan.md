@@ -14,9 +14,9 @@
 
 **Files:** 新建 `backend/packages/knowledge/lexical.py`、`backend/tests/unit/test_knowledge_lexical_recall.py`；修改 `repository.py` 的构造与两项关键词搜索、`retrieval.py` 的 canonical 元数据处理。不迁移索引或存储资料。
 
-- [ ] 先写真实临时 SQLite 失败用例：中文自然问句找到中文保修段，中文保修查英文 Warranty，英文 warranty 查中文段；未知词及 36 months 限制不匹配 24 months；不同型号 / 市场 / role / workspace 的强匹配在 top1 前排除。
-- [ ] 运行新测试观察 RED；基础资料只使用虚构产品，不能从当前 evaluation gold 提取词典。
-- [ ] 实现纯函数 `build_lexical_plan(query, competitors=None)`；返回严格表达式、补召回表达式、概念、literal、版本、禁用原因。使用设计中的 23 个通用概念，别名从 query 提取，保留原 query。
+- [x] 先写真实临时 SQLite 失败用例：中文自然问句找到中文保修段，中文保修查英文 Warranty，英文 warranty 查中文段；未知词及 36 months 限制不匹配 24 months；不同型号 / 市场 / role / workspace 的强匹配在 top1 前排除。
+- [x] 运行新测试观察 RED；基础资料只使用虚构产品，不能从当前 evaluation gold 提取词典。
+- [x] 实现纯函数 `build_lexical_plan(query, competitors=None)`；返回严格表达式、补召回表达式、概念、literal、版本、禁用原因。使用设计中的 23 个通用概念，别名从 query 提取，保留原 query。
 
 表达式合同：
 
@@ -28,10 +28,10 @@ assert plan.original_query == original_query
 assert plan.fallback_query is None if plan.disabled_reason else bool(plan.fallback_query)
 ```
 
-- [ ] 仓库构造增加 `lexical_fallback=True`；严格基线保留 `_to_fts_query` 原行为。两项搜索共用原过滤，不在 Python 后过滤替代 SQL。
-- [ ] 正文严格匹配分数使用 `(0.75 + 0.25 / rank) * document_weight`，补召回正文 `(0.5 + 0.25 / rank) * document_weight`，严格标题 `0.1 / rank * document_weight`；同块去重，保留最佳路径。补召回只执行正文，严格正文不足 limit 才执行；标题不挤掉正文。
-- [ ] hit metadata 增加 `lexical_retrieval`（version/path/concepts），覆盖同名来源字段；服务 canonical 回查仍生效，仅 sparse 保留这项诊断，不把它作为可信事实或授权。仓库正文 / 来源 metadata 不写回。
-- [ ] 补英文完整词边界、数字位置、纯问法、不支持的主题、8/12 上限关闭补召回、标题弱命中和 stale 折权测试；定向 GREEN、Ruff、SPEC、QUALITY 后提交。
+- [x] 仓库构造增加 `lexical_fallback=True`；严格基线保留 `_to_fts_query` 原行为与首个块命中保留的旧排序。两项搜索共用原过滤，不在 Python 后过滤替代 SQL；文档搜索只合并原文档，不将标题命中标成正文命中。
+- [x] 正文严格匹配分数使用 `(0.75 + 0.25 / rank) * document_weight`，补召回正文 `(0.5 + 0.25 / rank) * document_weight`，严格标题 `0.1 / rank * document_weight`；同块去重，保留最佳路径。补召回只执行正文，严格正文不足 limit 才执行；标题不挤掉正文。
+- [x] hit metadata 增加 `lexical_retrieval`（version/path/concepts），覆盖同名来源字段；服务 canonical 回查仍生效，先移除来源自带同名字段，仅 sparse 保留仓库生成的诊断，不把它作为可信事实或授权。仓库正文 / 来源 metadata 不写回。
+- [x] 补英文完整词边界、数字位置、纯问法、不支持的主题、8/12 上限关闭补召回、标题弱命中和 stale 折权测试；定向 GREEN、Ruff、SPEC、QUALITY 后提交。
 
 验证：
 
