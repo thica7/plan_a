@@ -1,0 +1,382 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "human_answer_boundary_review",
+  "created_at": "2026-10-05T08:35:53+00:00",
+  "baseline_git_revision": "a0a63750a9e64b7e9228824afcb289f9daa82380",
+  "scope": "Human answer policies and supplementation requirements, not evaluation gold or runtime enforcement.",
+  "original_queries_as_of": "2026-10-04",
+  "current_web_checks_as_of": "2026-10-05",
+  "independent_holdout": false,
+  "runtime_enforcement_implemented": false,
+  "external_model_calls": 0,
+  "local_model_calls": 0,
+  "frozen_inputs": {
+    "eval/product-research-corpus.jsonl": "ef36f9d26c57ac4b801869319a165d7b079d60aa2e2dde19f450733046f292f5",
+    "eval/product-research-queries-draft.jsonl": "f9da9a5a9a7753cd7d89ba9ede84e44fa456614ec01475ce1986206bd0fc15c7",
+    "eval/product-research-labels.jsonl": "80e995549deb649480270bbc85c7122c538fc43cc5f362a0a028796c0230f8cf",
+    "eval/product-research-reviewed-v2-corpus.jsonl": "199323e2e17fd37c7433c3f49571ecd60df50064503fe729293447a7eb97290e",
+    "eval/product-research-reviewed-v2-queries.jsonl": "de76a769653c2a195644233dfd54cf62550a2651c6aaea038c47824e69147156",
+    "eval/product-research-reviewed-v2-labels.jsonl": "2adf22ca5169e5ddd7f4a723ecb874eb73553361a15b5ade9497be7392fa748a",
+    "eval/product-research-reviewed-v2-facts.json": "9a9cca6b1b140fdabe88652df6bf088251a4e3c1a7fe5dd93a4dcf80ee13c9f6",
+    "eval/product-research-reviewed-v2-manifest.json": "1a5b90c0d88641161c744ede27b5a1a509e859ef955c7ec716e9558a969045a4"
+  },
+  "decisions": [
+    {
+      "query_id": "product-research-002",
+      "query_snapshot": {
+        "id": "product-research-002",
+        "category": "消费电子",
+        "product": "iPhone 15",
+        "dimension": "定价",
+        "market": "中国大陆",
+        "as_of": "2026-10-04",
+        "query": "截至研究日，iPhone 15不同容量的官方价格与促销价格应该怎样区分？",
+        "review_status": "draft",
+        "label_status": "unlabeled",
+        "purpose": "evaluation"
+      },
+      "original_candidate_outcome": "insufficient",
+      "review_status": "reviewed",
+      "review_scope": "answer_policy_only",
+      "reviewed_by": "project_user",
+      "review_recorded_at": "2026-10-05T08:35:53+00:00",
+      "user_review_text": "002:当前金额已知，就区分官方价格和平均最低价格",
+      "policy_interpretation_author": "AI",
+      "existing_proofs": [
+        {
+          "source_id": "apple-iphone15-launch-cn-20230912",
+          "start": 0,
+          "end": 53,
+          "quote": "起售价分别为 RMB 5,999 或每月 RMB 250 和 RMB 6,999 或每月 RMB 292。"
+        }
+      ],
+      "action": "compare_price_types",
+      "allowed_answer_scope": [
+        "区分历史官方发布价、研究日已核验官方价、各渠道最低到手价的平均值。",
+        "均价口径以用户确认的同容量、同地区、同成色、同时间窗为前提。"
+      ],
+      "not_supported": [
+        "将2023年起售价当作2026年各容量当前价格。",
+        "在渠道集合、时间窗或金额证据不齐时计算或声称已核验均价。",
+        "把某渠道短时券后价当作所有用户均能获得的价格。"
+      ],
+      "price_comparison": {
+        "user_confirmed_metric": "mean_of_channel_minimum_landed_prices",
+        "user_confirmation_text": "各渠道最低到手价的平均值（推荐，需明确渠道与时间窗）",
+        "aggregation": "mean(min(eligible landed_price observations within window) for each specified channel)",
+        "weighting": "equal_per_channel",
+        "comparability_fields": [
+          "model",
+          "capacity",
+          "market",
+          "condition",
+          "currency",
+          "time_window",
+          "discount_eligibility",
+          "tax_and_shipping_scope"
+        ],
+        "required_observation_fields": [
+          "channel",
+          "seller",
+          "amount",
+          "currency",
+          "source_url",
+          "observed_at",
+          "capacity",
+          "condition",
+          "discount_conditions",
+          "tax_scope",
+          "shipping_scope"
+        ],
+        "channels": null,
+        "time_window": null,
+        "amount_observations": [],
+        "missing_channel_handling": "report missing channels and coverage; never impute zero or silently change the denominator",
+        "official_current_amount": null,
+        "official_launch_price_is_historical": true,
+        "numerical_answer_status": "pending_price_evidence"
+      },
+      "remaining_inputs": [
+        "指定渠道集合",
+        "起止时间和时区",
+        "每个容量的价格、商家链接、采集时间及优惠条件"
+      ],
+      "factual_verification_status": "current_amounts_not_verified_in_repository"
+    },
+    {
+      "query_id": "product-research-022",
+      "query_snapshot": {
+        "id": "product-research-022",
+        "category": "SaaS",
+        "product": "Notion",
+        "dimension": "套餐",
+        "market": "全球",
+        "as_of": "2026-10-04",
+        "query": "Notion不同套餐的成员、访客与功能限制，应从哪些原始表格和脚注核实？",
+        "review_status": "draft",
+        "label_status": "unlabeled",
+        "purpose": "evaluation"
+      },
+      "original_candidate_outcome": "insufficient",
+      "review_status": "reviewed",
+      "review_scope": "answer_policy_only",
+      "reviewed_by": "project_user",
+      "review_recorded_at": "2026-10-05T08:35:53+00:00",
+      "user_review_text": "022:按照当前资料即可，注意实时性",
+      "policy_interpretation_author": "AI",
+      "existing_proofs": [
+        {
+          "source_id": "notion-guests-global",
+          "start": 0,
+          "end": 82,
+          "quote": "Remember that guests can be added to individual pages, not to an entire workspace."
+        }
+      ],
+      "action": "answer_with_scope_and_snapshot",
+      "allowed_answer_scope": [
+        "根据现有全球口径资料说明访客加入单个页面，提供对应官方成员/访客帮助与计费说明来源。",
+        "逐项核对套餐表及脚注；现有资料未保存完整套餐矩阵时明确该缺项。"
+      ],
+      "not_supported": [
+        "用欧盟EUR摘要填写全球各套餐数值。",
+        "推断所有套餐成员、访客和功能限制已逐项核验。",
+        "把今天读取的无发布日期网页当作已核验昨天的历史政策。"
+      ],
+      "freshness": {
+        "original_as_of": "2026-10-04",
+        "display_fields": [
+          "as_of",
+          "fetched_at",
+          "published_at",
+          "updated_at",
+          "market",
+          "billing_interval"
+        ],
+        "source_date_unknown_is_explicit": true,
+        "current_web_checks_are_separate_from_original_snapshot": true
+      },
+      "source_guidance": [
+        "https://www.notion.com/help/add-members-admins-guests-and-groups",
+        "https://www.notion.com/help/billing"
+      ],
+      "remaining_inputs": [],
+      "factual_verification_status": "existing_excerpt_supports_bounded_source_guidance_only"
+    },
+    {
+      "query_id": "product-research-024",
+      "query_snapshot": {
+        "id": "product-research-024",
+        "category": "SaaS",
+        "product": "Notion",
+        "dimension": "缺失证据",
+        "market": "全球",
+        "as_of": "2026-10-04",
+        "query": "如果资料只说明Notion的笔记功能，能否断言它满足某行业的全部合规要求？",
+        "review_status": "draft",
+        "label_status": "unlabeled",
+        "purpose": "evaluation"
+      },
+      "original_candidate_outcome": "insufficient",
+      "review_status": "reviewed",
+      "review_scope": "answer_policy_only",
+      "reviewed_by": "project_user",
+      "review_recorded_at": "2026-10-05T08:35:53+00:00",
+      "user_review_text": "024:先澄清",
+      "policy_interpretation_author": "AI",
+      "existing_proofs": [],
+      "action": "clarify",
+      "allowed_answer_scope": [
+        "说明笔记功能资料不足以支持“满足某行业全部合规要求”的断言，并先澄清适用范围。"
+      ],
+      "required_clarification_fields": [
+        "industry",
+        "jurisdiction",
+        "compliance_standard",
+        "intended_use"
+      ],
+      "suggested_clarification": "要核验哪个行业、哪个国家或地区、哪些具体合规标准，以及什么使用场景？",
+      "not_supported": [
+        "没有查到合规证据就判定产品不合规。",
+        "用笔记能力证明全部合规要求。"
+      ],
+      "remaining_inputs": [
+        "行业",
+        "国家或地区",
+        "具体标准",
+        "使用场景"
+      ],
+      "factual_verification_status": "no_product_compliance_verdict"
+    },
+    {
+      "query_id": "product-research-038",
+      "query_snapshot": {
+        "id": "product-research-038",
+        "category": "SaaS",
+        "product": "Shopify",
+        "dimension": "费用",
+        "market": "美国",
+        "as_of": "2026-10-04",
+        "query": "Shopify套餐费、支付费用与第三方应用费用如何分别核实？",
+        "review_status": "draft",
+        "label_status": "unlabeled",
+        "purpose": "evaluation"
+      },
+      "original_candidate_outcome": "insufficient",
+      "review_status": "reviewed",
+      "review_scope": "answer_policy_only",
+      "reviewed_by": "project_user",
+      "review_recorded_at": "2026-10-05T08:35:53+00:00",
+      "user_review_text": "038:建议补完完整账单。",
+      "policy_interpretation_author": "AI",
+      "existing_proofs": [
+        {
+          "source_id": "shopify-thirdparty-fees-us",
+          "start": 0,
+          "end": 144,
+          "quote": "Third-party transaction fees may apply when you use a third-party payment provider (instead of Shopify Payments). The rate depends on your plan."
+        }
+      ],
+      "action": "supplement_cost_components",
+      "allowed_answer_scope": [
+        "保留现有第三方支付费用规则的部分回答，并补齐套餐、支付、应用和税费各自的证据。",
+        "区分报价/估算与实际账单；完整成本核验需账单、支付结算记录及外部应用发票。"
+      ],
+      "required_components": [
+        "plan_subscription",
+        "shopify_payments_processing",
+        "third_party_payment_provider_processing",
+        "shopify_third_party_transaction_fee",
+        "app_recurring",
+        "app_usage",
+        "app_one_time",
+        "externally_billed_apps",
+        "taxes",
+        "credits_and_refunds"
+      ],
+      "required_context": [
+        "market",
+        "plan",
+        "currency",
+        "reporting_period",
+        "billing_interval",
+        "payment_provider",
+        "charge_status",
+        "source_record_id",
+        "usage_basis"
+      ],
+      "completeness_rule": "each applicable component must have evidence; non-applicable requires a reason, never an inferred zero",
+      "reconciliation": [
+        "Shopify subscription bill is separate from Shopify Payments fees deducted from payouts.",
+        "Some app invoices are issued outside Shopify.",
+        "Match charge IDs and coverage periods before summing; prevent duplicate inclusion of transaction and payout records."
+      ],
+      "not_supported": [
+        "把套餐月费当完整经营成本。",
+        "仅凭订阅账单断言已含全部支付处理费或外部应用费。",
+        "在缺真实账单、支付结构、应用用量、币种或税费时虚构实际总额。"
+      ],
+      "remaining_inputs": [
+        "若要实际总额：同一期间的脱敏账单、支付结算明细、外部应用费用记录及必要业务参数；当前未提供。"
+      ],
+      "factual_verification_status": "actual_bill_not_provided"
+    }
+  ],
+  "current_official_observations": [
+    {
+      "id": "apple-iphone15-store-redirect",
+      "requested_url": "https://www.apple.com.cn/shop/buy-iphone/iphone-15",
+      "resolved_url": "https://www.apple.com.cn/iphone/",
+      "text": "本次官方商店iPhone 15购买地址重定向到iPhone总览；此次访问没有取得可核验的当前iPhone 15各容量报价。该观察不证明其他渠道没有报价或产品全面停售。",
+      "quote": null,
+      "checked_at": "2026-10-05T08:35:53+00:00",
+      "capture_method": "official_page_read",
+      "text_kind": "AI_paraphrase_with_optional_short_quote",
+      "published_at": null,
+      "updated_at": null,
+      "effective_at": null,
+      "source_date_status": "not_provided",
+      "eligible_as_proof_for_original_2026_10_04_query": false,
+      "content_hash": "06e1d21e196f8660d454e69243507ec8cfc7d7fe190e63e2b3f67c25ad6f44bd"
+    },
+    {
+      "id": "notion-members-guests-current",
+      "requested_url": "https://www.notion.com/help/add-members-admins-guests-and-groups",
+      "resolved_url": "https://www.notion.com/help/add-members-admins-guests-and-groups",
+      "text": "官方成员/访客帮助仍指向套餐页核对访客限制，并区分页面访客与工作区成员；本次核查未采集完整套餐矩阵。",
+      "quote": null,
+      "checked_at": "2026-10-05T08:35:53+00:00",
+      "capture_method": "official_page_read",
+      "text_kind": "AI_paraphrase_with_optional_short_quote",
+      "published_at": null,
+      "updated_at": null,
+      "effective_at": null,
+      "source_date_status": "not_provided",
+      "eligible_as_proof_for_original_2026_10_04_query": false,
+      "content_hash": "6541172d0c657ad757f2ab9b813ed48278665228f949c1afb96406d0363196dd"
+    },
+    {
+      "id": "notion-billing-current",
+      "requested_url": "https://www.notion.com/help/billing",
+      "resolved_url": "https://www.notion.com/help/billing",
+      "text": "官方计费帮助覆盖月付/年付和成员数量变更后的计费机制；这些规则不能替代全部套餐价格和功能限额。",
+      "quote": null,
+      "checked_at": "2026-10-05T08:35:53+00:00",
+      "capture_method": "official_page_read",
+      "text_kind": "AI_paraphrase_with_optional_short_quote",
+      "published_at": null,
+      "updated_at": null,
+      "effective_at": null,
+      "source_date_status": "not_provided",
+      "eligible_as_proof_for_original_2026_10_04_query": false,
+      "content_hash": "7a81b89b0d27d164f562b160b37bb0e12644e4ce7a838982b146d60d3552989a"
+    },
+    {
+      "id": "shopify-bill-types-current",
+      "requested_url": "https://help.shopify.com/en/manual/your-account/manage-billing/billing-charges/types-of-charges",
+      "resolved_url": "https://help.shopify.com/en/manual/your-account/manage-billing/billing-charges/types-of-charges",
+      "text": "官方账单类型列出订阅、应用、运输、交易费及税费。Shopify Payments信用卡处理费从回款中扣除，不列入该订阅账单；完整成本应另核对支付结算记录。",
+      "quote": "they're deducted from your payouts rather than billed on your Shopify bill.",
+      "checked_at": "2026-10-05T08:35:53+00:00",
+      "capture_method": "official_page_read",
+      "text_kind": "AI_paraphrase_with_optional_short_quote",
+      "published_at": null,
+      "updated_at": null,
+      "effective_at": null,
+      "source_date_status": "not_provided",
+      "eligible_as_proof_for_original_2026_10_04_query": false,
+      "content_hash": "c65eb3e30a9fd3408cf99ebfba3cca0e94c95fcb8cdabbd6285d97ff6487e778"
+    },
+    {
+      "id": "shopify-app-charges-current",
+      "requested_url": "https://help.shopify.com/en/manual/your-account/manage-billing/billing-charges/types-of-charges/third-party-charges/app-charges",
+      "resolved_url": "https://help.shopify.com/en/manual/your-account/manage-billing/billing-charges/types-of-charges/third-party-charges/app-charges",
+      "text": "应用可按固定订阅、使用量或一次性收费，应用周期与Shopify周期可能不同；部分第三方应用在Shopify之外直接收费。实际汇总需费用状态和期间对齐。",
+      "quote": "some third-party apps charge you directly outside of Shopify.",
+      "checked_at": "2026-10-05T08:35:53+00:00",
+      "capture_method": "official_page_read",
+      "text_kind": "AI_paraphrase_with_optional_short_quote",
+      "published_at": null,
+      "updated_at": null,
+      "effective_at": null,
+      "source_date_status": "not_provided",
+      "eligible_as_proof_for_original_2026_10_04_query": false,
+      "content_hash": "b001ffa15460d2ebb1adb493802562f518fd5ad5fe6a11a303a58dec7e319c10"
+    },
+    {
+      "id": "shopify-bill-export-current",
+      "requested_url": "https://help.shopify.com/en/manual/your-account/manage-billing/managing-your-bills/exporting-your-bills",
+      "resolved_url": "https://help.shopify.com/en/manual/your-account/manage-billing/managing-your-bills/exporting-your-bills",
+      "text": "官方说明可导出账单CSV/PDF；已发行账单保留发行时的信息，后续计费档案变更不会改写历史账单。通用导出方法不能证明某个商家的实际金额。",
+      "quote": "Previously issued bills retain their original information.",
+      "checked_at": "2026-10-05T08:35:53+00:00",
+      "capture_method": "official_page_read",
+      "text_kind": "AI_paraphrase_with_optional_short_quote",
+      "published_at": null,
+      "updated_at": null,
+      "effective_at": null,
+      "source_date_status": "not_provided",
+      "eligible_as_proof_for_original_2026_10_04_query": false,
+      "content_hash": "2cee3c0de37878925f0a60fc5dfa023fa198f37d8a8ef74a8879bf7401ca22ca"
+    }
+  ]
+}
