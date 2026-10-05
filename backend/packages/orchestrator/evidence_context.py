@@ -244,30 +244,38 @@ class EvidenceContextMixin:
         return '{"analysis_gap":"analysis_context_budget_exceeded"}'
 
     def _analysis_artifacts_hash(self, detail):
-        return self._evidence_artifact_hash(
-            {
-                "knowledge": {
-                    key: value.model_dump(mode="json")
-                    for key, value in detail.competitor_knowledge.items()
-                },
-                "kbs": {
-                    key: value.model_dump(mode="json")
-                    for key, value in detail.competitor_kbs.items()
-                },
-                "cards": [item.model_dump(mode="json") for item in detail.claim_card_bundles],
-                "comparison": self._comparator_evidence_artifact_payload(detail),
-                "reflections": [item.model_dump(mode="json") for item in detail.reflections],
-            }
-        )
+        payload = {
+            "knowledge": {
+                key: value.model_dump(mode="json")
+                for key, value in detail.competitor_knowledge.items()
+            },
+            "kbs": {
+                key: value.model_dump(mode="json")
+                for key, value in detail.competitor_kbs.items()
+            },
+            "cards": [item.model_dump(mode="json") for item in detail.claim_card_bundles],
+            "comparison": self._comparator_evidence_artifact_payload(detail),
+            "reflections": [item.model_dump(mode="json") for item in detail.reflections],
+        }
+        if detail.plan.answer_requirements:
+            payload["answer_requirements"] = [
+                item.model_dump(mode="json") for item in detail.plan.answer_requirements
+            ]
+        return self._evidence_artifact_hash(payload)
 
     @staticmethod
     def _writer_evidence_artifact_payload(detail):
-        return {
+        payload = {
             "report_md": detail.report_md,
             "artifact": detail.report_artifact.model_dump(mode="json")
             if detail.report_artifact
             else None,
         }
+        if detail.report_answer_boundaries:
+            payload["answer_boundaries"] = [
+                item.model_dump(mode="json") for item in detail.report_answer_boundaries
+            ]
+        return payload
 
     def _final_qa_producer_verified(self, record, snapshot):
         dependency = next(
@@ -281,7 +289,7 @@ class EvidenceContextMixin:
         # Direct legacy citation audits have no Writer commit. Explicit preservation
         # without a proven producer is persisted as an empty consumption list.
         if dependency is None:
-            return True
+            return not record.detail.report_answer_boundaries
         if (
             not dependency.consumption_ids
             or dependency.payload_hash

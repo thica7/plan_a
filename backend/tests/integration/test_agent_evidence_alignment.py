@@ -1302,6 +1302,24 @@ async def test_new_writer_producer_survives_actual_projection_normalization(
 ):
     service = InputReplay(tmp_path)
     record = service.record
+    source = next(item for item in record.detail.raw_sources if item.id == "Phone-X-pricing")
+    source.metadata.update(market="CN", source_material_level="full_source")
+    row = source.metadata["normalized_fields"][0]
+    row.update(
+        price={"amount": 3999, "currency": "CNY"},
+        source_quote="Phone X 128 GB, new device, CNY 3999 including tax.",
+        evidence_item_ids=["item-phone-x-current-price"],
+        qualifiers={
+            "price_type": "official_current",
+            "price_basis": "device",
+            "model": "Phone X",
+            "capacity": "128 GB",
+            "condition": "new",
+            "billing_interval": "one_time",
+            "tax_scope": "included",
+            "verified_at": record.detail.created_at.isoformat(),
+        },
+    )
     original = seal_snapshot(record.detail, phase="analysis", canonical_documents={})
 
     async def complete(*args, **kwargs):

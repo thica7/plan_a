@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
+from packages.research.evidence.answer_models import AnswerRequirement
+
 
 class RedoScope(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -170,6 +172,7 @@ class AnalysisPlan(BaseModel):
     target_product_evidence: TargetProductEvidence | None = None
     competitors: list[str]
     dimensions: list[str]
+    answer_requirements: list[AnswerRequirement] = Field(default_factory=list)
     complexity: Literal["low", "medium", "high"] = "medium"
     competitor_layer: Literal["L1", "L2", "L3", "unknown"] = "unknown"
     scenario_id: str | None = None

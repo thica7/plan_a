@@ -6,7 +6,9 @@ import json
 from dataclasses import replace
 
 from packages.identity.source_resolver import resolve_source_token, source_tokens
+from packages.orchestrator.answer_context import ANSWER_GUARD_INSTRUCTIONS, build_answer_boundaries
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
+from packages.research.evidence.answer_models import AnswerBoundary
 from packages.research.evidence.snapshot_models import canonical_json
 from packages.research.evidence.views import select_evidence_view
 
@@ -59,6 +61,7 @@ class WriterEvidenceAlignmentMixin:
         draft = replace(
             record, detail=projected, evidence_origin=record, writer_preserved_report=False
         )
+        draft.detail.report_answer_boundaries = []
         initial_messages = {
             item.id: item.model_dump(mode="json") for item in projected.agent_messages
         }
@@ -81,7 +84,9 @@ class WriterEvidenceAlignmentMixin:
             record.detail.current_node = draft.detail.current_node
             self._persist_run(record.detail.id)
             return
-        for field in ("report_md", "report_artifact", "section_briefs"):
+        if draft.writer_preserved_report:
+            draft.detail.report_answer_boundaries = record.detail.report_answer_boundaries
+        for field in ("report_md", "report_artifact", "section_briefs", "report_answer_boundaries"):
             setattr(record.detail, field, getattr(draft.detail, field))
         record.structured_report_snapshot = draft.structured_report_snapshot
         record.previous_structured_report_snapshot = draft.previous_structured_report_snapshot
@@ -213,6 +218,10 @@ class WriterEvidenceAlignmentMixin:
             use if item.id == use.id else item for item in live.detail.evidence_consumptions
         ]
         self._persist_run(live.detail.id)
+        boundaries = [AnswerBoundary.model_validate(item) for item in selected["answer_boundaries"]]
+        for boundary in boundaries:
+            if boundary not in record.detail.report_answer_boundaries:
+                record.detail.report_answer_boundaries.append(boundary)
         return selected, use
 
     @staticmethod
@@ -231,6 +240,7 @@ class WriterEvidenceAlignmentMixin:
             "section_id",
             "section_key",
             "segment_competitor",
+            "dimension",
             "allowed_h2_headings",
             "required_h2_headings",
             "forbidden_h2_headings",
@@ -249,6 +259,11 @@ class WriterEvidenceAlignmentMixin:
         selected["evidence_consumption_id"] = use.id
         selected["allowed_source_ids"] = list(view.source_ids)
         selected["evidence_view"] = json.loads(view.to_prompt_json())
+        selected["answer_boundaries"] = [
+            boundary.model_dump(mode="json")
+            for boundary in build_answer_boundaries(record.detail, view)
+        ]
+        selected["answer_guard_instructions"] = ANSWER_GUARD_INSTRUCTIONS
         aliases = self._source_alias_map(self._evidence_live_record(record).detail)
         notes = segment.get("shard_notes", [])
         if isinstance(notes, list):

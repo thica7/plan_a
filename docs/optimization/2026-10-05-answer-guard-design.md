@@ -1,0 +1,40 @@
+# 共享事实核验设计
+
+用户已确认在现有共享证据流程中实施Writer/QA事实核验、部分回答、缺项提示和澄清的离线验证。本设计落实上一轮四条人审策略；002价格观察与038真实账单尚缺，不填造金额。
+
+## 方案与范围
+
+采用不可变证据快照上的确定性核验。另一种方案是增加模型裁判，但会增加调用且难以固定复现；仅用检索为空判拒答又会丢掉相关的部分事实。本轮选择复用现有StageEvidenceView，检查逐项来源、范围、必要字段和时间，不改召回词典、embedding、真实知识库或已有报告。
+
+核验结果包含研究范围、允许陈述的fact IDs、暂不能陈述的fact IDs、缺项和澄清条件。普通事实和价格机制可保留；金额不是空字段补成0。结果状态为answer、partial、clarify或insufficient，不能解释为对整份产品报告的语义认证。
+
+## 输入与数据约定
+
+在AnalysisPlan增加可选的answer_requirements列表，旧计划默认空列表。每条显式声明competitor、dimension、intent、market、as_of和context_json。intent支持facts、source_guidance、current_price、price_comparison、total_cost、compliance。默认按现有维度选择保守策略，显式source_guidance可表达“只回答核验方法”。不通过四题编号、品牌或扩充查询词典决定结果。
+
+context_json存比较渠道与窗口、适用费用项/报告期间或合规条件。必须是JSON对象，不把这些请求条件直接当作事实证据。核验只读快照的EvidenceFact及对应EvidenceSource；同市场、同产品、同维度、supported、有quote和原始evidence IDs的事实才有资格进入允许列表。signal、历史报告、冲突事实及范围不符资料不能升级成已核验事实。
+
+价格使用结构化amount、currency及qualifiers，必要条件包含price_type、billing_interval、tax_scope和verified_at，并按price_basis区分device的model/capacity/condition与subscription的plan/seat_type。允许tier_name作为plan、billing_cycle作为billing_interval、ISO币种unit作为currency别名；币种不能补成计费周期。不从任意价格字符串猜金额。核验时间不能由抓取时间补造。价格类型为official_launch/historical时不能支持研究日当前报价；不代表旧金额不存在或产品停售。
+
+官方展示单价有一个明确的部分回答范围：price_scope=listed_unit且tax_scope=unknown时，可陈述已核实的官方单价，仍列税费未知，状态partial；不推导含税到手总额。这与已审核的Figma单价边界一致。渠道到手价不享此例外，没有明确listed_unit标记的未知税费仍视为缺条件。
+
+价格比较要求指定渠道集合、起止时间、容量和成色，逐条保留渠道与优惠条件，缺项时不计算均价。本轮实现完整性核验，不在缺真实价格观察时生成算术结果。完整成本要求显式适用费用集合、报告期间、币种和相应cost_component/charge记录；公开机制资料不是实际账单。实际费用记录不能被强迫具备设备容量或订阅席位。沿用当前快照字段：费用可从price事实的结构化值/qualifiers声明cost_component，合规可由support_level及明确claim_kind=compliance声明条件；不能只在生产快照不会生成的手造field上通过。合规需要industry、jurisdiction、compliance_standard和intended_use，缺项先澄清；笔记功能不证明合规。
+
+比较窗口的日期端点按UTC全天解释；端点含时刻或报价观察含时刻时，必须明确时区，并按UTC保留小时精度。逐条比较观察都必须明确优惠条件（包括明确无优惠），此项不因价格来自官方而省略。仅核验完整性，不自动算均价或换汇。
+
+## Writer与QA接点
+
+Writer每个已有证据分段得到同一核验函数生成的answer_boundaries，纳入现有UTF-8上下文预算，不在超预算时默默删掉核验条件。生成后的边界记录随新报告持久化，并进入Writer producer payload；旧报告没有记录时维持已有producer校验路径，不伪装成已经过新守卫。
+
+QA基于原生成快照和原要求复核边界。用既有QCIssue返回具体违反项、来源、事实和补救范围：来源/事实缺证据交collector，已给条件但Writer使用了禁用事实交writer_only。缺项本身是部分回答的边界，不自动触发无限补采集或整份报告重做。
+
+确定性输出审计覆盖带币种的金额、已声明的事实ID及结构化的完整成本/合规结论。Writer可正常输出价格机制、澄清和缺项。自由文本的全部语义蕴含、错误套餐归属或未声明的合规措辞不能仅靠字段守卫保证，作为后续答案评测范围明确保留。
+
+## 验收条件
+
+- 002：近期抓取的旧发布价不升级成当前价；缺渠道/窗口/观察不生成均价。
+- 022：来源核验方法可回答，不因未保存全套餐矩阵拒绝整个问题；保留研究日/抓取日区别。
+- 024：非空笔记检索也要澄清合规条件，不作否定合规结论。
+- 038：仅有套餐费不证明完整成本；支付结算、外部应用和适用费用需要逐项证据。
+- 正例包含完整结构化当前价、明确的税费范围、零金额、同范围支持事实与有范围的回答；反例包含错误地区、未来/过期日期、未知金额、未声明优惠、冲突、报告改写及预算溢出。
+- 离线单元及真实RunService接点验证，不调用外部推理、不读取真实运行目录或数据库。既有资料及模型比较保持冻结。

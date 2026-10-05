@@ -5,6 +5,7 @@ from __future__ import annotations
 from packages.identity.source_resolver import normalize_source_token, resolve_source_token
 from packages.knowledge.models import KnowledgeScope
 from packages.knowledge.repository import KnowledgeRepository
+from packages.orchestrator.answer_context import audit_answer_boundaries, report_answer_claim_cards
 from packages.orchestrator.scoping import build_redo_scope
 from packages.research.evidence.snapshot import _document_problem
 from packages.research.evidence.snapshot_models import canonical_json
@@ -17,12 +18,17 @@ class FinalEvidenceAuditMixin:
     async def _final_qa_evidence(self, record):
         await self._ensure_analysis_evidence(record)
         aliases = self._source_alias_map(record.detail)
-        cited_ids = sorted(
-            {
-                resolve_source_token(token, aliases) or normalize_source_token(token)
-                for token in source_tokens(record.detail.report_md)
-            }
-        )
+        cited_ids = {
+            resolve_source_token(token, aliases) or normalize_source_token(token)
+            for token in source_tokens(record.detail.report_md)
+        }
+        if record.detail.report_answer_boundaries:
+            cited_ids.update(
+                resolve_source_token(source_id, aliases) or normalize_source_token(source_id)
+                for card in report_answer_claim_cards(record.detail)
+                for source_id in card.source_ids
+            )
+        cited_ids = sorted(cited_ids)
         snapshot = self._final_qa_snapshot(record)
         producer_verified = self._final_qa_producer_verified(record, snapshot)
         views, uses = [], []
@@ -110,6 +116,13 @@ class FinalEvidenceAuditMixin:
                 if current_view.dependency_hash != original_view.dependency_hash:
                     reasons.add("source_dependency_changed")
             for reason in sorted(reasons):
+                if (
+                    reason == "writer_producer_unverified"
+                    and record.detail.report_answer_boundaries
+                ):
+                    # The answer audit returns a Writer repair for a changed report
+                    # contract. Source/dependency failures retain collection repairs.
+                    continue
                 fact_ids = [fact.id for fact in snapshot.facts if fact.source_id == source_id]
                 problem = (
                     f"Referenced evidence {source_id} is invalid: {reason}. "
@@ -146,4 +159,7 @@ class FinalEvidenceAuditMixin:
                         },
                     )
                 )
+        issues.extend(audit_answer_boundaries(
+            self, record, snapshot, producer_verified=producer_verified, aliases=aliases
+        ))
         return projected, issues, uses
