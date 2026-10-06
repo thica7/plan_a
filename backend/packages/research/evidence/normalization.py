@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from typing import Any
 
 from packages.research.models import (
@@ -34,30 +36,40 @@ def normalized_pricing_fields_from_evidence_items(
     if not pricing_items:
         return []
 
-    model_type = _first_text(pricing_items, "pricing_model_type")
+    groups: dict[tuple[str, str, str | None], list[EvidenceItem]] = {}
+    for item in pricing_items:
+        key = (item.competitor, item.captured_page_id, item.source_url)
+        groups.setdefault(key, []).append(item)
+    return [row for group in groups.values() for row in _pricing_fields_for_source(group)]
+
+
+def _pricing_fields_for_source(pricing_items: list[EvidenceItem]) -> list[NormalizedPricingField]:
     price_rows = _pricing_rows(pricing_items)
     if price_rows:
-        enterprise_condition = _first_text(pricing_items, "enterprise_condition")
-        competitor = _first_attr(pricing_items, "competitor")
-        confidence = max((item.confidence for item in pricing_items), default=0.0)
-        source_url = _first_attr(pricing_items, "source_url") or None
         return [
             NormalizedPricingField(
-                competitor=competitor,
-                model_type=model_type,
+                competitor=row["item"].competitor,
+                model_type=_first_text(pricing_items, "pricing_model_type"),
                 tier_name=row["tier_name"],
                 price=row["price"],
                 billing_cycle=row["billing_cycle"],
                 usage_limit=row["usage_limit"],
-                enterprise_condition=enterprise_condition,
+                enterprise_condition=_first_text(pricing_items, "enterprise_condition"),
+                qualifiers=deepcopy(row["qualifiers"]),
+                market=row["market"],
                 source_quote=row["source_quote"],
                 evidence_item_ids=row["evidence_item_ids"],
-                source_url=source_url,
-                confidence=confidence,
+                source_url=row["item"].source_url,
+                confidence=row["item"].confidence,
             )
             for row in price_rows
         ]
 
+    return _legacy_pricing_fields(pricing_items)
+
+
+def _legacy_pricing_fields(pricing_items: list[EvidenceItem]) -> list[NormalizedPricingField]:
+    model_type = _first_text(pricing_items, "pricing_model_type")
     tier_names = _list_texts(pricing_items, "tier_names")
     prices = _list_texts(pricing_items, "price_points")
     billing_cycles = _list_texts(pricing_items, "billing_cycle")
@@ -90,7 +102,7 @@ def normalized_pricing_fields_from_evidence_items(
 
 def _pricing_rows(items: list[EvidenceItem]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[str] = set()
     for item in items:
         if item.field != "price_rows":
             continue
@@ -104,7 +116,19 @@ def _pricing_rows(items: list[EvidenceItem]) -> list[dict[str, Any]]:
                 continue
             billing_cycle = _clean_text(raw_row.get("billing_cycle"))
             usage_limit = _clean_text(raw_row.get("usage_limit"))
-            key = (tier_name.casefold(), price.casefold(), billing_cycle.casefold())
+            qualifiers = (
+                deepcopy(dict(raw_row.get("qualifiers")))
+                if isinstance(raw_row.get("qualifiers"), Mapping) else {}
+            )
+            market = _clean_text(raw_row.get("market")) or None
+            quote = raw_row.get("source_quote")
+            quote = (
+                quote.strip() if isinstance(quote, str) and quote.strip() else item.quote.strip()
+            )
+            key = json.dumps([
+                item.competitor, item.source_url, item.captured_page_id, tier_name, price,
+                billing_cycle, usage_limit, market, qualifiers, quote,
+            ], sort_keys=True, ensure_ascii=False)
             if key in seen:
                 continue
             seen.add(key)
@@ -114,15 +138,18 @@ def _pricing_rows(items: list[EvidenceItem]) -> list[dict[str, Any]]:
                     "price": price,
                     "billing_cycle": billing_cycle,
                     "usage_limit": usage_limit,
-                    "source_quote": _clean_text(raw_row.get("source_quote")) or item.quote.strip(),
+                    "source_quote": quote,
                     "evidence_item_ids": [item.id],
+                    "qualifiers": qualifiers,
+                    "market": market,
+                    "item": item,
                 }
             )
     return rows
 
 
 def _clean_text(value: object) -> str:
-    return " ".join(str(value or "").split()).strip()
+    return " ".join(value.split()).strip() if isinstance(value, str) else ""
 
 
 def normalized_feature_fields_from_evidence_items(

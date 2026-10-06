@@ -175,6 +175,7 @@ class CapturedPage(ResearchBaseModel):
     captured_at: datetime = Field(default_factory=datetime.utcnow)
     source_published_at: str | None = None
     source_updated_at: str | None = None
+    source_material_level: Literal["full_source", "unknown"] = "unknown"
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -360,6 +361,8 @@ class NormalizedPricingField(ResearchBaseModel):
     model_type: str = ""
     tier_name: str = ""
     price: str = ""
+    qualifiers: dict[str, Any] = Field(default_factory=dict)
+    market: str | None = None
     billing_cycle: str = ""
     usage_limit: str = ""
     enterprise_condition: str = ""

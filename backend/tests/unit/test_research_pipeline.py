@@ -1336,12 +1336,14 @@ def test_pricing_extractor_normalizes_price_rows_without_credit_noise() -> None:
             "price": "$19 per user",
             "billing_cycle": "monthly",
             "usage_limit": "",
+            "source_quote": page.text,
         },
         {
             "tier_name": "Enterprise",
             "price": "$39 per user",
             "billing_cycle": "monthly",
             "usage_limit": "",
+            "source_quote": page.text,
         },
     ]
     assert [(field.tier_name, field.price) for field in normalized] == [
@@ -1379,6 +1381,7 @@ def test_pricing_extractor_keeps_plan_price_with_credit_limit() -> None:
             "price": "$8 per month",
             "billing_cycle": "monthly",
             "usage_limit": "125 credits",
+            "source_quote": page.text,
         }
     ]
 

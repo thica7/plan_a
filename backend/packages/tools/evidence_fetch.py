@@ -27,6 +27,7 @@ class EvidenceFetchResult:
     capture_metadata: dict[str, Any] = field(default_factory=dict)
     source_published_at: str | None = None
     source_updated_at: str | None = None
+    source_material_level: str = "unknown"
 
     @property
     def snippet(self) -> str:
@@ -177,6 +178,10 @@ def _from_basic_fetch(
         text_length=len(result.text),
         failure_reason=failure_reason,
         content_type=result.content_type,
+        source_material_level=(
+            "full_source" if result.ok and failure_reason is None and result.text.strip()
+            and "summary" not in fetch_method.casefold() else "unknown"
+        ),
     )
 
 
@@ -203,6 +208,10 @@ def _from_advanced_fetch(result: AdvancedFetchResult) -> EvidenceFetchResult:
         text_length=result.quality.text_length or len(text),
         failure_reason=result.failure_reason,
         content_type=result.content_type,
+        source_material_level=(
+            "full_source" if result.ok and not result.failure_reason and text.strip()
+            and "summary" not in result.fetch_method.casefold() else "unknown"
+        ),
         capture_metadata={
             "webfetch_artifacts": artifacts if isinstance(artifacts, dict) else {},
             "webfetch_network": network_summary,

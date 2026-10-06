@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from packages.research.extraction.price_conditions import attach_price_conditions
 from packages.research.extraction.quality import quote_window_from_match
 from packages.research.models import (
     CapturedPage,
@@ -93,9 +94,8 @@ def extract_generic_pricing(brief: ResearchBrief, page: CapturedPage) -> Extract
         if re.search(r"优惠券|抵用券|赠送|credit balance|coupon", clause, re.I):
             continue
         price = " ".join(match.group().split())
-        if price in prices:
-            continue
-        prices.append(price)
+        if price not in prices:
+            prices.append(price)
         cycle = (
             "one_time" if re.search(r"一次性|买断|one.time", clause, re.I)
             else _billing_cycle_for_clause(clause) or "unknown"
@@ -114,8 +114,10 @@ def extract_generic_pricing(brief: ResearchBrief, page: CapturedPage) -> Extract
                 text=source_quote, source_url=page.final_url, field="price_points",
                 start_offset=match.start(), end_offset=match.end(),
             )
-        if len(prices) >= 8:
+        if len(rows) >= 8:
             break
+    rows = attach_price_conditions(rows, text)
+    prices = _dedupe([row["price"] for row in rows])
     cycles = {row["billing_cycle"] for row in rows}
     model_type = (
         "one_time_purchase" if "one_time" in cycles else
@@ -151,7 +153,7 @@ def extract_pricing_model(brief: ResearchBrief, page: CapturedPage) -> Extractio
     pricing_model_type = _pricing_model_type(brief.competitor, normalized)
     fields = {
         "pricing_model_type": pricing_model_type,
-        "price_rows": _price_rows(text),
+        "price_rows": attach_price_conditions(_price_rows(text), text),
         "tier_names": _tier_names(text),
         "price_points": _price_points(text),
         "billing_cycle": _billing_cycle(normalized),
@@ -234,8 +236,10 @@ def _price_points(text: str) -> list[str]:
 
 def _price_rows(text: str) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for clause in _pricing_clauses(text):
+    seen: set[tuple[str, str, str]] = set()
+    for clause, physical_line in (
+        (clause, line.strip()) for line in text.splitlines() for clause in _pricing_clauses(line)
+    ):
         for match in _price_match_regex().finditer(clause):
             if _price_match_is_noise(clause, match):
                 continue
@@ -243,7 +247,7 @@ def _price_rows(text: str) -> list[dict[str, str]]:
             if not tier_name and not _price_match_has_metered_unit(match.group(0)):
                 continue
             price = " ".join(match.group(0).split())
-            key = (tier_name.casefold(), price.casefold())
+            key = (tier_name.casefold(), price.casefold(), physical_line)
             if key in seen:
                 continue
             seen.add(key)
@@ -253,6 +257,7 @@ def _price_rows(text: str) -> list[dict[str, str]]:
                     "price": price,
                     "billing_cycle": _billing_cycle_for_clause(clause),
                     "usage_limit": _first_usage_limit(clause),
+                    "source_quote": physical_line,
                 }
             )
     return rows
@@ -260,7 +265,7 @@ def _price_rows(text: str) -> list[dict[str, str]]:
 
 def _price_match_regex() -> re.Pattern[str]:
     return re.compile(
-        r"(?:\$|USD\s*)\s?\d+(?:\.\d+)?"
+        r"(?:\$|USD\s*)\s?\d[\d,]*(?:\.\d+)?"
         r"(?:\s*(?:/|per)\s*(?:month|mo|year|yr|user|seat|developer|"
         r"active\s+day|day|1M tokens|MTok|million tokens|tokens?))?",
         flags=re.IGNORECASE,

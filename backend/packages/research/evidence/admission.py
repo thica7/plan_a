@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Callable
-from datetime import datetime
+from copy import deepcopy
+from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 
 from packages.business_intel.entity_resolver import (
     confusion_terms_for_competitor,
@@ -18,6 +20,10 @@ from packages.research.evidence.normalization import (
     normalized_fields_from_evidence_items,
 )
 from packages.research.evidence.store import accepted_evidence_by_page
+from packages.research.extraction.price_conditions import (
+    explicit_price_conditions,
+    has_ambiguous_price_conditions,
+)
 from packages.research.extraction.quality import HARDWARE_SPEC_RE, quote_quality_problem
 from packages.research.models import (
     CapturedPage,
@@ -74,6 +80,7 @@ def admit_evidence_items(
     *,
     captured_pages: list[CapturedPage] | None = None,
     candidates: list[SourceCandidate] | None = None,
+    brief: ResearchBrief | None = None,
     min_accept_confidence: float = 0.35,
     min_page_quality: float = 0.25,
 ) -> list[EvidenceItem]:
@@ -98,16 +105,21 @@ def admit_evidence_items(
                 min_page_quality=min_page_quality,
             )
             status = "rejected" if rejection_reasons else "accepted"
+            admitted_value = deepcopy(value)
+            if status == "accepted" and field == "price_rows" and page is not None:
+                admitted_value = _verified_price_rows(
+                    extraction, admitted_value, page, candidate, brief,
+                )
             items.append(
                 EvidenceItem(
                     competitor=extraction.competitor,
                     dimension=extraction.dimension,
                     field=field,
-                    value=value,
+                    value=admitted_value,
                     source_candidate_id=extraction.source_candidate_id,
                     captured_page_id=extraction.captured_page_id,
-                    source_url=(quote.source_url if quote is not None else None)
-                    or (page.final_url if page is not None else None),
+                    source_url=(page.final_url if page is not None else None)
+                    or (quote.source_url if quote is not None else None),
                     quote=quote.text if quote is not None else "",
                     confidence=extraction.confidence,
                     status=status,
@@ -157,13 +169,16 @@ def _admission_rejection_reasons(
         quote_problem = quote_quality_problem(quote.text, dimension=extraction.dimension)
         if quote_problem:
             reasons.append(quote_problem)
-    if extraction.extractor_name == "generic_product_pricing" and field in {
-        "price_rows", "price_points"
-    }:
+    if field == "price_rows" or (
+        field == "price_points"
+        and extraction.extractor_name in {"generic_product_pricing", "pricing_model"}
+    ):
         rows = extraction.fields.get("price_rows")
-        if not isinstance(rows, list) or not rows:
+        if (not isinstance(rows, list) or not rows) and (
+            field == "price_rows" or extraction.extractor_name == "generic_product_pricing"
+        ):
             reasons.append("price_row_evidence_missing")
-        elif page is not None:
+        elif isinstance(rows, list) and rows and page is not None:
             for row in rows:
                 if not isinstance(row, dict):
                     reasons.append("price_row_evidence_invalid")
@@ -171,9 +186,12 @@ def _admission_rejection_reasons(
                 price = str(row.get("price") or "")
                 row_quote = str(row.get("source_quote") or "")
                 if (
-                    not price or price not in row_quote or row_quote not in page.text
-                    or extraction.competitor.casefold() not in row_quote.casefold()
+                    not price or price not in row_quote
+                    or row_quote not in (page.text or page.markdown)
+                    or (extraction.extractor_name == "generic_product_pricing"
+                        and extraction.competitor.casefold() not in row_quote.casefold())
                     or quote_quality_problem(row_quote, dimension="pricing")
+                    or not _price_row_matches_body(row, page)
                 ):
                     reasons.append("price_row_evidence_invalid")
                     break
@@ -183,6 +201,108 @@ def _admission_rejection_reasons(
                 }:
                     reasons.append("price_points_rows_mismatch")
     return reasons
+
+
+def _price_row_matches_body(row: dict[str, object], page: CapturedPage) -> bool:
+    quote = row.get("source_quote")
+    if not isinstance(quote, str):
+        return False
+    lines = [line.strip() for line in (page.text or page.markdown).splitlines() if quote in line]
+    parsed = explicit_price_conditions(lines[0]) if len(lines) == 1 else {}
+    displayed = explicit_price_conditions(str(row.get("price") or ""))
+    qualifiers = row.get("qualifiers", {})
+    if not isinstance(qualifiers, dict):
+        return False
+    # Extractors cannot mint verification events or current-price classifications.
+    if any(key not in parsed or type(value) is not type(parsed[key]) or value != parsed[key]
+           for key, value in qualifiers.items()):
+        return False
+    if "market" in row and row["market"] != parsed.get("market"):
+        return False
+    if parsed:
+        if any(displayed.get(key) != parsed[key] for key in ("amount", "currency")):
+            return False
+        if row.get("tier_name", "") != parsed.get("plan", ""):
+            return False
+        if row.get("billing_cycle", "") != parsed.get("billing_interval", ""):
+            return False
+    else:
+        # Legacy display rows still need their tier and interval supported by their own quote.
+        if has_ambiguous_price_conditions(quote) and (
+            row.get("tier_name") or row.get("billing_cycle")
+        ):
+            return False
+        tier = row.get("tier_name")
+        if tier and (not isinstance(tier, str) or tier.casefold() not in quote.casefold()):
+            return False
+        interval_patterns = {
+            "monthly": r"monthly|per\s+month|/(?:month|mo)\b|每月",
+            "annual": r"annual|yearly|per\s+year|/(?:year|yr)\b|每年",
+            "one_time": r"one[ -]time|一次性|买断",
+            "usage": r"token|mtok|per\s+day|active\s+day",
+        }
+        cycle = row.get("billing_cycle")
+        if cycle is not None and not isinstance(cycle, str):
+            return False
+        if cycle in interval_patterns and not re.search(interval_patterns[cycle], quote, re.I):
+            return False
+    return True
+
+
+def _verified_price_rows(
+    extraction: ExtractionResult, rows: object, page: CapturedPage,
+    candidate: SourceCandidate | None, brief: ResearchBrief | None,
+) -> object:
+    if not isinstance(rows, list):
+        return rows
+    now = datetime.now(UTC)
+    captured = (
+        page.captured_at.replace(tzinfo=UTC) if page.captured_at.tzinfo is None
+        else page.captured_at.astimezone(UTC)
+    )
+    trusted = is_trusted_url_for_competitor(extraction.competitor, page.final_url)
+    if (brief and brief.competitor == extraction.competitor
+        and brief.dimension == extraction.dimension and brief.homepage_hint):
+        final_host = urlparse(page.final_url).hostname
+        homepage_host = urlparse(brief.homepage_hint).hostname
+        trusted = trusted or bool(
+            final_host and homepage_host and final_host.casefold() == homepage_host.casefold()
+        )
+    dated = any(
+        bool(value.strip()) if isinstance(value, str) else value is not None
+        for value in (
+            candidate.date if candidate else None, candidate.last_updated if candidate else None,
+            page.source_published_at, page.source_updated_at,
+        )
+    )
+    path = urlparse(page.final_url).path.casefold()
+    pricing_path = bool(re.search(
+        r"/(?:pricing|prices?|plans?|shop|buy(?:-[\w-]+)?|purchase)(?:/|$)", path,
+    ))
+    history_path = bool(re.search(r"/(?:news|blog|press|releases?|archive|launch)(?:/|$)", path))
+    current = (
+        trusted and page.source_material_level == "full_source"
+        and now - timedelta(days=7) <= captured <= now
+        and not dated and pricing_path and not history_path
+        and not re.search(
+            r"launch|archive|historical|previous(?:ly)?|changelog|release.note|"
+            r"发布价|首发|历史|旧价|归档",
+            f"{page.final_url}\n{page.title}\n{page.text or page.markdown}", re.I,
+        )
+        and "summary" not in page.fetch_method.casefold()
+    )
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("qualifiers"):
+            continue
+        qualifiers = row["qualifiers"]
+        qualifiers["verification_event_at"] = now.isoformat()
+        qualifiers["verification_method"] = "deterministic_body_row_reparse_v1"
+        if current:
+            qualifiers["price_type"] = "official_current"
+            qualifiers["price_scope"] = "listed_unit"
+            # Freshness remains anchored to the capture; replaying admission cannot renew it.
+            qualifiers["verified_at"] = captured.isoformat()
+    return rows
 
 
 def _quote_by_field(quotes: list[EvidenceQuote]) -> dict[str, EvidenceQuote]:
@@ -258,6 +378,14 @@ def raw_source_from_capture(
     source_metadata["capture_content_hash"] = capture.content_hash.strip()
     source_metadata["captured_page_id"] = capture.id
     source_metadata["fetched_at"] = capture.captured_at.isoformat()
+    source_metadata["source_material_level"] = capture.source_material_level
+    # The requested market and arbitrary page metadata cannot supply price scope.
+    if "pricing" in brief.dimension.casefold():
+        fields = (metadata or {}).get("normalized_fields", [])
+        row_markets = {row.get("market") for row in fields if isinstance(row, dict)}
+        source_metadata["market"] = (
+            next(iter(row_markets)) if len(row_markets) == 1 and None not in row_markets else None
+        )
     source_metadata.pop("last_verified_at", None)
     source_metadata.pop("capture_verified_at", None)
     if capture.status == "ok" and not capture.failure_reason and (

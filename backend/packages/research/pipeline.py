@@ -178,6 +178,7 @@ async def run_research_pipeline(
         extractions = dedupe_by_id([*extractions, *repair_pass.extractions])
         evidence_items = admit_evidence_items(
             extractions,
+            brief=brief,
             captured_pages=captured_pages,
             candidates=candidates,
         )
@@ -518,6 +519,7 @@ def _evaluate_capture_set(
     ]
     evidence_items = admit_evidence_items(
         extractions,
+        brief=brief,
         captured_pages=pages,
         candidates=candidates,
     )

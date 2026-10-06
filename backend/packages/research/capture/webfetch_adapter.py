@@ -6,6 +6,7 @@ from typing import Any
 
 from packages.research.capture.policy import capture_failure_reason, capture_rejection_reason
 from packages.research.models import CapturedPage, SourceCandidate
+from packages.tools.evidence_fetch import EvidenceFetchResult
 
 FetchCallable = Callable[[str], Awaitable[Any]]
 
@@ -50,6 +51,13 @@ async def fetch_candidate_page(
         failure_reason=rejection_reason or None if ok else capture_failure_reason(result),
         source_published_at=getattr(result, "source_published_at", None),
         source_updated_at=getattr(result, "source_updated_at", None),
+        source_material_level=(
+            "full_source" if isinstance(result, EvidenceFetchResult)
+            and result.source_material_level == "full_source" and ok and not rejection_reason
+            and (text.strip() or markdown.strip())
+            and "summary" not in result.fetch_method.casefold()
+            else "unknown"
+        ),
         metadata=dict(getattr(result, "capture_metadata", {}) or {}),
     )
 
