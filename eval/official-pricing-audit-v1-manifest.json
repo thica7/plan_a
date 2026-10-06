@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "kind": "official_source_sampling_audit",
+  "created_at": "2026-10-06T14:19:49.215285+00:00",
+  "code_revision": "e9f189ca42f86ddaad87f93aa0a9151d6c9ead89",
+  "corpus_path": "eval/official-pricing-audit-v1-samples.jsonl",
+  "corpus_sha256": "846d10cf26776296f8d5d4f0f79d537772113e452a676336aed3633147604c1b",
+  "unique_official_sources": 10,
+  "pricing_sources": 6,
+  "policy_sources": 4,
+  "selected_native_captures_successful": 9,
+  "pricing_native_successful": 5,
+  "pricing_native_failed": 1,
+  "pricing_sources_with_price_rows": 0,
+  "pricing_sources_with_structured_money_rows": 0,
+  "rate_denominator": "5 selected successful native static pricing captures; failed GitHub excluded and reported separately",
+  "initial_live_observation": "Initial fetch returned HTTP 200 for all 10 URLs and no price_rows for the 6 pricing pages. A later GitHub diagnostic fetch and one retry failed with an empty error string; initial full GitHub text is not retained for replay.",
+  "retained_segment_word_limit_per_source": 25,
+  "reviewed_samples": 0,
+  "independent_holdout": false,
+  "external_model_calls": 0,
+  "local_model_calls": 0,
+  "production_behavior_changed": false,
+  "source_date_unknown_count": 10,
+  "frozen_inputs": {
+    "eval/product-research-corpus.jsonl": "ef36f9d26c57ac4b801869319a165d7b079d60aa2e2dde19f450733046f292f5",
+    "eval/product-research-queries-draft.jsonl": "f9da9a5a9a7753cd7d89ba9ede84e44fa456614ec01475ce1986206bd0fc15c7",
+    "eval/product-research-labels.jsonl": "80e995549deb649480270bbc85c7122c538fc43cc5f362a0a028796c0230f8cf",
+    "eval/product-research-reviewed-v2-corpus.jsonl": "199323e2e17fd37c7433c3f49571ecd60df50064503fe729293447a7eb97290e",
+    "eval/product-research-reviewed-v2-queries.jsonl": "de76a769653c2a195644233dfd54cf62550a2651c6aaea038c47824e69147156",
+    "eval/product-research-reviewed-v2-labels.jsonl": "2adf22ca5169e5ddd7f4a723ecb874eb73553361a15b5ade9497be7392fa748a",
+    "eval/product-research-reviewed-v2-facts.json": "9a9cca6b1b140fdabe88652df6bf088251a4e3c1a7fe5dd93a4dcf80ee13c9f6",
+    "eval/product-research-reviewed-v2-manifest.json": "1a5b90c0d88641161c744ede27b5a1a509e859ef955c7ec716e9558a969045a4"
+  },
+  "limits": [
+    "A handful of deliberately selected sources; no population coverage or whole RAG qualification.",
+    "Full-page parsing observations used temporary capture text. Repository retains short fragments, hashes and diagnostics; it cannot replay complete page observations from fragments alone.",
+    "DOM text is a diagnostic representation with layout loss, not a tested production extraction replacement.",
+    "No browser billing/region state, final tax, checkout amount or customer invoice verification.",
+    "GitHub web-tool fragment supplements evidence, not native fetch success or current-price qualification."
+  ]
+}
