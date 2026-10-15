@@ -120,7 +120,8 @@ class CollectorKBBridgeMixin:
         # The shared automatic planner owns clause-local numbers and unresolved
         # conditions. Rewrapping it as explicit intent would append every number
         # to every fact and discard those diagnostics.
-        if plan.origin not in {"auto", "dimension_scope_lookup"} and all(len(fact) <= 500 for fact in plan.queries):
+        if (plan.origin not in {"auto", "dimension_scope_lookup", "topic_scope_lookup"}
+                and all(len(fact) <= 500 for fact in plan.queries)):
             request["retrieval_intent"] = RetrievalIntent(
                 fact_queries=list(plan.queries), output_language=plan.output_language,
                 require_citations=plan.require_citations,
@@ -299,6 +300,13 @@ class CollectorKBBridgeMixin:
             return "non_http_url"
         if source_type in {"llm_public_knowledge", "web_search_result"}:
             return "disallowed_source_type"
+        metadata = hit.get("metadata")
+        context = metadata.get("evidence_context") if isinstance(metadata, dict) else None
+        if isinstance(context, dict) and context.get("status") == "expanded":
+            from packages.knowledge.evidence_context import get_validated_evidence_context
+
+            if get_validated_evidence_context(hit) is None:
+                return "invalid_evidence_context"
         return None
 
     @staticmethod
@@ -406,7 +414,10 @@ class CollectorKBBridgeMixin:
         rank: int,
         query: str,
     ) -> RawSource | None:
-        text = str(hit.get("text") or "").strip()
+        from packages.knowledge.evidence_context import get_validated_evidence_context
+
+        evidence_context = get_validated_evidence_context(hit)
+        text = evidence_context["text"] if evidence_context else str(hit.get("text") or "").strip()
         url = str(hit.get("url") or "").strip()
         if not text or not url.startswith(("http://", "https://")):
             return None
@@ -416,7 +427,7 @@ class CollectorKBBridgeMixin:
         if source_type in {"llm_public_knowledge", "web_search_result"}:
             return None
         title = str(hit.get("title") or f"{competitor} {dimension} KB evidence").strip()
-        snippet = self._dimension_evidence_snippet(text, dimension, text[:1000])
+        snippet = text if evidence_context else self._dimension_evidence_snippet(text, dimension, text[:1000])
         content_hash = (
             str(hit.get("content_hash") or "").strip()
             or hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()[:16]
@@ -458,6 +469,8 @@ class CollectorKBBridgeMixin:
             "source_material_level": "kb_retrieval_chunk",
             "kb_confidence_policy": "reuse_requires_current_verification",
         }
+        if evidence_context:
+            metadata["kb_evidence_context"] = evidence_context
         for field, target in (
             ("fetched_at", "source_fetched_at"),
             ("source_published_at", "source_published_at"),

@@ -1,0 +1,111 @@
+{
+  "dataset_version": "offline-holdout-v2-candidate-2",
+  "baseline_commit": "db7a56a",
+  "created_at": "2026-10-15T14:58:17.394733+00:00",
+  "frozen": true,
+  "frozen_files_sha256": {
+    "corpus.jsonl": "c632c1caf32f9792660a23edd68a44eb111e279be7d0d94e4c28332b8950f162",
+    "queries.jsonl": "6efa15daaf069423ebbb67844c2fd182f08df963549d689a63aae7ed8c4d4e73",
+    "labels.jsonl": "28e2d62814572fc89b0c64516de02dd81f2b11854c468530dfdc2c8ea270d44d"
+  },
+  "corpus_sources": 11,
+  "candidate_queries": 16,
+  "counts": {
+    "outcomes": {
+      "answer": 12,
+      "insufficient": 2,
+      "clarify": 2
+    },
+    "products": {
+      "Confluence": 5,
+      "Coda": 6,
+      "Nuclino": 5
+    },
+    "languages": {
+      "zh": 11,
+      "mixed": 2,
+      "en": 3
+    },
+    "multi_source_questions": 3,
+    "question_groups": 16,
+    "answer_fact_groups": 12,
+    "control_groups": 4
+  },
+  "purpose": "evaluation",
+  "review_status": "candidate",
+  "human_reviewed": 0,
+  "independently_human_reviewed": false,
+  "third_party_blind_test": false,
+  "semantic_quality_verified": false,
+  "used_for_current_query_implementation_tuning": false,
+  "new_question_exposure": "Question and candidate answer content created in isolated /tmp directory. Query implementer has not been sent the content. Parent received inventory summary only before implementation lock.",
+  "previous_dataset_relation": "No exact product names, source URLs, or question texts overlap the inspected prior product-research JSONL datasets; independent facts selected from different saved product documents. This does not certify global novelty or independent human quality.",
+  "earlier_project_exposure": "Confluence/Coda/Nuclino official product pages and source facts may have appeared in prior collection work, reports, tests or agent context. New questions did not participate in the current query implementation tuning, but this is not a third-party blind holdout.",
+  "prior_dataset_sha256": {
+    "eval/product-research-corpus.jsonl": "ef36f9d26c57ac4b801869319a165d7b079d60aa2e2dde19f450733046f292f5",
+    "eval/product-research-independent-v1-corpus.jsonl": "3c6a30c613d967a18921216ddcab572511805c28f507c4a1f28d9e5a71cd3b95",
+    "eval/product-research-independent-v1-labels.jsonl": "23d73f09e3b49c589a619470b87cfb0f66332fc61746309fd2d034fc1337271c",
+    "eval/product-research-independent-v1-queries.jsonl": "0d4b63a9fbd0ff27aee55b28aaea602415dabbeae0f09860d0b48823589fc578",
+    "eval/product-research-intent-tuning-labels.jsonl": "ba810e653616ab5ee9ce453972a8072cd1e8dd488dc0682a7599dd2b3397be9a",
+    "eval/product-research-intent-tuning-plans.jsonl": "b1a1fc70b5fe8c8c7d9033432d52bfedfb0defd92c4f2c539dc6ca2c8de09330",
+    "eval/product-research-intent-tuning-queries.jsonl": "cc2f124067c8f3a7e54a980de035c323b3fe779bf71b46341f220f11010e10a5",
+    "eval/product-research-labels.jsonl": "80e995549deb649480270bbc85c7122c538fc43cc5f362a0a028796c0230f8cf",
+    "eval/product-research-queries-draft.jsonl": "f9da9a5a9a7753cd7d89ba9ede84e44fa456614ec01475ce1986206bd0fc15c7",
+    "eval/product-research-reviewed-v2-corpus.jsonl": "199323e2e17fd37c7433c3f49571ecd60df50064503fe729293447a7eb97290e",
+    "eval/product-research-reviewed-v2-labels.jsonl": "2adf22ca5169e5ddd7f4a723ecb874eb73553361a15b5ade9497be7392fa748a",
+    "eval/product-research-reviewed-v2-queries.jsonl": "de76a769653c2a195644233dfd54cf62550a2651c6aaea038c47824e69147156",
+    "eval/product-research-tuning-corpus.jsonl": "6d196a8489282b614b9f279e0796a7f23bb95fd39609cffabef7e39cbdf93f27",
+    "eval/product-research-tuning-labels.jsonl": "18b8103bb9300be14e7a800c380f71b39c1be2a89430317d49990731fa974cab",
+    "eval/product-research-tuning-queries.jsonl": "30f5e2c1c5a3be182f157948ac04f36e0dabcb7d1f07436ce9be5b85cdae0d9a"
+  },
+  "prior_exposure_check_scope": "All eval/product-research*jsonl read-only; explicit product names also searched in product-evidence-eval.jsonl and official-pricing-audit-v1-samples.jsonl with no matches.",
+  "fixed_as_of": "2026-10-13",
+  "source_fetched_at_min": "2026-10-10T10:50:44.413482+00:00",
+  "source_fetched_at_max": "2026-10-13T14:48:10.488413+00:00",
+  "freshness_limit": "Only previously saved official-page snapshots, collected 2026-10-10 through 2026-10-13, were inspected offline. No external revalidation performed on 2026-10-15; source publication/update dates are unavailable. Snapshot support is not a current validity claim.",
+  "source_text_kind": "verbatim_excerpts",
+  "original_saved_location": "runs/knowledge.db documents.text, read-only SQLite URI",
+  "provenance_method": "Each exact excerpt has original document ID, full original text SHA-256, stored capture hash, original character offsets, URL, fetched_at, and excerpt offsets. No source text is an author summary.",
+  "controls_scope": "Insufficient means missing evidence in the fixed excerpt corpus, not absence of the capability or evidence on the original full pages, in all database records, or on the public web. Clarify cases are machine-authored candidate control expectations.",
+  "grouping_policy": "One query per distinct fact_group; no alternative paraphrases of the same fact group. Multiple proofs from one URL count as one source, not independent confirmation.",
+  "coverage_limits": [
+    "Three SaaS products only; no hardware/model coverage because trustworthy unexposed model-specific offline material was insufficient.",
+    "US is the saved collection market; it does not prove locale-specific commercial availability or tax treatment.",
+    "Twelve answer queries plus two insufficient and two clarify controls; candidate labels require human review before formal acceptance.",
+    "One substantive question can have more than one required source; current benchmark source recall is distinct from all-source answer completeness."
+  ],
+  "correction_log": [
+    {
+      "previous_version": "offline-holdout-v2-candidate-1",
+      "previous_files": "versions/candidate-1/",
+      "stage": "source-proof-completeness-review-before-any-retrieval-run",
+      "reason": "Two candidate proofs lacked contextual evidence: custom-role table column header; explicit workspace-tier example. Added exact original excerpts and corresponding proof entries; question texts and expected_facts unchanged.",
+      "previous_frozen_files_sha256": {
+        "corpus.jsonl": "cd0d1fe7cc264ca1a487166cb59adbd7a855fe716f47b1a79aebefe29e79e932",
+        "queries.jsonl": "6efa15daaf069423ebbb67844c2fd182f08df963549d689a63aae7ed8c4d4e73",
+        "labels.jsonl": "703cd6a12c0633015ee96cef77164e28d280f200f10e910c26b4af7574c27f02"
+      }
+    }
+  ],
+  "freeze_policy": "Do not change questions or labels based on retrieval outcomes. Any genuine label error requires a new version and explicit correction log; preserve these original hashes.",
+  "operations": {
+    "network_requests": 0,
+    "external_model_calls": 0,
+    "weight_downloads": 0,
+    "model_loads": 0,
+    "business_code_changes": 0,
+    "old_eval_changes": 0,
+    "production_db_writes": 0,
+    "git_commands": 0,
+    "env_files_read": 0
+  },
+  "validation_report": "validation-report.json",
+  "validation_report_sha256": "32d64d1a9966a49c2e8cf4644df7b662049efdf4959c3ebd6313b94a340b9750",
+  "delivery_paths": {
+    "corpus": "eval/product-research-holdout-v2-corpus.jsonl",
+    "queries": "eval/product-research-holdout-v2-queries.jsonl",
+    "labels": "eval/product-research-holdout-v2-labels.jsonl"
+  },
+  "previous_version_delivery_path": "eval/archive/product-research-holdout-v2-candidate-1/",
+  "human_review_checklist": "docs/optimization/2026-10-15-rag-holdout-review.md"
+}

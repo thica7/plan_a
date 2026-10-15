@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from packages.knowledge.embeddings import HashEmbeddingProvider
-from packages.knowledge.lexical import build_lexical_plan
+from packages.knowledge.lexical import build_lexical_plan, topic_only_query_is_bounded
 from packages.knowledge.models import (
     DocumentCreate,
     KnowledgeChunk,
@@ -71,12 +71,27 @@ def test_chinese_connectors_do_not_become_literal_requirements():
     assert build_lexical_plan("价格和隐私是什么").literals == []
 
 
+@pytest.mark.parametrize("query,expected", [
+    ("Free账号的私有仓库可以直接使用branch protection吗？管理员默认也必须受所有分支保护限制吗？", True),
+    ("请问电池的容量是多少，充电器是否支持50W？", True),
+    ("飞鱼七代的私有仓库是否支持分支保护？", False),
+    ("私有仓库的分支保护是否支持飞鱼七代？", False),
+    ("免费管理员是否默认必须受所有限制？", False),
+    ("请问是否可以使用？", False),
+])
+def test_topic_only_query_requires_domain_and_fully_recognized_question_grammar(query, expected):
+    assert topic_only_query_is_bounded(query) is expected
+    # The safety gate does not erase unknown source text from lexical matching.
+    if "飞鱼" in query:
+        assert "飞鱼" in build_lexical_plan(query).literals
+
+
 @pytest.mark.asyncio
 async def test_long_chinese_question_has_bounded_fallback_without_losing_numeric_anchor(tmp_path):
     query = "Aurora 7 在断网以后是否还能继续编辑并在联网后同步？"
     plan = build_lexical_plan(query)
     assert plan.fallback_query and plan.disabled_reason is None
-    assert plan.version == "lexical-v3"
+    assert plan.version == "lexical-v4"
     assert '"7"' in plan.fallback_query
     assert len(plan.fallback_query) < 2500
     async with KnowledgeRepository(str(tmp_path / "kb.db")) as repo:
@@ -313,7 +328,7 @@ async def test_sparse_canonical_recheck_preserves_only_current_diagnostic(tmp_pa
         response = await service.retrieve(request)
         assert [hit.document_id for hit in response.hits] == [doc.id]
         assert response.hits[0].metadata["lexical_retrieval"] == {
-            "version": "lexical-v3",
+            "version": "lexical-v4",
             "path": "fallback_body",
             "concepts": ["warranty"],
         }

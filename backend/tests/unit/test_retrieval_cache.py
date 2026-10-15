@@ -4,6 +4,7 @@ import pytest
 
 from packages.knowledge.models import RetrievalHit, RetrievalRequest
 from packages.knowledge.retrieval import QueryRewriter, RetrievalService
+from packages.knowledge import retrieval
 
 
 class FakeRewriter(QueryRewriter):
@@ -84,3 +85,19 @@ async def test_retrieval_cache_is_bypassed_for_query_rewrite_requests() -> None:
     await service.retrieve(request)
 
     assert vector_store.calls == 4
+
+
+@pytest.mark.asyncio
+async def test_query_and_lexical_versions_each_invalidate_response_cache(monkeypatch) -> None:
+    vector_store = CountingVectorStore()
+    service = RetrievalService(EmptyRepo(), vector_store, embed_fn=embed)
+    request = RetrievalRequest(query="security", mode="dense", enable_query_rewrite=False)
+    await service.retrieve(request)
+    await service.retrieve(request)
+    assert vector_store.calls == 1
+    monkeypatch.setattr(retrieval, "PLAN_VERSION", "intent-next")
+    await service.retrieve(request)
+    assert vector_store.calls == 2
+    monkeypatch.setattr(retrieval, "LEXICAL_VERSION", "lexical-next")
+    await service.retrieve(request)
+    assert vector_store.calls == 3

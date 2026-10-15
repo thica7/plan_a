@@ -239,7 +239,9 @@ async def test_candidate_diagnostic_cannot_claim_semantic_quality(tmp_path: Path
 @pytest.mark.asyncio
 async def test_title_match_does_not_claim_quote_retrieval(tmp_path: Path):
     source = _source("good")
-    source["text"] = "Capacity " * 160 + "5000 mAh."
+    # Unique filler keeps this test about title-only retrieval. Ambiguous repeated
+    # anchors are covered separately and deliberately have no source coordinates.
+    source["text"] = " ".join(f"Capacity item {index}." for index in range(90)) + " 5000 mAh."
     source["content_hash"] = hashlib.sha256(source["text"].encode()).hexdigest()
     paths = _files(tmp_path, [source])
     query_path = paths[1]

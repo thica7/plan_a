@@ -19,12 +19,17 @@ from packages.config import get_settings
 from packages.llm import DoubaoClient
 
 from .embeddings import EmbeddingProvider
+from .evidence_context import (
+    MAX_CONTEXT_CHARS, MAX_REQUEST_ADDITIONAL_CHARS, build_evidence_context,
+)
 from .models import KnowledgeScope, RetrievalHit, RetrievalRequest, RetrievalResponse
 from .lexical import LEXICAL_VERSION
 from .query_intent import PLAN_VERSION, RetrievalPlan, resolve_retrieval_plan
 from .repository import KnowledgeRepository
 from .reranker import RerankerProvider
 from .runtime import call_provider
+
+RETRIEVAL_PIPELINE_VERSION = "dual-context-v1"
 
 _DEFAULT_CACHE_TTL_SECONDS = 300.0
 _DEFAULT_CACHE_MAXSIZE = 256
@@ -265,6 +270,8 @@ class RetrievalService:
         score_threshold: float = 0.0,
         cache_ttl: float = _DEFAULT_CACHE_TTL_SECONDS,
         cache_maxsize: int = _DEFAULT_CACHE_MAXSIZE,
+        enable_query_fusion: bool = True,
+        expand_context: bool = True,
     ) -> None:
         self._repo = repo
         self._vs = vector_store
@@ -277,6 +284,8 @@ class RetrievalService:
         self._dense_weight = dense_weight
         self._sparse_weight = sparse_weight
         self._score_threshold = score_threshold
+        self._enable_query_fusion = enable_query_fusion
+        self._expand_context = expand_context
         self._embedding_cache = _TTLCache(maxsize=cache_maxsize, ttl_seconds=cache_ttl)
         self._retrieval_cache = _TTLCache(maxsize=cache_maxsize, ttl_seconds=cache_ttl)
         self._reset_observability_counts()
@@ -288,7 +297,9 @@ class RetrievalService:
         started_at = time.monotonic()
         cache_hit = False
 
-        planned_search = plan.origin in {"explicit", "format_suffix", "auto", "dimension_scope_lookup"}
+        planned_search = plan.origin in {
+            "explicit", "format_suffix", "auto", "dimension_scope_lookup", "topic_scope_lookup",
+        }
         if not planned_search and request.enable_query_rewrite and request.num_rewrites > 0:
             response = await self._retrieve_with_rewrites(request, plan)
         else:
@@ -336,20 +347,102 @@ class RetrievalService:
             response.diagnostics = diagnostics
         elif "query_plan" not in response.diagnostics:
             response.diagnostics["query_plan"] = asdict(plan)
+        if cache_hit:
+            response.diagnostics["cached_ranking_provenance"] = {
+                key: response.diagnostics.get(key)
+                for key in ("query_fusion", "candidates", "candidate_refs")
+            }
+            response.diagnostics["query_fusion"] = {
+                **response.diagnostics.get("query_fusion", {}),
+                "execution_scope": "current_request", "executed_queries": [],
+                "branch_candidates": {"original": 0, "structured": 0},
+                "search_budget": {"per_query_top_k": request.top_k,
+                                  "unique_queries": 0, "max_candidates": 0},
+            }
+            response.diagnostics["candidates"] = {"dense": 0, "sparse": 0, "reranked": 0}
+            response.diagnostics["candidate_refs"] = []
+        response.diagnostics["cache"] = {"hit": cache_hit}
+        await self._attach_evidence_context(response, request)
         for hit in response.hits:
             hit.metadata = {**hit.metadata, "retrieval": response.diagnostics}
         return response
 
+    async def _attach_evidence_context(
+        self, response: RetrievalResponse, request: RetrievalRequest,
+    ) -> None:
+        remaining = MAX_REQUEST_ADDITIONAL_CHARS
+        documents: dict[str, Any] = {}
+        chunks: dict[str, list[Any]] = {}
+        emitted: dict[str, list[tuple[int, int]]] = {}
+        expanded_count = 0
+        skipped: dict[str, int] = {}
+        get_document = getattr(self._repo, "get_document", None)
+        get_chunks = getattr(self._repo, "get_chunks_for_document", None)
+        for hit in response.hits:
+            hit.metadata = {key: value for key, value in hit.metadata.items()
+                            if key != "evidence_context"}
+            if not self._expand_context:
+                continue
+            if hit.document_id not in documents:
+                documents[hit.document_id] = (await get_document(
+                    hit.document_id,
+                    **({"scope": request.scope} if request.scope is not None else {}),
+                ) if callable(get_document) else None)
+                chunks[hit.document_id] = (await get_chunks(hit.document_id)
+                                          if callable(get_chunks) else [])
+            context = build_evidence_context(
+                hit, documents[hit.document_id], chunks[hit.document_id],
+                remaining_budget=remaining, emitted_ranges=emitted.get(hit.document_id, []),
+            )
+            hit.metadata["evidence_context"] = context
+            if context["status"] == "expanded":
+                expanded_count += 1
+                remaining -= len(context["text"]) - len(hit.text)
+                emitted.setdefault(hit.document_id, []).append((context["start"], context["end"]))
+            else:
+                reason = context["omission_reason"]
+                skipped[reason] = skipped.get(reason, 0) + 1
+        response.diagnostics["context_expansion"] = {
+            "enabled": self._expand_context, "per_hit_max_chars": MAX_CONTEXT_CHARS,
+            "request_max_additional_chars": MAX_REQUEST_ADDITIONAL_CHARS,
+            "additional_chars": MAX_REQUEST_ADDITIONAL_CHARS - remaining,
+            "expanded_hits": expanded_count, "skipped": skipped,
+        }
+
     async def _retrieve_with_plan(
         self, request: RetrievalRequest, plan: RetrievalPlan
     ) -> RetrievalResponse:
-        ranked_lists = [await self._search_once(query, request) for query in plan.queries]
-        fused = (_rrf_fuse_ranked_lists(ranked_lists) if len(ranked_lists) > 1
-                 else ranked_lists[0])
+        queries = ([request.query, *plan.queries] if self._enable_query_fusion
+                   else list(plan.queries))
+        searched: dict[str, list[RetrievalHit]] = {}
+        for query in queries:
+            key = query.strip().casefold()
+            if key not in searched:
+                searched[key] = await self._search_once(query, request)
+        ranked_lists = [searched[query.strip().casefold()] for query in plan.queries]
+        # Production grants each distinct fact query one vote. The ablation keeps
+        # the legacy weighting while diagnostic slots retain the caller's plan.
+        fact_keys = [query.strip().casefold() for query in plan.queries]
+        fusion_lists = ([searched[key] for key in dict.fromkeys(fact_keys)]
+                        if self._enable_query_fusion else ranked_lists)
+        structured = (_rrf_fuse_ranked_lists(fusion_lists) if len(fusion_lists) > 1
+                      else fusion_lists[0])
+        original = searched[request.query.strip().casefold()] if self._enable_query_fusion else []
+        fused = (_rrf_fuse_ranked_lists([original, structured], weights=[1.0, 1.0])
+                 if self._enable_query_fusion else structured)
+        self._query_fusion = {
+            "enabled": self._enable_query_fusion,
+            "method": "hierarchical_rrf" if self._enable_query_fusion else "structured_only",
+            "branch_weights": {"original": 1.0, "structured": 1.0}
+            if self._enable_query_fusion else {"structured": 1.0},
+            "original_query": request.query,
+            "structured_queries": list(plan.queries),
+            "branch_candidates": {"original": len(original), "structured": len(structured)},
+        }
         fused = _filter_hits_by_request(fused, request)
         fused = self._filter_by_score_threshold(fused)
-        factual_query = " ".join(plan.queries)
-        top = await self._post_process(factual_query, fused, request)
+        rerank_query = request.query if self._enable_query_fusion else " ".join(plan.queries)
+        top = await self._post_process(rerank_query, fused, request)
         retained = {hit.chunk_id for hit in top}
         groups = [
             {"query": query, "chunk_ids": [hit.chunk_id for hit in hits
@@ -370,7 +463,19 @@ class RetrievalService:
             reranker.get("reason") if reranker else None,
         ) if reason]
         index_status = getattr(self._vs, "status", None)
-        return {"requested_mode": request.mode,
+        return {"pipeline_version": RETRIEVAL_PIPELINE_VERSION,
+                "query_fusion": {
+                    "execution_scope": "current_request",
+                    "original_query": request.query, "structured_queries": [],
+                    "executed_queries": list(self._executed_queries),
+                    "search_budget": {"per_query_top_k": request.top_k,
+                                      "unique_queries": len(self._executed_queries),
+                                      "max_candidates": request.top_k * len(self._executed_queries)
+                                      * (2 if request.mode == "hybrid" else 1)},
+                    **self._query_fusion,
+                },
+                "context_expansion": {"enabled": self._expand_context},
+                "requested_mode": request.mode,
                 "effective_mode": "sparse" if self._dense_error else request.mode,
                 "embedding": embedding, "reranker": reranker,
                 "index": index_status() if callable(index_status) else None,
@@ -391,6 +496,9 @@ class RetrievalService:
             num_rewrites=request.num_rewrites,
         )
         queries = [request.query, *rewrites[: request.num_rewrites]]
+        self._query_fusion = {
+            "enabled": False, "method": "query_rewrites", "branch_weights": {},
+        }
         ranked_lists = [
             await self._search_once(query, request)
             for query in queries
@@ -415,6 +523,7 @@ class RetrievalService:
         query: str,
         request: RetrievalRequest,
     ) -> list[RetrievalHit]:
+        self._executed_queries.append(query)
         dense_hits: list[RetrievalHit] = []
         sparse_hits: list[RetrievalHit] = []
         filters = {
@@ -478,6 +587,8 @@ class RetrievalService:
             )
         else:
             candidates = dense_hits or sparse_hits
+        for hit in candidates:
+            hit.metadata.pop("evidence_context", None)
         for hit in _filter_hits_by_request(candidates, request):
             self._candidate_refs[hit.chunk_id] = {
                 "chunk_id": hit.chunk_id, "document_id": hit.document_id,
@@ -567,6 +678,7 @@ class RetrievalService:
                     continue
             metadata = dict(getattr(document, "metadata", hit.metadata))
             metadata.pop("lexical_retrieval", None)
+            metadata.pop("evidence_context", None)
             if vector_index is not None:
                 metadata["vector_index"] = vector_index
             if not dense and isinstance(hit.metadata.get("lexical_retrieval"), dict):
@@ -797,7 +909,9 @@ class RetrievalService:
             os.getenv("KB_INDEX_VERSION", "v1"),
             getattr(self._reranker_provider, "model_version", None), self._rerank_model,
         )
-        return f"{PLAN_VERSION}:{LEXICAL_VERSION}:{self._cache_key(request)}:{identity!r}"
+        return (f"{PLAN_VERSION}:{LEXICAL_VERSION}:{RETRIEVAL_PIPELINE_VERSION}:"
+                f"{self._enable_query_fusion}:{self._expand_context}:"
+                f"{self._cache_key(request)}:{identity!r}")
 
     def _reset_observability_counts(self) -> None:
         self._dense_error: str | None = None
@@ -806,6 +920,10 @@ class RetrievalService:
         self._sparse_hits = 0
         self._reranked_hits = 0
         self._candidate_refs: dict[str, dict[str, Any]] = {}
+        self._executed_queries: list[str] = []
+        self._query_fusion: dict[str, Any] = {
+            "enabled": False, "method": "original_only", "branch_weights": {"original": 1.0},
+        }
 
     async def _record_observability(
         self,

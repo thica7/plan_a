@@ -48,6 +48,34 @@ def _never_embed(texts: list[str]) -> None:
     raise AssertionError("offline benchmark cannot embed")
 
 
+def _evidence_excerpt(hit, document, chunk):
+    """Score a verified evidence range while retaining the original ranking anchor."""
+    if (document is None or document.id != hit.document_id or chunk is None or chunk.document_id != hit.document_id
+            or chunk.text != hit.text or document.version != hit.document_version
+            or document.content_hash != hit.content_hash):
+        raise RuntimeError("retrieval hit differs from stored corpus snapshot")
+    start = document.text.find(hit.text)
+    if start < 0:
+        raise RuntimeError("anchor missing from stored corpus snapshot")
+    raw_context = hit.metadata.get("evidence_context")
+    if isinstance(raw_context, dict) and raw_context.get("status") == "expanded":
+        from .evidence_context import get_validated_evidence_context
+
+        context = get_validated_evidence_context(hit, canonical_text=document.text)
+        if context is None:
+            raise RuntimeError("expanded context differs from stored corpus snapshot")
+        return context["text"], context["start"], context["end"], context
+    if "source_start" in chunk.metadata or "source_end" in chunk.metadata:
+        start, end = chunk.metadata.get("source_start"), chunk.metadata.get("source_end")
+        if (type(start) is not int or type(end) is not int or not 0 <= start < end <= len(document.text)
+                or document.text[start:end] != hit.text):
+            raise RuntimeError("anchor coordinates differ from stored corpus snapshot")
+        return hit.text, start, end, None
+    if document.text.find(hit.text, start + 1) >= 0:
+        return hit.text, None, None, None
+    return hit.text, start, start + len(hit.text), None
+
+
 class _BenchmarkRepository(KnowledgeRepository):
     as_of: date | None = None
 
@@ -243,6 +271,8 @@ async def run_product_benchmark(
     embedding_provider: Any = None,
     reranker_provider: Any = None,
     product_scope: str = "product",
+    enable_query_fusion: bool = False,
+    expand_context: bool = False,
 ) -> dict[str, Any]:
     """Run scoped offline sparse retrieval over a single fixed corpus snapshot."""
     if mode not in {"formal", "candidate-diagnostic", "tuning-diagnostic"}:
@@ -440,6 +470,8 @@ async def run_product_benchmark(
                         query_rewriter=_NeverRewrite(),
                         rerank_fn=reranker_provider.rerank if enable_rerank else None,
                         reranker_provider=reranker_provider if enable_rerank else None,
+                        enable_query_fusion=enable_query_fusion,
+                        expand_context=expand_context,
                     )
                     request = RetrievalRequest(
                         query=query["query"],
@@ -493,18 +525,13 @@ async def run_product_benchmark(
                     for rank, hit in enumerate(response.hits, 1):
                         document = stored_docs.get(hit.document_id)
                         chunk = stored_chunks.get(hit.chunk_id)
-                        if (
-                            document is None
-                            or chunk is None
-                            or chunk.document_id != hit.document_id
-                            or chunk.text != hit.text
-                            or document.version != hit.document_version
-                            or document.content_hash != hit.content_hash
-                        ):
-                            raise RuntimeError("retrieval hit differs from stored corpus snapshot")
+                        excerpt, offset, end, context = _evidence_excerpt(hit, document, chunk)
                         source_id = hit.metadata.get("eval_source_id")
                         source = dataset.sources.get(source_id)
-                        offset = source["text"].find(hit.text) if source else -1
+                        if (source is None or source["text"] != document.text
+                                or (offset is not None and source["text"][offset:end] != excerpt)):
+                            raise RuntimeError("evidence excerpt differs from saved source text")
+                        anchor_offset = context["anchor"]["start"] if context else offset
                         hits.append(
                             {
                                 "rank": rank,
@@ -520,13 +547,18 @@ async def run_product_benchmark(
                                 "product": hit.competitor,
                                 "workspace_id": hit.workspace_id,
                                 "project_id": hit.project_id,
-                                "excerpt_start": offset if offset >= 0 else None,
-                                "excerpt_end": offset + len(hit.text) if offset >= 0 else None,
+                                "excerpt_start": offset,
+                                "excerpt_end": end,
+                                "anchor_start": anchor_offset,
+                                "anchor_end": anchor_offset + len(hit.text) if anchor_offset is not None else None,
+                                "anchor_chars": len(hit.text),
+                                "context_chars": len(excerpt),
                                 "metadata": {
                                     "lexical_retrieval": hit.metadata.get("lexical_retrieval"),
                                     "structured_facts": hit.metadata.get("structured_facts"),
                                     "text_kind": hit.metadata.get("text_kind"),
                                     "provenance": hit.metadata.get("provenance"),
+                                    "evidence_context": context,
                                 },
                             }
                         )
@@ -572,6 +604,11 @@ async def run_product_benchmark(
                                     source["text"][proof["start"] : proof["end"]] == proof["quote"]
                                 ),
                                 "quote_in_retrieved_excerpt": quote_in_hit,
+                                "quote_in_anchor_excerpt": any(
+                                    hit["source_id"] == proof["source_id"]
+                                    and hit["anchor_start"] is not None
+                                    and hit["anchor_start"] <= proof["start"]
+                                    and hit["anchor_end"] >= proof["end"] for hit in hits),
                             }
                         )
                     failure_reasons = []
@@ -605,6 +642,8 @@ async def run_product_benchmark(
                                 proof["quote_in_retrieved_excerpt"]
                                 and hits
                                 and proof["source_id"] == hits[0]["source_id"]
+                                and hits[0]["excerpt_start"] is not None
+                                and hits[0]["excerpt_end"] is not None
                                 and hits[0]["excerpt_start"] <= proof["start"]
                                 and hits[0]["excerpt_end"] >= proof["end"]
                                 for proof in proof_checks
@@ -630,6 +669,14 @@ async def run_product_benchmark(
                             "per_query_candidate_top_k": candidate_top_k,
                             "metrics": metrics,
                             "proofs": proof_checks,
+                            "anchor_proof_excerpt_recall": (
+                                sum(proof["quote_in_anchor_excerpt"] for proof in proof_checks)
+                                / len(proof_checks) if label["expected_outcome"] == "answer" else None
+                            ),
+                            "extra_context_chars": sum(
+                                hit["context_chars"] - hit["anchor_chars"] for hit in hits),
+                            "anchor_chars": sum(hit["anchor_chars"] for hit in hits),
+                            "context_chars": sum(hit["context_chars"] for hit in hits),
                             "proof_excerpt_recall": (
                                 sum(proof["quote_in_retrieved_excerpt"] for proof in proof_checks)
                                 / len(proof_checks)
@@ -709,6 +756,8 @@ async def run_product_benchmark(
         "lexical_policy": lexical_policy_report,
         "intent_policy": intent_policy,
         "product_scope": product_scope,
+        "enable_query_fusion": enable_query_fusion,
+        "expand_context": expand_context,
         "intent_plan_sha256": intent_plan_sha256,
         "semantic_quality_verified": False,
         "provider": provider,

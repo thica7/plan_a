@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from .tokenization import lexical_tokens
 
-LEXICAL_VERSION = "lexical-v3"
+LEXICAL_VERSION = "lexical-v4"
 
 _ALIASES: dict[str, tuple[str, ...]] = {
     "battery": ("电池", "battery", "batteries"),
@@ -88,6 +88,18 @@ _ZH_FILLER = (
     "在", "以后", "的时候", "时候", "还能", "继续", "并", "联网以后", "联网后",
     "需要哪些", "需要", "前提条件", "条件", "有什么", "哪些",
 )
+# These words may explain a question, but may not erase an unknown name or
+# condition. The complete residual CJK run must match this bounded grammar.
+_TOPIC_QUESTION_FILLER = (
+    "账号", "账户", "帐号", "帐户", "直接", "使用", "启用", "默认",
+    "也", "必须", "受", "所有", "限制", "是",
+)
+_DOMAIN_TOPICS = frozenset({
+    "battery", "warranty", "refund", "shipping", "export", "license",
+    "subscription", "billing", "monthly", "annual", "pricing", "seat",
+    "security", "privacy", "offline", "sync", "encryption", "desktop", "mobile",
+    "browser", "incognito", "extension", "branch protection", "repository", "runtime", "charger",
+})
 _CJK_RUN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]+")
 _DECIMAL = re.compile(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)")
 _QUANTITY = re.compile(
@@ -150,8 +162,8 @@ def quantity_literals(text: str) -> list[str]:
     return list(dict.fromkeys(match.group().casefold() for match in _QUANTITY.finditer(text)))
 
 
-def _strip_question_segments(text: str) -> str:
-    fillers = sorted(_ZH_FILLER, key=len, reverse=True)
+def _strip_question_segments(text: str, extra_fillers: tuple[str, ...] = ()) -> str:
+    fillers = sorted((*_ZH_FILLER, *extra_fillers), key=len, reverse=True)
 
     def replace(match: re.Match[str]) -> str:
         segment = match.group()
@@ -204,6 +216,22 @@ def query_terms(query: str, competitors: list[str] | None = None) -> tuple[list[
     literals = [term for term in lexical_tokens(_strip_question_segments(text))
                 if term not in _EN_FILLER]
     return concepts, [*literals, *quantities]
+
+
+def topic_only_query_is_bounded(query: str) -> bool:
+    """Permit missing-product topic lookup only for recognized domain questions.
+
+    This is a planning gate, not normalization: unknown text stays available in
+    query_terms and in the original question for later evidence verification.
+    """
+    text, concepts = _remove_spans(query, [
+        (concept, _pattern(alias)) for concept, aliases in _ALIASES.items() for alias in aliases
+    ])
+    text = _QUANTITY.sub(" ", text)
+    residual = _strip_question_segments(text, _TOPIC_QUESTION_FILLER)
+    return bool(_DOMAIN_TOPICS.intersection(concepts)) and not any(
+        term not in _EN_FILLER for term in lexical_tokens(residual)
+    )
 
 
 @dataclass(frozen=True)

@@ -134,12 +134,15 @@ RAG 用于复用可追溯的一手资料、统一各 Agent 的证据，并限制
 
 ```text
 抓取 / 导入 → 清洗、去重与分块 → SQLite 原文及 FTS5 + Qdrant 向量索引
-问题 / 研究维度 → 事实查询规划 → 稀疏与稠密召回 → RRF → 可选精排
-→ 原文、版本、范围、时效与来源角色校验 → Collector 准入 → 共享证据快照
+问题 / 研究维度 → 原句＋结构化查询 → 稀疏与稠密召回 → 双路 RRF → 可选原句精排
+→ 原文、版本、范围、时效与来源角色校验 → 同文档有界上下文补全
+→ Collector 提取与准入 → 共享证据快照
 → Analyst / Comparator / Reflector / Writer / QA
 ```
 
 - 稀疏检索使用 SQLite FTS5/BM25；Qdrant 提供向量检索。混合召回在共享检索服务中融合。
+- 生产检索保留原问句一路；结构化子查询先内部融合，再与原句一路等权 RRF。精排使用完整原句，重复查询只执行一次。两路采用相同的范围、时效与索引校验。
+- 排名锚块保持不变，另附当前文档的短章节/短全文或相邻块，附带原文坐标和哈希。每条上下文最多 3000 字符，每次最多额外 6000 字符；无法校验、重复区间或超预算时记录跳过原因。补全不自动证明条件属于某项能力，仍需提取和准入。
 - 默认 hash embedding/reranker 用于确定性开发测试，不具备真实多语语义能力。
 - 已接入本机 `intfloat/multilingual-e5-small` 与可选 `BAAI/bge-reranker-v2-m3`。配置、固定 revision 和本地路径参考 [本机模型配置示例](docs/optimization/2026-10-14-local-rag-profile.env.example)，复制后需修改为自己的权重路径。
 - 用 `GET /api/knowledge/providers` 检查实际 provider、模型和降级状态；更换 embedding 后需重建对应模型版本的索引。严格验收应设置 `KB_LOCAL_MODEL_STRICT=1`，避免加载失败退回 hash 而误报语义检索可用。
@@ -162,13 +165,30 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.p
 # 已准备本机权重后，执行比较
 PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.py \
   --local-profile /absolute/path/to/local-rag.env --output /tmp/retrieval-result.json --run
+
+# 新候选集仅作诊断；未人审时不能用默认 formal 模式
+PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.py \
+  --local-profile /absolute/path/to/local-rag.env \
+  --dataset-prefix eval/product-research-holdout-v2 --mode candidate-diagnostic \
+  --product-scope broad --output /tmp/candidate-retrieval.json --run
+
+# 十二组消融：原句、仅结构化、双路、双路加补全，各测三种检索配置
+PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.py \
+  --local-profile /absolute/path/to/local-rag.env \
+  --output /tmp/dual-context-result.json --ablation --run
 ```
+
+`--product-scope product` 可另测显式产品范围。两种范围应分别报告，不能把已知产品过滤的结果冒充全库表现。脚本在加载模型前校验审核状态与原文坐标，执行前后校验输入和实际导入检索代码的哈希；本机模型初始化失败会中止评测。不加 `--ablation` 时保留旧六组对照，关闭双路和补全；该评测默认与生产检索默认不同。消融分别统计来源召回、锚块引文和补全后引文，额外文本的覆盖收益不能冒称排序收益。
 
 ## 验证与交付边界
 
 测试、历史真实流程、当前阻断与检索结果分别记录在 [正式验收记录](docs/optimization/2026-10-14-formal-acceptance.md)。小规模、已曝光样本的召回改善不能证明开放问题上的回答准确率；精排是否有收益也需单独比较。
 
-最新 [检索接线交付](docs/optimization/2026-10-15-agent-retrieval-delivery.md)：在原 6 道答案题上，生产查询规划路径的 sparse top-3 为 **5/6**，raw 为 **0/6**；hybrid 和加 BGE 均为 **6/6**。本机评测外部模型/网络调用为 0；这组已曝光小集不作为 RAG 整体合格证明。
+最新 [双路检索与上下文补全](docs/optimization/2026-10-16-dual-query-context.md)：候选全库 hybrid+BGE 找全来源／引文题数，从仅结构化的 **11/12、10/12**，恢复为双路的 **12/12、11/12**；补全后引文为 **12/12**，排名锚块不变。稀疏检索仍为原人审集 **5/6**、候选 **2/12**，复杂跨语言召回尚未解决。后端 **4226 通过、1 跳过**；三组十二臂比较的外部模型/网络调用为 0。16 道候选未人审且已曝光，小库检索结果与固定 Agent 重放不能代替真实生成报告质量验收。
+
+上一轮基线与样本边界见 [离线检索与 Agent 复测](docs/optimization/2026-10-15-offline-rag-followup.md)。
+
+此前版本与已曝光原集的历史结果保留在 [检索接线交付](docs/optimization/2026-10-15-agent-retrieval-delivery.md)。
 
 当前四产品真实报告仍有证据覆盖与语义条件归属的验收缺口，最新重跑被工作区月度 token 额度阻止。不能把任务 `completed` 或单元测试通过解释为完整报告已达交付标准。HTTP Qdrant、Temporal、Redis 多 worker 及实机 Postgres RLS 仍需部署验收。
 

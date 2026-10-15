@@ -207,6 +207,10 @@ async def test_target_product_name_does_not_block_real_competitor_kb_recall(
     assert len(sources) == 1 and sources[0].metadata["kb_document_id"] == document_id
     assert sources[0].metadata["kb_retrieval_original_query"] == TOPIC
     plan = sources[0].metadata["kb_retrieval"]["query_plan"]
+    assert plan["origin"] in {"auto", "dimension_scope_lookup"}
+    if plan["origin"] == "dimension_scope_lookup":
+        assert plan["planning_reason"] == "metadata_scoped_browse_without_fact_parse"
+        assert plan["preserved_clauses"] == [service._kb_retrieval_query(detail, COMPETITOR, dimension)]
     assert all("Nintendo" not in query and "Switch" not in query for query in plan["queries"])
     assert all("AI agent" not in query for query in plan["queries"])
 

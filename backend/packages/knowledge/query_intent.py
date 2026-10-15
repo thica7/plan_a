@@ -5,16 +5,18 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .lexical import quantity_literals, query_terms
+from .lexical import quantity_literals, query_terms, topic_only_query_is_bounded
 from .models import RetrievalRequest
 from .tokenization import lexical_tokens
 
-PLAN_VERSION = "intent-v3"
+PLAN_VERSION = "intent-v7"
 _FORMAT_SUFFIX = re.compile(
     r"(?P<body>.*?)[；;。，,？?！!\n]\s*(?P<suffix>"
     r"输出中文(?:并(?:保留出处|附上出处|提供引用))?"
     r"|(?:请)?用中文(?:回答)?(?:并(?:保留出处|附上出处|提供引用|保留条件))?"
     r"|answer in Chinese(?: and include citations)?"
+    r"|请保留(?:原始|套餐|计费|适用)?(?:口径|条件|出处|引用)"
+    r"(?:[、和及与](?:原始|套餐|计费|适用)?(?:口径|条件|出处|引用))*"
     r")\s*[。.!！]?\s*$",
     re.IGNORECASE | re.DOTALL,
 )
@@ -24,6 +26,50 @@ _CONDITIONS = frozenset({"free", "admin", "guest", "private",
                          "enterprise", "paid", "public", "invited", "owner", "viewer", "permission"})
 _PRICING_TOPICS = frozenset({"pricing", "plans", "billing", "subscription", "monthly", "annual", "seat", "license"})
 _SECURITY_TOPICS = frozenset({"security", "privacy", "encryption", "local", "retention", "deletion", "history", "branch protection"})
+
+
+def _has_ambiguous_product_anchors(factual: str, competitors: list[str]) -> bool:
+    """Do not merge distinct name groups across prose, punctuation or relations."""
+    _, literals = query_terms(factual)
+    quantities = set(quantity_literals(factual))
+    # Bare numbers are constraints, not additional products. Adjacent numeric
+    # model suffixes still belong to the complete name for identity comparison.
+    anchor_terms = {term for term in literals if term.isascii() and term not in quantities
+                    and any(char.isalpha() for char in term)}
+    # Count declared names before query_terms removes them. A complete declared
+    # product is one span, including any internal Chinese words or punctuation.
+    declared = [match for name in competitors if name for match in re.finditer(
+        rf"(?<![A-Za-z0-9]){re.escape(name)}(?![A-Za-z0-9])", factual, re.IGNORECASE,
+    )]
+    spans = [(match.start(), match.end()) for match in declared]
+    spans.extend((match.start(), match.end()) for match in _LATIN.finditer(factual)
+                 if match.group().casefold() in anchor_terms
+                 and match.group().casefold() not in {"vs", "versus"}
+                 and not any(name.start() <= match.start() and match.end() <= name.end()
+                             for name in declared))
+    complete_spans: list[tuple[int, int]] = []
+    for start, end in spans:
+        for match in _LATIN.finditer(factual, end):
+            gap = factual[end:match.start()]
+            term = match.group().casefold()
+            if ((gap.strip() and re.fullmatch(r"[._-]", gap) is None)
+                    or re.fullmatch(r"\d+(?:-\d+)*", term) is None or term not in literals):
+                break
+            end = match.end()
+        complete_spans.append((start, end))
+    groups: list[tuple[int, int]] = []
+    for start, end in sorted(complete_spans):
+        if groups:
+            previous_start, previous_end = groups[-1]
+            gap = factual[previous_end:start]
+            model_join = (re.fullmatch(r"[._-]", gap) is not None
+                          and factual[start:end].isdigit())
+            if not gap.strip() or model_join:
+                groups[-1] = (previous_start, end)
+                continue
+        groups.append((start, end))
+    # Repeating the same complete name in a later clause is still one entity.
+    return len({" ".join(factual[start:end].casefold().split()) for start, end in groups}) > 1
 
 
 def _dimension_topics(topics: list[str], dimensions: list[str]) -> list[str]:
@@ -48,13 +94,14 @@ def _dimension_topics(topics: list[str], dimensions: list[str]) -> list[str]:
 
 def _auto_fact_queries(
     factual: str, competitors: list[str], dimensions: list[str]
-) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]] | None:
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], bool] | None:
     """Split recognized long questions into bounded facts, retaining access/model anchors."""
-    if (len(lexical_tokens(factual)) < 12 or not re.search(r"[\u3400-\u9fff]", factual)
+    if (len(competitors) > 1 or len(lexical_tokens(factual)) < 12
+            or not re.search(r"[\u3400-\u9fff]", factual)
             or re.search(r"输出中文|answer in Chinese", factual, re.IGNORECASE)):
         return None
     concepts, literals = query_terms(factual, competitors)
-    if not concepts:
+    if not concepts or _has_ambiguous_product_anchors(factual, competitors):
         return None
     anchor_tokens = {term for term in literals if term.isascii()
                      and not any(char.isdigit() for char in term)}
@@ -64,14 +111,32 @@ def _auto_fact_queries(
     prefix_quantities = set(quantity_literals(prefix))
     anchor_tokens.update(term for term in lexical_tokens(prefix)
                          if term in literals and term not in prefix_quantities)
+    # A product can follow a Chinese introduction. Preserve immediately adjacent
+    # model parts there too; otherwise a later fact could drop 7 and match 70.
+    starts = [match.end() for match in _LATIN.finditer(factual)
+              if match.group().casefold() in anchor_tokens]
+    starts.extend(match.end() for name in competitors if name for match in re.finditer(
+        rf"(?<![A-Za-z0-9]){re.escape(name)}(?![A-Za-z0-9])", factual, re.IGNORECASE,
+    ))
+    quantities = set(quantity_literals(factual))
+    for end in starts:
+        for match in _LATIN.finditer(factual, end):
+            gap = factual[end:match.start()]
+            term = match.group().casefold()
+            if ((gap.strip() and re.fullmatch(r"[._-]", gap) is None)
+                    or term not in literals or term in quantities):
+                break
+            anchor_tokens.add(term)
+            end = match.end()
     if len(anchor_tokens) > 12:
         return None
     anchors = list(dict.fromkeys(match.group() for match in _LATIN.finditer(factual)
                                 if match.group().casefold() in anchor_tokens))
     unknown_terms = tuple(dict.fromkeys(term for term in literals if not term.isascii()))
-    # Unknown Chinese names need a declared product boundary or a preserved
-    # Latin product/model anchor before topic-only recall is safe to attempt.
-    if unknown_terms and not competitors and not anchors:
+    topic_only = not competitors and not anchors
+    # Without a product boundary, only complete recognized domain grammar may
+    # become topic candidates. Unknown names before or after the topic stay raw.
+    if topic_only and not topic_only_query_is_bounded(factual):
         return None
     if len(" ".join(anchors)) > 350:
         return None
@@ -117,7 +182,9 @@ def _auto_fact_queries(
     # Preserve omitted clauses rather than merging unrelated numeric conditions.
     if len(queries) > 5:
         preserved_clauses = [factual]
-    return tuple(queries[:5]), unknown_terms, tuple(dict.fromkeys(preserved_clauses))
+    if topic_only:
+        preserved_clauses = [factual]
+    return tuple(queries[:5]), unknown_terms, tuple(dict.fromkeys(preserved_clauses)), topic_only
 
 
 @dataclass(frozen=True)
@@ -154,15 +221,17 @@ def resolve_retrieval_plan(request: RetrievalRequest) -> RetrievalPlan:
     match = _FORMAT_SUFFIX.fullmatch(original)
     factual = match.group("body").strip() if match and match.group("body").strip() else original
     suffix = match.group("suffix") if match and factual != original else ""
-    language = "中文" if suffix else None
+    language = "中文" if re.search(r"中文|Chinese", suffix, re.IGNORECASE) else None
     citations = bool(re.search(r"出处|引用|citations", suffix, re.IGNORECASE))
 
     intent = request.retrieval_intent
     if intent is None:
         automatic = _auto_fact_queries(factual, request.competitors, request.dimensions)
         if automatic:
-            queries, unknown_terms, clauses = automatic
-            return RetrievalPlan(PLAN_VERSION, "auto", original, queries, language, citations, (),
+            queries, unknown_terms, clauses, topic_only = automatic
+            return RetrievalPlan(PLAN_VERSION, "topic_scope_lookup" if topic_only else "auto",
+                original, queries, language, citations, (),
+                "missing_product_scope_topics_only_for_verification" if topic_only else
                 "unresolved_clauses_preserved_for_verification" if clauses else None,
                 unknown_terms, clauses)
         concepts, literals = query_terms(factual, request.competitors)
