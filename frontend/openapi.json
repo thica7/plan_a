@@ -109,6 +109,56 @@
         ],
         "summary": "List Runs",
         "operationId": "list_runs_api_runs_get",
+        "parameters": [
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -120,6 +170,16 @@
                     "$ref": "#/components/schemas/RunSummary"
                   },
                   "title": "Response List Runs Api Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -152,6 +212,54 @@
               "type": "boolean",
               "default": false,
               "title": "Include Trace Payloads"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
             }
           }
         ],
@@ -194,6 +302,54 @@
             "schema": {
               "type": "string",
               "title": "Run Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
             }
           }
         ],
@@ -263,6 +419,54 @@
               ],
               "title": "Baseline Run Id"
             }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
           }
         ],
         "responses": {
@@ -304,6 +508,54 @@
             "schema": {
               "type": "string",
               "title": "Run Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
             }
           }
         ],
@@ -756,6 +1008,54 @@
               "type": "string",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
           }
         ],
         "responses": {
@@ -801,6 +1101,54 @@
             "schema": {
               "type": "string",
               "title": "Run Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
             }
           }
         ],
@@ -848,6 +1196,54 @@
               "type": "string",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
           }
         ],
         "responses": {
@@ -890,6 +1286,54 @@
               "type": "string",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
           }
         ],
         "responses": {
@@ -931,6 +1375,54 @@
             "schema": {
               "type": "string",
               "title": "Run Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
             }
           }
         ],
@@ -1064,6 +1556,54 @@
               "type": "string",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
           }
         ],
         "responses": {
@@ -1105,6 +1645,54 @@
             "schema": {
               "type": "string",
               "title": "Run Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
             }
           }
         ],
@@ -1151,6 +1739,54 @@
             "schema": {
               "type": "string",
               "title": "Run Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
             }
           }
         ],
@@ -5052,6 +5688,54 @@
               "type": "string",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
           }
         ],
         "responses": {
@@ -5097,6 +5781,54 @@
             "schema": {
               "type": "string",
               "title": "Run Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
             }
           }
         ],
@@ -10765,6 +11497,89 @@
         }
       }
     },
+    "/api/enterprise/artifacts/{artifact_id}/download": {
+      "get": {
+        "tags": [
+          "enterprise"
+        ],
+        "summary": "Download Artifact",
+        "operationId": "download_artifact_api_enterprise_artifacts__artifact_id__download_get",
+        "parameters": [
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Artifact Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/enterprise/artifacts/{artifact_id}": {
       "get": {
         "tags": [
@@ -12488,6 +13303,54 @@
               "default": "heuristic",
               "title": "Judge Mode"
             }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
           }
         ],
         "responses": {
@@ -12598,6 +13461,54 @@
                 }
               ],
               "title": "Mode"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          },
+          {
+            "name": "X-User-Role",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Role"
+            }
+          },
+          {
+            "name": "X-Workspace-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
             }
           }
         ],
@@ -13534,6 +14445,13 @@
             "type": "array",
             "title": "Dimensions"
           },
+          "answer_requirements": {
+            "items": {
+              "$ref": "#/components/schemas/AnswerRequirement"
+            },
+            "type": "array",
+            "title": "Answer Requirements"
+          },
           "complexity": {
             "type": "string",
             "enum": [
@@ -13708,6 +14626,146 @@
           "dimension"
         ],
         "title": "AnalysisPlanTask"
+      },
+      "AnswerBoundary": {
+        "properties": {
+          "snapshot_id": {
+            "type": "string",
+            "title": "Snapshot Id"
+          },
+          "requirement": {
+            "$ref": "#/components/schemas/AnswerRequirement"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "answer",
+              "partial",
+              "clarify",
+              "insufficient"
+            ],
+            "title": "Status"
+          },
+          "allowed_fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Fact Ids",
+            "default": []
+          },
+          "withheld_fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Withheld Fact Ids",
+            "default": []
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Fields",
+            "default": []
+          },
+          "clarification_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Clarification Fields",
+            "default": []
+          },
+          "fact_decisions": {
+            "items": {
+              "$ref": "#/components/schemas/FactDecision"
+            },
+            "type": "array",
+            "title": "Fact Decisions",
+            "default": []
+          },
+          "view_source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "View Source Ids",
+            "default": []
+          },
+          "view_fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "View Fact Ids",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "snapshot_id",
+          "requirement",
+          "status"
+        ],
+        "title": "AnswerBoundary"
+      },
+      "AnswerRequirement": {
+        "properties": {
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "facts",
+              "source_guidance",
+              "recorded_price",
+              "current_price",
+              "price_comparison",
+              "total_cost",
+              "compliance"
+            ],
+            "title": "Intent",
+            "default": "facts"
+          },
+          "market": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of"
+          },
+          "context_json": {
+            "type": "string",
+            "title": "Context Json",
+            "default": "{}"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "competitor",
+          "dimension",
+          "as_of"
+        ],
+        "title": "AnswerRequirement"
       },
       "ArtifactCreateRequest": {
         "properties": {
@@ -14326,6 +15384,47 @@
           "resource_id"
         ],
         "title": "AuditLogRecord"
+      },
+      "AuditedReportClaim": {
+        "properties": {
+          "claim": {
+            "$ref": "#/components/schemas/ReportClaim"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "rejected",
+              "unreviewed"
+            ],
+            "title": "Status"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClaimReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rule_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rule Reasons",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "claim",
+          "status"
+        ],
+        "title": "AuditedReportClaim"
       },
       "BatchIngestItem": {
         "properties": {
@@ -15208,6 +16307,37 @@
         ],
         "title": "ClaimRecord"
       },
+      "ClaimReview": {
+        "properties": {
+          "claim_id": {
+            "type": "string",
+            "title": "Claim Id"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "unsupported",
+              "uncertain"
+            ],
+            "title": "Verdict"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "claim_id",
+          "verdict",
+          "reason"
+        ],
+        "title": "ClaimReview"
+      },
       "ClaimValidationIssue": {
         "properties": {
           "id": {
@@ -15584,6 +16714,67 @@
         "type": "object",
         "title": "CollectorResearchUsage"
       },
+      "ComparisonAssessment": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "comparable",
+              "insufficient_evidence",
+              "not_comparable"
+            ],
+            "title": "Status"
+          },
+          "winner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Winner"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale",
+            "default": ""
+          },
+          "scenario": {
+            "type": "string",
+            "title": "Scenario",
+            "default": ""
+          },
+          "tradeoffs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tradeoffs"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gaps"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ComparisonAssessment"
+      },
       "ComparisonCell": {
         "properties": {
           "competitor": {
@@ -15672,12 +16863,27 @@
             "type": "object",
             "title": "Winner By Dimension"
           },
+          "assessments": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ComparisonAssessment"
+            },
+            "type": "object",
+            "title": "Assessments"
+          },
           "summary": {
             "items": {
               "type": "string"
             },
             "type": "array",
             "title": "Summary"
+          },
+          "operation_alignment": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Operation Alignment"
           }
         },
         "additionalProperties": false,
@@ -18632,6 +19838,20 @@
             ],
             "title": "Requested Source Ids"
           },
+          "requested_fact_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Fact Ids"
+          },
           "fact_ids": {
             "items": {
               "type": "string"
@@ -20145,6 +21365,46 @@
           "payload_json"
         ],
         "title": "EvidenceSource"
+      },
+      "FactDecision": {
+        "properties": {
+          "fact_id": {
+            "type": "string",
+            "title": "Fact Id"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons",
+            "default": []
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Fields",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fact_id",
+          "source_id",
+          "allowed"
+        ],
+        "title": "FactDecision"
       },
       "FeatureNode": {
         "properties": {
@@ -24951,6 +26211,97 @@
         ],
         "title": "ReportArtifactV2"
       },
+      "ReportClaim": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fact",
+              "inference",
+              "hypothesis"
+            ],
+            "title": "Kind"
+          },
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fact Ids"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Ids"
+          },
+          "operation_binding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportOperationBinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "text",
+          "kind",
+          "competitor",
+          "dimension",
+          "fact_ids",
+          "source_ids"
+        ],
+        "title": "ReportClaim"
+      },
+      "ReportConditionGroup": {
+        "properties": {
+          "operator": {
+            "type": "string",
+            "const": "any_of",
+            "title": "Operator"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 2,
+            "title": "Options"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "operator",
+          "options"
+        ],
+        "title": "ReportConditionGroup"
+      },
       "ReportDiffLine": {
         "properties": {
           "kind": {
@@ -24974,6 +26325,54 @@
           "text"
         ],
         "title": "ReportDiffLine"
+      },
+      "ReportDimensionAudit": {
+        "properties": {
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "consumption_id": {
+            "type": "string",
+            "title": "Consumption Id"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/AuditedReportClaim"
+            },
+            "type": "array",
+            "title": "Claims",
+            "default": []
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gaps",
+            "default": []
+          },
+          "review_context_bytes": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Review Context Bytes",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "competitor",
+          "dimension",
+          "consumption_id"
+        ],
+        "title": "ReportDimensionAudit"
       },
       "ReportLayer": {
         "properties": {
@@ -25062,6 +26461,142 @@
           "end_line"
         ],
         "title": "ReportLayerSection"
+      },
+      "ReportOperationBinding": {
+        "properties": {
+          "observation_id": {
+            "type": "string",
+            "title": "Observation Id"
+          },
+          "fact_id": {
+            "type": "string",
+            "title": "Fact Id"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "competitor": {
+            "type": "string",
+            "title": "Competitor"
+          },
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "operation": {
+            "type": "string",
+            "title": "Operation"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          },
+          "object_quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Quote"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          },
+          "access_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Scope"
+          },
+          "effect": {
+            "type": "string",
+            "title": "Effect"
+          },
+          "prerequisites": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Prerequisites"
+          },
+          "condition_evidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Condition Evidence"
+          },
+          "operation_quote": {
+            "type": "string",
+            "title": "Operation Quote"
+          },
+          "condition_groups": {
+            "items": {
+              "$ref": "#/components/schemas/ReportConditionGroup"
+            },
+            "type": "array",
+            "title": "Condition Groups",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "observation_id",
+          "fact_id",
+          "source_id",
+          "competitor",
+          "dimension",
+          "operation",
+          "object_type",
+          "object_quote",
+          "role",
+          "plan",
+          "access_scope",
+          "effect",
+          "prerequisites",
+          "condition_evidence",
+          "operation_quote"
+        ],
+        "title": "ReportOperationBinding"
       },
       "ReportQualityAccount": {
         "properties": {
@@ -25705,6 +27240,51 @@
         "title": "RetrievalHit",
         "description": "A single result from hybrid retrieval."
       },
+      "RetrievalIntent": {
+        "properties": {
+          "fact_queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Fact Queries"
+          },
+          "required_terms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Required Terms"
+          },
+          "output_language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Language"
+          },
+          "require_citations": {
+            "type": "boolean",
+            "title": "Require Citations",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fact_queries"
+        ],
+        "title": "RetrievalIntent",
+        "description": "Caller-declared facts and presentation preferences, without scope authority."
+      },
       "RetrievalPreset": {
         "properties": {
           "name": {
@@ -25913,6 +27493,25 @@
             "maxLength": 2000,
             "minLength": 1,
             "title": "Query"
+          },
+          "intent_policy": {
+            "type": "string",
+            "enum": [
+              "raw",
+              "structured"
+            ],
+            "title": "Intent Policy",
+            "default": "structured"
+          },
+          "retrieval_intent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetrievalIntent"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "preset": {
             "anyOf": [
@@ -26672,6 +28271,20 @@
               }
             ]
           },
+          "report_answer_boundaries": {
+            "items": {
+              "$ref": "#/components/schemas/AnswerBoundary"
+            },
+            "type": "array",
+            "title": "Report Answer Boundaries"
+          },
+          "report_dimension_audits": {
+            "items": {
+              "$ref": "#/components/schemas/ReportDimensionAudit"
+            },
+            "type": "array",
+            "title": "Report Dimension Audits"
+          },
           "raw_sources": {
             "items": {
               "$ref": "#/components/schemas/RawSource"
@@ -27092,6 +28705,17 @@
             "title": "Schema Version",
             "default": "run_evidence_snapshot.v1"
           },
+          "fact_market_policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fact Market Policy Version"
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -27138,6 +28762,14 @@
               "analysis"
             ],
             "title": "Phase"
+          },
+          "competitors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Competitors",
+            "default": []
           },
           "sources": {
             "items": {

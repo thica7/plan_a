@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { fillProjectEvidenceGaps, getDecisionReplay, getTraceSpans, redoRun, updateEvidenceQuality } from "../../api/client";
 import type {
@@ -64,6 +64,12 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     [data.versions, selectedVersionId],
   );
 
+  const exportContext = `${selectedProjectId}:${selectedVersion?.id}`;
+  const currentExportContext = useRef(exportContext);
+  const exportGeneration = useRef(0);
+  if (currentExportContext.current !== exportContext) exportGeneration.current += 1;
+  currentExportContext.current = exportContext;
+
   const competitorById = useMemo(() => buildCompetitorMap(data.competitors), [data.competitors]);
 
   const evidenceById = useMemo(() => buildEvidenceMap(data.evidence), [data.evidence]);
@@ -96,6 +102,7 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
     }
     let active = true;
     setLastExport(null);
+    setReportActionPending(false);
     loadReleaseGate(selectedVersion.id).then((gate) => {
       if (active) setReleaseGate(gate);
     });
@@ -246,15 +253,18 @@ export function useEnterpriseWorkbenchData(initialView: EnterpriseView) {
 
   async function handleExport(format: ReportExportFormat) {
     if (!selectedVersion) return;
+    const generation = exportGeneration.current;
+    const isCurrent = () => generation === exportGeneration.current;
     setReportActionPending(true);
+    setLastExport(null);
     setError(null);
     try {
-      const artifact = await exportReportArtifact(selectedVersion.id, format);
-      setLastExport(artifact);
+      const artifact = await exportReportArtifact(selectedVersion.id, format, isCurrent);
+      if (isCurrent()) setLastExport(artifact);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to export report");
+      if (isCurrent()) setError(err instanceof Error ? err.message : "报告下载失败");
     } finally {
-      setReportActionPending(false);
+      if (isCurrent()) setReportActionPending(false);
     }
   }
 

@@ -9,6 +9,7 @@ from app.deps import (
     get_enterprise_store,
     get_enterprise_user_context,
     get_run_service,
+    require_run_access,
 )
 from app.events import RunEvent
 from packages.artifacts import ArtifactStorage, ArtifactStorageError
@@ -40,7 +41,9 @@ EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user
 async def get_trace(
     run_id: str,
     service: RunServiceDep,
+    user: EnterpriseUserDep,
 ) -> list[RunEvent]:
+    require_run_access(service, run_id, user, "report:read")
     events = service.get_trace(run_id)
     if events is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -51,7 +54,9 @@ async def get_trace(
 async def get_trace_spans(
     run_id: str,
     service: RunServiceDep,
+    user: EnterpriseUserDep,
 ) -> list[TraceSpan]:
+    require_run_access(service, run_id, user, "report:read")
     spans = service.get_trace_spans(run_id)
     if spans is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -62,7 +67,9 @@ async def get_trace_spans(
 async def get_trace_otel_export(
     run_id: str,
     service: RunServiceDep,
+    user: EnterpriseUserDep,
 ) -> OtelTraceExport:
+    require_run_access(service, run_id, user, "report:read")
     spans = service.get_trace_spans(run_id)
     if spans is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -73,7 +80,9 @@ async def get_trace_otel_export(
 async def get_trace_observability_report(
     run_id: str,
     service: RunServiceDep,
+    user: EnterpriseUserDep,
 ) -> TraceObservabilityReport:
+    require_run_access(service, run_id, user, "report:read")
     spans = service.get_trace_spans(run_id)
     if spans is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -84,8 +93,10 @@ async def get_trace_observability_report(
 async def get_run_compliance_report(
     run_id: str,
     service: RunServiceDep,
+    user: EnterpriseUserDep,
     settings: SettingsDep,
 ) -> RunComplianceReport:
+    require_run_access(service, run_id, user, "report:read")
     detail = service.get_run(run_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -101,6 +112,7 @@ async def export_run_compliance_report(
     artifact_storage: ArtifactStorageDep,
     user: EnterpriseUserDep,
 ) -> ArtifactCreateResult:
+    require_run_access(service, run_id, user, "artifact:write")
     detail = service.get_run(run_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -146,8 +158,10 @@ async def export_run_compliance_report(
 async def get_decision_replay(
     run_id: str,
     service: RunServiceDep,
+    user: EnterpriseUserDep,
     store: EnterpriseStoreDep,
 ) -> DecisionReplayReport:
+    require_run_access(service, run_id, user, "report:read")
     detail = service.get_run(run_id)
     events = service.get_trace(run_id)
     if detail is None or events is None:
@@ -183,7 +197,9 @@ def _require_workspace_access(
 async def get_agent_messages(
     run_id: str,
     service: RunServiceDep,
+    user: EnterpriseUserDep,
 ) -> list[AgentMessage]:
+    require_run_access(service, run_id, user, "report:read")
     messages = service.get_agent_messages(run_id)
     if messages is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -194,7 +210,9 @@ async def get_agent_messages(
 async def get_tool_call_messages(
     run_id: str,
     service: RunServiceDep,
+    user: EnterpriseUserDep,
 ) -> list[ToolCallMessage]:
+    require_run_access(service, run_id, user, "report:read")
     messages = service.get_tool_call_messages(run_id)
     if messages is None:
         raise HTTPException(status_code=404, detail="Run not found")

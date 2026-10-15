@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import re
+
 from packages.identity import normalize_url
+from packages.research.extraction import extract_page
 from packages.research.models import (
     CandidateIntent,
     CandidateLedgerEntry,
@@ -24,20 +27,25 @@ def evaluate_coverage_contract(
     if (brief.product_name or brief.product_category) and "pricing" in brief.dimension.casefold():
         page_by_id = {page.id: page for page in pages}
         supported = any(
-            item.status == "accepted" and item.field in {"price_rows", "price_points"}
-            and item.competitor == brief.competitor and item.dimension == brief.dimension
-            and (page := page_by_id.get(item.captured_page_id)) is not None
-            and page.status == "ok"
-            and brief.competitor.casefold() in f"{page.title} {page.text}".casefold()
+            _price_evidence_supports_page(brief, item, page_by_id.get(item.captured_page_id))
+            and brief.competitor.casefold()
+            in (
+                f"{page_by_id[item.captured_page_id].title} "
+                f"{page_by_id[item.captured_page_id].text}"
+            ).casefold()
             for item in evidence_items
         )
         return CoverageContractResult(
-            dimension=brief.dimension, competitor=brief.competitor,
+            dimension=brief.dimension,
+            competitor=brief.competitor,
             required_intents=["current_plan_price_support"],
             satisfied_intents=["current_plan_price_support"] if supported else [],
             missing_intents=[] if supported else ["current_plan_price_support"],
             blocking_reasons=[] if supported else ["No source-backed product price was found."],
             passed=supported,
+            repair_hints=[]
+            if supported
+            else _repair_hints(brief, ["current_plan_price_support"], []),
             metadata={"contract": "product_pricing_v1", "authority": "source_requires_review"},
         )
     if "pricing" not in brief.dimension.casefold():
@@ -167,12 +175,11 @@ def _pricing_satisfied_intents(
     evidence_items: list[EvidenceItem],
 ) -> set[CandidateIntent]:
     candidate_by_id = {candidate.id: candidate for candidate in candidates}
+    page_by_id = {page.id: page for page in pages}
     accepted_page_ids = {
         item.captured_page_id
         for item in evidence_items
-        if item.status == "accepted"
-        and item.competitor == brief.competitor
-        and item.dimension == brief.dimension
+        if _price_evidence_supports_page(brief, item, page_by_id.get(item.captured_page_id))
     }
     satisfied: set[CandidateIntent] = set()
     for page in pages:
@@ -223,3 +230,33 @@ def _repair_hints(
     if blocking_reasons:
         hints.append("Avoid changelog, plugin overview, and product docs as primary pricing sources.")
     return hints
+
+
+def _price_evidence_supports_page(
+    brief: ResearchBrief, item: EvidenceItem, page: CapturedPage | None
+) -> bool:
+    if (page is None or page.status != "ok" or item.status != "accepted"
+            or item.competitor != brief.competitor or item.dimension != brief.dimension
+            or item.source_candidate_id != page.candidate_id):
+        return False
+    if item.source_url and normalize_url(item.source_url) not in {
+        normalize_url(page.final_url), normalize_url(page.requested_url),
+    }:
+        return False
+    if not isinstance(item.value, list):
+        return False
+    if item.field == "price_rows":
+        prices = [row.get("price") for row in item.value if isinstance(row, dict)]
+    elif item.field == "price_points":
+        prices = item.value
+    else:
+        return False
+    # Legacy price_points can contain shipping or billing-policy amounts. Require
+    # an independently extracted plan/product row in the same captured page.
+    captured_rows = extract_page(brief, page).fields.get("price_rows", [])
+    captured_prices = [row.get("price") for row in captured_rows if isinstance(row, dict)]
+    def amount(price):
+        match = re.search(r"[0-9][0-9,]*(?:\.[0-9]+)?", price) if isinstance(price, str) else None
+        return match.group().replace(",", "") if match else None
+    captured_amounts = {amount(price) for price in captured_prices} - {None}
+    return any(amount(price) in captured_amounts for price in prices)

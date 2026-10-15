@@ -3,8 +3,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from packages.agents.prompt_contract import EVIDENCE_RULES
 from packages.research.budget import research_depth_budget
 from packages.schema.api_dto import RunDetail
+from packages.schema.decision_brief import decision_brief_prompt_context
 
 
 @dataclass(frozen=True)
@@ -28,13 +30,23 @@ class WriterPromptBuilder:
         writer_context_json: str,
         required_sections: str,
     ) -> WriterPrompt:
+        draft_instruction = (
+            "Produce a compact decision-grade markdown first draft."
+            if detail.plan.research_depth == "quick"
+            else "Produce a decision-grade markdown first draft with substantive analysis."
+        )
+        analysis_instruction = (
+            "Use a compact comparison and one actionable next validation step; avoid padding."
+            if detail.plan.research_depth == "quick"
+            else "Write with consulting depth: side-by-side matrices and dimension analysis."
+        )
         depth_budget = research_depth_budget(detail.plan.research_depth)
         report_chars = depth_budget.report_chars if depth_budget is not None else "16,000-20,000"
         core_depth_instruction = (
             "Summarize the target product, core competitor comparison, evidence, "
             "limitations and next validation step concisely. "
-            if detail.plan.research_depth == "quick" else
-            "Core section minimums: Decision Summary 800+ characters; "
+            if detail.plan.research_depth == "quick"
+            else "Core section minimums: Decision Summary 800+ characters; "
             "Competitive Findings 1,200+; User Review Themes 1,000+ when "
             "review, community, survey, interview, or persona evidence exists; "
             "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
@@ -44,31 +56,33 @@ class WriterPromptBuilder:
         )
         allocation_instruction = (
             "Focus on the core summary, product comparison, evidence and limitations. "
-            if detail.plan.research_depth == "quick" else
-            "Use about 70-80% of the report on the Core analysis layer: decision summary, "
+            if detail.plan.research_depth == "quick"
+            else "Use about 70-80% of the report on the Core analysis layer: decision summary, "
             "competitive findings, user review themes, competitor deep dives, SWOT, "
             "matrix interpretation, and layer-specific implications. "
         )
         layer_instruction = (
             "For quick research, use only the requested compact sections and disclose limitations."
-            if detail.plan.research_depth == "quick" else
-            "Use the requested competitive layer to choose the report shape: L1 "
+            if detail.plan.research_depth == "quick"
+            else "Use the requested competitive layer to choose the report shape: L1 "
             "is a direct battlecard, L2 is adjacent workflow and enterprise-risk "
             "analysis, and L3 is market landscape and category strategy."
         )
         return WriterPrompt(
             system=(
-                "You are a senior enterprise competitive-intelligence analyst. "
-                "Produce a concise decision-grade markdown first draft, not a short "
-                "summary. Use an analysis-first structure: lead with an executive "
+                EVIDENCE_RULES + "You are a senior enterprise competitive-intelligence analyst. "
+                f"{draft_instruction} Use an analysis-first structure: lead with an executive "
                 "takeaway, decision summary, competitive findings, competitor deep "
                 "dives, and the selected layer-specific analysis. Put source quality, "
                 "scenario QA, claim risk, RAG gap-fill, verification tasks, and the "
-                "evidence appendix after the core analysis as support material. Write "
-                "with consulting depth: side-by-side matrices, dimension analysis, "
+                "evidence appendix after the core analysis as support material. "
+                f"{analysis_instruction} "
                 "risks, buying implications, and explicit next validation tasks. Cite "
                 "factual claims with existing source IDs using [source:ID]. Do not "
                 "invent source IDs. "
+                "Preserve the exact numerical values, decimal points and units in cited evidence. "
+                "When a field is absent from the evidence pack, say it was not captured in "
+                "this research; do not claim the original page omits it. "
                 "Do not use web_search_result or confidence < 0.75 as the sole support "
                 "for a winner, legal/security certification, pricing, or procurement "
                 "recommendation. If evidence is incomplete, say the conclusion is "
@@ -76,6 +90,11 @@ class WriterPromptBuilder:
                 "are verified when any source_type is web_search_result or "
                 "llm_public_knowledge. "
                 "Follow the Grounded Evidence Contract exactly. "
+                "For each requested dimension distinguish cited product content from missing evidence. "
+                "A blocked dimension may contain supported facts but no winner or missing numerical comparison. "
+                "Answer boundaries describe this selected view. When evidence_status is "
+                "collected_but_omitted, explicitly say the material was collected but not "
+                "selected; never say it was not captured in this research. "
                 f"{language_guidance} "
                 f"{user_research_policy} "
                 "Honor confirmed memory guidance when it does not conflict with "
@@ -84,9 +103,9 @@ class WriterPromptBuilder:
             ),
             user=(
                 f"Topic: {detail.topic}\n"
-                f"Target product: {detail.plan.target_product.name if detail.plan.target_product else 'none'}\n"
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
                 f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                f"{decision_brief_prompt_context(detail.plan.decision_brief)}"
                 f"Competitive Layer: {detail.plan.competitor_layer}\n"
                 f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
                 "Scenario Recommended Dimensions: "
@@ -96,7 +115,7 @@ class WriterPromptBuilder:
                 f"Layer Report Context: {layer_context}\n"
                 f"{grounding_prompt}\n"
                 f"{community_policy_text}\n"
-                f"Writer Report Brief JSON: {writer_context_json}\n\n"
+                f"Report Evidence Context JSON: {writer_context_json}\n\n"
                 f"Required sections:\n{required_sections}\n"
                 f"Target {report_chars} characters for the first draft. "
                 f"{allocation_instruction}"
@@ -128,17 +147,20 @@ class WriterPromptBuilder:
         layer_context: str,
         community_policy_text: str,
         required_sections: str,
+        heading_language_instruction: str = "",
+        publication_repair_instruction: str = "",
+        report_target_instruction: str = "",
     ) -> WriterPrompt:
         return WriterPrompt(
             system=(
-                "You are a senior enterprise competitive-intelligence analyst writing "
+                EVIDENCE_RULES
+                + "You are a senior enterprise competitive-intelligence analyst writing "
                 "one section group of a larger markdown report. Return only markdown "
                 "for this segment. Cite factual claims only with source IDs in "
-                "allowed_source_ids. Do not invent source IDs. Use exact [source:ID] "
-                "syntax with no space after source:. Do not combine multiple source "
-                "IDs inside one [source:...] token; write consecutive citations "
-                "like [source:A][source:B]. Do not put citations in headings or "
-                "table header rows. "
+                "the segment's citation source list. Do not invent source IDs. "
+                "Use exact [source:ID] syntax with no space after source:. Do not "
+                "combine multiple source IDs inside one [source:...] token; write "
+                "consecutive citations like [source:A][source:B]. "
                 "Do not use web_search_result or confidence < 0.75 as the sole support "
                 "for a winner, legal/security certification, pricing, or procurement "
                 "recommendation. If evidence is incomplete, say the conclusion is "
@@ -150,9 +172,9 @@ class WriterPromptBuilder:
             ),
             user=(
                 f"Topic: {detail.topic}\n"
-                f"Target product: {detail.plan.target_product.name if detail.plan.target_product else 'none'}\n"
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
                 f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
+                f"{decision_brief_prompt_context(detail.plan.decision_brief)}"
                 f"segment_name={segment['segment_name']}\n"
                 f"segment_kind={segment.get('segment_kind', 'section_fragment')}\n"
                 f"section_id={segment.get('section_id', segment['segment_name'])}\n"
@@ -164,24 +186,29 @@ class WriterPromptBuilder:
                 f"{required_h2_headings or 'none'}\n"
                 "Forbidden H2 headings for this segment: "
                 f"{forbidden_h2_headings or 'none'}\n"
+                f"{heading_language_instruction}"
                 f"{segment_outline}\n"
                 f"{citation_warning}"
                 f"{contract_warning}"
                 f"{user_research_gap_instruction}"
+                f"{publication_repair_instruction}"
                 f"{shard_instruction}"
                 "Do not write headings outside this segment's contract. "
                 "Do not write support or appendix sections unless "
                 "segment_kind=support_fragment. If segment_kind=evidence_shard, "
-                "do not write any ## H2 headings. Never mention Segment Evidence Pack, "
-                "Writer Evidence Pack, Writer Report Brief, report_brief, writer_constraints, "
-                "source_registry, allowed_source_ids, or other writer-internal field "
-                "names in the reader-facing markdown.\n"
+                "do not write any ## H2 headings.\n"
                 f"Confirmed Memory Preferences:\n{memory_context}\n"
                 f"Layer Report Context: {layer_context}\n"
                 f"{community_policy_text}\n"
-                f"Segment Evidence Pack JSON: {segment_json}\n\n"
+                f"Segment Context JSON: {segment_json}\n\n"
                 f"Required sections for full report:\n{required_sections}\n"
-                "Write with consulting depth for this segment. Keep support material "
+                f"{report_target_instruction}"
+                + (
+                    "Write concisely for this segment. "
+                    if detail.plan.research_depth == "quick"
+                    else "Write with consulting depth for this segment. "
+                )
+                + "Keep support material "
                 "concise and preserve [source:ID] citation syntax."
             ),
         )
@@ -196,10 +223,12 @@ class WriterPromptBuilder:
         community_policy_text: str,
         writer_context_json: str,
         previous_report: str,
+        publication_repair_instruction: str = "",
     ) -> WriterPrompt:
         return WriterPrompt(
             system=(
-                "You are a senior enterprise competitive-intelligence analyst repairing "
+                EVIDENCE_RULES
+                + "You are a senior enterprise competitive-intelligence analyst repairing "
                 "one section of an existing markdown report. Return only the requested "
                 "section markdown. Preserve existing [source:ID] syntax, never invent "
                 "source IDs, and cite factual claims with available source IDs. "
@@ -207,7 +236,6 @@ class WriterPromptBuilder:
             ),
             user=(
                 f"Topic: {detail.topic}\n"
-                f"Target product: {detail.plan.target_product.name if detail.plan.target_product else 'none'}\n"
                 f"Competitors: {', '.join(detail.plan.competitors)}\n"
                 f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
                 f"Repair only these sections: {', '.join(sections)}\n"
@@ -217,7 +245,8 @@ class WriterPromptBuilder:
                 "Use the exact requested level-2 heading for each returned section.\n"
                 "You must preserve existing [source:ID] syntax.\n"
                 f"{community_policy_text}\n"
-                f"Writer Repair Context JSON: {writer_context_json}\n\n"
+                f"{publication_repair_instruction}"
+                f"Report Evidence Context JSON: {writer_context_json}\n\n"
                 f"Previous report:\n{previous_report}"
             ),
         )
@@ -235,6 +264,4 @@ def writer_user_research_policy_text() -> str:
             "manual",
         )
     )
-    return (
-        f"Treat {source_types} as user-research signals, not as official factual proof."
-    )
+    return f"Treat {source_types} as user-research signals, not as official factual proof."

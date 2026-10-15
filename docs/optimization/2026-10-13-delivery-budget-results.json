@@ -1,0 +1,2111 @@
+{
+  "date": "2026-10-13",
+  "scope": "固定四家、standard、feature；真实LangGraph/模型/原生搜索/fetch，隔离内存存储",
+  "limits": {
+    "max_calls": 60,
+    "max_tokens": 200000,
+    "max_writer_review_hold_tokens": 128000
+  },
+  "verification": {
+    "backend": "3526 passed, 1 skipped, 152 warnings in 84.42s (0:01:24)",
+    "independent_review": "77 passed in 3.45s; 本次范围未发现剩余可复现P1/P2"
+  },
+  "acceptance": {
+    "budget_and_delivery_dispatch": true,
+    "partial_reviewed_fact_draft": true,
+    "complete_operation_comparison": false,
+    "procurement_decision": false
+  },
+  "complete_cells": {
+    "read": {
+      "Notion": false,
+      "Confluence": false,
+      "Coda": false,
+      "Nuclino": false
+    },
+    "comment": {
+      "Notion": false,
+      "Confluence": false,
+      "Coda": false,
+      "Nuclino": false
+    },
+    "edit": {
+      "Notion": false,
+      "Confluence": false,
+      "Coda": false,
+      "Nuclino": false
+    },
+    "create": {
+      "Notion": false,
+      "Confluence": false,
+      "Coda": false,
+      "Nuclino": false
+    },
+    "share": {
+      "Notion": false,
+      "Confluence": false,
+      "Coda": false,
+      "Nuclino": false
+    },
+    "manage_access": {
+      "Notion": false,
+      "Confluence": false,
+      "Coda": false,
+      "Nuclino": false
+    }
+  },
+  "operation_alignment": [
+    {
+      "operation": "read",
+      "comparison_status": "insufficient_evidence",
+      "product_statuses": {
+        "Notion": "unknown",
+        "Confluence": "unknown",
+        "Coda": "unknown",
+        "Nuclino": "unknown"
+      },
+      "observations_by_product": {},
+      "missing_products": [
+        "Notion",
+        "Confluence",
+        "Coda",
+        "Nuclino"
+      ]
+    },
+    {
+      "operation": "comment",
+      "comparison_status": "needs_condition_review",
+      "product_statuses": {
+        "Notion": "documented",
+        "Confluence": "documented",
+        "Coda": "documented",
+        "Nuclino": "documented"
+      },
+      "observations_by_product": {
+        "Notion": [
+          {
+            "access_scope": "comment",
+            "competitor": "Notion",
+            "condition_evidence": [
+              "- Hover over the top of any page and click Add comment .\n- @-mention colleagues to refer to them or bring them into the conversation.\nTo resolve a comment, hover over it and select ✔️.\nTo edit or delete a comment, hover over it and select ••• → Edit comment or Delete comment.\nTo open a previously resolved comment, select 💬 at the top of the page. Filter by Resolved comments, then select ↪️ to re-open."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-07872aaf26b5dcf31b4e3fbeda23b15423567fcabc4ec731f510e22b3b2b0492",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "comment",
+            "object_type": "comment",
+            "operation": "comment",
+            "operation_quote": "To resolve a comment, hover over it and select ✔️",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "To resolve a comment, hover over it and select ✔️.",
+            "role": null,
+            "source_id": "raw-source-b92f96c0c5e5d2643df7"
+          },
+          {
+            "access_scope": "comment",
+            "competitor": "Notion",
+            "condition_evidence": [],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-3c0ee719d7715af46b10a750f5a0c476974a7fbc2832f642cc52ae1d363a5e95",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "comments",
+            "object_type": "comment",
+            "operation": "comment",
+            "operation_quote": "You can also resolve or re-open comments",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "You can also resolve or re-open comments",
+            "role": null,
+            "source_id": "raw-source-b92f96c0c5e5d2643df7"
+          },
+          {
+            "access_scope": "document",
+            "competitor": "Notion",
+            "condition_evidence": [
+              "To resolve a comment, hover over it and select ✔️.\nTo edit or delete a comment, hover over it and select ••• → Edit comment or Delete comment.\nTo open a previously resolved comment, select 💬 at the top of the page. Filter by Resolved comments, then select ↪️ to re-open.\nInline page comments\nOffer your opinion or ask a question by commenting on specific parts of a page. There are several ways to make a comment in Notion:"
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-552afe4e76edff5f82e77be51adfd8affda9a7c8690a93b181c5daf75c42fd00",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "page",
+            "object_type": "page",
+            "operation": "comment",
+            "operation_quote": "To open a previously resolved comment, select 💬 at the top of the page",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "To open a previously resolved comment, select 💬 at the top of the page. Filter by Resolved comments, then select ↪️ to re-open.",
+            "role": null,
+            "source_id": "raw-source-b92f96c0c5e5d2643df7"
+          },
+          {
+            "access_scope": "comment",
+            "competitor": "Notion",
+            "condition_evidence": [
+              "To resolve a comment, hover over it and select ✔️.\nTo edit or delete a comment, hover over it and select ••• → Edit comment or Delete comment.\nTo open a previously resolved comment, select 💬 at the top of the page. Filter by Resolved comments, then select ↪️ to re-open.\nInline page comments\nOffer your opinion or ask a question by commenting on specific parts of a page. There are several ways to make a comment in Notion:"
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-552afe4e76edff5f82e77be51adfd8affda9a7c8690a93b181c5daf75c42fd00",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "comments",
+            "object_type": "comment",
+            "operation": "comment",
+            "operation_quote": "Filter by Resolved comments, then select ↪️ to re-open",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "To open a previously resolved comment, select 💬 at the top of the page. Filter by Resolved comments, then select ↪️ to re-open.",
+            "role": null,
+            "source_id": "raw-source-b92f96c0c5e5d2643df7"
+          },
+          {
+            "access_scope": "comment",
+            "competitor": "Notion",
+            "condition_evidence": [
+              "- To leave a comment on an image, embed, or other type of block, you can click the ••• that appears at the top right or the⋮⋮ icon that appears to the left on hover. ChooseComment from the menu that pops up. (You can also right click to bring it up!)\n- You can @-mention your colleagues in comments to get their attention.\nNotion is built for asynchronous communication. You'll be notified if someone needs you or if a page you care about has been changed.\n- Click on Inbox at the top of your left sidebar. This is where we collect all notifications concerning you.\n  - All updates will appear with a grey badge. If you've been mentioned, you'll see a red badge with the number of mentions waiting for you next to Inbox .\n- Click on any of these updates to go directly to the comment, mention, or edit in question."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-9f1c2cc88bc78878aa7e36f1cea1ef3eb34849b1c27e0de4368d2ae010231da5",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "comment",
+            "object_type": "comment",
+            "operation": "comment",
+            "operation_quote": "- Click on any of these updates to go directly to the comment, mention, or edit in question",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "Notion is built for asynchronous communication. You'll be notified if someone needs you or if a page you care about has been changed.\n- Click on Inbox at the top of your left sidebar. This is where we collect all notifications concerning you.\n  - All updates will appear with a grey badge. If you've been mentioned, you'll see a red badge with the number of mentions waiting for you next to Inbox .\n- Click on any of these updates to go directly to the comment, mention, or edit in question.",
+            "role": null,
+            "source_id": "raw-source-f7a81bf787f1e9e932e7"
+          },
+          {
+            "access_scope": "comment",
+            "competitor": "Notion",
+            "condition_evidence": [
+              "- @-mention colleagues to refer to them or bring them into the conversation.\nTo resolve a comment, hover over it and select ✔️.\nTo edit or delete a comment, hover over it and select ••• → Edit comment or Delete comment.\nTo open a previously resolved comment, select 💬 at the top of the page. Filter by Resolved comments, then select ↪️ to re-open.\nInline page comments"
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-af6656005c0537491fe8fc1069cb3d14d03ea64808e3a8409b0ef64f8a599a2d",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "comment",
+            "object_type": "comment",
+            "operation": "comment",
+            "operation_quote": "To edit or delete a comment, hover over it and select ••• → Edit comment or Delete comment",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "To edit or delete a comment, hover over it and select ••• → Edit comment or Delete comment.",
+            "role": null,
+            "source_id": "raw-source-b92f96c0c5e5d2643df7"
+          }
+        ],
+        "Coda": [
+          {
+            "access_scope": "document",
+            "competitor": "Coda",
+            "condition_evidence": [],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-13e6ce7baed4f3d3e1fe3c8e0b615825ef23dbef07da3d21459bdd873a35b51c",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "doc",
+            "object_type": "document",
+            "operation": "comment",
+            "operation_quote": "You can add comments to the canvas and tables of a doc in a few different ways",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "You can add comments to the canvas and tables of a doc in a few different ways",
+            "role": null,
+            "source_id": "raw-source-cfd5046889caadc3c3bd"
+          },
+          {
+            "access_scope": "comment",
+            "competitor": "Coda",
+            "condition_evidence": [],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-5fb6a9f94b043060e9068e61039e30a79cbeb658c29459edd86fe84438e705c6",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "comment",
+            "object_type": "comment",
+            "operation": "comment",
+            "operation_quote": "You can combine stickers and text in the same comment",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "You can combine stickers and text in the same comment",
+            "role": null,
+            "source_id": "raw-source-cfd5046889caadc3c3bd"
+          },
+          {
+            "access_scope": "table_row",
+            "competitor": "Coda",
+            "condition_evidence": [
+              "You can only comment on the entire row"
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-ab9623738a81b94f0152a333b95fd9c78b6f3ed6fe470de0831e202daa46e0f9",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "row",
+            "object_type": "table_row",
+            "operation": "comment",
+            "operation_quote": "You can only comment on the entire row",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "other",
+                "quote": "You can only comment on the entire row"
+              }
+            ],
+            "quote": "You can only comment on the entire row",
+            "role": null,
+            "source_id": "raw-source-cfd5046889caadc3c3bd"
+          }
+        ],
+        "Confluence": [
+          {
+            "access_scope": null,
+            "competitor": "Confluence",
+            "condition_evidence": [
+              "- Avatars — People who are currently editing have colored avatars, while people who made edits and left the page appear in greyscale.\n- Invite to edit —Select the plus sign to invite others to edit your page with you from inside the editor. Either copy and send them the page link, or send them a Confluence notification, which will reach them via email and workbox.\nInline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-33acd106b153adaef4913e9ce524b35da152fd65782d08067c79a4d45472c4a4",
+            "missing_fields": [
+              "role",
+              "plan",
+              "access_scope"
+            ],
+            "object_quote": null,
+            "object_type": null,
+            "operation": "comment",
+            "operation_quote": "Inline comments can be added",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "other",
+                "quote": "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+              }
+            ],
+            "quote": "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers.",
+            "role": null,
+            "source_id": "raw-source-a5a35d9a74b6bc0454f0"
+          },
+          {
+            "access_scope": "comment",
+            "competitor": "Confluence",
+            "condition_evidence": [
+              "Only those in your editing session can see, reply to, and resolve the comments",
+              "- Avatars — People who are currently editing have colored avatars, while people who made edits and left the page appear in greyscale.\n- Invite to edit —Select the plus sign to invite others to edit your page with you from inside the editor. Either copy and send them the page link, or send them a Confluence notification, which will reach them via email and workbox.\nInline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-33acd106b153adaef4913e9ce524b35da152fd65782d08067c79a4d45472c4a4",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "comments",
+            "object_type": "comment",
+            "operation": "comment",
+            "operation_quote": "Only those in your editing session can see, reply to, and resolve the comments",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "other",
+                "quote": "Only those in your editing session can see, reply to, and resolve the comments"
+              },
+              {
+                "kind": "other",
+                "quote": "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+              }
+            ],
+            "quote": "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers.",
+            "role": null,
+            "source_id": "raw-source-a5a35d9a74b6bc0454f0"
+          },
+          {
+            "access_scope": "document",
+            "competitor": "Confluence",
+            "condition_evidence": [
+              "- Avatars — People who are currently editing have colored avatars, while people who made edits and left the page appear in greyscale.\n- Invite to edit —Select the plus sign to invite others to edit your page with you from inside the editor. Either copy and send them the page link, or send them a Confluence notification, which will reach them via email and workbox.\nInline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-33acd106b153adaef4913e9ce524b35da152fd65782d08067c79a4d45472c4a4",
+            "missing_fields": [
+              "plan"
+            ],
+            "object_quote": "page",
+            "object_type": "page",
+            "operation": "comment",
+            "operation_quote": "Once the page has been published, any unresolved comments can be seen by page viewers",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "other",
+                "quote": "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+              }
+            ],
+            "quote": "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers.",
+            "role": "viewers",
+            "source_id": "raw-source-a5a35d9a74b6bc0454f0"
+          }
+        ],
+        "Nuclino": [
+          {
+            "access_scope": "comment",
+            "competitor": "Nuclino",
+            "condition_evidence": [
+              "- Click on RESOLVE.\n- Everyone mentioned in the comment thread will receive a notification.\nIf you participated in a comment thread, resolving it would send you a notification. Other resolved comments and comment threads can be found in the Activity and comments menu.\nIf you received a notification:\n- Open the Notifications menu.",
+              "🔐 Only workspace members with full access or comment-only roles can comment on content.",
+              "⭐️ Available on all plans.",
+              "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-5a44d902bbb0cca2167b0d9a57d821fcfc0457ed7e8c99b26442519f2c35361b",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "comments",
+            "object_type": "comment",
+            "operation": "comment",
+            "operation_quote": "Other resolved comments and comment threads can be found in the Activity and comments menu",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "permission",
+                "quote": "🔐 Only workspace members with full access or comment-only roles can comment on content."
+              },
+              {
+                "kind": "plan",
+                "quote": "⭐️ Available on all plans."
+              },
+              {
+                "kind": "permission",
+                "quote": "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections."
+              }
+            ],
+            "quote": "If you participated in a comment thread, resolving it would send you a notification. Other resolved comments and comment threads can be found in the Activity and comments menu.",
+            "role": null,
+            "source_id": "raw-source-80b414ca6087c5157148"
+          },
+          {
+            "access_scope": "item",
+            "competitor": "Nuclino",
+            "condition_evidence": [
+              "- Click on the three dots ⋮ .\n- Click on Delete.\n- Open the Activity and comments menu in the top right corner of the item or collection.\n- Click on FOLLOW in the top right corner of the menu.\n- You will receive notifications about all new comments added to this item or collection.",
+              "🔐 Only workspace members with full access or comment-only roles can comment on content.",
+              "⭐️ Available on all plans.",
+              "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-ad0636c20275029713b8357769f89dfdf7dd4054b822130ea3a1f18f93a4e8d7",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "item",
+            "object_type": "item",
+            "operation": "comment",
+            "operation_quote": "- Open the Activity and comments menu in the top right corner of the item or collection",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "permission",
+                "quote": "🔐 Only workspace members with full access or comment-only roles can comment on content."
+              },
+              {
+                "kind": "plan",
+                "quote": "⭐️ Available on all plans."
+              },
+              {
+                "kind": "permission",
+                "quote": "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections."
+              }
+            ],
+            "quote": "- Open the Activity and comments menu in the top right corner of the item or collection.\n- Click on FOLLOW in the top right corner of the menu.\n- You will receive notifications about all new comments added to this item or collection.",
+            "role": null,
+            "source_id": "raw-source-80b414ca6087c5157148"
+          },
+          {
+            "access_scope": "item",
+            "competitor": "Nuclino",
+            "condition_evidence": [
+              "- Click on the three dots ⋮ .\n- Click on Delete.\n- Open the Activity and comments menu in the top right corner of the item or collection.\n- Click on FOLLOW in the top right corner of the menu.\n- You will receive notifications about all new comments added to this item or collection.",
+              "🔐 Only workspace members with full access or comment-only roles can comment on content.",
+              "⭐️ Available on all plans.",
+              "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-ad0636c20275029713b8357769f89dfdf7dd4054b822130ea3a1f18f93a4e8d7",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "item",
+            "object_type": "item",
+            "operation": "comment",
+            "operation_quote": "- You will receive notifications about all new comments added to this item or collection",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "permission",
+                "quote": "🔐 Only workspace members with full access or comment-only roles can comment on content."
+              },
+              {
+                "kind": "plan",
+                "quote": "⭐️ Available on all plans."
+              },
+              {
+                "kind": "permission",
+                "quote": "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections."
+              }
+            ],
+            "quote": "- Open the Activity and comments menu in the top right corner of the item or collection.\n- Click on FOLLOW in the top right corner of the menu.\n- You will receive notifications about all new comments added to this item or collection.",
+            "role": null,
+            "source_id": "raw-source-80b414ca6087c5157148"
+          },
+          {
+            "access_scope": "item",
+            "competitor": "Nuclino",
+            "condition_evidence": [
+              "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection",
+              "🔐 Only workspace members with full access or comment-only roles can comment on content.\n⭐️ Available on all plans.\nWorkspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections.\n- Open the item or collection in which you'd like to add a comment. \n  - To comment on text: Select the text that you'd like to comment on.",
+              "🔐 Only workspace members with full access or comment-only roles can comment on content.",
+              "⭐️ Available on all plans."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-cb5f59eaf1705a85b01132f23c5a620978c7f8e70163672f3c9aceaf71dc7ca7",
+            "missing_fields": [
+              "plan"
+            ],
+            "object_quote": "item",
+            "object_type": "item",
+            "operation": "comment",
+            "operation_quote": "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "permission",
+                "quote": "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection"
+              },
+              {
+                "kind": "permission",
+                "quote": "🔐 Only workspace members with full access or comment-only roles can comment on content."
+              },
+              {
+                "kind": "plan",
+                "quote": "⭐️ Available on all plans."
+              },
+              {
+                "kind": "permission",
+                "quote": "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections."
+              }
+            ],
+            "quote": "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections.",
+            "role": "Workspace members with full access or comment-only roles",
+            "source_id": "raw-source-80b414ca6087c5157148"
+          },
+          {
+            "access_scope": "item",
+            "competitor": "Nuclino",
+            "condition_evidence": [
+              "🔐 Only workspace members with full access or comment-only roles can comment on content.\n⭐️ Available on all plans.\nWorkspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections.\n- Open the item or collection in which you'd like to add a comment. \n  - To comment on text: Select the text that you'd like to comment on.",
+              "🔐 Only workspace members with full access or comment-only roles can comment on content.",
+              "⭐️ Available on all plans."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-cb5f59eaf1705a85b01132f23c5a620978c7f8e70163672f3c9aceaf71dc7ca7",
+            "missing_fields": [
+              "plan"
+            ],
+            "object_quote": "items",
+            "object_type": "item",
+            "operation": "comment",
+            "operation_quote": "They can also comment on entire items and collections",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "permission",
+                "quote": "🔐 Only workspace members with full access or comment-only roles can comment on content."
+              },
+              {
+                "kind": "plan",
+                "quote": "⭐️ Available on all plans."
+              },
+              {
+                "kind": "permission",
+                "quote": "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections."
+              }
+            ],
+            "quote": "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections.",
+            "role": "Workspace members with full access or comment-only roles",
+            "source_id": "raw-source-80b414ca6087c5157148"
+          },
+          {
+            "access_scope": "content",
+            "competitor": "Nuclino",
+            "condition_evidence": [
+              "🔐 Only workspace members with full access or comment-only roles can comment on content",
+              "Who can use this feature?\n🔐 Only workspace members with full access or comment-only roles can comment on content.\n⭐️ Available on all plans.\nWorkspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections.",
+              "⭐️ Available on all plans.",
+              "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-d51a27004b633f56015c82132a979b334606891d64e6f7c07214f901fef1db31",
+            "missing_fields": [
+              "plan"
+            ],
+            "object_quote": "content",
+            "object_type": "content",
+            "operation": "comment",
+            "operation_quote": "🔐 Only workspace members with full access or comment-only roles can comment on content",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "permission",
+                "quote": "🔐 Only workspace members with full access or comment-only roles can comment on content"
+              },
+              {
+                "kind": "permission",
+                "quote": "🔐 Only workspace members with full access or comment-only roles can comment on content."
+              },
+              {
+                "kind": "plan",
+                "quote": "⭐️ Available on all plans."
+              },
+              {
+                "kind": "permission",
+                "quote": "Workspace members with full access or comment-only roles can comment on text, images, and embeds within an item or a collection. They can also comment on entire items and collections."
+              }
+            ],
+            "quote": "🔐 Only workspace members with full access or comment-only roles can comment on content.",
+            "role": "workspace members with full access or comment-only roles",
+            "source_id": "raw-source-80b414ca6087c5157148"
+          }
+        ]
+      },
+      "missing_products": []
+    },
+    {
+      "operation": "edit",
+      "comparison_status": "insufficient_evidence",
+      "product_statuses": {
+        "Notion": "documented",
+        "Confluence": "documented",
+        "Coda": "unknown",
+        "Nuclino": "unknown"
+      },
+      "observations_by_product": {
+        "Confluence": [
+          {
+            "access_scope": "document",
+            "competitor": "Confluence",
+            "condition_evidence": [
+              "- Avatars — People who are currently editing have colored avatars, while people who made edits and left the page appear in greyscale.\n- Invite to edit —Select the plus sign to invite others to edit your page with you from inside the editor. Either copy and send them the page link, or send them a Confluence notification, which will reach them via email and workbox.\nInline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-33acd106b153adaef4913e9ce524b35da152fd65782d08067c79a4d45472c4a4",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "page",
+            "object_type": "page",
+            "operation": "edit",
+            "operation_quote": "editing a page",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "other",
+                "quote": "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+              }
+            ],
+            "quote": "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers.",
+            "role": null,
+            "source_id": "raw-source-a5a35d9a74b6bc0454f0"
+          },
+          {
+            "access_scope": "comment",
+            "competitor": "Confluence",
+            "condition_evidence": [
+              "Only those in your editing session can see, reply to, and resolve the comments",
+              "- Avatars — People who are currently editing have colored avatars, while people who made edits and left the page appear in greyscale.\n- Invite to edit —Select the plus sign to invite others to edit your page with you from inside the editor. Either copy and send them the page link, or send them a Confluence notification, which will reach them via email and workbox.\nInline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-33acd106b153adaef4913e9ce524b35da152fd65782d08067c79a4d45472c4a4",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "comments",
+            "object_type": "comment",
+            "operation": "edit",
+            "operation_quote": "Only those in your editing session can see, reply to, and resolve the comments",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "other",
+                "quote": "Only those in your editing session can see, reply to, and resolve the comments"
+              },
+              {
+                "kind": "other",
+                "quote": "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+              }
+            ],
+            "quote": "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers.",
+            "role": null,
+            "source_id": "raw-source-a5a35d9a74b6bc0454f0"
+          },
+          {
+            "access_scope": "document",
+            "competitor": "Confluence",
+            "condition_evidence": [
+              "Collaborative editing\nYou and up to 29 teammates can edit a page together in real time in Confluence. Changes save and sync automatically so that everyone editing sees the same thing.\n- Avatars — People who are currently editing have colored avatars, while people who made edits and left the page appear in greyscale.\n- Invite to edit —Select the plus sign to invite others to edit your page with you from inside the editor. Either copy and send them the page link, or send them a Confluence notification, which will reach them via email and workbox.",
+              "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-dcf44cbd8c92e103a7d217ce86018d30d7989c95328d39f3524589d02ce30eb5",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "page",
+            "object_type": "page",
+            "operation": "edit",
+            "operation_quote": "You and up to 29 teammates can edit a page together in real time in Confluence",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "other",
+                "quote": "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+              }
+            ],
+            "quote": "You and up to 29 teammates can edit a page together in real time in Confluence. Changes save and sync automatically so that everyone editing sees the same thing.",
+            "role": null,
+            "source_id": "raw-source-a5a35d9a74b6bc0454f0"
+          },
+          {
+            "access_scope": null,
+            "competitor": "Confluence",
+            "condition_evidence": [
+              "Collaborative editing\nYou and up to 29 teammates can edit a page together in real time in Confluence. Changes save and sync automatically so that everyone editing sees the same thing.\n- Avatars — People who are currently editing have colored avatars, while people who made edits and left the page appear in greyscale.\n- Invite to edit —Select the plus sign to invite others to edit your page with you from inside the editor. Either copy and send them the page link, or send them a Confluence notification, which will reach them via email and workbox.",
+              "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-dcf44cbd8c92e103a7d217ce86018d30d7989c95328d39f3524589d02ce30eb5",
+            "missing_fields": [
+              "role",
+              "plan",
+              "access_scope"
+            ],
+            "object_quote": null,
+            "object_type": null,
+            "operation": "edit",
+            "operation_quote": "Changes save and sync automatically so that everyone editing sees the same thing",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "other",
+                "quote": "Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers."
+              }
+            ],
+            "quote": "You and up to 29 teammates can edit a page together in real time in Confluence. Changes save and sync automatically so that everyone editing sees the same thing.",
+            "role": null,
+            "source_id": "raw-source-a5a35d9a74b6bc0454f0"
+          },
+          {
+            "access_scope": null,
+            "competitor": "Confluence",
+            "condition_evidence": [],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-f62f53e8a0f39ccb86639bc41728a4152e942924445589b1b9e3c010c2d06082",
+            "missing_fields": [
+              "role",
+              "plan",
+              "access_scope"
+            ],
+            "object_quote": null,
+            "object_type": null,
+            "operation": "edit",
+            "operation_quote": "You can invite others to edit, leave feedback, and share links so your work reaches the right audience",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "You can invite others to edit, leave feedback, and share links so your work reaches the right audience",
+            "role": null,
+            "source_id": "raw-source-a5a35d9a74b6bc0454f0"
+          }
+        ],
+        "Notion": [
+          {
+            "access_scope": "document",
+            "competitor": "Notion",
+            "condition_evidence": [
+              "Notion has several features designed to improve and increase the velocity of communication with your team — whether you're all editing the same page or working across time zones.\nYou can edit the same page at the same time with an unlimited number of people.\n- Their profile photos will show you where they're looking or working on the page.\n- Edits and comments made by everyone will appear to you instantly."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-9b5df62f2d4107db5cc19c5ca2784fe4854a9d992ebbb603eaf6e28b799afe00",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "page",
+            "object_type": "page",
+            "operation": "edit",
+            "operation_quote": "You can edit the same page at the same time with an unlimited number of people",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "You can edit the same page at the same time with an unlimited number of people.",
+            "role": null,
+            "source_id": "raw-source-f7a81bf787f1e9e932e7"
+          },
+          {
+            "access_scope": "comment",
+            "competitor": "Notion",
+            "condition_evidence": [
+              "- @-mention colleagues to refer to them or bring them into the conversation.\nTo resolve a comment, hover over it and select ✔️.\nTo edit or delete a comment, hover over it and select ••• → Edit comment or Delete comment.\nTo open a previously resolved comment, select 💬 at the top of the page. Filter by Resolved comments, then select ↪️ to re-open.\nInline page comments"
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-af6656005c0537491fe8fc1069cb3d14d03ea64808e3a8409b0ef64f8a599a2d",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "comment",
+            "object_type": "comment",
+            "operation": "edit",
+            "operation_quote": "To edit or delete a comment, hover over it and select ••• → Edit comment or Delete comment",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "To edit or delete a comment, hover over it and select ••• → Edit comment or Delete comment.",
+            "role": null,
+            "source_id": "raw-source-b92f96c0c5e5d2643df7"
+          }
+        ]
+      },
+      "missing_products": [
+        "Coda",
+        "Nuclino"
+      ]
+    },
+    {
+      "operation": "create",
+      "comparison_status": "insufficient_evidence",
+      "product_statuses": {
+        "Notion": "unknown",
+        "Confluence": "documented",
+        "Coda": "unknown",
+        "Nuclino": "unknown"
+      },
+      "observations_by_product": {
+        "Confluence": [
+          {
+            "access_scope": "document",
+            "competitor": "Confluence",
+            "condition_evidence": [
+              "Adding content contextually puts it where you want it to live from the start. Made a mistake or changed your mind? Use the drag and drop feature in the content tree to drag the page where you want it or use drag and drop to reorder the pages.\nCan't create a page or blog?\nTo create a page or blog post, you need the Add content permissions for that space.",
+              "Can't create a page or blog?"
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-3416e9df1a923140f33c07cd84c2e3f7adfb76731f62a606a0452d2c77b13cec",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "page",
+            "object_type": "page",
+            "operation": "create",
+            "operation_quote": "To create a page or blog post, you need the Add content permissions for that space",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "other",
+                "quote": "Can't create a page or blog?"
+              }
+            ],
+            "quote": "To create a page or blog post, you need the Add content permissions for that space.",
+            "role": null,
+            "source_id": "raw-source-a5a35d9a74b6bc0454f0"
+          }
+        ]
+      },
+      "missing_products": [
+        "Notion",
+        "Coda",
+        "Nuclino"
+      ]
+    },
+    {
+      "operation": "share",
+      "comparison_status": "insufficient_evidence",
+      "product_statuses": {
+        "Notion": "unknown",
+        "Confluence": "documented",
+        "Coda": "documented",
+        "Nuclino": "unknown"
+      },
+      "observations_by_product": {
+        "Coda": [
+          {
+            "access_scope": "document",
+            "competitor": "Coda",
+            "condition_evidence": [
+              "Continue reading to learn about the different sharing methods available to you."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-74e7b3b0d204a7bb950594dc82dcf2a8b6c55b32f56e5b6bf0adf81b2028d2c0",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "doc",
+            "object_type": "document",
+            "operation": "share",
+            "operation_quote": "You can share your doc by clicking on Share in the top right hand corner, then clicking the slider icon in the upper right",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "You can share your doc by clicking on Share in the top right hand corner, then clicking the slider icon in the upper right",
+            "role": null,
+            "source_id": "raw-source-970d5d3dabcdab0bf470"
+          },
+          {
+            "access_scope": "document",
+            "competitor": "Coda",
+            "condition_evidence": [
+              "Continue reading to learn about the different sharing methods available to you.",
+              "For example: Let’s say you have a folder with all the employee handbooks that’s shared with the whole workspace. You may want to give ‘Can edit’ access only to members of the HR team, and give everyone in the workspace ‘Can view’ access.",
+              "Note that private folders are only available on the Team and Enterprise tiers of Superhuman Docs."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-7730c1e6a63b86e9a2fe69a5ba6141554a26d7c4eec17d64ff93be92dcdb0d7e",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "doc",
+            "object_type": "document",
+            "operation": "share",
+            "operation_quote": "You can change a user’s access on the doc by modifying their access directly from the sharing dialog",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "shared_access",
+                "quote": "For example: Let’s say you have a folder with all the employee handbooks that’s shared with the whole workspace. You may want to give ‘Can edit’ access only to members of the HR team, and give everyone in the workspace ‘Can view’ access."
+              },
+              {
+                "kind": "other",
+                "quote": "Note that private folders are only available on the Team and Enterprise tiers of Superhuman Docs."
+              }
+            ],
+            "quote": "You can change a user’s access on the doc by modifying their access directly from the sharing dialog",
+            "role": null,
+            "source_id": "raw-source-970d5d3dabcdab0bf470"
+          },
+          {
+            "access_scope": "document",
+            "competitor": "Coda",
+            "condition_evidence": [
+              "Continue reading to learn about the different sharing methods available to you.",
+              "For example: Let’s say you have a folder with all the employee handbooks that’s shared with the whole workspace. You may want to give ‘Can edit’ access only to members of the HR team, and give everyone in the workspace ‘Can view’ access.",
+              "Note that private folders are only available on the Team and Enterprise tiers of Superhuman Docs."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-95b5d36d9c3f7a67a90dfbdc4fad544de8c1355624ba4d3b7b410b3253dd35fb",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "docs",
+            "object_type": "document",
+            "operation": "share",
+            "operation_quote": "You can read all about folders and how to use them to share docs here",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "shared_access",
+                "quote": "For example: Let’s say you have a folder with all the employee handbooks that’s shared with the whole workspace. You may want to give ‘Can edit’ access only to members of the HR team, and give everyone in the workspace ‘Can view’ access."
+              },
+              {
+                "kind": "other",
+                "quote": "Note that private folders are only available on the Team and Enterprise tiers of Superhuman Docs."
+              }
+            ],
+            "quote": "You can read all about folders and how to use them to share docs here",
+            "role": null,
+            "source_id": "raw-source-970d5d3dabcdab0bf470"
+          }
+        ],
+        "Confluence": [
+          {
+            "access_scope": null,
+            "competitor": "Confluence",
+            "condition_evidence": [],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-f62f53e8a0f39ccb86639bc41728a4152e942924445589b1b9e3c010c2d06082",
+            "missing_fields": [
+              "role",
+              "plan",
+              "access_scope"
+            ],
+            "object_quote": null,
+            "object_type": null,
+            "operation": "share",
+            "operation_quote": "You can invite others to edit, leave feedback, and share links so your work reaches the right audience",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "You can invite others to edit, leave feedback, and share links so your work reaches the right audience",
+            "role": null,
+            "source_id": "raw-source-a5a35d9a74b6bc0454f0"
+          }
+        ]
+      },
+      "missing_products": [
+        "Notion",
+        "Nuclino"
+      ]
+    },
+    {
+      "operation": "manage_access",
+      "comparison_status": "insufficient_evidence",
+      "product_statuses": {
+        "Notion": "documented",
+        "Confluence": "documented",
+        "Coda": "documented",
+        "Nuclino": "unknown"
+      },
+      "observations_by_product": {
+        "Coda": [
+          {
+            "access_scope": "document",
+            "competitor": "Coda",
+            "condition_evidence": [
+              "Continue reading to learn about the different sharing methods available to you.",
+              "For example: Let’s say you have a folder with all the employee handbooks that’s shared with the whole workspace. You may want to give ‘Can edit’ access only to members of the HR team, and give everyone in the workspace ‘Can view’ access.",
+              "Note that private folders are only available on the Team and Enterprise tiers of Superhuman Docs."
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-7730c1e6a63b86e9a2fe69a5ba6141554a26d7c4eec17d64ff93be92dcdb0d7e",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "doc",
+            "object_type": "document",
+            "operation": "manage_access",
+            "operation_quote": "You can change a user’s access on the doc by modifying their access directly from the sharing dialog",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "shared_access",
+                "quote": "For example: Let’s say you have a folder with all the employee handbooks that’s shared with the whole workspace. You may want to give ‘Can edit’ access only to members of the HR team, and give everyone in the workspace ‘Can view’ access."
+              },
+              {
+                "kind": "other",
+                "quote": "Note that private folders are only available on the Team and Enterprise tiers of Superhuman Docs."
+              }
+            ],
+            "quote": "You can change a user’s access on the doc by modifying their access directly from the sharing dialog",
+            "role": null,
+            "source_id": "raw-source-970d5d3dabcdab0bf470"
+          }
+        ],
+        "Confluence": [
+          {
+            "access_scope": null,
+            "competitor": "Confluence",
+            "condition_evidence": [
+              "Even in a shared space, you may have content that you're not ready to share with everyone yet. Or perhaps you have some confidential content that's only meant for a few eyes. Whatever the reason, Confluence lets you set view and edit restrictions at the content level so you can keep your content as open or as closed as you need.",
+              "You can’t restrict access to content on the free plan.",
+              "Confluence’s core tenet is about getting the right knowledge to the right people in your organization. To support this, Confluence’s permissions are open by default, which means that the content wants to be available to everyone unless otherwise noted.",
+              "The fundamental piece of this open-by-default model is represented by General access. This refers to the general audience for the content item — everyone who has at least view access to the space a content item lives in, or, if a parent item is restricted, everyone who has at least view access to the parent item.",
+              "- If the content item is restricted by a parent, then you can check who has access to the parent item by selecting this parent in the line “Anyone on this parent”",
+              "- Restricted: Only specific people can view or edit"
+            ],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-883b825b31086b4d5aa69ced2f890f4cecc3f6e4031188c7f5eaf87a1d9c5931",
+            "missing_fields": [
+              "role",
+              "plan",
+              "access_scope"
+            ],
+            "object_quote": null,
+            "object_type": null,
+            "operation": "manage_access",
+            "operation_quote": "You can set general access to 3 states of permissions:",
+            "plan": null,
+            "prerequisites": [
+              {
+                "kind": "other",
+                "quote": "Even in a shared space, you may have content that you're not ready to share with everyone yet. Or perhaps you have some confidential content that's only meant for a few eyes. Whatever the reason, Confluence lets you set view and edit restrictions at the content level so you can keep your content as open or as closed as you need."
+              },
+              {
+                "kind": "permission",
+                "quote": "You can’t restrict access to content on the free plan."
+              },
+              {
+                "kind": "permission",
+                "quote": "Confluence’s core tenet is about getting the right knowledge to the right people in your organization. To support this, Confluence’s permissions are open by default, which means that the content wants to be available to everyone unless otherwise noted."
+              },
+              {
+                "kind": "other",
+                "quote": "- Restricted: Only specific people can view or edit"
+              }
+            ],
+            "quote": "You can set general access to 3 states of permissions:",
+            "role": null,
+            "source_id": "raw-source-940ce7ba9cc5de38d91a"
+          }
+        ],
+        "Notion": [
+          {
+            "access_scope": "database_property",
+            "competitor": "Notion",
+            "condition_evidence": [],
+            "effect": "allowed",
+            "fact_id": "evidence-fact-record-fe8cde5f146525d6946cb044ba0d0a04001dcbc66ed12889a9981da55dd802ef",
+            "missing_fields": [
+              "role",
+              "plan"
+            ],
+            "object_quote": "person property",
+            "object_type": "database_property",
+            "operation": "manage_access",
+            "operation_quote": "You can assign specific permissions to people who are tagged in a person property or created by property in your database",
+            "plan": null,
+            "prerequisites": [],
+            "quote": "You can assign specific permissions to people who are tagged in a person property or created by property in your database",
+            "role": null,
+            "source_id": "raw-source-4e1b574b5bb7896a0f9e"
+          }
+        ]
+      },
+      "missing_products": [
+        "Nuclino"
+      ]
+    }
+  ],
+  "versions": [
+    {
+      "version": 1,
+      "summary": {
+        "case_id": "operations-four-products",
+        "timed_out": false,
+        "error_type": null,
+        "duration_seconds": 105.13,
+        "failure_messages": [],
+        "status": "completed",
+        "current_node": null,
+        "pipeline_terminal": true,
+        "mechanical_pass": true,
+        "partial_report_generated": false,
+        "semantic_quality": null,
+        "has_product_analysis_signal": true,
+        "citations_valid": true,
+        "unknown_citation_count": 0,
+        "report_chars": 7552,
+        "core_chars": 6583,
+        "competitors": [
+          "Notion",
+          "Confluence",
+          "Coda",
+          "Nuclino"
+        ],
+        "source_count": 10,
+        "source_types": [
+          "webpage_verified"
+        ],
+        "assessments": {
+          "feature": {
+            "status": "insufficient_evidence",
+            "winner": null,
+            "rationale": "Comparison withheld: Not comparable: feature / operation.read; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.comment; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'documented'}.; Not comparable: feature / operation.edit; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.create; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.share; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.manage_access; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions', 'Nuclino': 'documented_with_conditions'}.; Not comparable: feature / mentions; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+            "scenario": "共同维护产品文档和团队知识",
+            "tradeoffs": [],
+            "gaps": [
+              "Not comparable: feature / operation.read; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.comment; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'documented'}.",
+              "Not comparable: feature / operation.edit; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.create; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.share; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.manage_access; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions', 'Nuclino': 'documented_with_conditions'}.",
+              "Not comparable: feature / mentions; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'documented_with_conditions'}.",
+              "Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'unknown'}."
+            ],
+            "source_ids": []
+          }
+        },
+        "native_llm_spans": 30,
+        "search_spans": 21,
+        "successful_search_spans": 10,
+        "provider_usage_by_kind": {
+          "llm": {
+            "prompt_tokens": 31763,
+            "completion_tokens": 5484,
+            "total_tokens": 37247,
+            "prompt_cache_hit_tokens": 3584,
+            "prompt_cache_miss_tokens": 28179
+          },
+          "search": {
+            "prompt_tokens": 77254,
+            "completion_tokens": 6824,
+            "total_tokens": 84078,
+            "prompt_cache_hit_tokens": 15360,
+            "prompt_cache_miss_tokens": 61894
+          }
+        },
+        "provider_total_tokens_last_attempts": 121325,
+        "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+        "budget_checkpoint": {
+          "calls": 21,
+          "repairs": 0,
+          "tokens_charged": 121325,
+          "cost_charged_usd": 0.041905163999999995,
+          "delivery_limit:writer:Confluence/feature": 20000,
+          "delivery_charged:writer:Confluence/feature": 4827,
+          "delivery_calls:writer:Confluence/feature": 1,
+          "delivery_finished:writer:Confluence/feature": 1,
+          "delivery_limit:qa:Confluence/feature": 12000,
+          "delivery_charged:qa:Confluence/feature": 4728,
+          "delivery_calls:qa:Confluence/feature": 1,
+          "delivery_finished:qa:Confluence/feature": 1,
+          "delivery_limit:writer:Coda/feature": 20000,
+          "delivery_charged:writer:Coda/feature": 2878,
+          "delivery_calls:writer:Coda/feature": 1,
+          "delivery_finished:writer:Coda/feature": 1,
+          "delivery_limit:qa:Coda/feature": 12000,
+          "delivery_charged:qa:Coda/feature": 3349,
+          "delivery_calls:qa:Coda/feature": 1,
+          "delivery_finished:qa:Coda/feature": 1,
+          "delivery_limit:writer:Nuclino/feature": 20000,
+          "delivery_charged:writer:Nuclino/feature": 3303,
+          "delivery_calls:writer:Nuclino/feature": 1,
+          "delivery_finished:writer:Nuclino/feature": 1,
+          "delivery_limit:qa:Nuclino/feature": 12000,
+          "delivery_charged:qa:Nuclino/feature": 3591,
+          "delivery_calls:qa:Nuclino/feature": 1,
+          "delivery_finished:qa:Nuclino/feature": 1
+        },
+        "qa_issue_count": 4
+      },
+      "delivery_phases": [
+        {
+          "agent": "writer",
+          "product": "Notion",
+          "calls": 1,
+          "successful": 0,
+          "attempts": 0
+        },
+        {
+          "agent": "writer",
+          "product": "Confluence",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Coda",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Nuclino",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Notion",
+          "calls": 0,
+          "successful": 0,
+          "attempts": 0
+        },
+        {
+          "agent": "qa",
+          "product": "Confluence",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Coda",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Nuclino",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        }
+      ],
+      "claims_by_product": {
+        "Notion": {},
+        "Confluence": {
+          "supported": 7,
+          "unreviewed": 1
+        },
+        "Coda": {
+          "supported": 8
+        },
+        "Nuclino": {
+          "supported": 8
+        }
+      },
+      "audit_gaps": {
+        "Notion": [
+          "claim_execution_budget_exceeded",
+          "claim_generation_unavailable",
+          "context_budget_exceeded",
+          "no_reviewed_claims"
+        ],
+        "Confluence": [
+          "context_budget_exceeded"
+        ],
+        "Coda": [
+          "context_budget_exceeded"
+        ],
+        "Nuclino": []
+      }
+    },
+    {
+      "version": 2,
+      "summary": {
+        "case_id": "operations-four-products",
+        "timed_out": false,
+        "error_type": null,
+        "duration_seconds": 105.74,
+        "failure_messages": [],
+        "status": "completed",
+        "current_node": null,
+        "pipeline_terminal": true,
+        "mechanical_pass": true,
+        "partial_report_generated": false,
+        "semantic_quality": null,
+        "has_product_analysis_signal": true,
+        "citations_valid": true,
+        "unknown_citation_count": 0,
+        "report_chars": 9889,
+        "core_chars": 8810,
+        "competitors": [
+          "Notion",
+          "Confluence",
+          "Coda",
+          "Nuclino"
+        ],
+        "source_count": 9,
+        "source_types": [
+          "webpage_verified"
+        ],
+        "assessments": {
+          "feature": {
+            "status": "insufficient_evidence",
+            "winner": null,
+            "rationale": "Comparison withheld: Not comparable: feature / operation.read; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.comment; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'documented'}.; Not comparable: feature / operation.edit; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.create; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.share; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.manage_access; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions', 'Nuclino': 'documented_with_conditions'}.; Not comparable: feature / mentions; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+            "scenario": "共同维护产品文档和团队知识",
+            "tradeoffs": [],
+            "gaps": [
+              "Not comparable: feature / operation.read; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.comment; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'documented'}.",
+              "Not comparable: feature / operation.edit; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.create; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.share; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.manage_access; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions', 'Nuclino': 'documented_with_conditions'}.",
+              "Not comparable: feature / mentions; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'documented_with_conditions'}.",
+              "Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'unknown'}."
+            ],
+            "source_ids": []
+          }
+        },
+        "native_llm_spans": 31,
+        "search_spans": 21,
+        "successful_search_spans": 8,
+        "provider_usage_by_kind": {
+          "llm": {
+            "prompt_tokens": 32876,
+            "completion_tokens": 6604,
+            "total_tokens": 39480,
+            "prompt_cache_hit_tokens": 9856,
+            "prompt_cache_miss_tokens": 23020
+          },
+          "search": {
+            "prompt_tokens": 51375,
+            "completion_tokens": 4350,
+            "total_tokens": 55725,
+            "prompt_cache_hit_tokens": 8192,
+            "prompt_cache_miss_tokens": 43183
+          }
+        },
+        "provider_total_tokens_last_attempts": 95205,
+        "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+        "budget_checkpoint": {
+          "calls": 19,
+          "repairs": 0,
+          "tokens_charged": 95205,
+          "cost_charged_usd": 0.03311398800000001,
+          "delivery_limit:writer:Confluence/feature": 20000,
+          "delivery_charged:writer:Confluence/feature": 4246,
+          "delivery_calls:writer:Confluence/feature": 1,
+          "delivery_finished:writer:Confluence/feature": 1,
+          "delivery_limit:qa:Confluence/feature": 12000,
+          "delivery_charged:qa:Confluence/feature": 4779,
+          "delivery_calls:qa:Confluence/feature": 1,
+          "delivery_finished:qa:Confluence/feature": 1,
+          "delivery_limit:writer:Coda/feature": 20000,
+          "delivery_charged:writer:Coda/feature": 2848,
+          "delivery_calls:writer:Coda/feature": 1,
+          "delivery_finished:writer:Coda/feature": 1,
+          "delivery_limit:qa:Coda/feature": 12000,
+          "delivery_charged:qa:Coda/feature": 3309,
+          "delivery_calls:qa:Coda/feature": 1,
+          "delivery_finished:qa:Coda/feature": 1,
+          "delivery_limit:writer:Nuclino/feature": 20000,
+          "delivery_charged:writer:Nuclino/feature": 3785,
+          "delivery_calls:writer:Nuclino/feature": 1,
+          "delivery_finished:writer:Nuclino/feature": 1,
+          "delivery_limit:qa:Nuclino/feature": 12000,
+          "delivery_charged:qa:Nuclino/feature": 4098,
+          "delivery_calls:qa:Nuclino/feature": 1,
+          "delivery_finished:qa:Nuclino/feature": 1,
+          "delivery_limit:writer:Notion/feature": 20000,
+          "delivery_charged:writer:Notion/feature": 3079,
+          "delivery_calls:writer:Notion/feature": 1,
+          "delivery_finished:writer:Notion/feature": 1,
+          "delivery_limit:qa:Notion/feature": 12000,
+          "delivery_charged:qa:Notion/feature": 3614,
+          "delivery_calls:qa:Notion/feature": 1,
+          "delivery_finished:qa:Notion/feature": 1
+        },
+        "qa_issue_count": 4
+      },
+      "delivery_phases": [
+        {
+          "agent": "writer",
+          "product": "Notion",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Confluence",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Coda",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Nuclino",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Notion",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Confluence",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Coda",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Nuclino",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        }
+      ],
+      "claims_by_product": {
+        "Notion": {
+          "supported": 8
+        },
+        "Confluence": {
+          "supported": 8
+        },
+        "Coda": {
+          "supported": 8
+        },
+        "Nuclino": {
+          "supported": 8
+        }
+      },
+      "audit_gaps": {
+        "Notion": [
+          "context_budget_exceeded"
+        ],
+        "Confluence": [
+          "context_budget_exceeded"
+        ],
+        "Coda": [
+          "context_budget_exceeded"
+        ],
+        "Nuclino": []
+      }
+    },
+    {
+      "version": 3,
+      "summary": {
+        "case_id": "operations-four-products",
+        "timed_out": false,
+        "error_type": null,
+        "duration_seconds": 97.18,
+        "failure_messages": [],
+        "status": "completed",
+        "current_node": null,
+        "pipeline_terminal": true,
+        "mechanical_pass": true,
+        "partial_report_generated": false,
+        "semantic_quality": null,
+        "has_product_analysis_signal": true,
+        "citations_valid": true,
+        "unknown_citation_count": 0,
+        "report_chars": 9081,
+        "core_chars": 7910,
+        "competitors": [
+          "Notion",
+          "Confluence",
+          "Coda",
+          "Nuclino"
+        ],
+        "source_count": 9,
+        "source_types": [
+          "webpage_verified"
+        ],
+        "assessments": {
+          "feature": {
+            "status": "insufficient_evidence",
+            "winner": null,
+            "rationale": "Comparison withheld: Not comparable: feature / operation.read; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.comment; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'documented'}.; Not comparable: feature / operation.edit; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.create; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.share; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.manage_access; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.; Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions', 'Nuclino': 'documented_with_conditions'}.; Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+            "scenario": "共同维护产品文档和团队知识",
+            "tradeoffs": [],
+            "gaps": [
+              "Not comparable: feature / operation.read; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.comment; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'documented'}.",
+              "Not comparable: feature / operation.edit; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.create; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.share; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.manage_access; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions', 'Nuclino': 'documented_with_conditions'}.",
+              "Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'documented_with_conditions'}.",
+              "Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'unknown'}."
+            ],
+            "source_ids": []
+          }
+        },
+        "native_llm_spans": 31,
+        "search_spans": 20,
+        "successful_search_spans": 8,
+        "provider_usage_by_kind": {
+          "llm": {
+            "prompt_tokens": 38622,
+            "completion_tokens": 6792,
+            "total_tokens": 45414,
+            "prompt_cache_hit_tokens": 12928,
+            "prompt_cache_miss_tokens": 25694
+          },
+          "search": {
+            "prompt_tokens": 46431,
+            "completion_tokens": 4524,
+            "total_tokens": 50955,
+            "prompt_cache_hit_tokens": 13184,
+            "prompt_cache_miss_tokens": 33247
+          }
+        },
+        "provider_total_tokens_last_attempts": 96369,
+        "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+        "budget_checkpoint": {
+          "calls": 20,
+          "repairs": 0,
+          "tokens_charged": 96369,
+          "cost_charged_usd": 0.031418171999999994,
+          "delivery_limit:writer:Confluence/feature": 20000,
+          "delivery_charged:writer:Confluence/feature": 4669,
+          "delivery_calls:writer:Confluence/feature": 1,
+          "delivery_finished:writer:Confluence/feature": 1,
+          "delivery_limit:qa:Confluence/feature": 12000,
+          "delivery_charged:qa:Confluence/feature": 4761,
+          "delivery_calls:qa:Confluence/feature": 1,
+          "delivery_finished:qa:Confluence/feature": 1,
+          "delivery_limit:writer:Coda/feature": 20000,
+          "delivery_charged:writer:Coda/feature": 3742,
+          "delivery_calls:writer:Coda/feature": 1,
+          "delivery_finished:writer:Coda/feature": 1,
+          "delivery_limit:qa:Coda/feature": 12000,
+          "delivery_charged:qa:Coda/feature": 4251,
+          "delivery_calls:qa:Coda/feature": 1,
+          "delivery_finished:qa:Coda/feature": 1,
+          "delivery_limit:writer:Nuclino/feature": 20000,
+          "delivery_charged:writer:Nuclino/feature": 2965,
+          "delivery_calls:writer:Nuclino/feature": 1,
+          "delivery_finished:writer:Nuclino/feature": 1,
+          "delivery_limit:qa:Nuclino/feature": 12000,
+          "delivery_charged:qa:Nuclino/feature": 3045,
+          "delivery_calls:qa:Nuclino/feature": 1,
+          "delivery_finished:qa:Nuclino/feature": 1,
+          "delivery_limit:writer:Notion/feature": 20000,
+          "delivery_charged:writer:Notion/feature": 3759,
+          "delivery_calls:writer:Notion/feature": 1,
+          "delivery_finished:writer:Notion/feature": 1,
+          "delivery_limit:qa:Notion/feature": 12000,
+          "delivery_charged:qa:Notion/feature": 4323,
+          "delivery_calls:qa:Notion/feature": 1,
+          "delivery_finished:qa:Notion/feature": 1
+        },
+        "qa_issue_count": 11
+      },
+      "delivery_phases": [
+        {
+          "agent": "writer",
+          "product": "Notion",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Confluence",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Coda",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Nuclino",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Notion",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Confluence",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Coda",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Nuclino",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        }
+      ],
+      "claims_by_product": {
+        "Notion": {
+          "supported": 8
+        },
+        "Confluence": {
+          "supported": 8
+        },
+        "Coda": {
+          "unreviewed": 8
+        },
+        "Nuclino": {
+          "supported": 6
+        }
+      },
+      "audit_gaps": {
+        "Notion": [
+          "context_budget_exceeded"
+        ],
+        "Confluence": [
+          "context_budget_exceeded"
+        ],
+        "Coda": [
+          "claim_review_invalid",
+          "context_budget_exceeded",
+          "no_reviewed_claims"
+        ],
+        "Nuclino": []
+      }
+    },
+    {
+      "version": 4,
+      "summary": {
+        "case_id": "operations-four-products",
+        "timed_out": false,
+        "error_type": null,
+        "duration_seconds": 103.9,
+        "failure_messages": [],
+        "status": "completed",
+        "current_node": null,
+        "pipeline_terminal": true,
+        "mechanical_pass": true,
+        "partial_report_generated": false,
+        "semantic_quality": null,
+        "has_product_analysis_signal": true,
+        "citations_valid": true,
+        "unknown_citation_count": 0,
+        "report_chars": 9776,
+        "core_chars": 8428,
+        "competitors": [
+          "Notion",
+          "Confluence",
+          "Coda",
+          "Nuclino"
+        ],
+        "source_count": 10,
+        "source_types": [
+          "webpage_verified"
+        ],
+        "assessments": {
+          "feature": {
+            "status": "insufficient_evidence",
+            "winner": null,
+            "rationale": "Comparison withheld: Not comparable: feature / operation.read; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.comment; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'documented'}.; Not comparable: feature / operation.edit; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.create; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.share; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.manage_access; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.; Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions', 'Nuclino': 'documented_with_conditions'}.; Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+            "scenario": "共同维护产品文档和团队知识",
+            "tradeoffs": [],
+            "gaps": [
+              "Not comparable: feature / operation.read; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.comment; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'documented'}.",
+              "Not comparable: feature / operation.edit; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.create; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.share; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.manage_access; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions', 'Nuclino': 'documented_with_conditions'}.",
+              "Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'documented_with_conditions'}.",
+              "Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'unknown'}."
+            ],
+            "source_ids": []
+          }
+        },
+        "native_llm_spans": 31,
+        "search_spans": 22,
+        "successful_search_spans": 8,
+        "provider_usage_by_kind": {
+          "llm": {
+            "prompt_tokens": 36971,
+            "completion_tokens": 6355,
+            "total_tokens": 43326,
+            "prompt_cache_hit_tokens": 19712,
+            "prompt_cache_miss_tokens": 17259
+          },
+          "search": {
+            "prompt_tokens": 45573,
+            "completion_tokens": 4337,
+            "total_tokens": 49910,
+            "prompt_cache_hit_tokens": 2176,
+            "prompt_cache_miss_tokens": 43397
+          }
+        },
+        "provider_total_tokens_last_attempts": 93236,
+        "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+        "budget_checkpoint": {
+          "calls": 21,
+          "repairs": 0,
+          "tokens_charged": 93236,
+          "cost_charged_usd": 0.031158528000000008,
+          "delivery_limit:writer:Confluence/feature": 20000,
+          "delivery_charged:writer:Confluence/feature": 4685,
+          "delivery_calls:writer:Confluence/feature": 1,
+          "delivery_finished:writer:Confluence/feature": 1,
+          "delivery_limit:qa:Confluence/feature": 12000,
+          "delivery_charged:qa:Confluence/feature": 4961,
+          "delivery_calls:qa:Confluence/feature": 1,
+          "delivery_finished:qa:Confluence/feature": 1,
+          "delivery_limit:writer:Coda/feature": 20000,
+          "delivery_charged:writer:Coda/feature": 3731,
+          "delivery_calls:writer:Coda/feature": 1,
+          "delivery_finished:writer:Coda/feature": 1,
+          "delivery_limit:qa:Coda/feature": 12000,
+          "delivery_charged:qa:Coda/feature": 3759,
+          "delivery_calls:qa:Coda/feature": 1,
+          "delivery_finished:qa:Coda/feature": 1,
+          "delivery_limit:writer:Nuclino/feature": 20000,
+          "delivery_charged:writer:Nuclino/feature": 2957,
+          "delivery_calls:writer:Nuclino/feature": 1,
+          "delivery_finished:writer:Nuclino/feature": 1,
+          "delivery_limit:qa:Nuclino/feature": 12000,
+          "delivery_charged:qa:Nuclino/feature": 3032,
+          "delivery_calls:qa:Nuclino/feature": 1,
+          "delivery_finished:qa:Nuclino/feature": 1,
+          "delivery_limit:writer:Notion/feature": 20000,
+          "delivery_charged:writer:Notion/feature": 3689,
+          "delivery_calls:writer:Notion/feature": 1,
+          "delivery_finished:writer:Notion/feature": 1,
+          "delivery_limit:qa:Notion/feature": 12000,
+          "delivery_charged:qa:Notion/feature": 4221,
+          "delivery_calls:qa:Notion/feature": 1,
+          "delivery_finished:qa:Notion/feature": 1
+        },
+        "qa_issue_count": 10
+      },
+      "delivery_phases": [
+        {
+          "agent": "writer",
+          "product": "Notion",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Confluence",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Coda",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Nuclino",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Notion",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Confluence",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Coda",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Nuclino",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        }
+      ],
+      "claims_by_product": {
+        "Notion": {
+          "supported": 8
+        },
+        "Confluence": {
+          "supported": 8
+        },
+        "Coda": {
+          "supported": 8
+        },
+        "Nuclino": {
+          "supported": 6
+        }
+      },
+      "audit_gaps": {
+        "Notion": [
+          "context_budget_exceeded"
+        ],
+        "Confluence": [
+          "context_budget_exceeded"
+        ],
+        "Coda": [
+          "context_budget_exceeded"
+        ],
+        "Nuclino": []
+      }
+    },
+    {
+      "version": 5,
+      "summary": {
+        "case_id": "operations-four-products",
+        "timed_out": false,
+        "error_type": null,
+        "duration_seconds": 88.45,
+        "failure_messages": [],
+        "status": "completed",
+        "current_node": null,
+        "pipeline_terminal": true,
+        "mechanical_pass": true,
+        "partial_report_generated": false,
+        "semantic_quality": null,
+        "has_product_analysis_signal": true,
+        "citations_valid": true,
+        "unknown_citation_count": 0,
+        "report_chars": 9986,
+        "core_chars": 8638,
+        "competitors": [
+          "Notion",
+          "Confluence",
+          "Coda",
+          "Nuclino"
+        ],
+        "source_count": 10,
+        "source_types": [
+          "webpage_verified"
+        ],
+        "assessments": {
+          "feature": {
+            "status": "insufficient_evidence",
+            "winner": null,
+            "rationale": "Comparison withheld: Not comparable: feature / operation.read; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.comment; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'documented'}.; Not comparable: feature / operation.edit; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.create; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.share; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.; Not comparable: feature / operation.manage_access; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.; Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions', 'Nuclino': 'documented_with_conditions'}.; Not comparable: feature / mentions; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.; Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+            "scenario": "共同维护产品文档和团队知识",
+            "tradeoffs": [],
+            "gaps": [
+              "Not comparable: feature / operation.read; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.comment; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'documented'}.",
+              "Not comparable: feature / operation.edit; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.create; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.share; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / operation.manage_access; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented', 'Coda': 'documented', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions', 'Nuclino': 'documented_with_conditions'}.",
+              "Not comparable: feature / mentions; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'unknown', 'Coda': 'unknown', 'Nuclino': 'unknown'}.",
+              "Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'documented', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'documented_with_conditions'}.",
+              "Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown', 'Nuclino': 'unknown'}."
+            ],
+            "source_ids": []
+          }
+        },
+        "native_llm_spans": 31,
+        "search_spans": 21,
+        "successful_search_spans": 8,
+        "provider_usage_by_kind": {
+          "llm": {
+            "prompt_tokens": 40602,
+            "completion_tokens": 6737,
+            "total_tokens": 47339,
+            "prompt_cache_hit_tokens": 20352,
+            "prompt_cache_miss_tokens": 20250
+          },
+          "search": {
+            "prompt_tokens": 45745,
+            "completion_tokens": 4845,
+            "total_tokens": 50590,
+            "prompt_cache_hit_tokens": 9216,
+            "prompt_cache_miss_tokens": 36529
+          }
+        },
+        "provider_total_tokens_last_attempts": 97929,
+        "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+        "budget_checkpoint": {
+          "calls": 21,
+          "repairs": 0,
+          "tokens_charged": 97929,
+          "cost_charged_usd": 0.031109508000000004,
+          "delivery_limit:writer:Confluence/feature": 20000,
+          "delivery_charged:writer:Confluence/feature": 4755,
+          "delivery_calls:writer:Confluence/feature": 1,
+          "delivery_finished:writer:Confluence/feature": 1,
+          "delivery_limit:qa:Confluence/feature": 12000,
+          "delivery_charged:qa:Confluence/feature": 4261,
+          "delivery_calls:qa:Confluence/feature": 1,
+          "delivery_finished:qa:Confluence/feature": 1,
+          "delivery_limit:writer:Coda/feature": 20000,
+          "delivery_charged:writer:Coda/feature": 3687,
+          "delivery_calls:writer:Coda/feature": 1,
+          "delivery_finished:writer:Coda/feature": 1,
+          "delivery_limit:qa:Coda/feature": 12000,
+          "delivery_charged:qa:Coda/feature": 4107,
+          "delivery_calls:qa:Coda/feature": 1,
+          "delivery_finished:qa:Coda/feature": 1,
+          "delivery_limit:writer:Nuclino/feature": 20000,
+          "delivery_charged:writer:Nuclino/feature": 3468,
+          "delivery_calls:writer:Nuclino/feature": 1,
+          "delivery_finished:writer:Nuclino/feature": 1,
+          "delivery_limit:qa:Nuclino/feature": 12000,
+          "delivery_charged:qa:Nuclino/feature": 3552,
+          "delivery_calls:qa:Nuclino/feature": 1,
+          "delivery_finished:qa:Nuclino/feature": 1,
+          "delivery_limit:writer:Notion/feature": 20000,
+          "delivery_charged:writer:Notion/feature": 4123,
+          "delivery_calls:writer:Notion/feature": 1,
+          "delivery_finished:writer:Notion/feature": 1,
+          "delivery_limit:qa:Notion/feature": 12000,
+          "delivery_charged:qa:Notion/feature": 4554,
+          "delivery_calls:qa:Notion/feature": 1,
+          "delivery_finished:qa:Notion/feature": 1
+        },
+        "qa_issue_count": 11
+      },
+      "delivery_phases": [
+        {
+          "agent": "writer",
+          "product": "Notion",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Confluence",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Coda",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "writer",
+          "product": "Nuclino",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Notion",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Confluence",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Coda",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        },
+        {
+          "agent": "qa",
+          "product": "Nuclino",
+          "calls": 1,
+          "successful": 1,
+          "attempts": 1
+        }
+      ],
+      "claims_by_product": {
+        "Notion": {
+          "supported": 8
+        },
+        "Confluence": {
+          "supported": 7,
+          "unreviewed": 1
+        },
+        "Coda": {
+          "supported": 7,
+          "rejected": 1
+        },
+        "Nuclino": {
+          "supported": 5
+        }
+      },
+      "audit_gaps": {
+        "Notion": [
+          "context_budget_exceeded"
+        ],
+        "Confluence": [
+          "claim_review_invalid",
+          "context_budget_exceeded"
+        ],
+        "Coda": [
+          "context_budget_exceeded"
+        ],
+        "Nuclino": []
+      }
+    }
+  ],
+  "total_estimated_cost_usd": 0.16870536000000003,
+  "code_sha256": {
+    "backend/packages/llm/execution_budget.py": "4f6b0a768ef84d2f2040b407d893627fa4de7bda6964bff45bf17587326376b8",
+    "backend/packages/orchestrator/llm_execution.py": "406a1c8663030b677cb9a7e1eb5a67b16c99f03923872d9e9c9566eebb66f91d",
+    "backend/packages/orchestrator/search_execution.py": "e142baf644fae4db6a0469dda204f75330b4ba936d052d8a2ae80e7e6c5453f8",
+    "backend/packages/agents/analysts/logic.py": "e262ce7d771c9c2acaf21a0718def51e9b0a6d434713541c8d1803c7855d8926",
+    "backend/packages/agents/writer/dimension_writer.py": "ab0b40bae9bc0a77fd13c797a825fe9c81b74d776d2e243f2aa5eb6fbaf0152e",
+    "backend/packages/research/extraction/semantic.py": "1acb0a1b52353ee91fd3e02dd91a090565992efa1491dcbe2a33282dce9597fc",
+    "backend/packages/research/evidence/operations.py": "d76e8ed71d31b79902e8e14b5802dbffb0b1fd8fed168d6b5ae7be3186d383d5",
+    "backend/packages/research/evidence/normalization.py": "9306c8ee25282bac9e28ed74356ee7bf0bd944a97b7788eb51a66d7013f1ca97",
+    "backend/packages/research/evidence/capabilities.py": "e0f692d4bf1072ae430faffff63eebecccfc89ee24d85f6a5a2cdca9b41333d6",
+    "backend/packages/research/evidence/report_claims.py": "c51459ba3fbcc682d1b166c5a149919b0fb31ca974fddab650587b14bf47de5b",
+    "backend/packages/research/models.py": "53c936039bd3845671f039544abe04b5acad4dab74ba1753767d617664f157f3",
+    "backend/tests/unit/test_delivery_budget.py": "dd6fd141832e323aa24f54d0d48258c7c5e4c80757f167c495e5e38cc8d63e5c",
+    "backend/tests/unit/test_dimension_writer.py": "bcb0703deb050af7757369343b8b51d634c70220ff2c78f33c263e0b8a08a3f8",
+    "backend/tests/unit/test_semantic_extraction.py": "17477103777ff9e5f20bd80b1a7e8c3ff7b0571e81bd9b9e0e3fbf76f80e7eb4",
+    "backend/tests/unit/test_operation_comparison.py": "49c3cd977b5bd3b45f5e9eeadb8f181a41aa6047a7caf895daf8c00f38baa6b9",
+    "backend/tests/unit/test_report_claim_audit.py": "ed4dc2af87f0cde5b2ea4cdfeab2407cb6b7aa08e8f3a59e313a1c16168e6969"
+  }
+}

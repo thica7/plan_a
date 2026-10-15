@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -228,9 +230,22 @@ async def _fetch_browser(
                 await asyncio.to_thread(validate_public_url, final_url)
                 status_code = response.status if response else None
                 browser_extracted = extract_best_content(rendered_html, title, status_code=status_code)
-                if browser_extracted.text and len(browser_extracted.text) >= len(visible_text) * 0.6:
-                    visible_text = browser_extracted.text
-                extraction = browser_extracted.extraction
+                visible_text = _select_browser_text(
+                    final_url, title, visible_text, browser_extracted.text,
+                )
+                selected_controls = await page.locator('input[name="billingInterval"]:checked, input[name="billing"]:checked, input#unit-count').evaluate_all(
+                    '''els => els.filter(e => {
+                      if (e.closest('nav,footer,[hidden],[aria-hidden="true"]')) return false;
+                      for (let n=e; n; n=n.parentElement) {
+                        const s=getComputedStyle(n);
+                        if (s.display==='none' || s.visibility==='hidden') return false;
+                      }
+                      return true;
+                    }).slice(0,16).map(e => e.outerHTML)''')
+                offer_json = await page.locator('script[type="application/ld+json"]').evaluate_all(
+                    'els => els.slice(0,16).map(e => e.textContent).filter(t => t && t.length <= 20000)')
+                extraction = replace(browser_extracted.extraction, pricing_control_html=selected_controls,
+                                     pricing_offer_json=offer_json)
                 quality = score_quality(title, visible_text, status_code=status_code)
                 failure_reason = None if quality.score >= 0.55 else failure_reason_from_quality(quality)
                 if quality.cookie_banner_detected:
@@ -348,6 +363,14 @@ def _should_sample_body(content_type: str) -> bool:
 
 def _should_try_browser(quality: Quality) -> bool:
     return quality.js_required or quality.content_too_short or quality.score < 0.55
+
+
+def _select_browser_text(url: str, title: str, visible: str, extracted: str) -> str:
+    # Pricing cards bind a plan/seat heading to a separate amount. Article
+    # extraction can retain most prose while dropping those essential labels.
+    if re.search(r"pricing|价格|定价", f"{url} {title}", re.IGNORECASE) and visible.strip():
+        return visible
+    return extracted if extracted and len(extracted) >= len(visible) * 0.6 else visible
 
 
 def _failed_result(

@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import csv
+import hashlib
 import html
 import io
 import re
@@ -8,9 +9,11 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from threading import RLock
 from typing import Annotated, Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import Response
 
 from app.deps import (
     get_app_settings,
@@ -1290,6 +1293,7 @@ async def get_project_quality_matrix(
         ),
         _evalops_quality_matrix_entry(
             project_id=project_id,
+            workspace_id=project.workspace_id,
             run_service=run_service,
             settings=settings,
         ),
@@ -1330,14 +1334,16 @@ async def get_project_quality_matrix(
 def _evalops_quality_matrix_entry(
     *,
     project_id: str,
+    workspace_id: str,
     run_service: RunService,
     settings: Settings,
 ) -> QualityAgentMatrixEntry:
     runs = [
         detail
-        for summary in run_service.list_runs()
+        for summary in run_service.list_runs(workspace_id=workspace_id)
+        if summary.project_id == project_id
         if (detail := run_service.get_run(summary.id)) is not None
-        and detail.project_id == project_id
+        and (detail.project_id, detail.workspace_id) == (project_id, workspace_id)
     ]
     report = build_enterprise_evalops_report(
         runs,
@@ -2124,6 +2130,7 @@ def get_artifact_preview(
     if artifact is None:
         raise HTTPException(status_code=404, detail="Artifact not found")
     _require_workspace_access(user, artifact.workspace_id, "artifact:read")
+    _validate_artifact_association(artifact, store, user)
     try:
         preview_type = _artifact_preview_type(artifact)
         if preview_type == "text":
@@ -2159,6 +2166,95 @@ def get_artifact_preview(
         content_text=content_text,
         media_type=artifact.media_type,
         truncated=truncated,
+    )
+
+
+def _validate_artifact_association(
+    artifact: ArtifactRecord,
+    store: EnterpriseStore,
+    user: EnterpriseUserContext,
+) -> None:
+    project = _project_or_404(artifact.project_id, store, user, "artifact:read")
+    if project.workspace_id != artifact.workspace_id:
+        raise HTTPException(status_code=409, detail="Artifact project scope mismatch")
+    if artifact.evidence_id and not any(
+        item.id == artifact.evidence_id and item.workspace_id == artifact.workspace_id
+        for item in store.list_evidence(artifact.project_id)
+    ):
+        raise HTTPException(status_code=409, detail="Artifact evidence scope mismatch")
+    if artifact.report_version_id:
+        version = _report_version_or_404(artifact.report_version_id, store, user, "artifact:read")
+        if (
+            version.project_id != artifact.project_id
+            or version.workspace_id != artifact.workspace_id
+            or (artifact.run_id is not None and version.run_id != artifact.run_id)
+        ):
+            raise HTTPException(status_code=409, detail="Artifact report version scope mismatch")
+
+
+@router.get("/enterprise/artifacts/{artifact_id}/download", response_class=Response)
+def download_artifact(
+    artifact_id: str,
+    store: EnterpriseStoreDep,
+    user: EnterpriseUserDep,
+    artifact_storage: ArtifactStorageDep,
+) -> Response:
+    artifact = store.get_artifact(artifact_id)
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    _require_workspace_access(user, artifact.workspace_id, "artifact:read")
+    _validate_artifact_association(artifact, store, user)
+    if artifact.storage_backend != "local" or not artifact.uri.startswith("local://"):
+        raise HTTPException(status_code=400, detail="External artifact download is not configured")
+    if artifact.byte_size > 20_000_000:
+        raise HTTPException(status_code=413, detail="Artifact exceeds download size limit")
+    try:
+        result = artifact_storage.read_bytes(artifact, max_bytes=20_000_000)
+    except ArtifactStorageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Artifact payload not found")
+    payload, truncated = result
+    if (
+        truncated
+        or len(payload) != artifact.byte_size
+        or hashlib.sha256(payload).hexdigest() != artifact.content_hash
+    ):
+        raise HTTPException(status_code=409, detail="Artifact payload integrity mismatch")
+    if artifact.artifact_type == "report_export" and artifact.report_version_id:
+        version = store.get_report_version(artifact.report_version_id)
+        export_format = artifact.metadata.get("export_format")
+        if export_format not in {"markdown", "html", "csv"}:
+            raise HTTPException(
+                status_code=409, detail="Artifact has no verified report export format"
+            )
+        expected, _, _ = _report_export_payload(
+            version, export_format, scope=artifact.metadata.get("report_scope")
+        )
+        if payload != expected.encode("utf-8"):
+            raise HTTPException(
+                status_code=409, detail="Artifact content does not match report version"
+            )
+    safe_name = (
+        re.sub(r"[\r\n\x00-\x1f\x7f]", "", artifact.filename).replace("\\", "/").split("/")[-1]
+    )
+    fallback = re.sub(r"[^A-Za-z0-9._-]", "_", safe_name) or "artifact.bin"
+    disposition = (
+        f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(safe_name, safe='')}"
+    )
+    media_type = (
+        artifact.media_type
+        if re.fullmatch(r"[\w.+-]+/[\w.+-]+", artifact.media_type)
+        else "application/octet-stream"
+    )
+    return Response(
+        payload,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": disposition,
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+        },
     )
 
 

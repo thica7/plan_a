@@ -375,6 +375,7 @@ export interface ComparisonMatrix {
   cells: ComparisonCell[];
   winner_by_dimension: Record<string, string>;
   summary: string[];
+  operation_alignment?: Array<Record<string, unknown>>;
 }
 
 export interface CompetitorCandidate {
@@ -1005,11 +1006,16 @@ export interface RunDetail extends RunSummary {
   auto_redo_warn_enabled: boolean;
   hitl_enabled: boolean;
   evidence_repair_rounds?: number;
+  evidence_snapshot_id?: string | null;
+  evidence_snapshots?: components['schemas']['RunEvidenceSnapshot'][];
+  evidence_retired_source_ids?: string[];
   report_md: string;
   claim_card_bundles: ClaimCardBundle[];
   decision_card_bundle?: DecisionCardBundle | null;
   section_briefs: SectionBrief[];
   report_artifact?: ReportArtifactV2 | null;
+  report_answer_boundaries?: components['schemas']['AnswerBoundary'][];
+  report_dimension_audits?: components['schemas']['ReportDimensionAudit'][];
   raw_sources: RawSource[];
   competitor_kbs: Record<string, CompetitorKB>;
   competitor_knowledge: Record<string, CompetitorKnowledge>;

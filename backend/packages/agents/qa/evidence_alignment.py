@@ -10,8 +10,51 @@ from packages.orchestrator.scoping import build_redo_scope
 from packages.research.evidence.snapshot import _document_problem
 from packages.research.evidence.snapshot_models import canonical_json
 from packages.research.evidence.views import select_evidence_view
+from packages.research.evidence.report_claims import audit_report_claims
+from packages.schema.decision_brief import safe_decision_brief_text
 from packages.schema.models import QCIssue
 from packages.sources import source_tokens
+
+
+def audit_dimension_claims(service, record, snapshot, *, producer_verified):
+    """Replay the original generation view; do not borrow uncited snapshot facts."""
+    issues = []
+    dependency = next((d for d in record.detail.evidence_artifact_dependencies if d.kind == "writer"), None)
+    uses = {u.id: u for u in record.detail.evidence_consumptions}
+    for index, audit in enumerate(record.detail.report_dimension_audits):
+        reasons = set()
+        use = uses.get(audit.consumption_id)
+        if not producer_verified or dependency is None or audit.consumption_id not in dependency.consumption_ids:
+            reasons.add("claim_producer_unverified")
+        if use is None or use.agent != "writer" or use.snapshot_id != snapshot.id:
+            reasons.add("claim_generation_view_missing")
+        elif use.competitor != audit.competitor or use.dimension != audit.dimension:
+            reasons.add("claim_generation_scope_mismatch")
+        if not reasons:
+            view = select_evidence_view(snapshot, agent="writer", competitor=use.competitor, dimension=use.dimension,
+                source_ids=use.requested_source_ids, max_bytes=use.view_max_bytes or use.max_bytes)
+            boundaries = [b for b in record.detail.report_answer_boundaries
+                          if b.requirement.competitor == audit.competitor and b.requirement.dimension == audit.dimension
+                          and set(b.view_fact_ids) == set(use.fact_ids) and set(b.view_source_ids) == set(use.source_ids)]
+            published = [c for c in audit.claims if c.status == "supported"]
+            replayed = audit_report_claims([c.claim for c in published], [c.review for c in published if c.review], view, boundaries)
+            if any(c.status != "supported" for c in replayed):
+                reasons.add("claim_review_replay_failed")
+            for item in published:
+                clause = safe_decision_brief_text(item.claim.text) + " " + "".join(f"[source:{sid}]" for sid in item.claim.source_ids)
+                if clause not in record.detail.report_md:
+                    reasons.add("published_claim_missing_or_changed")
+            if any(size > use.max_bytes for size in audit.review_context_bytes):
+                reasons.add("claim_review_context_exceeded")
+        for reason in sorted(reasons):
+            problem = f"主张引用审核失败：{reason}。请重新生成该产品和维度的报告内容。"
+            issues.append(QCIssue(id=f"qa-claim-{service._evidence_artifact_hash([snapshot.id, index, reason])[:20]}",
+                severity="blocker", detected_by="citation", target_agent="writer", target_competitor=audit.competitor,
+                target_subagent=audit.dimension, field_path=f"report.dimension_audits.{index}", problem=problem,
+                redo_scope=build_redo_scope(detected_by="citation", target_agent="writer", target_competitor=audit.competitor,
+                    target_subagent=audit.dimension, field_path=f"report.dimension_audits.{index}", problem=problem),
+                metadata={"claim_audit_reason": reason, "snapshot_id": snapshot.id, "unpublishable_evidence": True}))
+    return issues
 
 
 class FinalEvidenceAuditMixin:
@@ -31,6 +74,7 @@ class FinalEvidenceAuditMixin:
         cited_ids = sorted(cited_ids)
         snapshot = self._final_qa_snapshot(record)
         producer_verified = self._final_qa_producer_verified(record, snapshot)
+        claim_issues = audit_dimension_claims(self, record, snapshot, producer_verified=producer_verified)
         views, uses = [], []
         for source_id in cited_ids:
             view, use = self._begin_evidence_use(record, agent="qa", source_ids=[source_id])
@@ -51,7 +95,7 @@ class FinalEvidenceAuditMixin:
             )
         projected, _ = self._project_evidence_detail(record, views)
         projected.report_md = record.detail.report_md
-        issues = []
+        issues = list(claim_issues)
         selected = {source.id: source for source in snapshot.sources if source.id in cited_ids}
         scope = KnowledgeScope(
             workspace_id=record.detail.workspace_id,
@@ -105,7 +149,11 @@ class FinalEvidenceAuditMixin:
                 reasons.add("source_not_in_snapshot")
             if source_id is not None:
                 original_view = views[index]
-                if any(gap.reason == "context_budget_exceeded" for gap in original_view.gaps):
+                reviewed_claim_sources = {sid for a in record.detail.report_dimension_audits
+                    for c in a.claims if c.status == "supported" for sid in c.claim.source_ids}
+                if any(gap.reason == "context_budget_exceeded" for gap in original_view.gaps) and not (
+                    producer_verified and not claim_issues and source_id in reviewed_claim_sources
+                ):
                     reasons.add("context_budget_exceeded")
                 current_view = select_evidence_view(
                     self._current_evidence_snapshot(record),
@@ -124,7 +172,11 @@ class FinalEvidenceAuditMixin:
                     # contract. Source/dependency failures retain collection repairs.
                     continue
                 fact_ids = [fact.id for fact in snapshot.facts if fact.source_id == source_id]
-                problem = (
+                capacity_problem = reason == "context_budget_exceeded"
+                target_agent = "writer" if capacity_problem else "collector"
+                problem = ("Local citation audit could not inspect all facts within its context capacity. "
+                           "Reduce the cited claim set and rerun the audit; the source remains valid."
+                           if capacity_problem else
                     f"Referenced evidence {source_id} is invalid: {reason}. "
                     "Original citation must be recollected and reanalysed."
                 )
@@ -136,14 +188,14 @@ class FinalEvidenceAuditMixin:
                         id=f"qa-evidence-{issue_hash[:24]}",
                         severity="blocker",
                         detected_by="citation",
-                        target_agent="collector",
+                        target_agent=target_agent,
                         target_competitor=competitor,
                         target_subagent=dimension,
                         field_path=f"report.citations.{source_id}",
                         problem=problem,
                         redo_scope=build_redo_scope(
                             detected_by="citation",
-                            target_agent="collector",
+                            target_agent=target_agent,
                             target_competitor=competitor,
                             target_subagent=dimension,
                             field_path=f"raw_sources.{source_id}",

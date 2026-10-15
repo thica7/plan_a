@@ -1957,7 +1957,10 @@ def test_enterprise_router_exposes_projection() -> None:
         competitor_id_map=context.competitor_id_map,
     )
     store.save_projection(projection)
+    from app.deps import get_run_journal
+    from packages.memory import RunJournal
     app = create_app()
+    app.dependency_overrides[get_run_journal] = RunJournal.in_memory
     app.dependency_overrides[get_enterprise_store] = lambda: store
     app.dependency_overrides[get_artifact_storage] = lambda: LocalArtifactStorage(artifact_root)
     app.dependency_overrides[get_preference_memory] = lambda: memory

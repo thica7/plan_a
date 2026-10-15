@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 ResearchDepth = Literal["quick", "standard", "deep"]
@@ -64,5 +64,8 @@ RESEARCH_DEPTH_BUDGETS: dict[ResearchDepth, ResearchDepthBudget] = {
 }
 
 
-def research_depth_budget(depth: ResearchDepth | None) -> ResearchDepthBudget | None:
-    return RESEARCH_DEPTH_BUDGETS[depth] if depth is not None else None
+def research_depth_budget(depth: ResearchDepth | None, *, dimension: str | None = None) -> ResearchDepthBudget | None:
+    budget = RESEARCH_DEPTH_BUDGETS[depth] if depth is not None else None
+    if depth == 'quick' and dimension == 'feature':
+        return replace(budget, target_sources=3, max_fetches=4, max_advanced_fetches=2)
+    return budget

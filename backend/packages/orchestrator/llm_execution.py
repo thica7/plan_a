@@ -5,6 +5,7 @@ import json
 import time
 from typing import Any
 
+from packages.agents.prompt_contract import prompt_trace_metadata
 from packages.llm.errors import LLMExecutionLimitError
 from packages.llm.execution_budget import LLMCallExecution, RunLLMBudget, current_llm_execution
 from packages.research.budget import research_depth_budget
@@ -13,7 +14,38 @@ from packages.research.budget import research_depth_budget
 class LLMExecutionMixin:
     """Admission, accounting and trace capture for all Agent LLM calls."""
 
+    async def _admit_llm_call(self, execution):
+        while True:
+            try:
+                execution.reserve()
+                return
+            except LLMExecutionLimitError as exc:
+                budget = execution.budget
+                tokens = execution.input_tokens + execution.max_output_tokens
+                cost = budget.cost(execution.input_tokens, execution.max_output_tokens)
+                transient = (
+                    str(exc) == 'run_llm_token_budget_exhausted'
+                    and budget.max_tokens and budget.tokens_used + tokens <= budget.max_tokens
+                ) or (
+                    str(exc) == 'run_llm_cost_budget_exhausted'
+                    and budget.max_cost_usd and budget.cost_used_usd + cost <= budget.max_cost_usd
+                )
+                if str(exc) == 'run_llm_budget_reserved_for_delivery':
+                    protected = budget.protected_tokens(execution.phase)
+                    transient = (
+                        (not budget.max_tokens or budget.tokens_used + tokens + protected <= budget.max_tokens)
+                        and budget.calls + 1 + budget.protected_calls(execution.phase) <= budget.max_calls
+                        and (not budget.max_cost_usd or budget.cost_used_usd + cost + protected * max(
+                            budget.input_usd_per_million, budget.output_usd_per_million) / 1_000_000 <= budget.max_cost_usd)
+                    )
+                if not transient or not budget.tokens_reserved:
+                    raise
+                budget.reservation_settled.clear()
+                await budget.reservation_settled.wait()
+
     def _run_llm_budget(self, record) -> RunLLMBudget:
+        record = self._evidence_live_record(record)
+        restoring = record.llm_budget is None
         if record.llm_budget is None:
             spans = [span for span in record.detail.trace_spans if span.kind == "llm"
                      or (span.kind == "search" and span.metadata.get("native_search"))]
@@ -44,9 +76,80 @@ class LLMExecutionMixin:
                 cache_usd_per_million=self._settings.llm_cache_usd_per_million,
                 output_usd_per_million=self._settings.llm_output_usd_per_million,
             )
-        return record.llm_budget
+        budget = record.llm_budget
+        from packages.agents.writer.dimension_writer import dimension_writing_enabled
+        dimension_mode = dimension_writing_enabled(record.detail)
+        if dimension_mode or (record.detail.execution_mode == 'real' and budget.max_tokens):
+            products = list(record.detail.plan.competitors)
+            target = record.detail.plan.target_product
+            if target and target.name not in products:
+                products.append(target.name)
+            segments = [f"{p}/{d}" for d in record.detail.plan.dimensions for p in products]
+            phases = ([f"{agent}:{segment}" for segment in segments for agent in ('writer', 'qa')]
+                      if dimension_mode else ['writer:run'])
+            phases += [f'collector:{segment}' for segment in segments]
+            phases += [f'analyst:{segment}' for segment in segments]
+            phases += ['comparator:run', 'reflector:run']
+            # Leave acquisition room and a shared conservative request envelope.
+            # Only core stages may borrow the envelope; actual/unknown usage is
+            # still charged against the same global hard cap.
+            fractions = {'collector': .10, 'analyst': .16, 'comparator': .10,
+                         'reflector': .06, 'writer': .16 if dimension_mode else .28, 'qa': .12}
+            checkpoint = record.detail.llm_budget_checkpoint
+            budget.stage_headroom = min(12000, int(budget.max_tokens * .06)) if budget.max_tokens else 0
+            adding_phases = any(phase not in budget.delivery_reserves for phase in phases)
+            for phase in phases:
+                agent = phase.split(':', 1)[0]
+                count = 1 if agent in {'comparator', 'reflector'} or (agent == 'writer' and not dimension_mode) else max(1, len(segments))
+                desired = min(32000, int(budget.max_tokens * fractions[agent] / count)) if budget.max_tokens else 32000
+                if phase in budget.delivery_reserves:
+                    if adding_phases:
+                        budget.delivery_reserves[phase] = min(budget.delivery_reserves[phase], desired)
+                    continue
+                budget.delivery_reserves[phase] = int(checkpoint.get(f'delivery_limit:{phase}', desired))
+                budget.delivery_charged[phase] = int(checkpoint.get(f'delivery_charged:{phase}', 0))
+                budget.delivery_calls[phase] = int(checkpoint.get(f'delivery_calls:{phase}', 0))
+                if checkpoint.get(f'delivery_finished:{phase}'):
+                    budget.delivery_finished.add(phase)
+            for phase in budget.delivery_reserves.keys() - set(phases):
+                budget.finish_delivery(phase)
+            # Legacy checkpoints did not preserve phase allowances. Recovery
+            # must protect only what is still available, not recreate a full
+            # allowance on top of charges that already consumed it.
+            protected = sum(max(0, amount - budget.delivery_charged.get(phase, 0))
+                            for phase, amount in budget.delivery_reserves.items()
+                            if phase not in budget.delivery_finished)
+            available = max(0, budget.max_tokens - budget.tokens_used - budget.tokens_reserved) if budget.max_tokens else protected
+            if budget.max_cost_usd:
+                remaining_cost = max(0, budget.max_cost_usd - budget.cost_used_usd - budget.cost_reserved_usd)
+                rate = max(budget.input_usd_per_million, budget.output_usd_per_million)
+                if rate > 0:
+                    available = min(available, int(remaining_cost * 1_000_000 / rate))
+            available = max(0, available - budget.stage_headroom)
+            if protected > available and (restoring or adding_phases):
+                available = int(available * .70)
+                for phase, amount in list(budget.delivery_reserves.items()):
+                    if phase not in budget.delivery_finished:
+                        charged = budget.delivery_charged.get(phase, 0)
+                        budget.delivery_reserves[phase] = charged + int(max(0, amount - charged) * available / protected)
+        return budget
+
+    @staticmethod
+    def _llm_phase(agent, subagent):
+        if agent in {'comparator', 'reflector'} or (agent == 'writer' and not subagent):
+            return f'{agent}:run'
+        if agent in {'collector', 'analyst'} and subagent and '::' in subagent:
+            dimension, product = subagent.split('::', 1)
+            return f'{agent}:{product}/{dimension}'
+        return f'{agent}:{subagent}' if subagent else None
+
+    def _finish_delivery_phase(self, record, agent, subagent):
+        budget = self._run_llm_budget(record)
+        budget.finish_delivery(self._llm_phase(agent, subagent) or f'{agent}:run')
+        self._checkpoint_llm_budget(record, budget)
 
     def _checkpoint_llm_budget(self, record, budget) -> None:
+        record = self._evidence_live_record(record)
         # Persist admission BEFORE transport. On crash, outstanding reservations
         # become conservative charges; they cannot disappear on process recovery.
         record.detail.llm_budget_checkpoint = {
@@ -54,6 +157,13 @@ class LLMExecutionMixin:
             "tokens_charged": budget.tokens_used + budget.tokens_reserved,
             "cost_charged_usd": budget.cost_used_usd + budget.cost_reserved_usd,
         }
+        for phase, amount in budget.delivery_reserves.items():
+            record.detail.llm_budget_checkpoint.update({
+                f'delivery_limit:{phase}': amount,
+                f'delivery_charged:{phase}': budget.delivery_charged.get(phase, 0),
+                f'delivery_calls:{phase}': budget.delivery_calls.get(phase, 0),
+                f'delivery_finished:{phase}': int(phase in budget.delivery_finished),
+            })
         self._persist_run(record.detail.id)
 
     async def _trace_llm_json(
@@ -69,6 +179,7 @@ class LLMExecutionMixin:
         context=None,
         is_repair: bool = False,
         timeout_seconds: float | None = None,
+        max_output_tokens: int | None = None,
     ) -> dict[str, Any]:
         return await self._trace_budgeted_llm(
             record,
@@ -81,6 +192,7 @@ class LLMExecutionMixin:
             context=context,
             is_repair=is_repair,
             timeout_seconds=timeout_seconds,
+            max_output_tokens=max_output_tokens,
         )
 
     async def _trace_llm_text(
@@ -95,6 +207,7 @@ class LLMExecutionMixin:
         context=None,
         is_repair: bool = False,
         timeout_seconds: float | None = None,
+        max_output_tokens: int | None = None,
     ) -> str:
         return await self._trace_budgeted_llm(
             record,
@@ -107,6 +220,7 @@ class LLMExecutionMixin:
             context=context,
             is_repair=is_repair,
             timeout_seconds=timeout_seconds,
+            max_output_tokens=max_output_tokens,
         )
 
     async def _trace_budgeted_llm(
@@ -122,6 +236,7 @@ class LLMExecutionMixin:
         context,
         is_repair,
         timeout_seconds,
+        max_output_tokens=None,
     ):
         record = self._evidence_live_record(record)
         started = time.perf_counter()
@@ -134,10 +249,11 @@ class LLMExecutionMixin:
         execution = LLMCallExecution(
             self._run_llm_budget(record),
             is_repair=is_repair or record.pending_graph_redo is not None,
+            phase=self._llm_phase(agent, subagent),
             # UTF-8 bytes bound ordinary text tokenization conservatively;
             # framing/schema instructions reserve additional room.
             input_tokens=len(input_text.encode("utf-8")) + 256,
-            max_output_tokens=self._settings.llm_max_output_tokens or 4096,
+            max_output_tokens=min(self._settings.llm_max_output_tokens or 4096, max_output_tokens) if max_output_tokens else self._settings.llm_max_output_tokens or 4096,
         )
         execution.checkpoint = lambda: self._checkpoint_llm_budget(record, execution.budget)
         queue_wait_ms = 0
@@ -147,8 +263,8 @@ class LLMExecutionMixin:
         extra = {}
         try:
             async with self._llm_semaphore:
+                await self._admit_llm_call(execution)
                 queue_wait_ms = max(0, int((time.perf_counter() - started) * 1000))
-                execution.reserve()
                 token = current_llm_execution.set(execution)
                 try:
 
@@ -223,6 +339,7 @@ class LLMExecutionMixin:
                 metadata=self._trace_metadata(
                     context,
                     {
+                        **prompt_trace_metadata(agent, name, system, user, schema_hint),
                         "response_format": "json" if schema_hint is not None else "text",
                         "queue_wait_ms": queue_wait_ms,
                         "cost_estimate_source": "provider_usage"
@@ -232,6 +349,8 @@ class LLMExecutionMixin:
                         if self._settings.llm_provider_name == "deepseek"
                         else "configured_estimate",
                         **execution.metadata(),
+                        "llm_execution_status": "succeeded" if status == "ok" else (
+                            "error" if execution.transport_attempts else "rejected"),
                         **extra,
                     },
                 ),

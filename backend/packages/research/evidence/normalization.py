@@ -155,6 +155,7 @@ def _clean_text(value: object) -> str:
 def normalized_feature_fields_from_evidence_items(
     evidence_items: Iterable[EvidenceItem],
 ) -> list[NormalizedFeatureField]:
+    from packages.research.evidence.operations import structured_operations
     fields: list[NormalizedFeatureField] = []
     for item in evidence_items:
         if item.status != "accepted" or "feature" not in item.dimension.casefold():
@@ -169,6 +170,9 @@ def normalized_feature_fields_from_evidence_items(
             NormalizedFeatureField(
                 competitor=item.competitor,
                 slot=item.field,
+                qualifiers={'operations': deepcopy(value['operations']),
+                            **({'table_context': deepcopy(value['table_context'])} if value.get('table_context') else {})} if isinstance(value.get('operations'), list)
+                    else {'operations': structured_operations(item.quote.strip(), _string_list(value.get('evidence_terms')), item.competitor)},
                 support_level=status,
                 evidence_terms=_string_list(value.get("evidence_terms")),
                 evidence_quote=item.quote.strip(),

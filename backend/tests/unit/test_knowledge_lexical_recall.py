@@ -71,6 +71,20 @@ def test_chinese_connectors_do_not_become_literal_requirements():
     assert build_lexical_plan("价格和隐私是什么").literals == []
 
 
+@pytest.mark.asyncio
+async def test_long_chinese_question_has_bounded_fallback_without_losing_numeric_anchor(tmp_path):
+    query = "Aurora 7 在断网以后是否还能继续编辑并在联网后同步？"
+    plan = build_lexical_plan(query)
+    assert plan.fallback_query and plan.disabled_reason is None
+    assert plan.version == "lexical-v3"
+    assert '"7"' in plan.fallback_query
+    assert len(plan.fallback_query) < 2500
+    async with KnowledgeRepository(str(tmp_path / "kb.db")) as repo:
+        good = await add(repo, "Aurora 7 supports offline editing and sync on desktop devices.")
+        await add(repo, "Aurora 70 supports offline editing and sync on desktop devices.")
+        assert [hit.document_id for hit in await repo.search_chunks(query)] == [good.id]
+
+
 def test_unknown_chinese_nouns_keep_internal_question_characters():
     assert build_lexical_plan("智能 battery").literals == ["智能"]
     assert build_lexical_plan("性能 warranty").literals == ["性能"]
@@ -142,6 +156,73 @@ async def test_literal_and_word_boundaries(tmp_path):
         await add(repo, "seattle guide")
         assert await repo.search_chunks("annual") == []
         assert await repo.search_chunks("seat") == []
+
+
+@pytest.mark.asyncio
+async def test_title_entity_and_body_topic_join_only_within_same_scoped_document(tmp_path):
+    async with KnowledgeRepository(str(tmp_path / "kb.db")) as repo:
+        good = await add(repo, "The configuration has a battery rated at 40Whr.", title="Nova Deck 7 comparison")
+        await add(repo, "The configuration has a battery rated at 40Whr.", title="Nova Deck 70 comparison")
+        await add(repo, "Unrelated warranty details.", title="Nova Deck 7 warranty")
+        await add(repo, "The configuration has a battery rated at 40Whr.", title="Other product")
+        await add(repo, "The configuration has a battery rated at 40Whr.", title="Nova Deck 7 foreign", project_id="other")
+        scope = KnowledgeScope(workspace_id="ws", project_id="project")
+        hits = await repo.search_chunks("Nova Deck 7 battery", scope=scope)
+        assert [hit.document_id for hit in hits] == [good.id]
+        assert hits[0].metadata["lexical_retrieval"]["path"] == "fallback_title_body"
+        assert hits[0].document_version == good.version and hits[0].content_hash == good.content_hash
+        assert await repo.search_chunks("Nova Deck 7 shipping", scope=scope) == []
+        service = RetrievalService(repo, object(), embed_fn=lambda _: [])
+        request = RetrievalRequest(query="Nova Deck 7 battery", workspace_id="ws", project_id="project",
+                                   mode="sparse", enable_query_rewrite=False)
+        assert [hit.document_id for hit in (await service.retrieve(request)).hits] == [good.id]
+        await repo.soft_delete(good.id)
+        # The cached reference is rechecked; remaining titles/bodies from other
+        # documents cannot combine into a replacement for the deleted source.
+        assert (await service.retrieve(request)).hits == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("query_amount,source_amount", [
+    ("50Wh", "50Whr"), ("50Whr", "50 Wh"), ("50 Wh", "50Whr"),
+    ("45W", "45 W"), ("45 W", "45W"), ("50.5Wh", "50.5 Whr"),
+    (".5Wh", ".5 Whr"), ("5Wh", "5Whr"),
+])
+async def test_quantity_spellings_preserve_amount_and_unit_dimension(tmp_path, query_amount, source_amount):
+    async with KnowledgeRepository(str(tmp_path / "kb.db")) as repo:
+        good = await add(repo, f"Battery specifications: {source_amount}.")
+        for wrong in ("50W", "500Wh", "45Wh", "450W", "50.50Wh", "50WhrX", "-50Wh", ".50Wh", "5Wh", ".5Wh"):
+            if wrong.casefold() not in {source_amount.casefold(), query_amount.casefold()}:
+                await add(repo, f"Battery specifications: {wrong}.", title=wrong)
+        hits = await repo.search_chunks(f"battery {query_amount}", limit=1)
+        assert [hit.document_id for hit in hits] == [good.id]
+        assert [doc.id for doc in await repo.search_documents(f"battery {query_amount}", limit=1)] == [good.id]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("query,source", [
+    ("battery 1/2Wh", "Battery 1 stores 2Wh."),
+    ("battery 2Wh", "Battery stores 1/2Wh."),
+    ("battery 1 / 2Wh", "Battery 1 stores 2Wh."),
+    ("battery 2Wh", "Battery stores 1 / 2Wh."),
+])
+async def test_unsupported_fractional_quantity_never_matches_its_numeric_fragment(tmp_path, query, source):
+    async with KnowledgeRepository(str(tmp_path / "kb.db")) as repo:
+        await add(repo, source)
+        assert await repo.search_chunks(query) == []
+
+
+@pytest.mark.asyncio
+async def test_title_body_join_and_unit_variants_preserve_unknown_model_tokens(tmp_path):
+    async with KnowledgeRepository(str(tmp_path / "kb.db")) as repo:
+        good = await add(repo, "The battery stores 50Whr. The charger uses 45 W.", title="Aurora Q7 specifications")
+        await add(repo, "The battery stores 50Whr. The charger uses 45 W.", title="Aurora Q70 specifications")
+        hits = await repo.search_chunks("Aurora Q7 battery 50Wh 45W")
+        assert [hit.document_id for hit in hits] == [good.id]
+        await add(repo, "The battery is replaceable.", title="Aurora X50Whr")
+        assert await repo.search_chunks("Aurora X50Wh battery") == []
+        await add(repo, "The battery stores 50Whr.", title="Aurora X-50Whr")
+        assert await repo.search_chunks("Aurora X-50Wh battery") == []
 
 
 @pytest.mark.asyncio
@@ -232,7 +313,7 @@ async def test_sparse_canonical_recheck_preserves_only_current_diagnostic(tmp_pa
         response = await service.retrieve(request)
         assert [hit.document_id for hit in response.hits] == [doc.id]
         assert response.hits[0].metadata["lexical_retrieval"] == {
-            "version": "lexical-v1",
+            "version": "lexical-v3",
             "path": "fallback_body",
             "concepts": ["warranty"],
         }

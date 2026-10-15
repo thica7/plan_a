@@ -12,6 +12,7 @@ from packages.business_intel.entity_resolver import (
     identity_terms_for_competitor,
     is_trusted_url_for_competitor,
     normalize_competitor_key,
+    product_title_matches,
 )
 from packages.identity import compute_raw_source_id, normalize_url
 from packages.research.evidence.citations import snippet_from_evidence_items
@@ -19,12 +20,16 @@ from packages.research.evidence.normalization import (
     normalized_fields_as_dicts,
     normalized_fields_from_evidence_items,
 )
+from packages.research.evidence.snapshot_models import canonical_json
 from packages.research.evidence.store import accepted_evidence_by_page
 from packages.research.extraction.price_conditions import (
     explicit_price_conditions,
     has_ambiguous_price_conditions,
 )
+from packages.research.extraction.pricing_cards import rendered_price_cards
 from packages.research.extraction.quality import HARDWARE_SPEC_RE, quote_quality_problem
+from packages.research.extraction.feature import extract_generic_capabilities
+from packages.research.extraction.semantic import semantic_extraction
 from packages.research.models import (
     CapturedPage,
     EvidenceItem,
@@ -97,6 +102,7 @@ def admit_evidence_items(
             quote = quote_by_field.get(field)
             rejection_reasons = _admission_rejection_reasons(
                 extraction,
+                brief=brief,
                 field=field,
                 value=value,
                 quote=quote,
@@ -143,6 +149,7 @@ def admit_evidence_items(
 def _admission_rejection_reasons(
     extraction: ExtractionResult,
     *,
+    brief: ResearchBrief,
     field: str,
     value: object,
     quote: EvidenceQuote | None,
@@ -162,13 +169,41 @@ def _admission_rejection_reasons(
     elif page.quality_score < min_page_quality:
         reasons.append(f"page_quality_below_{min_page_quality:.2f}")
     if _requires_field_quote(extraction, field, value) and (
-        quote is None or len(quote.text.strip()) < 24
+        quote is None or not quote.text.strip()
     ):
         reasons.append("field_quote_missing_or_too_short")
     if quote is not None:
         quote_problem = quote_quality_problem(quote.text, dimension=extraction.dimension)
         if quote_problem:
             reasons.append(quote_problem)
+    if extraction.extractor_name == "generic_product_capabilities" and page is not None:
+        verified = extract_generic_capabilities(
+            ResearchBrief(
+                run_id="admission", topic="", competitor=extraction.competitor,
+                dimension=extraction.dimension,
+                product_category=str(extraction.metadata.get("category") or ""),
+                product_name=str(extraction.metadata.get("product_name") or ""),
+            ),
+            page,
+        )
+        expected_quote = _quote_by_field(verified.quotes).get(field)
+        if (
+            value != verified.fields.get(field)
+            or quote is None or expected_quote is None
+            or quote != expected_quote
+        ):
+            reasons.append("capability_evidence_not_bound_to_body")
+    if extraction.extractor_name == "bounded_semantic_capabilities" and page is not None:
+        verified = semantic_extraction(
+            ResearchBrief(run_id="admission", topic=brief.topic, product_use_cases=brief.product_use_cases, competitor=extraction.competitor,
+                          dimension=extraction.dimension,
+                          required_fields=[field for field in brief.required_fields if field.startswith('operation.')],
+                          product_category=str(extraction.metadata.get("category") or ""),
+                          product_name=str(extraction.metadata.get("product_name") or "")),
+            page, {"facts": [{"quote": item.text} for item in extraction.quotes]},
+        )
+        if value != verified.fields.get(field) or quote != _quote_by_field(verified.quotes).get(field):
+            reasons.append("semantic_evidence_not_bound_to_body")
     if field == "price_rows" or (
         field == "price_points"
         and extraction.extractor_name in {"generic_product_pricing", "pricing_model"}
@@ -179,19 +214,28 @@ def _admission_rejection_reasons(
         ):
             reasons.append("price_row_evidence_missing")
         elif isinstance(rows, list) and rows and page is not None:
+            # Reparse the captured page, independently of extraction metadata.
+            # Exact equality also rejects forged qualifiers/verification events.
+            rendered_rows = {
+                canonical_json(row)
+                for row in rendered_price_cards(extraction.competitor, page)
+            }
             for row in rows:
                 if not isinstance(row, dict):
                     reasons.append("price_row_evidence_invalid")
                     break
                 price = str(row.get("price") or "")
                 row_quote = str(row.get("source_quote") or "")
+                rendered_match = canonical_json(row) in rendered_rows
+                row_problem = quote_quality_problem(row_quote, dimension="pricing")
                 if (
                     not price or price not in row_quote
                     or row_quote not in (page.text or page.markdown)
                     or (extraction.extractor_name == "generic_product_pricing"
-                        and extraction.competitor.casefold() not in row_quote.casefold())
-                    or quote_quality_problem(row_quote, dimension="pricing")
-                    or not _price_row_matches_body(row, page)
+                        and extraction.competitor.casefold() not in row_quote.casefold()
+                        and not rendered_match)
+                    or (row_problem and not (rendered_match and row_problem == "quote_too_short"))
+                    or (not rendered_match and not _price_row_matches_body(row, page))
                 ):
                     reasons.append("price_row_evidence_invalid")
                     break
@@ -445,6 +489,8 @@ def raw_sources_from_research_result(
     candidate_by_id = {candidate.id: candidate for candidate in result.candidates}
     accepted_by_page = accepted_evidence_by_page(result.evidence_items)
     sources: list[RawSource] = []
+    if result.metrics.get('operation_repair_round_count'):
+        target_source_count = min(brief.max_fetches, target_source_count + 1)
 
     for page in sorted(
         result.captured_pages,
@@ -542,6 +588,9 @@ def raw_sources_from_research_result(
             )
             continue
         sources.append(source)
+    if result.metrics.get('operation_repair_round_count'):
+        for source in sources:
+            source.metadata['operation_repair_evidence_retained'] = True
     return sources
 
 
@@ -662,6 +711,8 @@ def has_concrete_source_signal(dimension: str, normalized_text: str) -> bool:
         term in normalized_text for term in (
             "model", "api", "feature", "coding", "reasoning",
             "具备", "支持", "提供", "可更换", "包含", "supports", "provides", "offers",
+            "edit", "export", "download", "assign", "create", "share", "inspect", "comment",
+            "编辑", "导出", "下载", "分配", "创建", "共享", "评论",
         )
     )
 
@@ -762,7 +813,8 @@ def has_dimension_specific_fact(dimension: str, normalized_text: str) -> bool:
             r"context window|context awareness|tool calls?|code completion|"
             r"pull requests?|api|benchmark|cascade|autocomplete|supercomplete|"
             r"write/chat modes?|auto-execution|model context protocol|mcp|"
-            r"jetbrains plugin|command|tab)",
+            r"jetbrains plugin|command|tab|edit|export|download|assign|create|share|inspect|comment|"
+            r"编辑|导出|下载|分配|创建|共享|评论)",
             normalized_text,
         )
     )
@@ -822,6 +874,8 @@ def competitor_identity_problem(source: RawSource) -> str | None:
                 f"{source.competitor}."
             )
     hints = identity_terms_for_competitor(source.competitor)
+    if trusted_lineage and product_title_matches(source.competitor, source.title, str(source.url or "")):
+        return None
     if not hints and len(key) >= 4 and key not in normalize_competitor_key(haystack):
         return (
             f"Source {source.id} does not expose a recognizable {source.competitor} "
@@ -921,6 +975,8 @@ def dimension_terms_present(dimension: str, normalized_text: str) -> bool:
             return True
         terms = (
             "feature",
+            "edit", "export", "download", "assign", "create", "share", "inspect", "comment",
+            "编辑", "导出", "下载", "分配", "创建", "共享", "评论",
             "capability",
             "model",
             "context",

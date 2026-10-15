@@ -6,10 +6,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
 from packages.identity import stable_prefixed_id
+from packages.llm.errors import LLMExecutionLimitError
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.orchestrator.scoping import assign_redo_scope, build_redo_scope
 from packages.schema.api_dto import RunDetail
-from packages.schema.models import QCIssue, RedoScope, ReflectionRecord
+from packages.schema.models import ComparisonCell, ComparisonMatrix, QCIssue, RedoScope, ReflectionRecord
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
@@ -24,7 +25,19 @@ class ReflectorAgentMixin:
         await self._ensure_analysis_evidence(record)
         view, use = self._begin_evidence_use(record, agent="reflector")
         projected, dependency_gaps = self._project_evidence_detail(record, [view])
-        matrix_json = self._bounded_analysis_json(view, self._reflector_matrix_digest(projected))
+        coverage = self._producer_coverage_digest(record, view,
+            max_bytes=max(0, use.max_bytes - len(view.to_prompt_json().encode("utf-8"))))
+        matrix_json = self._bounded_analysis_json(view, coverage, max_bytes=use.max_bytes)
+        coverage_capacity_omitted = coverage.get("context_omitted") and coverage.get("matrix_valid")
+        coverage_counts = coverage if coverage_capacity_omitted else None
+        # A metadata-only projection is authorized by current producer credentials.
+        # Its empty values must never be used as original product observations.
+        if coverage.get("matrix_status") == "validated" and not coverage.get("context_omitted"):
+            projected.comparison_matrix = ComparisonMatrix(
+                competitors=detail.plan.competitors, dimensions=detail.plan.dimensions,
+                cells=[ComparisonCell(**cell, value="") for cell in coverage["cells"]])
+        context_omissions = [gap for gap in dependency_gaps if gap.startswith("Analysis context omitted:")]
+        dependency_gaps = [gap for gap in dependency_gaps if gap not in context_omissions]
         baseline = self._analysis_artifacts_hash(detail)
         detail.current_node = "reflector"
         self._consume_queued_agent_messages(
@@ -43,6 +56,10 @@ class ReflectorAgentMixin:
                 name="coverage_reflection",
                 system=(
                     "You are a reflector. Find coverage gaps before QA. Be strict but concise. "
+                    "producer_coverage_only contains current verified producer references and coverage metadata, "
+                    "not original fact text. omitted_fact_count and context_budget_exceeded mean collected "
+                    "material was not sent in this small view; never turn them into collection or matrix gaps. "
+                    "Assessment status and gap_count retain unresolved comparison limitations; do not infer a winner. "
                     "Treat comparison-matrix cells with source_ids across every competitor and "
                     "dimension as side-by-side comparison coverage; only report "
                     "cross_competitor_gaps when the matrix lacks cells, source_ids, or aligned "
@@ -61,13 +78,21 @@ class ReflectorAgentMixin:
                 '"suggested_redo_dimension":"dimension or null","gate_status":"pass|warn|block",'
                 '"blocking_gaps":["gap"],"writer_constraints":["constraint"]}',
             )
+            list_fields = ('coverage_gaps', 'confidence_outliers', 'cross_competitor_gaps',
+                           'blocking_gaps', 'writer_constraints')
+            if (not any(field in payload for field in list_fields)
+                    or any(not isinstance(payload[field], list)
+                           or any(not isinstance(item, str) for item in payload[field])
+                           for field in list_fields if field in payload)
+                    or ('gate_status' in payload and payload['gate_status'] not in {'pass', 'warn', 'block'})):
+                raise ValueError('invalid_structured_payload')
         except EvidenceUseRejectedError:
             raise
         except Exception as exc:  # noqa: BLE001 - deterministic reflection keeps the run alive.
-            payload = self._deterministic_reflector_payload(projected)
+            payload = self._deterministic_reflector_payload(projected, producer_coverage=coverage_counts)
             fallback = {
                 "used": True,
-                "reason": "llm_error",
+                "reason": str(exc) if isinstance(exc, LLMExecutionLimitError) or str(exc) == "invalid_structured_payload" else "llm_error",
                 "deterministic_fallback": True,
                 "error": str(exc),
             }
@@ -77,11 +102,14 @@ class ReflectorAgentMixin:
             *dependency_gaps,
             *(
                 f"Evidence gap: {gap.reason} ({gap.source_id or gap.fact_id or 'coverage'})"
-                for gap in view.gaps
+                for gap in view.gaps if gap.reason != "context_budget_exceeded"
             ),
         ]
         confidence_outliers = self._string_list(payload.get("confidence_outliers"))
         cross_competitor_gaps = self._string_list(payload.get("cross_competitor_gaps"))
+        if coverage_counts and coverage_counts["confidence_min"] < QA_CONFIDENCE_OUTLIER_THRESHOLD:
+            confidence_outliers = self._unique_strings([*confidence_outliers,
+                f"Matrix cell confidence {coverage_counts['confidence_min']:.2f} is below {QA_CONFIDENCE_OUTLIER_THRESHOLD:.2f}."])
         suggested_dimension = payload.get("suggested_redo_dimension")
         suggested_redos = []
         if isinstance(suggested_dimension, str) and suggested_dimension in detail.plan.dimensions:
@@ -99,13 +127,24 @@ class ReflectorAgentMixin:
             cross_competitor_gaps=cross_competitor_gaps,
             llm_gate_status=payload.get("gate_status"),
             llm_blocking_gaps=self._string_list(payload.get("blocking_gaps")),
+            producer_coverage=coverage_counts,
         )
+        if coverage_capacity_omitted and gate_status == "pass":
+            # Incomplete context raises the minimum status; it never lowers a block.
+            gate_status = "warn"
         writer_constraints = self._reflection_writer_constraints(
             gate_status=gate_status,
             blocking_gaps=blocking_gaps,
-            llm_constraints=self._string_list(payload.get("writer_constraints")),
+            llm_constraints=[*self._string_list(payload.get("writer_constraints")),
+                *(["Some collected original facts were omitted from this view; preserve producer limitations."]
+                  if context_omissions else []),
+                *(["Producer coverage exceeds context capacity; coverage review remains incomplete."]
+                  if coverage_capacity_omitted else [])],
         )
         self._validate_evidence_use(record, use)
+        if coverage != self._producer_coverage_digest(record, view,
+                max_bytes=max(0, use.max_bytes - len(view.to_prompt_json().encode("utf-8")))):
+            raise EvidenceUseRejectedError("Reflector producer coverage changed before commit")
         if baseline != self._analysis_artifacts_hash(detail):
             raise EvidenceUseRejectedError("Reflector analysis artifacts changed before commit")
         detail.reflections.append(
@@ -157,6 +196,20 @@ class ReflectorAgentMixin:
             },
         )
 
+        self._finish_delivery_phase(record, 'reflector', None)
+
+    @staticmethod
+    def _coverage_metadata_blockers(coverage):
+        """Local structure checks consume verified counts, never unsent fact values."""
+        gaps = []
+        if coverage["missing_cell_count"]:
+            gaps.append(f"Missing comparison cell count: {coverage['missing_cell_count']} (verified producer metadata).")
+        if coverage["uncited_cell_count"]:
+            gaps.append(f"Missing comparison cell source_ids: {coverage['uncited_cell_count']} cell(s) has no source_ids.")
+        if coverage["unavailable_count"]:
+            gaps.append(f"Analysis dependency unavailable count: {coverage['unavailable_count']}; reanalyse.")
+        return gaps
+
     def _reflection_gate(
         self,
         detail: RunDetail,
@@ -166,9 +219,12 @@ class ReflectorAgentMixin:
         cross_competitor_gaps: list[str],
         llm_gate_status: object,
         llm_blocking_gaps: list[str],
+        producer_coverage=None,
     ) -> tuple[Literal["pass", "warn", "block"], list[str]]:
         blocking_gaps: list[str] = []
-        if detail.comparison_matrix is None:
+        if producer_coverage is not None:
+            blocking_gaps.extend(self._coverage_metadata_blockers(producer_coverage))
+        elif detail.comparison_matrix is None:
             blocking_gaps.append("Comparison matrix is missing before writing.")
         else:
             cells_by_key = {
@@ -210,6 +266,9 @@ class ReflectorAgentMixin:
         if blocking_gaps:
             return "block", blocking_gaps
         if llm_gate_status == "block":
+            if producer_coverage is not None and not llm_blocking_gaps:
+                llm_blocking_gaps = [*coverage_gaps, *cross_competitor_gaps, *confidence_outliers] or [
+                    "Reflector explicitly blocked coverage; the blocking reason still requires review."]
             return "block", self._unique_strings(llm_blocking_gaps)[:5]
         if (
             llm_gate_status == "warn"
@@ -261,7 +320,11 @@ class ReflectorAgentMixin:
             unique.append(text)
         return unique
 
-    def _deterministic_reflector_payload(self, detail: RunDetail) -> dict[str, object]:
+    def _deterministic_reflector_payload(self, detail: RunDetail, *, producer_coverage=None) -> dict[str, object]:
+        if producer_coverage is not None:
+            return {"coverage_gaps": [], "confidence_outliers": [],
+                    "cross_competitor_gaps": self._coverage_metadata_blockers(producer_coverage),
+                    "suggested_redo_dimension": None}
         coverage_gaps: list[str] = []
         confidence_outliers: list[str] = []
         cross_competitor_gaps: list[str] = []
@@ -446,7 +509,7 @@ class ReflectorAgentMixin:
                 return dimension
         return None
 
-    def _reflector_matrix_digest(self, detail: RunDetail) -> dict[str, object]:
+    def _reflector_matrix_digest(self, detail: RunDetail, *, evidence_view=None) -> dict[str, object]:
         if detail.comparison_matrix is None:
             return {"winner_by_dimension": {}, "summary": [], "cells": []}
         return {
@@ -458,7 +521,10 @@ class ReflectorAgentMixin:
                     "dimension": cell.dimension,
                     "source_ids": cell.source_ids,
                     "confidence": round(cell.confidence, 3),
-                    "value": self._reflector_matrix_cell_value(cell.dimension, cell.value),
+                    **({"evidence_fact_refs": [f.id for f in evidence_view.facts
+                         if f.competitor == cell.competitor and f.dimension == cell.dimension]}
+                       if evidence_view is not None else
+                       {"value": self._reflector_matrix_cell_value(cell.dimension, cell.value)}),
                 }
                 for cell in detail.comparison_matrix.cells
             ],

@@ -58,6 +58,12 @@ def test_structured_suffix_only_after_boundary_and_preserves_original():
     assert comma.output_language == "中文"
     assert english.require_citations is True
 
+    after_question = resolve_retrieval_plan(request(
+        "Can Aurora synchronize settings between desktop and mobile? 用中文回答并保留条件。"
+    ))
+    assert after_question.output_language == "中文"
+    assert after_question.queries == ("Can Aurora synchronize settings between desktop and mobile",)
+
 
 @pytest.mark.parametrize("query", [
     "中文支持、消息保留和引用功能", "battery answer in Chinese and include citations",
@@ -73,6 +79,137 @@ def test_raw_policy_is_exact_and_conflicts_with_explicit_intent():
     assert plan.queries == (query,)
     with pytest.raises(ValidationError):
         request(query, intent_policy="raw", retrieval_intent={"fact_queries": ["battery"]})
+
+
+def test_long_question_plans_bounded_facts_and_keeps_model_and_access_conditions():
+    original = "Acme Vault 7 的离线编辑和同步有什么前提条件？Free 套餐的管理员能否在私有仓库启用分支保护？；输出中文并保留出处"
+    plan = resolve_retrieval_plan(request(original))
+    assert plan.origin == "auto"
+    assert plan.original_query == original
+    assert 2 <= len(plan.queries) <= 5
+    assert all("Acme" in fact and "Vault" in fact and "7" in fact for fact in plan.queries)
+    assert any("offline" in fact for fact in plan.queries)
+    assert any("branch protection" in fact for fact in plan.queries)
+    assert any(all(term in fact for term in ("free", "admin", "private"))
+               for fact in plan.queries)
+    assert all("输出中文" not in fact for fact in plan.queries)
+    assert plan.output_language == "中文" and plan.require_citations
+
+
+def test_auto_numeric_constraints_stay_with_their_fact_clause():
+    plan = resolve_retrieval_plan(request("Acme V7 的充电器45W是什么规格？电池50Wh是否影响续航？"))
+    assert plan.origin == "auto"
+    charger = next(fact for fact in plan.queries if "charger" in fact)
+    battery = next(fact for fact in plan.queries if "battery" in fact)
+    assert "45w" in charger and "50wh" not in charger
+    assert "50wh" in battery and "45w" not in battery
+    assert all("V7" in fact for fact in plan.queries)
+
+
+@pytest.mark.parametrize("amount", ["50.5Wh", "-50Wh", ".5Wh", "1/2Wh", "1,050Wh", "1，050Wh"])
+def test_auto_plan_preserves_quantity_numeric_text_before_lexical_matching(amount):
+    plan = resolve_retrieval_plan(request(
+        f"Acme Vault 7 的电池{amount}是否支持在断网的时候继续编辑？"
+    ))
+    assert plan.origin == "auto"
+    assert all(amount.casefold() in fact for fact in plan.queries)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("amount,source_amount,wrong_amount,answerable", [
+    ("50.5Wh", "50.5Whr", "5Wh", True),
+    ("-50Wh", "-50Whr", "50Wh", True),
+    (".5Wh", ".5Whr", "5Wh", True),
+    ("1/2Wh", "1/2Whr", "2Wh", False),
+    ("1,050Wh", "1,050Whr", "1Wh", False),
+    ("1，050Wh", "1，050Whr", "1Wh", False),
+])
+async def test_auto_quantity_decimal_cannot_be_recalled_as_a_different_amount(
+    tmp_path, amount, source_amount, wrong_amount, answerable
+):
+    async with KnowledgeRepository(str(tmp_path / "kb.db")) as repo:
+        pipeline = IngestionPipeline(repo, object())
+        good = await pipeline.ingest(DocumentCreate(
+            title="Exact specifications", text=f"Acme Vault 7 battery {source_amount} supports offline editing.",
+            source_type="manual", workspace_id="ws-a", project_id="project-a",
+        ))
+        await pipeline.ingest(DocumentCreate(
+            title="Different amount", text=f"Acme Vault 7 battery {wrong_amount} supports offline editing. Reference notes 1 and 50.",
+            source_type="manual", workspace_id="ws-a", project_id="project-a",
+        ))
+        engine = RetrievalService(repo, object(), embed_fn=lambda texts: [], query_rewriter=ForbiddenRewriter())
+        response = await engine.retrieve(request(
+            f"Acme Vault 7 的电池{amount}是否支持在断网的时候继续编辑？", mode="sparse"
+        ))
+        assert [hit.document_id for hit in response.hits] == ([good] if answerable else [])
+
+
+def test_auto_records_unknown_chinese_conditions_and_keeps_recognized_access_filters():
+    query = "Acme 企业版的访客仅受邀后才能离线编辑，数据不得出境是否影响同步？"
+    plan = resolve_retrieval_plan(request(query))
+    if plan.origin == "auto":
+        assert "不得" in plan.unknown_terms and "出境" in plan.unknown_terms
+        assert "数据不得出境是否影响同步" in plan.preserved_clauses
+        assert any("enterprise" in fact and "guest" in fact and "invited" in fact
+                   for fact in plan.queries)
+    else:
+        assert plan.queries == (query,)
+        assert plan.planning_reason
+
+
+def test_long_unknown_clauses_are_auditable_while_entity_topic_queries_can_find_counterevidence():
+    query = "Acme Vault 7 默认加密，是否表示每台设备里的本地资料也被自动加密？"
+    plan = resolve_retrieval_plan(request(query))
+    assert plan.origin == "auto"
+    assert any("encryption" in fact and "7" in fact for fact in plan.queries)
+    assert plan.unknown_terms
+    assert "是否表示每台设备里的本地资料也被自动加密" in plan.preserved_clauses
+    assert plan.planning_reason == "unresolved_clauses_preserved_for_verification"
+
+
+def test_unknown_chinese_entity_without_declared_scope_is_not_silently_removed():
+    query = "飞鱼七代在断网的时候能否继续编辑并在联网以后同步？"
+    plan = resolve_retrieval_plan(request(query))
+    assert plan.queries == (query,)
+
+
+def test_dimension_scope_lookup_is_explicit_metadata_browse_with_full_question_preserved():
+    query = "Acme 的产品优化方向与目标用户"
+    plan = resolve_retrieval_plan(request(query, competitors=["Acme"], dimensions=["feature"], source_roles=["source"]))
+    assert plan.origin == "dimension_scope_lookup"
+    assert plan.queries == ("Acme",)
+    assert plan.preserved_clauses == (query,)
+    assert plan.planning_reason == "metadata_scoped_browse_without_fact_parse"
+    for changes in ({"competitors": []}, {"competitors": ["Acme", "Other"]},
+                    {"dimensions": []}, {"dimensions": ["feature", "pricing"]},
+                    {"source_roles": []}, {"source_roles": ["historical_report"]}):
+        values = dict(competitors=["Acme"], dimensions=["feature"], source_roles=["source"])
+        values.update(changes)
+        assert resolve_retrieval_plan(request(query, **values)).origin != "dimension_scope_lookup"
+    numeric = resolve_retrieval_plan(request(query + " 50Wh", competitors=["Acme"], dimensions=["feature"], source_roles=["source"]))
+    assert numeric.origin != "dimension_scope_lookup"
+
+
+@pytest.mark.asyncio
+async def test_auto_plan_searches_english_facts_without_llm_and_rejects_wrong_model(tmp_path):
+    async with KnowledgeRepository(str(tmp_path / "kb.db")) as repo:
+        pipeline = IngestionPipeline(repo, object())
+        own = await pipeline.ingest(DocumentCreate(
+            title="Access guide", text="Acme Vault 7 supports offline editing. Sync uses encryption.",
+            source_type="manual", workspace_id="ws-a", project_id="project-a",
+        ))
+        await pipeline.ingest(DocumentCreate(
+            title="Other model", text="Acme Vault 70 supports offline editing and sync.",
+            source_type="manual", workspace_id="ws-a", project_id="project-a",
+        ))
+        engine = RetrievalService(repo, object(), embed_fn=lambda texts: [],
+                                  query_rewriter=ForbiddenRewriter())
+        original = "Acme Vault 7 在断网的时候能否继续编辑？同步是否支持加密？；输出中文并保留出处"
+        response = await engine.retrieve(request(original, mode="sparse", num_rewrites=2))
+        assert response.query == original
+        assert [hit.document_id for hit in response.hits] == [own]
+        assert response.diagnostics["query_plan"]["origin"] == "auto"
+        assert response.diagnostics["fact_query_results"]
 
 
 def test_explicit_facts_preserve_terms_and_standalone_numbers():

@@ -129,6 +129,113 @@ class InputReplay(RunService):
 
 
 @pytest.mark.asyncio
+async def test_real_rag_entry_admission_snapshot_and_downstream_consumers_share_evidence(tmp_path, monkeypatch):
+    """Offline fixture capture exercises production RAG/admission and actual agent steps."""
+    from packages.agents import SubagentContext
+    from packages.knowledge.ingestion import IngestionPipeline
+    from packages.research.evidence.admission import admit_evidence_items
+    from packages.research.models import CapturedPage, ResearchResult, SourceCandidate
+    from packages.research.extraction.feature import extract_generic_capabilities
+
+    monkeypatch.setenv("KB_DB_PATH", str(tmp_path / "rag-chain.db"))
+    monkeypatch.setenv("KB_RETRIEVAL_MODE", "sparse")
+    monkeypatch.setenv("KB_RERANKER_PROVIDER", "none")
+    service = InputReplay(tmp_path)
+    record, product = service.record, "Acme Vault 7"
+    detail = record.detail
+    detail.raw_sources = []
+    detail.topic = "Acme Vault 7 在断网的时候能否继续编辑？联网以后同步需要哪些条件？；输出中文并保留出处"
+    detail.plan.topic = detail.topic
+    detail.plan.competitors, detail.plan.dimensions = [product], ["feature"]
+    detail.plan.homepage_hints = {product: "https://acme.example"}
+    quote = "Acme Vault 7 supports offline editing and synchronizes changes when connected."
+    async with KnowledgeRepository() as repo:
+        for foreign_product in ("Acme Vault 70", None):
+            await IngestionPipeline(repo, object()).ingest(DocumentCreate(
+                title="Foreign feature guide", text=quote + " Foreign candidate.",
+                url=f"https://foreign.example/{foreign_product or 'unmarked'}", source_type="official_docs",
+                competitor=foreign_product, dimension="feature", workspace_id=detail.workspace_id,
+                project_id=None, last_verified_at=datetime.now(UTC),
+            ))
+        document_id = await IngestionPipeline(repo, object()).ingest(DocumentCreate(
+            title="Acme Vault 7 feature guide", text=quote, url="https://acme.example/features",
+            source_type="official_docs", competitor=product, dimension="feature",
+            workspace_id=detail.workspace_id, project_id=detail.project_id,
+            last_verified_at=datetime.now(UTC),
+        ))
+    context = SubagentContext(run_id=detail.id, agent="collector", subagent="feature::Acme Vault 7")
+    seeds = await service._collect_competitor_from_kb(record, detail, "feature", product, context,
+                                                    target_source_count=1)
+    assert len(seeds) == 1
+    assert seeds[0].metadata["kb_document_id"] == document_id
+    plan = seeds[0].metadata["kb_retrieval"]["query_plan"]
+    assert plan["origin"] == "auto" and len(plan["queries"]) <= 5
+    assert all("official source" not in query for query in plan["queries"])
+    assert not seeds[0].metadata.get("normalized_fields")
+
+    # A KB hit remains a candidate. An explicit offline capture and exact quote
+    # must pass the same admission code used by the collector before fact use.
+    brief = service._research_brief(detail, product, "feature")
+    candidate = SourceCandidate(title=seeds[0].title, url=str(seeds[0].url), origin="web_search",
+                                competitor=product, dimension="feature")
+    page = CapturedPage(candidate_id=candidate.id, requested_url=candidate.url,
+                        final_url=candidate.url, status="ok", title=candidate.title,
+                        text=quote, snippet=quote, content_hash="offline-capture-v1", quality_score=1)
+    extraction = extract_generic_capabilities(brief, page)
+    items = admit_evidence_items([extraction], captured_pages=[page], candidates=[candidate], brief=brief)
+    result = ResearchResult(brief=brief, candidates=[candidate], captured_pages=[page],
+                            extractions=[extraction], evidence_items=items)
+    accepted = service._raw_sources_from_research_result(detail, brief, result,
+        batch_sources=[], target_source_count=1)
+    assert accepted and items and all(item.status == "accepted" for item in items)
+    await service._persist_captured_sources_to_kb(record, detail, accepted, result, context)
+    detail.raw_sources = accepted
+    snapshot = await service._prepare_evidence_snapshot(record, phase="analysis")
+    assert snapshot.facts and {source.id for source in snapshot.sources} == {accepted[0].id}
+    source_id = accepted[0].id
+
+    async def replay_json(_record, **kwargs):
+        service.inputs.append(kwargs)
+        if kwargs["agent"] == "analyst":
+            return {"feature_tree": {"summary_claims": [{"claim": quote, "source_ids": [source_id], "confidence": .9}]}}
+        if kwargs["agent"] == "comparator":
+            return {"matrix_summary": ["Offline editing documented"], "winner_by_dimension": {}}
+        return {"coverage_gaps": [], "gate_status": "pass"}
+
+    async def replay_text(_record, **kwargs):
+        service.inputs.append(kwargs)
+        if kwargs["name"] == "dimension_claim_writer":
+            payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+            fact = next(fact for fact in payload["evidence_view"]["facts"] if fact["field"] == "evidence_terms")
+            claim = {"text": quote, "kind": "fact", "competitor": product,
+                "dimension": "feature", "fact_ids": [fact["id"]], "source_ids": [source_id]}
+            if fact.get("operation_observations"):
+                claim["observation_id"] = fact["operation_observations"][0]["observation_id"]
+            return json.dumps({"claims": [claim]})
+        if kwargs["name"] == "dimension_claim_review":
+            payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+            return json.dumps({"reviews": [{"claim_id": claim["id"], "verdict": "supported",
+                "reason": "Offline replay quote matches every condition."} for claim in payload["claims"]]})
+        return f"## Findings\n{quote} [source:{source_id}]"
+
+    monkeypatch.setattr(service, "_trace_llm_json", replay_json)
+    monkeypatch.setattr(service, "_trace_llm_text", replay_text)
+    monkeypatch.setattr(service, "_harden_report_markdown", lambda _detail, report: report)
+    detail.raw_sources[0].snippet = "LIVE_POISON"
+    await service._real_analyst_branch_step(record, "feature", product, expected_snapshot_id=snapshot.id)
+    await service._real_comparator_step(record)
+    await service._real_reflector_step(record)
+    await service._real_writer_step(record)
+    assert f"[source:{source_id}]" in detail.report_md
+    await service._real_qa_step(record)
+    assert {use.agent for use in detail.evidence_consumptions} >= {"analyst", "comparator", "reflector", "writer", "qa"}
+    assert all(use.snapshot_id == snapshot.id for use in detail.evidence_consumptions)
+    assert all("LIVE_POISON" not in item["user"] for item in service.inputs)
+    assert f"[source:{source_id}]" in detail.report_md
+    assert [span.name for span in detail.trace_spans].count("rag_kb_warm_start") == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("react", [False, True])
 async def test_actual_analyst_inputs_and_tools_use_fixed_product_dimension_view(tmp_path, react):
     service = InputReplay(tmp_path, react=react)
@@ -204,6 +311,149 @@ async def test_comparator_reflector_actual_input_and_premerge_guard(tmp_path):
         "comparator",
         "reflector",
     }
+
+
+@pytest.mark.asyncio
+async def test_final_structural_qa_keeps_valid_uncited_analyst_and_matrix(tmp_path, monkeypatch):
+    service = InputReplay(tmp_path)
+    record = service.record
+    seal_snapshot(record.detail, phase="analysis", canonical_documents={})
+    for product in record.detail.plan.competitors:
+        for dimension in record.detail.plan.dimensions:
+            await service._real_analyst_branch_step(record, dimension, product)
+    await service._real_comparator_step(record)
+    _, use = service._begin_evidence_use(record, agent="writer")
+    service._validate_evidence_use(record, use)
+    record.detail.report_md = "## Competitive Findings\nCaptured [source:Phone-X-pricing]"
+    service._record_evidence_artifact(record, kind="writer", uses=[use], payload=service._writer_evidence_artifact_payload(record.detail))
+    monkeypatch.setattr(service, "_sync_report_with_final_qa", lambda detail: None)
+    await service._real_qa_step(record)
+    problems = [issue.problem for issue in record.detail.qa_findings]
+    assert not any("did not produce structured findings" in problem for problem in problems)
+    assert not any("Comparison matrix is missing" in problem for problem in problems)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('agent', ['comparator', 'reflector'])
+async def test_comparator_aggregate_budget_preserves_completed_branch_inputs(tmp_path, agent):
+    from copy import deepcopy
+    service = InputReplay(tmp_path)
+    record = service.record
+    for source in record.detail.raw_sources:
+        prototype = source.metadata["normalized_fields"][0]
+        source.metadata["normalized_fields"] = [
+            dict(deepcopy(prototype), qualifiers={"slot": f"observation-{n}"},
+                 source_quote=f"{source.competitor} original observation {n}. " * 8)
+            for n in range(12)
+        ]
+    seal_snapshot(record.detail, phase="analysis", canonical_documents={})
+    for product in record.detail.plan.competitors:
+        for dimension in record.detail.plan.dimensions:
+            await service._real_analyst_branch_step(record, dimension, product)
+    if agent == 'reflector':
+        await service._real_comparator_step(record)
+    view, use = service._begin_evidence_use(record, agent=agent)
+    producer_facts = {fact_id for item in record.detail.evidence_consumptions
+                      if item.agent == 'analyst' and item.status in {'validated', 'reused'}
+                      for fact_id in item.fact_ids}
+    assert set(view.fact_ids) == producer_facts
+    projected, gaps = service._project_evidence_detail(record, [view])
+    assert not gaps
+    assert all(projected.competitor_kbs[p].slices.get(d) for p in projected.plan.competitors for d in projected.plan.dimensions)
+    if agent == 'reflector':
+        assert projected.comparison_matrix is not None
+        await service._real_reflector_step(record)
+        prompt = next(item['user'] for item in reversed(service.inputs) if item['agent'] == 'reflector')
+        import json
+        matrix = json.loads(prompt.split('Comparison Matrix JSON: ', 1)[1].split('\nEvidence View JSON:', 1)[0])
+        assert matrix.get('cells'), matrix
+    assert use.estimated_bytes <= use.max_bytes <= 98304
+
+
+@pytest.mark.asyncio
+async def test_large_local_source_audit_replays_its_original_budget(tmp_path):
+    from copy import deepcopy
+    service = InputReplay(tmp_path)
+    record = service.record
+    source = record.detail.raw_sources[0]
+    prototype = source.metadata['normalized_fields'][0]
+    source.metadata['normalized_fields'] = [dict(deepcopy(prototype),
+        qualifiers={'slot': f'observation-{n}'}, source_quote=f'Full price conditions for observation {n}. ' * 8)
+        for n in range(24)]
+    seal_snapshot(record.detail, phase='analysis', canonical_documents={})
+    view, use = service._begin_evidence_use(record, agent='collect_qa', source_ids=[source.id])
+    assert use.max_bytes == view.max_bytes
+    service._validate_evidence_use(record, use)
+    assert use.estimated_bytes <= use.max_bytes
+    assert use.max_bytes > 98304
+
+
+@pytest.mark.asyncio
+async def test_comparator_keeps_unchanged_branch_capacity_after_resealing(tmp_path):
+    from copy import deepcopy
+    service = InputReplay(tmp_path)
+    record = service.record
+    for source in record.detail.raw_sources:
+        prototype = source.metadata['normalized_fields'][0]
+        source.metadata['normalized_fields'] = [
+            dict(deepcopy(prototype), qualifiers={'slot': f'observation-{n}'},
+                 source_quote=f'{source.competitor} original observation {n}. ' * 8)
+            for n in range(4)
+        ]
+    initial = seal_snapshot(record.detail, phase='analysis', canonical_documents={})
+    for product in record.detail.plan.competitors:
+        for dimension in record.detail.plan.dimensions:
+            await service._real_analyst_branch_step(record, dimension, product)
+    record.detail.raw_sources[0].content_hash = 'recaptured-price-page'
+    resealed = seal_snapshot(record.detail, phase='analysis', canonical_documents={})
+    assert resealed.id != initial.id
+    await service._real_analyst_branch_step(record, 'pricing', 'Phone X')
+    view, use = service._begin_evidence_use(record, agent='comparator')
+    projected, gaps = service._project_evidence_detail(record, [view])
+    assert not gaps
+    assert all(projected.competitor_kbs[p].slices.get(d)
+               for p in projected.plan.competitors for d in projected.plan.dimensions)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['claim_noise', 'reflector'])
+async def test_final_qa_retains_verified_upstream_quality_blockers(tmp_path, monkeypatch, failure):
+    service = InputReplay(tmp_path)
+    record = service.record
+    original = service._trace_llm_json
+
+    async def answer(candidate, **kwargs):
+        result = await original(candidate, **kwargs)
+        if failure == 'claim_noise' and kwargs['agent'] == 'analyst' and 'pricing_model' in result:
+            result['pricing_model'] = {'notes': [dict(
+                claim='mpletions Published 2023 API token pricing and billing details.',
+                source_ids=result['pricing_model']['summary_claims'][0]['source_ids'], confidence=.9,
+            )]}
+        if failure == 'reflector' and kwargs['agent'] == 'reflector':
+            result.update(gate_status='block',
+                cross_competitor_gaps=['Comparison matrix pricing needs common seat conditions.'],
+                blocking_gaps=['Comparison matrix pricing needs common seat conditions.'])
+        return result
+
+    monkeypatch.setattr(service, '_trace_llm_json', answer)
+    seal_snapshot(record.detail, phase='analysis', canonical_documents={})
+    for product in record.detail.plan.competitors:
+        for dimension in record.detail.plan.dimensions:
+            await service._real_analyst_branch_step(record, dimension, product)
+    await service._real_comparator_step(record)
+    if failure == 'reflector':
+        await service._real_reflector_step(record)
+    _, use = service._begin_evidence_use(record, agent='writer')
+    service._validate_evidence_use(record, use)
+    record.detail.report_md = '## Competitive Findings\nCaptured [source:Phone-X-pricing]'
+    service._record_evidence_artifact(record, kind='writer', uses=[use],
+        payload=service._writer_evidence_artifact_payload(record.detail))
+    monkeypatch.setattr(service, '_sync_report_with_final_qa', lambda detail: None)
+    await service._real_qa_step(record)
+    blockers = [i for i in record.detail.qa_findings if i.severity == 'blocker']
+    assert any(i.detected_by == ('text_quality' if failure == 'claim_noise' else 'reflector')
+               and i.target_agent == ('analyst' if failure == 'claim_noise' else 'comparator')
+               for i in blockers)
 
 
 @pytest.mark.asyncio
@@ -388,6 +638,7 @@ async def test_final_qa_reloads_only_cited_canonical_document_and_reports_exact_
 async def test_full_writer_actual_llm_prompt_guard_and_live_accounting(tmp_path, monkeypatch):
     service = InputReplay(tmp_path)
     record = service.record
+    record.detail.plan.dimensions = ["pricing"]  # Legacy single-dimension transport.
     snapshot = seal_snapshot(record.detail, phase="analysis", canonical_documents={})
     for source in record.detail.raw_sources:
         source.snippet = "LIVE_POISON"
@@ -562,6 +813,9 @@ async def test_comparator_alignment_uses_same_fact_slot_and_context(tmp_path, co
         source for source in record.detail.raw_sources if source.dimension == "pricing"
     ]
     for source in record.detail.raw_sources:
+        source.metadata["normalized_fields"][0].update(
+            billing_cycle="monthly", qualifiers={"tax_scope": "excluded"}
+        )
         source.metadata["normalized_fields"].append(
             {
                 "kind": "pricing",
@@ -580,7 +834,7 @@ async def test_comparator_alignment_uses_same_fact_slot_and_context(tmp_path, co
     elif context_change == "market":
         other_price["market"] = "US"
     elif context_change == "time":
-        other_price["qualifiers"] = {"effective_at": "2026-09-01"}
+        other_price["qualifiers"].update(effective_at="2026-09-01")
     seal_snapshot(record.detail, phase="analysis", canonical_documents={})
     for product in record.detail.plan.competitors:
         await service._real_analyst_branch_step(record, "pricing", product)
@@ -596,6 +850,7 @@ async def test_writer_actual_transport_usage_and_trace_survive_draft_rejection(
 ):
     service = InputReplay(tmp_path)
     record = service.record
+    record.detail.plan.dimensions = ["pricing"]
     seal_snapshot(record.detail, phase="analysis", canonical_documents={})
     service._trace_store = TraceStore(tmp_path / "trace.db")
     # Execute the original accounting/trace path; only the provider transport is replayed.
@@ -678,7 +933,8 @@ async def test_comparator_budget_omission_drops_unsupported_analytic_branch(tmp_
     service = InputReplay(tmp_path)
     record = service.record
     record.detail.plan.research_depth = "deep"
-    record.detail.raw_sources[0].metadata["normalized_fields"][0]["source_quote"] = "q" * 5000
+    # Fits deep capacity, exceeds quick capacity even after exact deduplication.
+    record.detail.raw_sources[0].metadata["normalized_fields"][0]["source_quote"] = "q" * 12000
     seal_snapshot(record.detail, phase="analysis", canonical_documents={})
     original = service._trace_llm_json
 
@@ -718,7 +974,8 @@ async def test_analyst_rejects_claim_for_same_branch_source_omitted_by_budget(
 ):
     service = InputReplay(tmp_path)
     record = service.record
-    record.detail.raw_sources[0].metadata["normalized_fields"][0]["source_quote"] = "q" * 5000
+    # A once-stored quote must exceed the explicit 16384-byte pricing view.
+    record.detail.raw_sources[0].metadata["normalized_fields"][0]["source_quote"] = "q" * 20000
     seal_snapshot(record.detail, phase="analysis", canonical_documents={})
 
     async def answer(candidate, **kwargs):
@@ -739,13 +996,16 @@ async def test_analyst_rejects_claim_for_same_branch_source_omitted_by_budget(
     await service._real_analyst_branch_step(record, "pricing", "Phone X")
     use = record.detail.evidence_consumptions[-1]
     assert use.source_ids == ()
-    assert "Phone-X-pricing" not in service.inputs[-1]["user"]
-    assert not record.detail.competitor_knowledge["Phone X"].pricing_model.notes
+    assert not service.inputs  # No complete accepted observation fits: no model request.
+    event = next(e for e in reversed(record.events) if e.type == 'node_completed' and e.agent == 'analyst')
+    assert event.payload['module_status'] == 'skipped'
+    assert event.payload['execution_reason'] == 'context_budget_exceeded'
+    assert "Phone X" not in record.detail.competitor_knowledge
     assert "UNCONSUMED_MODEL_CLAIM" not in str(record.detail.claim_card_bundles)
 
 
 @pytest.mark.asyncio
-async def test_long_valid_analysis_is_an_explicit_prompt_gap_within_view_budget(tmp_path):
+async def test_long_valid_analysis_uses_original_fact_references_within_view_budget(tmp_path):
     service = InputReplay(tmp_path)
     record = service.record
     seal_snapshot(record.detail, phase="analysis", canonical_documents={})
@@ -763,9 +1023,10 @@ async def test_long_valid_analysis_is_an_explicit_prompt_gap_within_view_budget(
     await service._real_comparator_step(record)
     user = service.inputs[-1]["user"]
     assert "LONG_ANALYSIS_SENTINEL" not in user
-    assert "analysis_context_budget_exceeded" in user
+    assert "analysis_context_budget_exceeded" not in user
+    assert 'verified_analysis_branches' in user
     view = json.loads(user.split("Evidence View JSON: ")[1])
-    assert view["estimated_bytes"] <= 8192
+    assert view["estimated_bytes"] <= 16384
     assert any(fact["value"] == 3999 for fact in view["facts"])
 
 
@@ -831,6 +1092,27 @@ async def test_two_matching_fact_slots_remain_comparable(tmp_path):
     service._trace_llm_json = comparator
     await service._real_comparator_step(record)
     assert not any("Not comparable" in x for x in record.detail.comparison_matrix.summary)
+
+
+@pytest.mark.asyncio
+async def test_unmapped_page_slots_are_unknown_without_false_counterparts(tmp_path):
+    service = InputReplay(tmp_path)
+    record = service.record
+    record.detail.plan.dimensions = ["feature"]
+    record.detail.raw_sources = [s for s in record.detail.raw_sources if s.dimension == "feature"]
+    for number, source in enumerate(record.detail.raw_sources):
+        source.metadata["normalized_fields"] = [{"kind": "feature", "competitor": source.competitor, "dimension": "feature", "slot": f"semantic_capability_{number}", "support_level": "supported", "evidence_terms": ["Original camera functionality requires interpretation."], "evidence_quote": "Original camera functionality requires interpretation.", "confidence": .9}]
+    seal_snapshot(record.detail, phase="analysis", canonical_documents={})
+    async def comparator(current, **kwargs):
+        return {"matrix_summary": [], "assessments": {"feature": {"status": "comparable", "winner": "Phone X", "scenario": "Same task", "rationale": "Model proposed ranking", "source_ids": [s.id for s in record.detail.raw_sources]}}}
+    service._trace_llm_json = comparator
+    await service._real_comparator_step(record)
+    matrix = record.detail.comparison_matrix
+    assert matrix.assessments["feature"].status == "insufficient_evidence"
+    assert matrix.assessments["feature"].winner is None
+    assert "feature" not in matrix.winner_by_dimension
+    assert not any("comparison_counterpart_missing" in text for text in matrix.summary)
+    assert any("Unmapped feature observation" in text for text in matrix.summary)
 
 
 @pytest.mark.asyncio
@@ -905,7 +1187,8 @@ async def test_writer_segment_data_budget_includes_wrapper(tmp_path, depth, budg
     for fact in data["evidence_view"]["facts"]:
         if fact["field"] == "price":
             assert fact["value"] == "V" * size
-            assert fact["quote"] == "Q" * size
+            quote = fact.get("quote") or data["evidence_view"].get("quoted_evidence", {}).get(fact.get("quote_ref"))
+            assert quote == "Q" * size
     if not use.source_ids:
         assert "context_budget_exceeded" in context
         assert data["citation_source_ids"] == []
@@ -954,6 +1237,7 @@ async def test_matching_slots_allow_boolean_without_units_and_prices_in_matching
         source for source in record.detail.raw_sources if source.dimension == dimension
     ]
     for source in record.detail.raw_sources:
+        source.metadata["source_material_level"] = "full_source"
         if dimension == "feature":
             rows = [
                 {
@@ -974,13 +1258,15 @@ async def test_matching_slots_allow_boolean_without_units_and_prices_in_matching
                     "unit": "CNY",
                     "market": "CN",
                     "billing_cycle": "monthly",
+                    "qualifiers": {"tax_scope": "excluded"},
                     "source_quote": f"{tier} {price} CNY monthly CN",
                     "confidence": 0.9,
                 }
                 for tier, price in (("Starter", 20), ("Pro", 40))
             ]
         source.metadata["normalized_fields"] = [
-            {**row, "competitor": source.competitor, "dimension": dimension} for row in rows
+            {**row, "competitor": source.competitor, "dimension": dimension,
+             "evidence_item_ids": [f"{source.id}-{index}"]} for index, row in enumerate(rows)
         ]
     seal_snapshot(record.detail, phase="analysis", canonical_documents={})
     for product in record.detail.plan.competitors:
@@ -990,7 +1276,9 @@ async def test_matching_slots_allow_boolean_without_units_and_prices_in_matching
         service.inputs.append(kwargs)
         return {
             "matrix_summary": ["Aligned same slot"],
-            "winner_by_dimension": {dimension: "Phone X"},
+            "assessments": {dimension: {"status": "comparable", "winner": "Phone X",
+                "scenario": "Matching product tier", "rationale": "Aligned evidence slots",
+                "source_ids": [source.id for source in record.detail.raw_sources]}},
         }
 
     service._trace_llm_json = comparator
@@ -1086,7 +1374,7 @@ def test_writer_view_budget_is_optional_in_legacy_json_and_cannot_exceed_stage_b
 
 
 @pytest.mark.asyncio
-async def test_different_price_tiers_require_matching_product_counterparts(tmp_path):
+async def test_different_price_tiers_require_explicit_plan_alignment(tmp_path):
     service = InputReplay(tmp_path)
     record = service.record
     record.detail.plan.dimensions = ["pricing"]
@@ -1109,16 +1397,18 @@ async def test_different_price_tiers_require_matching_product_counterparts(tmp_p
         service.inputs.append(kwargs)
         return {
             "matrix_summary": ["Compare Starter with Enterprise"],
-            "winner_by_dimension": {"pricing": "Phone X"},
+            "assessments": {"pricing": {"status": "comparable", "winner": "Phone X",
+                "scenario": "Matching product tier", "rationale": "Proposed ranking",
+                "source_ids": [source.id for source in record.detail.raw_sources]}},
         }
 
     service._trace_llm_json = comparator
     await service._real_comparator_step(record)
     matrix = record.detail.comparison_matrix
-    assert matrix.winner_by_dimension["pricing"] == "tie"
-    assert any("comparison_counterpart_missing" in item for item in matrix.summary)
-    assert any("Starter" in item and "Phone X Pro" in item for item in matrix.summary)
-    assert any("Enterprise" in item and "Phone X" in item for item in matrix.summary)
+    assert "pricing" not in matrix.winner_by_dimension
+    assert matrix.assessments["pricing"].status == "insufficient_evidence"
+    assert not any("comparison_counterpart_missing" in item for item in matrix.summary)
+    assert any('plan_alignment_unverified' in item and 'Starter' in item and 'Enterprise' in item for item in matrix.summary)
 
 
 def seed_previous_writer_report(service, *, producer=True, phase="analysis"):
@@ -1153,6 +1443,7 @@ async def test_actual_writer_preserve_retains_original_producer_or_blocks_unknow
 ):
     service = InputReplay(tmp_path)
     record = service.record
+    record.detail.plan.dimensions = ["pricing"]
     original = seed_previous_writer_report(service, producer=producer)
     previous = record.detail.report_md
     dependency = next(iter(record.detail.evidence_artifact_dependencies), None)
@@ -1229,6 +1520,7 @@ async def test_actual_writer_preserve_retains_original_producer_or_blocks_unknow
 async def test_actual_preserved_report_hardening_cannot_forge_new_producer(tmp_path, monkeypatch):
     service = InputReplay(tmp_path)
     record = service.record
+    record.detail.plan.dimensions = ["pricing"]
     original = seed_previous_writer_report(service)
     dependency = record.detail.evidence_artifact_dependencies[-1]
     previous = record.detail.report_md
@@ -1302,6 +1594,7 @@ async def test_new_writer_producer_survives_actual_projection_normalization(
 ):
     service = InputReplay(tmp_path)
     record = service.record
+    record.detail.plan.dimensions = ["pricing"]
     source = next(item for item in record.detail.raw_sources if item.id == "Phone-X-pricing")
     source.metadata.update(market="CN", source_material_level="full_source")
     row = source.metadata["normalized_fields"][0]
@@ -1428,3 +1721,62 @@ def test_analyst_checkpoint_credential_rejects_unaccepted_collect_phase(tmp_path
     with pytest.raises(EvidenceUseRejectedError, match="not currently accepted"):
         service._validate_evidence_use(record, use)
     assert record.detail.evidence_consumptions[-1].status == "rejected"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('condition,expected', [
+    ('no_price_facts', 'insufficient_evidence'),
+    ('unknown_basis', 'insufficient_evidence'),
+    ('missing_terms', 'insufficient_evidence'),
+    ('unknown_terms', 'insufficient_evidence'),
+    ('unknown_billing', 'insufficient_evidence'),
+    ('known_terms', 'comparable'),
+    ('different_market', 'not_comparable'),
+])
+async def test_comparator_actual_commit_requires_price_facts_and_known_comparison_basis(
+    tmp_path, condition, expected
+):
+    service = InputReplay(tmp_path)
+    record = service.record
+    record.detail.plan.dimensions = ['pricing']
+    record.detail.raw_sources = [s for s in record.detail.raw_sources if s.dimension == 'pricing']
+    for index, source in enumerate(record.detail.raw_sources):
+        if condition == 'no_price_facts':
+            source.metadata['normalized_fields'] = []
+            source.snippet = 'Billing renews monthly; no captured plan amount.'
+        elif condition in {'missing_terms', 'unknown_terms', 'unknown_billing', 'known_terms'}:
+            source.metadata['source_material_level'] = 'full_source'
+            for field in source.metadata['normalized_fields']:
+                field['evidence_item_ids'] = [f'{source.id}-price']
+                field['source_quote'] = 'Current product price'
+                field['qualifiers'] = {
+                    'tax_scope': 'unknown' if condition == 'unknown_terms' else 'included',
+                    'billing_interval': 'unknown' if condition == 'unknown_billing' else 'monthly',
+                }
+                if condition == 'missing_terms':
+                    field['qualifiers'] = {}
+                    field.pop('billing_cycle', None)
+        elif condition == 'unknown_basis':
+            source.metadata.pop('market', None)
+            for field in source.metadata['normalized_fields']:
+                field.pop('unit', None)
+                field.pop('market', None)
+        elif index:
+            source.metadata['normalized_fields'][0]['market'] = 'US'
+    seal_snapshot(record.detail, phase='analysis', canonical_documents={})
+    for product in record.detail.plan.competitors:
+        await service._real_analyst_branch_step(record, 'pricing', product)
+
+    async def comparator(current, **kwargs):
+        return {'assessments': {'pricing': {
+            'status': 'comparable', 'winner': 'Phone X', 'scenario': 'Budget buyer',
+            'rationale': 'Lower current price.',
+            'source_ids': [s.id for s in record.detail.raw_sources],
+        }}}
+
+    service._trace_llm_json = comparator
+    await service._real_comparator_step(record)
+    matrix = record.detail.comparison_matrix
+    assert ('pricing' in matrix.winner_by_dimension) is (expected == 'comparable')
+    assert matrix.assessments['pricing'].status == expected
+    assert any(f'[assessment:pricing] {expected};' in row for row in matrix.summary)

@@ -60,6 +60,15 @@ export function formatSpanMeta(span: TraceSpan, locale: Locale = "en-US") {
   const unknownCount = span.metadata.unknown_count;
   if (typeof validCount === "number") parts.push(`${validCount} ${t('trace.validRefs')}`);
   if (typeof unknownCount === "number" && unknownCount > 0) parts.push(`${unknownCount} ${t('trace.unknownRefs')}`);
+  const admission = stringValue(span.metadata.llm_admission_status);
+  const execution = stringValue(span.metadata.llm_execution_status);
+  const transports = numberMetaOrNull(span, 'llm_transport_attempts');
+  if (admission === 'rejected') parts.push(locale === 'zh-CN' ? '预算拒绝' : 'Budget rejected');
+  else if (execution === 'succeeded') parts.push(locale === 'zh-CN' ? '模型调用成功' : 'Model succeeded');
+  else if (execution === 'error') parts.push(locale === 'zh-CN' ? '模型调用错误' : 'Model error');
+  if (transports !== null) parts.push(`${locale === 'zh-CN' ? '实际请求' : 'Transport requests'} ${transports}`);
+  const reason = stringValue(span.metadata.degradation_reason);
+  if (reason) parts.push(formatExecutionReason(reason, locale));
   return parts.join(" / ");
 }
 
@@ -221,20 +230,43 @@ export function formatModuleExecutionStatus(payload: Record<string, unknown>, lo
   const moduleStatus = stringValue(payload.module_status);
   const fallback = objectValue(payload.fallback);
   const fallbackUsed = fallback ? booleanValue(fallback.used) : null;
+  if (moduleStatus === 'skipped') {
+    const reason = stringValue(payload.execution_reason);
+    const label = locale === 'zh-CN' ? (reason === 'no_accepted_evidence' ? '无证据跳过' : '已跳过') : 'Skipped';
+    return [label, formatExecutionReason(reason, locale)].filter(Boolean).join(': ');
+  }
+  if (moduleStatus === 'cache') return locale === 'zh-CN' ? '已验证缓存复用' : 'Verified cache reuse';
   if (moduleStatus === "fallback" || fallbackUsed === true) {
     const reason = fallback ? stringValue(fallback.reason) : "";
     const timeoutSeconds = fallback ? numberValue(fallback.timeout_seconds) : null;
     const error = fallback ? stringValue(fallback.error) : "";
-    const parts = [t('trace.fallback')];
-    if (reason) parts.push(locale === 'zh-CN' ? displayLabel(reason, locale) : reason);
+    const parts = [locale === 'zh-CN' ? '规则回退' : t('trace.fallback')];
+    if (reason) parts.push(formatExecutionReason(reason, locale));
     if (timeoutSeconds !== null) parts.push(`${timeoutSeconds}${t('common.seconds')}`);
     if (error) parts.push(clipPayloadText(error));
     return parts.join(": ");
   }
   if (moduleStatus === "llm" || fallbackUsed === false) {
-    return locale === 'zh-CN' ? displayLabel('llm', locale) : "LLM";
+    return locale === 'zh-CN' ? '模型生成' : "LLM";
   }
   return "";
+}
+
+function formatExecutionReason(reason: string, locale: Locale) {
+  if (locale !== 'zh-CN') return reason;
+  const labels: Record<string, string> = {
+    run_llm_budget_reserved_for_delivery: '为后续必要阶段保留额度',
+    run_llm_token_budget_exhausted: '总 token 预算不足',
+    run_llm_call_budget_exhausted: '总调用次数不足',
+    run_llm_cost_budget_exhausted: '总成本预算不足',
+    run_llm_repair_budget_exhausted: '修复次数预算不足',
+    no_accepted_evidence: '没有已接受的来源证据',
+    context_budget_exceeded: '完整原文观察超出输入容量，已记录遗漏',
+    empty_structured_payload: '模型结构缺少有效主张',
+    invalid_structured_payload: '模型输出结构无效',
+  };
+  if (reason.startsWith('run_llm_scope_budget_insufficient')) return `任务范围超过调用预算（${reason.split(':')[1] ?? ''}）`;
+  return labels[reason] ?? displayLabel(reason, locale);
 }
 
 function numberPayload(event: DecisionReplayEvent, key: string) {

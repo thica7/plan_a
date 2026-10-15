@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from urllib.parse import urlparse
 
+from packages.business_intel.entity_resolver import (
+    is_trusted_url_for_competitor,
+    confusion_terms_for_competitor,
+    resolve_competitor_identity,
+    product_title_matches,
+)
 from packages.research.extraction.quality import (
     HARDWARE_SPEC_RE,
     quote_quality_problem,
     quote_window_from_match,
 )
+from packages.research.extraction.semantic import document_condition_context, semantic_page_allowed
 from packages.research.models import (
     CapturedPage,
     EvidenceQuote,
@@ -28,12 +36,13 @@ FEATURE_SLOTS = (
 )
 
 _GENERIC_CAPABILITY_VERBS = re.compile(
-    r"具备|支持|提供|可以|可更换|包含|采用|includes?|supports?|offers?|features?|provides?|has\b",
+    r"具备|配備|配备|支持|提供|可以|可更换|包含|采用|comes with|includes?|supports?|offers?|features?|provides?|has\b|\bcan\b",
     flags=re.IGNORECASE,
 )
 _GENERIC_NEGATION = re.compile(
     r"不支持|无法|不提供|不具备|不能|没有|does not support|doesn't support|"
-    r"does not have|doesn't have|has no|without|not available|\bnot supported\b|\bunsupported\b",
+    r"does not have|doesn't have|has no|without|not available|\bnot supported\b|\bunsupported\b|"
+    r"\bcannot\b|\bcan['’]t\b|\bcan not\b|\bno longer\b",
     flags=re.IGNORECASE,
 )
 
@@ -45,6 +54,8 @@ def extract_generic_capabilities(brief: ResearchBrief, page: CapturedPage) -> Ex
     quotes: list[EvidenceQuote] = []
     for clause_match in re.finditer(r"(?:[^。！？.!?;\n]|(?<=\d)\.(?=\d))+", text):
         clause = clause_match.group().strip()
+        if re.match(r'^(?:can|could|how|why|who|what|when|should)\b', clause, re.I):
+            continue
         clause_start = clause_match.start() + len(clause_match.group()) - len(
             clause_match.group().lstrip()
         )
@@ -79,20 +90,28 @@ def extract_generic_capabilities(brief: ResearchBrief, page: CapturedPage) -> Ex
         verb = _GENERIC_CAPABILITY_VERBS.search(clause)
         if not clause or verb is None or not clause[verb.end():].strip():
             continue
-        if brief.competitor.casefold() not in clause[:verb.start()].casefold():
+        if not _capability_subject_matches(brief, page, clause, verb.start()):
             continue
         if (
             brief.product_name and brief.product_name != brief.competitor
             and brief.product_name.casefold() in clause.casefold()
         ):
             continue
-        if re.search(r"[和与及、]|\band\b", clause[:verb.start()], re.I):
-            continue
-        if _GENERIC_NEGATION.search(clause):
+        if (
+            _GENERIC_NEGATION.search(clause)
+            or quote_quality_problem(clause, dimension=brief.dimension)
+            or re.search(r"\b(?:promotion|giveaway|win|prize)\b|促销|抽奖|赠品", clause, re.I)
+        ):
             continue
         index = len(fields) + 1
         key = f"capability_{index}"
-        fields[key] = {"status": "supported", "evidence_terms": [clause[:180]]}
+        conditions = []
+        if page.metadata.get('document_headings') and semantic_page_allowed(brief, page):
+            context = document_condition_context(text, page, clause_start, clause_start + len(clause))
+            if context is None or len(context[1]) > 6 or any(len(line) > 420 for line in context[1]):
+                continue
+            conditions = context[1]
+        fields[key] = {"status": "supported", "evidence_terms": [clause[:180], *conditions]}
         quotes.append(EvidenceQuote(
             text=clause, source_url=page.final_url, field=key,
             start_offset=clause_start, end_offset=clause_start + len(clause),
@@ -100,7 +119,8 @@ def extract_generic_capabilities(brief: ResearchBrief, page: CapturedPage) -> Ex
         if index >= 6:
             break
     if (
-        brief.competitor.casefold() in page.title.casefold()
+        not page.metadata.get('document_headings')
+        and brief.competitor.casefold() in page.title.casefold()
         and re.search(r"\b(?:specs|specifications)\b|技术参数|规格", page.title, re.I)
         and not re.search(r"\b(?:versus|vs|comparison)\b|对比|比较", page.title, re.I)
     ):
@@ -136,8 +156,77 @@ def extract_generic_capabilities(brief: ResearchBrief, page: CapturedPage) -> Ex
         extractor_name="generic_product_capabilities",
         status="extracted" if quotes else "partial",
         missing_fields=[] if quotes else ["product_capabilities"],
-        metadata={"category": brief.product_category, "capability_count": len(quotes)},
+        metadata={
+            "category": brief.product_category, "product_name": brief.product_name,
+            "capability_count": len(quotes),
+        },
     )
+
+
+def _capability_subject_matches(
+    brief: ResearchBrief, page: CapturedPage, clause: str, verb_start: int,
+) -> bool:
+    prefix = clause[:verb_start].strip()
+    name = brief.competitor.casefold()
+    position = prefix.casefold().find(name)
+    if position >= 0:
+        # Coordinated components belong to the product; coordinated product subjects
+        # cannot be attributed to only one competitor.
+        before = prefix[:position]
+        suffix = prefix[position + len(brief.competitor):]
+        if suffix[:1].isascii() and suffix[:1].isalnum():
+            return False
+        after = suffix.lstrip()
+        if re.fullmatch(r"[A-Z][A-Za-z0-9-]*", after):
+            return False
+        for component in re.split(r"[和与及、]|\band\b", after, flags=re.I)[1:]:
+            if re.search(r"\b[A-Z][a-z][A-Za-z0-9]*\b", component):
+                return False
+            for token in re.findall(r"\w+", component):
+                other = resolve_competitor_identity(token)
+                current = resolve_competitor_identity(brief.competitor)
+                if other is not None and other != current:
+                    return False
+        return not (
+            re.search(r"[和与及、]|\band\b", before, re.I)
+            or re.match(r"(?:[和与及、]|and\b)", after, re.I)
+        )
+    if not is_trusted_url_for_competitor(brief.competitor, page.final_url):
+        return False
+    if not product_title_matches(brief.competitor, page.title, page.final_url):
+        return False
+    identity = resolve_competitor_identity(brief.competitor)
+    if identity is None:
+        return False
+    url = urlparse(page.final_url)
+    documents = [
+        source for source in identity.sources_by_dimension.get("feature", ())
+        if (urlparse(source.url).hostname, urlparse(source.url).path.rstrip("/"))
+        == (url.hostname, url.path.rstrip("/"))
+    ]
+    # Shared vendor domains and known product siblings are not document identity.
+    if not documents or any(
+        term in page.title.casefold()
+        for term in confusion_terms_for_competitor(brief.competitor)
+    ):
+        return False
+    if re.search(
+        r"\b(?:versus|vs|comparison|reviews?|customer stories|case stud(?:y|ies))\b|对比|比较|客户案例",
+        page.title, re.I,
+    ) or re.search(
+        r"/(?:customers?|stories|blog|templates?|marketplace|integrations?|compare)(?:/|$)",
+        urlparse(page.final_url).path, re.I,
+    ):
+        return False
+    if clause.startswith(('"', "'", "“", "‘", ">")):
+        return False
+    if re.match(r"features?\b", clause, re.I):
+        return False
+    # Do not infer an arbitrary named subject from an official domain alone.
+    return bool(re.fullmatch(
+        r"(?:you|你们?)?", prefix, re.I,
+    ))
+
 
 _SLOT_TERMS: dict[str, tuple[str, ...]] = {
     "core_capability": (

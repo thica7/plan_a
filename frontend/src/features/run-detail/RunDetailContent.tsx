@@ -34,7 +34,7 @@ interface RunDetailContentProps {
   isRedoing: boolean;
   onBaselineRunChange: (runId: string) => void;
   onExportCompliance: () => void;
-  onRedo: () => void;
+  onRedo: (issueIds?: string[]) => Promise<boolean> | void;
   onViewChange: (view: RunDetailView) => void;
   qualityBaselineRunId: string;
   qualityComparison: RunQualityComparison | null;
@@ -74,7 +74,7 @@ export function RunDetailContent({
   const renderedAgentMessages = agentMessages ?? detail.agent_messages;
   const renderedToolCallMessages = toolCallMessages ?? detail.tool_call_messages;
   if (activeView === "report") {
-    return <RunReportReviewStudio detail={detail} reportSources={reportSources} />;
+    return <RunReportReviewStudio detail={detail} reportSources={reportSources} onRepair={onRedo} />;
   }
 
   if (activeView === "agents") {

@@ -1,0 +1,96 @@
+{
+  "date": "2026-10-15",
+  "status": "engineering_verified_live_waiting_for_quota_approval",
+  "source_tree_sha256": "56b22bd7e4e312fd6a87f83ed99fded30b91df2cbb63e04ca4c65a6e1cf2ee79",
+  "source_files": 883,
+  "changes": [
+    "逐候选校验隔离，非法候选不再丢弃后续合法主张",
+    "writer视图共享完整重复条件，按操作及对象选择原始观察，事实与来源身份保持",
+    "分类背景与实际前提分开，保留登录、邀请、跨主体先授权及父级访问等已审核反例",
+    "真缺产品维度时生成有审核的短局部报告，汇总缺口并保留采集阻断",
+    "软件未知能力轴保留，硬件不生成无关软件空表"
+  ],
+  "verification": {
+    "backend": {
+      "passed": 4050,
+      "skipped": 1,
+      "warnings": 202,
+      "seconds": 158.67,
+      "log": "/tmp/plan_a_v10_backend_tests.log"
+    },
+    "frontend": {
+      "passed": 279,
+      "files": 55,
+      "build": "passed",
+      "scope": "frontend files identical between v9 tests/build and final v10 source manifest",
+      "test_log": "/tmp/plan_a_v9_frontend_tests.log",
+      "build_log": "/tmp/plan_a_v9_frontend_build.log"
+    },
+    "openapi": {
+      "json_equal": true,
+      "types_equal": true,
+      "proof": "/tmp/plan_a_v10_openapi_check.json"
+    },
+    "diff_check": "passed",
+    "reviews": {
+      "spec_full": "/tmp/plan_a_evidence_report_spec.v3.json",
+      "quality_full": "/tmp/plan_a_evidence_report_quality.v3.json",
+      "spec_final_delta": "/tmp/plan_a_evidence_report_spec.v4.json",
+      "quality_final_delta": "/tmp/plan_a_evidence_report_quality.v4.json"
+    },
+    "new_regression_cases": 31,
+    "secret_scan": {
+      "scope": "literal current configured credentials in nonignored text sources/docs/eval, built frontend and specified acceptance artifacts; excludes secret env bodies and Git history",
+      "configured_credential_count": 1,
+      "files_scanned": 1141,
+      "actual_secret_hit_paths": [],
+      "tracked_secret_config_paths": [],
+      "status": "pass"
+    },
+    "source_unchanged": true
+  },
+  "offline_fixed_inputs": {
+    "notion_original_response": {
+      "previously_parsed": 1,
+      "now_parsed": 4,
+      "still_rejected_without_binding": 2,
+      "scope": "parsing only; no new model review or publication"
+    },
+    "candidate_missing_after_original_text_reprojection": {
+      "Notion": [],
+      "Confluence": [],
+      "Coda": [
+        "read",
+        "comment",
+        "manage_access"
+      ],
+      "Nuclino": []
+    },
+    "old_structured_binding_policy": "old mismatches remain rejected; re-extraction uses new fact/binding identities and is only an offline diagnostic",
+    "hardware": {
+      "new_chars": 1376,
+      "old_readback_chars": 20332,
+      "collector_blockers_retained": 2,
+      "scope": "real writer entry with exact-quote and review fixtures; not live semantic validation; original formal report length 21105 is not the comparison base"
+    },
+    "proof": "/tmp/plan_a_evidence_report_replay.json"
+  },
+  "live_acceptance": {
+    "status": "not_started",
+    "creation_http_status": 429,
+    "reason": "workspace monthly token quota exceeded",
+    "monthly_limit": 2000000,
+    "estimated_monthly_tokens": 2089864,
+    "external_model_calls_for_new_case": 0,
+    "project_id": "project-acceptance-72225e10679343d3",
+    "output": "/tmp/plan_a_acceptance_v5/api-operations"
+  },
+  "limitations": [
+    "条件解析是有限规则并保留原文语义审核，不能宣称任意自然语言条件都已解决",
+    "候选覆盖不是已审核发布覆盖或独立人工事实准确率",
+    "历史错误报告未自动迁移为新审核版本",
+    "短稿部分audit.gaps保留在审计记录中，不逐条展开在正文",
+    "本机Qdrant local验证不覆盖HTTP Qdrant、Temporal、Redis多worker或实机Postgres RLS",
+    "健康检查仍报告既有Temporal切流策略问题"
+  ]
+}

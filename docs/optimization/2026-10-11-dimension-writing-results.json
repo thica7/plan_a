@@ -1,0 +1,638 @@
+{
+  "date": "2026-10-11",
+  "scope": {
+    "execution_mode": "real",
+    "research_depth": "quick",
+    "minimum_dimensions": 2,
+    "corpus": "Frozen public official feature evidence plus already captured Notion prices; no new search/fetch in this phase",
+    "runtime_storage": "In-memory acceptance; business history unchanged"
+  },
+  "verification": {
+    "backend": {
+      "passed": 3338,
+      "skipped": 1,
+      "warnings": 152,
+      "seconds": 77.8,
+      "skip_reason": "Real PostgreSQL RLS test database not configured"
+    },
+    "targeted": {
+      "passed": 149,
+      "seconds": 13.07
+    },
+    "frontend": {
+      "passed": 16,
+      "files": 2,
+      "build": "passed"
+    },
+    "independent_review": {
+      "open_p1_p2": 0,
+      "claim_tests": 40,
+      "selected_integration_tests": 89
+    },
+    "human_sample_review": {
+      "published_claims_checked": 8,
+      "bound_quotes_checked": true,
+      "price_conditions_preserved": true,
+      "status": "This sample only; not a universal semantic guarantee"
+    },
+    "final_checks": {
+      "openapi_export_matches": true,
+      "core_hashes_match": true,
+      "draft_byte_exact": true,
+      "git_diff_check": "passed",
+      "phase_secret_pattern_scan": "passed"
+    }
+  },
+  "final_acceptance": {
+    "status": "completed_with_blockers",
+    "mechanical_pass": false,
+    "semantic_quality": null,
+    "citations_valid": true,
+    "unknown_citation_count": 0,
+    "report_chars": 1812,
+    "core_chars": 1117,
+    "calls_added": 7,
+    "tokens_added": 17553,
+    "error": null,
+    "generation_contexts": [
+      {
+        "product": "Notion",
+        "dimension": "feature",
+        "bytes": 6849,
+        "max_bytes": 8192,
+        "status": "validated"
+      },
+      {
+        "product": "Confluence",
+        "dimension": "feature",
+        "bytes": 6974,
+        "max_bytes": 8192,
+        "status": "validated"
+      },
+      {
+        "product": "Coda",
+        "dimension": "feature",
+        "bytes": 8107,
+        "max_bytes": 8192,
+        "status": "validated"
+      },
+      {
+        "product": "Notion",
+        "dimension": "pricing",
+        "bytes": 8153,
+        "max_bytes": 8192,
+        "status": "validated"
+      },
+      {
+        "product": "Confluence",
+        "dimension": "pricing",
+        "bytes": 6748,
+        "max_bytes": 8192,
+        "status": "validated"
+      },
+      {
+        "product": "Coda",
+        "dimension": "pricing",
+        "bytes": 6724,
+        "max_bytes": 8192,
+        "status": "validated"
+      }
+    ],
+    "dimension_audits": [
+      {
+        "competitor": "Notion",
+        "dimension": "feature",
+        "consumption_id": "evidence-use-0f012f1e59d3410cb97a24b71d9bd86a",
+        "claims": [
+          {
+            "claim": {
+              "id": "claim-a58b81106180a74f7969",
+              "text": "Notion 支持在页面评论中解决或重新打开评论。",
+              "kind": "fact",
+              "competitor": "Notion",
+              "dimension": "feature",
+              "fact_ids": [
+                "evidence-fact-record-9862c949fa4fc555f1299f674542444ab59b68c63f29c87a38d291899ce4fad7"
+              ],
+              "source_ids": [
+                "raw-source-b92f96c0c5e5d2643df7"
+              ]
+            },
+            "status": "supported",
+            "review": {
+              "claim_id": "claim-a58b81106180a74f7969",
+              "verdict": "supported",
+              "reason": "The cited quote q1 states 'You can also resolve or re-open comments,' which directly supports that Notion supports resolving or reopening comments in page comments."
+            },
+            "rule_reasons": []
+          },
+          {
+            "claim": {
+              "id": "claim-82cf2d694fb613506ac9",
+              "text": "在表格视图或打开数据库页面时，Notion 允许直接在数据库属性上留下评论。",
+              "kind": "fact",
+              "competitor": "Notion",
+              "dimension": "feature",
+              "fact_ids": [
+                "evidence-fact-record-f3da7479dedf115e16b4b16c2f96df62877f9e8439858def68a59ecedb08b576"
+              ],
+              "source_ids": [
+                "raw-source-b92f96c0c5e5d2643df7"
+              ]
+            },
+            "status": "supported",
+            "review": {
+              "claim_id": "claim-82cf2d694fb613506ac9",
+              "verdict": "supported",
+              "reason": "The cited quote q0 states 'You can leave comments directly on database properties when you’re in table view or when you have a database page open,' matching the claim exactly."
+            },
+            "rule_reasons": []
+          },
+          {
+            "claim": {
+              "id": "claim-20f43d22de3f3e6df1a5",
+              "text": "Notion 支持多人同时编辑同一页面，且所有人的编辑和评论会即时显示；该能力的具体条件需以原始页面说明为准。",
+              "kind": "inference",
+              "competitor": "Notion",
+              "dimension": "feature",
+              "fact_ids": [
+                "evidence-fact-record-fe5516114352449d3a388492a8a62da706628fee5d025bd39c4485850d360380"
+              ],
+              "source_ids": [
+                "raw-source-f7a81bf787f1e9e932e7"
+              ]
+            },
+            "status": "rejected",
+            "review": {
+              "claim_id": "claim-20f43d22de3f3e6df1a5",
+              "verdict": "unsupported",
+              "reason": "The claim asserts support for multiple people editing the same page simultaneously, but the only cited quote q2 says 'Edits and comments made by everyone will appear to you instantly.' It does not mention simultaneous editing or multiple people editing the same page; the broader evidence_terms were not cited as quotes."
+            },
+            "rule_reasons": []
+          }
+        ],
+        "gaps": [
+          "context_budget_exceeded"
+        ],
+        "review_context_bytes": [
+          4662
+        ]
+      },
+      {
+        "competitor": "Confluence",
+        "dimension": "feature",
+        "consumption_id": "evidence-use-bbb22027d896438ea06062800f8672bf",
+        "claims": [
+          {
+            "claim": {
+              "id": "claim-b3837bc7cf53e0bfd367",
+              "text": "Confluence 的 Free 计划包含一组用于推动团队前进的功能。",
+              "kind": "fact",
+              "competitor": "Confluence",
+              "dimension": "feature",
+              "fact_ids": [
+                "evidence-fact-record-1e146d30a9921f957fcb63a343358df3f79233393f9b8f987ea9b305e6a82e96"
+              ],
+              "source_ids": [
+                "raw-source-859c368a1a9cd092356d"
+              ]
+            },
+            "status": "unreviewed",
+            "review": null,
+            "rule_reasons": [
+              "promotional_claim_not_concrete",
+              "missing_or_duplicate_review"
+            ]
+          },
+          {
+            "claim": {
+              "id": "claim-d18ae1db2e26239d3b9a",
+              "text": "Confluence 的 Standard 计划包含 Free 计划的全部功能以及更多内容，用于支持成长中的团队。",
+              "kind": "fact",
+              "competitor": "Confluence",
+              "dimension": "feature",
+              "fact_ids": [
+                "evidence-fact-record-3d7ffd764b335a96e917a010b908a602288436ecd96aeb0a200f2a12285f08ba"
+              ],
+              "source_ids": [
+                "raw-source-859c368a1a9cd092356d"
+              ]
+            },
+            "status": "unreviewed",
+            "review": null,
+            "rule_reasons": [
+              "promotional_claim_not_concrete",
+              "missing_or_duplicate_review"
+            ]
+          },
+          {
+            "claim": {
+              "id": "claim-5bb09305c46edd8a7a41",
+              "text": "Confluence 的 Premium 计划包含 Standard 计划和 Free 计划的全部功能以及更多内容，用于支持大型团队并大规模保护数据。",
+              "kind": "fact",
+              "competitor": "Confluence",
+              "dimension": "feature",
+              "fact_ids": [
+                "evidence-fact-record-9c289c35450440897876fea8bfea66bc392271215c0dadb0e6673c78e146969f"
+              ],
+              "source_ids": [
+                "raw-source-859c368a1a9cd092356d"
+              ]
+            },
+            "status": "unreviewed",
+            "review": null,
+            "rule_reasons": [
+              "promotional_claim_not_concrete",
+              "missing_or_duplicate_review"
+            ]
+          }
+        ],
+        "gaps": [
+          "context_budget_exceeded",
+          "no_reviewed_claims",
+          "promotional_claim_not_concrete"
+        ],
+        "review_context_bytes": []
+      },
+      {
+        "competitor": "Coda",
+        "dimension": "feature",
+        "consumption_id": "evidence-use-40182ca1bb5047c78996fe0f01ad993f",
+        "claims": [
+          {
+            "claim": {
+              "id": "claim-549eeb652dab99af0a43",
+              "text": "Coda 支持通过操作公式设置页面名称。",
+              "kind": "fact",
+              "competitor": "Coda",
+              "dimension": "feature",
+              "fact_ids": [
+                "evidence-fact-record-837adb27bc90f1b31d71663b78f99cacd1a628af94a6b900642c02183a2f3c77",
+                "evidence-fact-record-796318ef26a647cf6d7d39dc934974520bf120751b1ee89efed62c4e937be51e"
+              ],
+              "source_ids": [
+                "raw-source-253e8845f02fcb0d4c4d"
+              ]
+            },
+            "status": "supported",
+            "review": {
+              "claim_id": "claim-549eeb652dab99af0a43",
+              "verdict": "supported",
+              "reason": "The cited quote q1 states 'You can now set your pages name via an action formula,' which directly supports that Coda supports setting page names via an action formula."
+            },
+            "rule_reasons": []
+          },
+          {
+            "claim": {
+              "id": "claim-64b77acd10c13f729373",
+              "text": "Coda 支持通过操作公式隐藏或显示页面。",
+              "kind": "fact",
+              "competitor": "Coda",
+              "dimension": "feature",
+              "fact_ids": [
+                "evidence-fact-record-9caed424ed3c4956cebd3081f1da361ccc32b945fdd49a98d02285ba46b23a60",
+                "evidence-fact-record-34b9b50cc9ad381143c0ea429af9d589bc8483046b585dbfb3e76a58f35cdf07"
+              ],
+              "source_ids": [
+                "raw-source-253e8845f02fcb0d4c4d"
+              ]
+            },
+            "status": "supported",
+            "review": {
+              "claim_id": "claim-64b77acd10c13f729373",
+              "verdict": "supported",
+              "reason": "The cited quote q2 states 'You can now hide or show pages via an action formula,' which directly supports that Coda supports hiding or showing pages via an action formula."
+            },
+            "rule_reasons": []
+          },
+          {
+            "claim": {
+              "id": "claim-847110e774cd21e5ae74",
+              "text": "Coda 支持为表格设置固定行高，可在单行、两行、三行或全部行之间选择。",
+              "kind": "fact",
+              "competitor": "Coda",
+              "dimension": "feature",
+              "fact_ids": [
+                "evidence-fact-record-a128128f64f6d1bb7efb2e25ef334f9740054f1ae95b6ead019f64451563b43d",
+                "evidence-fact-record-13e32caf6fcd1a51d006308d62eb2d8cd7b53c47764c964b17030193aa0e47b9"
+              ],
+              "source_ids": [
+                "raw-source-253e8845f02fcb0d4c4d"
+              ]
+            },
+            "status": "supported",
+            "review": {
+              "claim_id": "claim-847110e774cd21e5ae74",
+              "verdict": "supported",
+              "reason": "The cited quote q0 states 'You can now set a fixed row height for tables—choosing between one, two, three, or all lines,' which directly supports fixed row height for tables with the listed options."
+            },
+            "rule_reasons": []
+          }
+        ],
+        "gaps": [
+          "context_budget_exceeded"
+        ],
+        "review_context_bytes": [
+          4439
+        ]
+      },
+      {
+        "competitor": "Notion",
+        "dimension": "pricing",
+        "consumption_id": "evidence-use-18146687d6cb4cd3b0aa076a48a98dad",
+        "claims": [
+          {
+            "claim": {
+              "id": "claim-444eeb38dd41cd689c45",
+              "text": "Plus 套餐页面标价为 10 USD。页面按每位成员每月展示。",
+              "kind": "fact",
+              "competitor": "Notion",
+              "dimension": "pricing",
+              "fact_ids": [
+                "evidence-fact-record-140480dd22736a1f151b73a50882bec936b8f5c75470d9c369ee30048e162458"
+              ],
+              "source_ids": [
+                "raw-source-84d93774a937707e285a"
+              ]
+            },
+            "status": "supported",
+            "review": {
+              "claim_id": "claim-444eeb38dd41cd689c45",
+              "verdict": "supported",
+              "reason": "Quote q0 shows 'Plus' followed by '$10' and 'per member / month', matching the claimed plan, amount, currency, and per-member-per-month display."
+            },
+            "rule_reasons": []
+          },
+          {
+            "claim": {
+              "id": "claim-6b85142ed4015d3008b7",
+              "text": "Business 套餐页面标价为 20 USD。页面按每位成员每月展示。",
+              "kind": "fact",
+              "competitor": "Notion",
+              "dimension": "pricing",
+              "fact_ids": [
+                "evidence-fact-record-2a686403bb401e1a3ca4561644e6056e2c3f3ac26bbf03ad0f5f79fa16449443"
+              ],
+              "source_ids": [
+                "raw-source-84d93774a937707e285a"
+              ]
+            },
+            "status": "supported",
+            "review": {
+              "claim_id": "claim-6b85142ed4015d3008b7",
+              "verdict": "supported",
+              "reason": "Quote q1 shows 'Business' followed by '$20' and 'per member / month', matching the claimed plan, amount, currency, and per-member-per-month display."
+            },
+            "rule_reasons": []
+          },
+          {
+            "claim": {
+              "id": "claim-da5200ad7fcccf04c5b4",
+              "text": "Free 套餐页面标价为 0 USD。页面按每位成员每月展示。",
+              "kind": "fact",
+              "competitor": "Notion",
+              "dimension": "pricing",
+              "fact_ids": [
+                "evidence-fact-record-e272787f8ebce9d8b6e1a8ee1fb583746233b2c3096ed7660aef95540f6deab7"
+              ],
+              "source_ids": [
+                "raw-source-84d93774a937707e285a"
+              ]
+            },
+            "status": "supported",
+            "review": {
+              "claim_id": "claim-da5200ad7fcccf04c5b4",
+              "verdict": "supported",
+              "reason": "The quote shows the Free plan with $0 and 'per member / month', and the fact qualifiers confirm amount 0.0, currency USD, plan Free, amount_basis member, amount_period monthly. The claim only states the listed price and display basis, not billing cycle or suitability."
+            },
+            "rule_reasons": []
+          }
+        ],
+        "gaps": [
+          "billing_interval",
+          "market",
+          "seat_type",
+          "tax_scope"
+        ],
+        "review_context_bytes": [
+          7223,
+          3186
+        ]
+      },
+      {
+        "competitor": "Confluence",
+        "dimension": "pricing",
+        "consumption_id": "evidence-use-ee46bbfc51e8406393009a39cd5b7128",
+        "claims": [],
+        "gaps": [
+          "no_reviewed_claims",
+          "supporting_facts"
+        ],
+        "review_context_bytes": []
+      },
+      {
+        "competitor": "Coda",
+        "dimension": "pricing",
+        "consumption_id": "evidence-use-869bc2cba07349ef9c5fe9379539bb7f",
+        "claims": [],
+        "gaps": [
+          "no_reviewed_claims",
+          "supporting_facts"
+        ],
+        "review_context_bytes": []
+      }
+    ],
+    "qa_issues": [
+      {
+        "problem": "Community triangulation was not attempted for Notion / feature.",
+        "severity": "warn",
+        "target_agent": "collector",
+        "target_competitor": "Notion",
+        "target_subagent": "feature",
+        "metadata": {}
+      },
+      {
+        "problem": "Community triangulation was not attempted for Notion / pricing.",
+        "severity": "warn",
+        "target_agent": "collector",
+        "target_competitor": "Notion",
+        "target_subagent": "pricing",
+        "metadata": {}
+      },
+      {
+        "problem": "Community triangulation was not attempted for Confluence / feature.",
+        "severity": "warn",
+        "target_agent": "collector",
+        "target_competitor": "Confluence",
+        "target_subagent": "feature",
+        "metadata": {}
+      },
+      {
+        "problem": "Community triangulation was not attempted for Confluence / pricing.",
+        "severity": "warn",
+        "target_agent": "collector",
+        "target_competitor": "Confluence",
+        "target_subagent": "pricing",
+        "metadata": {}
+      },
+      {
+        "problem": "Community triangulation was not attempted for Coda / feature.",
+        "severity": "warn",
+        "target_agent": "collector",
+        "target_competitor": "Coda",
+        "target_subagent": "feature",
+        "metadata": {}
+      },
+      {
+        "problem": "Community triangulation was not attempted for Coda / pricing.",
+        "severity": "warn",
+        "target_agent": "collector",
+        "target_competitor": "Coda",
+        "target_subagent": "pricing",
+        "metadata": {}
+      },
+      {
+        "problem": "Feature analyst did not produce structured findings for Notion.",
+        "severity": "blocker",
+        "target_agent": "analyst",
+        "target_competitor": "Notion",
+        "target_subagent": "feature",
+        "metadata": {}
+      },
+      {
+        "problem": "Pricing analyst did not produce structured findings for Notion.",
+        "severity": "blocker",
+        "target_agent": "analyst",
+        "target_competitor": "Notion",
+        "target_subagent": "pricing",
+        "metadata": {}
+      },
+      {
+        "problem": "Comparison matrix is missing even though structured KB data exists.",
+        "severity": "blocker",
+        "target_agent": "comparator",
+        "target_competitor": null,
+        "target_subagent": null,
+        "metadata": {}
+      },
+      {
+        "problem": "No pricing source covers Confluence.",
+        "severity": "blocker",
+        "target_agent": "collector",
+        "target_competitor": "Confluence",
+        "target_subagent": "pricing",
+        "metadata": {
+          "issue_kind": "missing_evidence"
+        }
+      },
+      {
+        "problem": "No pricing source covers Coda.",
+        "severity": "blocker",
+        "target_agent": "collector",
+        "target_competitor": "Coda",
+        "target_subagent": "pricing",
+        "metadata": {
+          "issue_kind": "missing_evidence"
+        }
+      }
+    ]
+  },
+  "claim_counts": {
+    "total": 12,
+    "published": 8,
+    "model_unsupported": 1,
+    "local_rule_blocked_without_model_review": 3
+  },
+  "budget": {
+    "original_checkpoint": {
+      "calls": 7,
+      "repairs": 0,
+      "tokens_charged": 25907,
+      "cost_charged_usd": 0.008326476
+    },
+    "final_checkpoint": {
+      "calls": 36,
+      "repairs": 0,
+      "tokens_charged": 101311,
+      "cost_charged_usd": 0.038217348
+    },
+    "phase_added_calls": 29,
+    "phase_added_tokens": 75404,
+    "phase_added_estimated_usd": 0.029890872,
+    "billing_note": "Configured estimate, not provider invoice; budgets never reset"
+  },
+  "attempts": [
+    {
+      "number": 1,
+      "status": "failed",
+      "report_chars": 0,
+      "calls_added": 8,
+      "tokens_added": 21708,
+      "error": {
+        "type": "RuntimeError",
+        "message": "Writer failed before report generation: Schema-contract report failed quality preflight after hardening: missing_core_sections"
+      }
+    },
+    {
+      "number": 2,
+      "status": "completed_with_blockers",
+      "report_chars": 1803,
+      "calls_added": 7,
+      "tokens_added": 18065,
+      "error": null
+    },
+    {
+      "number": 3,
+      "status": "completed_with_blockers",
+      "report_chars": 2022,
+      "calls_added": 7,
+      "tokens_added": 18078,
+      "error": null
+    },
+    {
+      "number": 4,
+      "status": "completed_with_blockers",
+      "report_chars": 1812,
+      "calls_added": 7,
+      "tokens_added": 17553,
+      "error": null
+    }
+  ],
+  "limitations": [
+    "Full report still blocked: missing Confluence/Coda price evidence, upstream Notion feature KB and comparison matrix; no common-task capability comparison",
+    "Model semantic verdicts can be wrong; deterministic heuristics cover selected error patterns only",
+    "Redo in this route rebuilds the entire audited draft; selective audited repairs remain future work",
+    "Standard/deep/demo and single-dimension writers retain their prior routes",
+    "Qdrant HTTP, real PostgreSQL RLS, Temporal and complete automatic discovery/live fetch not accepted in this phase"
+  ],
+  "core_file_sha256": {
+    "backend/packages/agents/writer/dimension_writer.py": "4cd3fbb0136c4929469546806ea8c6fd33e0c920048c98fd73cbd98bdb9d69fa",
+    "backend/packages/research/evidence/report_claims.py": "43ce1ba55a1611ba19749cea5160ae2719bb01cc26e3a3c455edaad3a8c0fee0",
+    "backend/packages/agents/writer/evidence_alignment.py": "d1d806474787e3cec04ed2f305a7c5988fcf359435cb110a27e24c821f6c5267",
+    "backend/packages/agents/writer/logic.py": "3f6a6c35ea26bdad4800f45c6f561470e8208b4c8d63a382cb8f7355d238125a",
+    "backend/packages/agents/qa/evidence_alignment.py": "f6905c7b2d71f35b71a37133109ab64316b62a9478f428c0ac40c411db07a0ab",
+    "backend/packages/research/evidence/answer_guard.py": "b0e2b9a426f82756bf10816081a0b71edbdfe32bf6ead4be9fa566c887bf2348",
+    "backend/packages/research/evidence/answer_models.py": "cf9519785687ea82c06d5bb1dffb60c2ce22c0f95f98cd69628fe5353bf58a45",
+    "backend/packages/research/evidence/snapshot_models.py": "0a5c2a9bdff294362d3dc9a038b3ae3b85489d6548914528b231f79e33b12a22",
+    "backend/packages/orchestrator/answer_context.py": "8b2756e0caff4ab80f4747256a5835266b392c611c67b202f5b1660877e9e9ee",
+    "backend/packages/orchestrator/evidence_context.py": "551d178ebe9fe68ec7a3e2897de98192c96e9fb1afedacb409d44b41e60179b3",
+    "backend/packages/schema/api_dto.py": "ae5e3b4a7f3d0a2f4e2975662fd284d9c0be3fdc9513841e468132aafdee62aa",
+    "backend/tests/unit/test_report_claim_audit.py": "4cf9d0f5ffcdf7e81a878a32874b662a2a1ad858c48c2a485cecbd54ac5dcb35",
+    "backend/tests/unit/test_dimension_writer.py": "fa2ea0fb3ad4f8eafd7f83910b9cfe6a8d0d07464ef11f651b3c7aaca5d0f987",
+    "frontend/openapi.json": "5255333c923fe2faf3264b0b0f5142dbc4eb20bf7264f0136693af1679713cec",
+    "frontend/src/api/openapi.ts": "2e473d0601d63186590a6b351950b68c200e920b2ad62e265abfe48968e67108",
+    "frontend/src/api/types.ts": "8fba92781bd555c23593811ca623cc56c90474d0a6dbf252ee3ea03ddc001f80",
+    "docs/optimization/2026-10-11-dimension-writing-live-draft.md": "02a5ef1bb48fea828ee201247290c5a019bb5c6be7e3d97eb4222df339987534"
+  },
+  "draft_sha256": "02a5ef1bb48fea828ee201247290c5a019bb5c6be7e3d97eb4222df339987534",
+  "runtime": {
+    "backend_restarted": true,
+    "live_openapi_audit_field": true,
+    "frontend_http": 200,
+    "health_status": "error",
+    "outstanding_checks": {
+      "temporal_cutover": "error",
+      "temporal_server": "warn"
+    }
+  }
+}

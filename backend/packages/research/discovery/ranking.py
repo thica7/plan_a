@@ -66,12 +66,16 @@ def _score(
         origin_score = max(origin_score, SOURCE_ORIGIN_PRIORITY["deepseek"] + 1)
     trust_score = 1 if is_trusted_url_for_competitor(competitor, candidate.url) else 0
     homepage_score = 1 if homepage_host and host.endswith(homepage_host) else 0
+    if candidate.origin == 'trusted_registry':
+        # The curated order already expresses which official document to try.
+        # A product homepage/changelog must not displace a migrated help article.
+        homepage_score = 0
     dimension_score = 1 if _dimension_hint_present(dimension, url, candidate.snippet) else 0
     return (
         origin_score,
         candidate.confidence,
-        trust_score + homepage_score,
         dimension_score,
+        trust_score + homepage_score,
         -candidate.rank,
         candidate.url,
     )
@@ -87,7 +91,7 @@ def _dimension_hint_present(dimension: str, url: str, snippet: str) -> bool:
     elif "security" in key or "trust" in key:
         terms = ("security", "trust", "compliance", "privacy", "soc", "iso")
     else:
-        terms = ("docs", "features", "models", "product", "api", "capabilities")
+        terms = ("doc", "help", "features", "models", "product", "api", "capabilities")
     return any(term in haystack for term in terms)
 
 

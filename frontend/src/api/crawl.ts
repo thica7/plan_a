@@ -1,5 +1,7 @@
 import { apiFetch } from "./http";
 export interface CrawlJob {
+  workspace_id?: string | null;
+  project_id?: string | null;
   id: string;
   run_id: string | null;
   url: string;

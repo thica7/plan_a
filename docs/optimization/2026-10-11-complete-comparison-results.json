@@ -1,0 +1,533 @@
+{
+  "case_id": "notion-three-products",
+  "date": "2026-10-11",
+  "git_head": "40e0f520b7923959c791fb197b741cfdff713200",
+  "worktree_status": "existing uncommitted changes preserved; no commit or push in this phase",
+  "code_sha256": {
+    "backend/packages/business_intel/entity_resolver.py": "9a62f3b0d174b1593979fa4521d79d5a4298c0aacde0b8f76ba049fdefa70255",
+    "backend/packages/research/discovery/ranking.py": "964b892bdbf12c4ac08aa611dd424fcea601c2d4a9dd4616217c4cce734ab377",
+    "backend/packages/research/extraction/pricing.py": "53fe24def806dcc8b4950a6e58b529d2114868d8d90d0500eae4c21727150983",
+    "backend/packages/research/extraction/pricing_cards.py": "827e0e6ad036f428b8c8255f76b3dff6e39ecf7b9b8b1e0818eb1ae9fb723608",
+    "backend/packages/research/extraction/semantic.py": "0005a67fbbc8b36fdbd1719fc43d0f3f32b9034f494d2fa586aeac15b36c8882",
+    "backend/packages/research/extraction/feature.py": "5d75d299c4bb9b928e6b63b6a3db7bf5025bbc6c82d737d5fafd1145de852f39",
+    "backend/packages/research/evidence/admission.py": "eda3ff1a514f353a6b61d32e7307d05aa75ed89f68f8bf0c78cb38db35b6e26c",
+    "backend/packages/research/evidence/snapshot.py": "66ebe63a1b691c8a42adb0c2499ea6915807df6255ff3b3a7648dcd68e490f07",
+    "backend/packages/research/evidence/snapshot_models.py": "be56ddd758057066252aed71351eb6de6cedd1245d6d00b2c7d90cd06279bd89",
+    "backend/packages/research/evidence/views.py": "bc3f1e94b7dca60fe239b25af5e2aabb12896978ff0fcd64476fa000cfdcc394",
+    "backend/packages/research/evidence/capabilities.py": "2aaf5783d8e6ef2d78ce3aa4cc0b6ed0cf6b26e80c1da0d7ea0f00d734a16154",
+    "backend/packages/tools/evidence_fetch.py": "3458700a8d47841fd24120f9932e63efd2590ade9bdb496178594c7ccfa5a3d9",
+    "backend/packages/tools/fetch_page.py": "3779369aad2888403e6eb73700632f4852549199a21ebcba9bfd512b8cbc1404",
+    "backend/packages/orchestrator/evidence_context.py": "b5659b8ebe7b6e46fbc6a6b289d6b8665eb4191302e3728a861c79ec9c7b46a3",
+    "backend/packages/agents/comparator/logic.py": "d906e3aaa77273584812cebb88dc0475a4b48c2e63a12c87cb5f221e9c34f363",
+    "backend/packages/agents/reflector/logic.py": "57ae7a6bfc70267d97d89a35109e435d128b4f7bc4671a1ff57eb7f89747a00a",
+    "backend/packages/agents/qa/logic.py": "83ce2f36c3625c4f03f089256f84317967528883ceece31fe8a9857ed9379b52",
+    "backend/packages/agents/writer/dimension_writer.py": "ddb01c28637f65760745842ab76916ca753b571aea16069bca28aee45915c68c",
+    "backend/packages/research/evidence/report_claims.py": "9da1283324619684062554900265734ce2c52950f50154f9793eb9a0717ff865",
+    "backend/scripts/eval_live_products.py": "597a4478186ac9d3eb69efdbac95e397148c7359d377cd545433ba12405e7262",
+    "third_party/webfetch_v2/webfetch_v2/extract.py": "e25ee9be7bdd830802d6644d2e91016c117a63bde489822ff73fe50f2af49acc",
+    "third_party/webfetch_v2/webfetch_v2/models.py": "32c24fe246e80b43ecdedbde32839c486104c847f34969ef80266f4f4ba5ce74"
+  },
+  "latest_summary": {
+    "case_id": "notion-three-products",
+    "timed_out": false,
+    "error_type": null,
+    "duration_seconds": 212.76,
+    "failure_messages": [],
+    "status": "completed",
+    "current_node": null,
+    "pipeline_terminal": true,
+    "mechanical_pass": true,
+    "partial_report_generated": false,
+    "semantic_quality": {
+      "status": "not_passed",
+      "reviewer": "manual report and structured-artifact inspection",
+      "issues": [
+        "未形成三家在共享编辑、评论、权限三个共同轴下的完整证据对照；Coda 共享编辑和三方权限条件仍缺。",
+        "Confluence 页面金额已入库但币种、人数状态和付款周期未证实，正文无有效金额；不能推测 USD 或十人总价。",
+        "Coda 两条月付价格已入库但未进入最终正文；Notion Business 和 Confluence Standard 也被短视图省略。",
+        "比较汇总事实范围已修复，但派生分析上下文仍溢出：38011B 证据 + 25296B 知识摘要 > 57344B 上限，摘要被省略。",
+        "矩阵模型摘要将最多29名队友误写为最多29人，且出现无对应正式套餐证据的 Team 及重复 Pro 标签；正文未引用这些条目，矩阵本身仍须逐条审核。",
+        "55条 QA 均为 warn，系统 completed 没有表达用户指定能力和报价的最低交付覆盖要求。"
+      ]
+    },
+    "has_product_analysis_signal": true,
+    "citations_valid": true,
+    "unknown_citation_count": 0,
+    "report_chars": 2501,
+    "core_chars": 1548,
+    "competitors": [
+      "Notion",
+      "Confluence",
+      "Coda"
+    ],
+    "source_count": 7,
+    "source_types": [
+      "webpage_verified"
+    ],
+    "assessments": {
+      "feature": {
+        "status": "insufficient_evidence",
+        "winner": null,
+        "rationale": "Comparison withheld: Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown'}.",
+        "scenario": "十人团队共同维护产品文档与团队知识，核实评论、共享编辑与权限边界",
+        "tradeoffs": [
+          "Confluence 共享编辑文档给出 29 人上限，Notion 文档称无限人数，但两者来源与条件不同，不能直接判定质量优劣",
+          "Coda 评论受访问级别与页面锁定限制，权限边界更细但本视图未捕获共享编辑证据",
+          "Confluence 内联评论在编辑会话内可见，发布后未解决评论对页面查看者可见，权限边界与 Notion/Coda 未对齐"
+        ],
+        "gaps": [
+          "Coda 共享编辑能力在本视图未捕获（context_budget_exceeded，非缺失）",
+          "三方评论权限边界（谁能评论、谁能解决、发布后可见范围）未在同一条件下对齐",
+          "Notion 部分能力事实置信度 0.64，低于 0.75，不能单独支撑胜负判定",
+          "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+          "Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown'}."
+        ],
+        "source_ids": [
+          "raw-source-f7a81bf787f1e9e932e7",
+          "raw-source-a5a35d9a74b6bc0454f0",
+          "raw-source-cfd5046889caadc3c3bd"
+        ]
+      },
+      "pricing": {
+        "status": "insufficient_evidence",
+        "winner": null,
+        "rationale": "Comparison withheld: Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.; Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Free', 'Plus'], 'Confluence': ['Free', 'Premium'], 'Coda': ['Free', 'Pro']}; select plans for the shared task before ranking prices.",
+        "scenario": "十人团队评估三家文档协作工具的标价与收费席位/付款周期",
+        "tradeoffs": [
+          "Notion Plus $10/成员/月与 Confluence Premium $10.44/用户/月计费周期未知，无法与 Coda Pro 年付 $12 USD/月 per Doc Maker 对齐",
+          "Coda Pro 按 Doc Maker 计费，与 Notion 的 member、Confluence 的 user 席位口径不同",
+          "三方 tax_scope 均为 unknown，不能当作完整采购账单",
+          "未捕获十人团队实际席位构成与年付折月换算，不能推算总成本"
+        ],
+        "gaps": [
+          "Notion Plus 与 Confluence Premium 的 billing_interval/billing_cycle 未知",
+          "三方 tax_scope 均未知",
+          "Coda Pro 年付与 Notion/Confluence 月付口径不可直接换算",
+          "十人团队实际席位类型与人数未捕获",
+          "Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.",
+          "Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Free', 'Plus'], 'Confluence': ['Free', 'Premium'], 'Coda': ['Free', 'Pro']}; select plans for the shared task before ranking prices."
+        ],
+        "source_ids": [
+          "raw-source-84d93774a937707e285a",
+          "raw-source-fc5559a8484790bb214f",
+          "raw-source-2ee7fb10b23da736180d"
+        ]
+      }
+    },
+    "native_llm_spans": 27,
+    "search_spans": 24,
+    "successful_search_spans": 6,
+    "provider_usage_by_kind": {
+      "llm": {
+        "prompt_tokens": 80637,
+        "completion_tokens": 9648,
+        "total_tokens": 90285,
+        "prompt_cache_hit_tokens": 17024,
+        "prompt_cache_miss_tokens": 63613
+      },
+      "search": {
+        "prompt_tokens": 44775,
+        "completion_tokens": 4794,
+        "total_tokens": 49569,
+        "prompt_cache_hit_tokens": 12544,
+        "prompt_cache_miss_tokens": 32231
+      }
+    },
+    "provider_total_tokens_last_attempts": 139854,
+    "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+    "budget_checkpoint": {
+      "calls": 33,
+      "repairs": 0,
+      "tokens_charged": 148484,
+      "cost_charged_usd": 0.049165164
+    },
+    "qa_issue_count": 55
+  },
+  "history": [
+    {
+      "label": "native",
+      "status": "failed",
+      "duration_seconds": 18.83,
+      "mechanical_pass": false,
+      "report_chars": 0,
+      "source_count": 0,
+      "provider_total_tokens_last_attempts": 35234,
+      "budget_checkpoint": {
+        "calls": 4,
+        "repairs": 0,
+        "tokens_charged": 35234,
+        "cost_charged_usd": 0.01210986
+      },
+      "review_note": "自动发现失败；未进入固定三产品分析。"
+    },
+    {
+      "label": "fixed",
+      "status": "completed_with_blockers",
+      "duration_seconds": 205.68,
+      "mechanical_pass": false,
+      "report_chars": 2119,
+      "source_count": 7,
+      "provider_total_tokens_last_attempts": 173659,
+      "budget_checkpoint": {
+        "calls": 43,
+        "repairs": 11,
+        "tokens_charged": 182452,
+        "cost_charged_usd": 0.066988872
+      },
+      "review_note": "汇总预算过小、价格与正文审计问题。"
+    },
+    {
+      "label": "repaired",
+      "status": "completed_with_blockers",
+      "duration_seconds": 266.75,
+      "mechanical_pass": false,
+      "report_chars": 2193,
+      "source_count": 7,
+      "provider_total_tokens_last_attempts": 185467,
+      "budget_checkpoint": {
+        "calls": 43,
+        "repairs": 13,
+        "tokens_charged": 185467,
+        "cost_charged_usd": 0.064105728
+      },
+      "review_note": "汇总回放修复后，Coda Free 短引用仍导致整组拒绝。"
+    },
+    {
+      "label": "public_docs",
+      "status": "completed_with_blockers",
+      "duration_seconds": 211.9,
+      "mechanical_pass": false,
+      "report_chars": 2195,
+      "source_count": 7,
+      "provider_total_tokens_last_attempts": 189857,
+      "budget_checkpoint": {
+        "calls": 44,
+        "repairs": 12,
+        "tokens_charged": 189857,
+        "cost_charged_usd": 0.06289344000000001
+      },
+      "review_note": "匿名公开文档重试后，迁移产品身份仍未准入。"
+    },
+    {
+      "label": "final",
+      "status": "completed_with_blockers",
+      "duration_seconds": 181.42,
+      "mechanical_pass": false,
+      "report_chars": 2504,
+      "source_count": 9,
+      "provider_total_tokens_last_attempts": 183900,
+      "budget_checkpoint": {
+        "calls": 43,
+        "repairs": 11,
+        "tokens_charged": 183900,
+        "cost_charged_usd": 0.05912546399999998
+      },
+      "review_note": "价格已入库；文档揉成一行，限制绑定与能力选择不合格。"
+    },
+    {
+      "label": "structured",
+      "status": "completed",
+      "duration_seconds": 285.38,
+      "mechanical_pass": true,
+      "report_chars": 2714,
+      "source_count": 7,
+      "provider_total_tokens_last_attempts": 169009,
+      "budget_checkpoint": {
+        "calls": 41,
+        "repairs": 9,
+        "tokens_charged": 173537,
+        "cost_charged_usd": 0.06055758000000001
+      },
+      "review_note": "机械通过；共同轴、Confluence 价格、上下文仍不合格。"
+    },
+    {
+      "label": "scoped",
+      "status": "failed",
+      "duration_seconds": 43.27,
+      "mechanical_pass": false,
+      "report_chars": 0,
+      "source_count": 7,
+      "provider_total_tokens_last_attempts": 63898,
+      "budget_checkpoint": {
+        "calls": 14,
+        "repairs": 0,
+        "tokens_charged": 63898,
+        "cost_charged_usd": 0.019214844
+      },
+      "review_note": "本地 QA 预算误截断导致凭据重放失败；现已修复。"
+    },
+    {
+      "label": "delivered",
+      "status": "completed",
+      "duration_seconds": 212.76,
+      "mechanical_pass": true,
+      "report_chars": 2501,
+      "source_count": 7,
+      "provider_total_tokens_last_attempts": 139854,
+      "budget_checkpoint": {
+        "calls": 33,
+        "repairs": 0,
+        "tokens_charged": 148484,
+        "cost_charged_usd": 0.049165164
+      },
+      "review_note": "机械通过；人工交付验收未通过，详见本轮缺口。"
+    }
+  ],
+  "cumulative_budget": {
+    "calls": 265,
+    "repairs": 56,
+    "tokens_charged": 1162829,
+    "estimated_cost_usd": 0.394160952,
+    "scope": "eight workflow runs; diagnostic probes excluded; estimate is not provider invoice"
+  },
+  "qa_severities": {
+    "warn": 55
+  },
+  "price_records": [
+    {
+      "source_id": "raw-source-84d93774a937707e285a",
+      "product": "Notion",
+      "plan": "Free",
+      "captured_display": "$0",
+      "amount": 0.0,
+      "currency": "USD",
+      "amount_basis": "member",
+      "amount_period": "monthly",
+      "billing_interval": "unknown",
+      "tax_scope": "unknown",
+      "verified_at": "2026-10-11T09:42:50.080323+00:00"
+    },
+    {
+      "source_id": "raw-source-84d93774a937707e285a",
+      "product": "Notion",
+      "plan": "Plus",
+      "captured_display": "$10",
+      "amount": 10.0,
+      "currency": "USD",
+      "amount_basis": "member",
+      "amount_period": "monthly",
+      "billing_interval": "unknown",
+      "tax_scope": "unknown",
+      "verified_at": "2026-10-11T09:42:50.080323+00:00"
+    },
+    {
+      "source_id": "raw-source-84d93774a937707e285a",
+      "product": "Notion",
+      "plan": "Business",
+      "captured_display": "$20",
+      "amount": 20.0,
+      "currency": "USD",
+      "amount_basis": "member",
+      "amount_period": "monthly",
+      "billing_interval": "unknown",
+      "tax_scope": "unknown",
+      "verified_at": "2026-10-11T09:42:50.080323+00:00"
+    },
+    {
+      "source_id": "raw-source-fc5559a8484790bb214f",
+      "product": "Confluence",
+      "plan": "Free",
+      "captured_display": "$0",
+      "amount": 0.0,
+      "currency": "unknown",
+      "amount_basis": "unknown",
+      "amount_period": "unknown",
+      "billing_interval": "unknown",
+      "tax_scope": "unknown",
+      "verified_at": "unknown"
+    },
+    {
+      "source_id": "raw-source-fc5559a8484790bb214f",
+      "product": "Confluence",
+      "plan": "Standard",
+      "captured_display": "$5.42",
+      "amount": 5.42,
+      "currency": "unknown",
+      "amount_basis": "user",
+      "amount_period": "monthly",
+      "billing_interval": "unknown",
+      "tax_scope": "unknown",
+      "verified_at": "unknown"
+    },
+    {
+      "source_id": "raw-source-fc5559a8484790bb214f",
+      "product": "Confluence",
+      "plan": "Premium",
+      "captured_display": "$10.44",
+      "amount": 10.44,
+      "currency": "unknown",
+      "amount_basis": "user",
+      "amount_period": "monthly",
+      "billing_interval": "unknown",
+      "tax_scope": "unknown",
+      "verified_at": "unknown"
+    },
+    {
+      "source_id": "raw-source-2ee7fb10b23da736180d",
+      "product": "Coda",
+      "plan": "Free",
+      "captured_display": "$0 USD",
+      "amount": 0.0,
+      "currency": "USD",
+      "amount_basis": "unknown",
+      "amount_period": "unknown",
+      "billing_interval": "unknown",
+      "tax_scope": "unknown",
+      "verified_at": "2026-10-11T09:43:05.901979+00:00"
+    },
+    {
+      "source_id": "raw-source-2ee7fb10b23da736180d",
+      "product": "Coda",
+      "plan": "Pro",
+      "captured_display": "$12 USD / month",
+      "amount": 12.0,
+      "currency": "USD",
+      "amount_basis": "doc_maker",
+      "amount_period": "monthly",
+      "billing_interval": "annual",
+      "tax_scope": "unknown",
+      "verified_at": "2026-10-11T09:43:05.901979+00:00"
+    },
+    {
+      "source_id": "raw-source-2ee7fb10b23da736180d",
+      "product": "Coda",
+      "plan": "Pro",
+      "captured_display": "$15 when billed monthly",
+      "amount": 15.0,
+      "currency": "USD",
+      "amount_basis": "doc_maker",
+      "amount_period": "monthly",
+      "billing_interval": "monthly",
+      "tax_scope": "unknown",
+      "verified_at": "2026-10-11T09:43:05.901979+00:00"
+    },
+    {
+      "source_id": "raw-source-2ee7fb10b23da736180d",
+      "product": "Coda",
+      "plan": "Business",
+      "captured_display": "$33 USD / month",
+      "amount": 33.0,
+      "currency": "USD",
+      "amount_basis": "doc_maker",
+      "amount_period": "monthly",
+      "billing_interval": "annual",
+      "tax_scope": "unknown",
+      "verified_at": "2026-10-11T09:43:05.901979+00:00"
+    },
+    {
+      "source_id": "raw-source-2ee7fb10b23da736180d",
+      "product": "Coda",
+      "plan": "Business",
+      "captured_display": "$40 when billed monthly",
+      "amount": 40.0,
+      "currency": "USD",
+      "amount_basis": "doc_maker",
+      "amount_period": "monthly",
+      "billing_interval": "monthly",
+      "tax_scope": "unknown",
+      "verified_at": "2026-10-11T09:43:05.901979+00:00"
+    }
+  ],
+  "source_index": [
+    {
+      "id": "raw-source-b92f96c0c5e5d2643df7",
+      "competitor": "Notion",
+      "dimension": "feature",
+      "url": "https://www.notion.com/help/comments-mentions-and-reminders",
+      "title": "Comments, mentions & reactions in Notion | Notion Help – Notion Help Center",
+      "retrieved_at": null
+    },
+    {
+      "id": "raw-source-f7a81bf787f1e9e932e7",
+      "competitor": "Notion",
+      "dimension": "feature",
+      "url": "https://www.notion.com/help/collaborate-with-people",
+      "title": "Collaborate with people in Notion | Notion Help – Notion Help Center",
+      "retrieved_at": null
+    },
+    {
+      "id": "raw-source-a5a35d9a74b6bc0454f0",
+      "competitor": "Confluence",
+      "dimension": "feature",
+      "url": "https://support.atlassian.com/confluence-cloud/docs/create-edit-and-publish-a-page/",
+      "title": "Create, update, and manage written content | Confluence Cloud | Atlassian Support",
+      "retrieved_at": null
+    },
+    {
+      "id": "raw-source-84d93774a937707e285a",
+      "competitor": "Notion",
+      "dimension": "pricing",
+      "url": "https://www.notion.com/pricing",
+      "title": "Notion Pricing Plans: Free, Plus, Business, & Enterprise.",
+      "retrieved_at": null
+    },
+    {
+      "id": "raw-source-cfd5046889caadc3c3bd",
+      "competitor": "Coda",
+      "dimension": "feature",
+      "url": "https://help.superhuman.com/hc/en-us/articles/46210367411469-Comment-on-docs",
+      "title": "Comment on docs – Superhuman Help Center",
+      "retrieved_at": null
+    },
+    {
+      "id": "raw-source-fc5559a8484790bb214f",
+      "competitor": "Confluence",
+      "dimension": "pricing",
+      "url": "https://www.atlassian.com/software/confluence/pricing",
+      "title": "Confluence Pricing: Free and Paid Plans | Atlassian",
+      "retrieved_at": null
+    },
+    {
+      "id": "raw-source-2ee7fb10b23da736180d",
+      "competitor": "Coda",
+      "dimension": "pricing",
+      "url": "https://superhuman.com/plans/docs",
+      "title": "Superhuman Docs | Pricing & Plans",
+      "retrieved_at": null
+    }
+  ],
+  "comparison_context_replay": {
+    "evidence_bytes": 38011,
+    "analysis_bytes": 25296,
+    "max_bytes": 57344,
+    "analysis_omitted": true,
+    "model_calls": 0
+  },
+  "verification": {
+    "backend": {
+      "passed": 3386,
+      "skipped": 1,
+      "warnings": 152,
+      "seconds": 144.32
+    },
+    "evidence_alignment": {
+      "passed": 77,
+      "seconds": 9.32
+    },
+    "webfetch_security": {
+      "passed": 7
+    },
+    "frontend": "OpenAPI regenerated; TypeScript and Vite build passed",
+    "independent_review": "no remaining reproducible P1/P2 in reviewed increment; semantic quality not certified",
+    "local_api": {
+      "http_health": 200,
+      "http_openapi": 200,
+      "evidence_consumption_schema_loaded": true,
+      "health_status": "error",
+      "temporal_cutover": "error",
+      "temporal_server": "warn"
+    }
+  },
+  "artifacts": {
+    "report_path": "docs/optimization/2026-10-11-complete-comparison-live-draft.md",
+    "report_sha256": "fcd5c3de744d2c304a0f7a265e3e5841d0e1346c141cc9374f25f6474893af78",
+    "report_is_verbatim": true,
+    "raw_run_sha256": "7bd399c153641417d402029e35bb29f6c3f0c84f6439a7778f7895893800bec8"
+  },
+  "limitations": [
+    "固定竞品输入；自动发现没有验收通过。",
+    "本次实际生产 LangGraph 工作流使用内存隔离存储；不代表 PostgreSQL、Temporal、Qdrant HTTP 生产依赖验收。",
+    "匿名浏览器权重位于 /tmp，系统清理后需重新安装。",
+    "真实报告仍是非交付草稿；禁止使用 completed 对外声明已通过人工验收。"
+  ]
+}

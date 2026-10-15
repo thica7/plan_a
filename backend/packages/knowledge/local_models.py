@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
+import os
+import threading
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -116,6 +121,7 @@ class LocalEmbeddingProvider(_LocalStatus, EmbeddingProvider):
         device: str = "cpu",
         batch_size: int = 4,
         max_length: int = 512,
+        dimensions: int | None = None,
     ) -> None:
         _check_options(model_id, revision, device, batch_size, max_length)
         if model_id not in _EMBEDDING_IDS:
@@ -130,11 +136,12 @@ class LocalEmbeddingProvider(_LocalStatus, EmbeddingProvider):
             if model_id.startswith("intfloat/")
             else {"query": "", "document": ""}
         )
-        self.dimensions: int | None = None
+        self.dimensions: int | None = dimensions
         self._model = None
         self._error = None
         self.load_time_ms = None
         self.inference_calls = 0
+        self._lock = threading.RLock()
 
     def status(self) -> dict[str, Any]:
         return {**super().status(), "dimensions": self.dimensions, "prefix": self.prefix.copy()}
@@ -151,6 +158,10 @@ class LocalEmbeddingProvider(_LocalStatus, EmbeddingProvider):
         return self._model
 
     def _embed(self, texts: list[str], prefix: str) -> list[list[float]]:
+        with self._lock:
+            return self._embed_locked(texts, prefix)
+
+    def _embed_locked(self, texts: list[str], prefix: str) -> list[list[float]]:
         if not texts:
             return []
         try:
@@ -218,6 +229,7 @@ class LocalRerankerProvider(_LocalStatus, RerankerProvider):
         self._error = None
         self.load_time_ms = None
         self.inference_calls = 0
+        self._lock = threading.RLock()
 
     def _get_model(self) -> Any:
         if self._model is None:
@@ -229,6 +241,10 @@ class LocalRerankerProvider(_LocalStatus, RerankerProvider):
         return self._model
 
     def rerank(self, query: str, texts: list[str]) -> list[float]:
+        with self._lock:
+            return self._rerank_locked(query, texts)
+
+    def _rerank_locked(self, query: str, texts: list[str]) -> list[float]:
         if not query.strip():
             raise ValueError("Reranking query must not be empty")
         if not texts:
@@ -255,3 +271,99 @@ class LocalRerankerProvider(_LocalStatus, RerankerProvider):
         except Exception as exc:
             self._error = exc
             raise
+
+
+_MANIFEST_PATH = (Path(__file__).resolve().parents[3] / "docs" / "optimization"
+                  / "2026-10-04-local-model-download-manifest.json")
+_FROZEN_REVISIONS = {
+    "intfloat/multilingual-e5-small": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+    "BAAI/bge-m3": "5617a9f61b028005a4858fdac845db406aefb181",
+    "BAAI/bge-reranker-v2-m3": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+}
+
+
+def local_model_strict() -> bool:
+    return os.getenv("KB_LOCAL_MODEL_STRICT", "").lower() in {"1", "true", "yes"}
+
+
+class UnavailableLocalProvider(EmbeddingProvider, RerankerProvider):
+    """Explicit sparse fallback signal; never produces substitute hash vectors/scores."""
+
+    def __init__(self, kind: str, model_id: str, revision: str, reason: str) -> None:
+        self.requested_provider = ("local-sentence-transformer" if kind == "embedding"
+                                   else "local-cross-encoder")
+        self.model_version = f"{model_id}@{revision}"
+        self.model_id, self.revision, self.reason = model_id, revision, reason
+        self.dimensions = 384 if model_id == "intfloat/multilingual-e5-small" else None
+
+    def status(self) -> dict[str, Any]:
+        return {**EmbeddingProvider.status(self), "effective_provider": "unavailable",
+                "model_id": self.model_id, "revision": self.revision,
+                "degraded": True, "reason": self.reason, "inference_calls": 0}
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError(self.reason)
+
+    def embed_query(self, text: str) -> list[float]:
+        raise RuntimeError(self.reason)
+
+    def rerank(self, query: str, texts: list[str]) -> list[float]:
+        raise RuntimeError(self.reason)
+
+
+def get_local_provider_from_env(kind: str) -> Any:
+    """Load only frozen local artifacts. Hash validation and model loading are cached."""
+    prefix = f"KB_{kind.upper()}"
+    default_id = "intfloat/multilingual-e5-small" if kind == "embedding" else _RERANKER_ID
+    if kind == "embedding" and os.getenv(f"{prefix}_PROVIDER", "").strip().lower() == "bge-m3":
+        default_id = "BAAI/bge-m3"
+    model_id = os.getenv(f"{prefix}_MODEL", default_id)
+    revision = os.getenv(f"{prefix}_REVISION", _FROZEN_REVISIONS.get(model_id, ""))
+    try:
+        manifest_bytes = _MANIFEST_PATH.read_bytes()
+        entry = next((item for item in json.loads(manifest_bytes)["models"]
+                      if item["model_id"] == model_id), None)
+        if (entry is None or revision != _FROZEN_REVISIONS.get(model_id)
+                or entry["revision"] != revision):
+            raise ValueError("Local model identity/revision is not in the frozen manifest")
+        path = Path(os.getenv(f"{prefix}_LOCAL_PATH", entry["local_path"]))
+        _check_path(path)
+        if path.resolve() != Path(entry["local_path"]).resolve():
+            raise ValueError("Local model path does not match the frozen manifest")
+        version = os.getenv(f"{prefix}_MODEL_VERSION", f"{model_id}@{revision}")
+        if version != f"{model_id}@{revision}":
+            raise ValueError("Local model version must match the frozen identity")
+        # Stats invalidate the cached verification/provider after local artifact changes.
+        signature = tuple((item["file"], (path / item["file"]).stat().st_size,
+                           (path / item["file"]).stat().st_mtime_ns) for item in entry["files"])
+        return _frozen_provider(
+            kind, model_id, revision, str(path), int(os.getenv(f"{prefix}_BATCH_SIZE", "4")),
+            int(os.getenv(f"{prefix}_MAX_LENGTH", "512")), manifest_bytes, signature,
+        )
+    except Exception as exc:
+        if local_model_strict():
+            raise
+        return UnavailableLocalProvider(kind, model_id, revision, str(exc))
+
+
+@lru_cache(maxsize=8)
+def _frozen_provider(
+    kind: str, model_id: str, revision: str, path: str, batch_size: int, max_length: int,
+    manifest_bytes: bytes, signature: tuple,
+) -> Any:
+    entry = next(item for item in json.loads(manifest_bytes)["models"]
+                 if item["model_id"] == model_id and item["revision"] == revision)
+    for item in entry["files"]:
+        local_file = Path(path) / item["file"]
+        digest = hashlib.sha256()
+        with local_file.open("rb") as handle:
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(block)
+        if local_file.stat().st_size != item["bytes"] or digest.hexdigest() != item["sha256"]:
+            raise ValueError(f"Frozen local model file integrity mismatch: {item['file']}")
+    options = dict(model_id=model_id, revision=revision, batch_size=batch_size,
+                   max_length=max_length)
+    if kind == "embedding":
+        return LocalEmbeddingProvider(Path(path), dimensions=384 if model_id.startswith("intfloat/")
+                                      else 1024, **options)
+    return LocalRerankerProvider(Path(path), **options)

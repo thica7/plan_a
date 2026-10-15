@@ -477,18 +477,19 @@ def test_summary_material_cannot_be_promoted_by_quote_and_ids() -> None:
     assert all(fact.status == "signal" for fact in snapshot.facts)
 
 
-def test_normalized_market_is_preserved_without_overriding_canonical_market() -> None:
+def test_normalized_pricing_market_is_preserved_over_canonical_classification() -> None:
     seal, _, _ = snapshot_api()
     detail = make_detail()
     detail.raw_sources[0].metadata.pop("market")
     snapshot = seal(detail, phase="analysis", canonical_documents={})
     assert next(fact for fact in snapshot.facts if fact.field == "price").market == "CN"
     detail = with_document(make_detail())
-    detail.raw_sources[0].metadata["normalized_fields"][0]["market"] = "spoofed-market"
-    doc = make_document()
+    doc = make_document(market="US")
+    raw_before = detail.raw_sources[0].model_dump_json()
     snapshot = seal(detail, phase="analysis", canonical_documents={doc.id: doc})
-    assert "spoofed-market" not in snapshot.model_dump_json()
-    assert next(fact for fact in snapshot.facts if fact.field == "price").market == doc.market
+    assert snapshot.sources[0].market == "CN"
+    assert next(fact for fact in snapshot.facts if fact.field == "price").market == "CN"
+    assert detail.raw_sources[0].model_dump_json() == raw_before
 
 
 def test_different_capacities_units_markets_and_unknown_basis_are_not_merged() -> None:

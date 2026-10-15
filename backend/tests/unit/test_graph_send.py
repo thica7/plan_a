@@ -6,6 +6,15 @@ from packages.orchestrator.graph import build_real_analysis_graph
 
 
 class FrozenGraphContract:
+    async def _ensure_analysis_evidence(self, record):
+        return await self._prepare_evidence_snapshot(record, phase="analysis")
+
+    def _finish_delivery_phase(self, record, agent, subagent):
+        pass  # This graph routing double has no model budget; budget tests exercise release.
+
+    def _phase_retry_blockers(self, record, phase):
+        return self._blocking_phase_issues(record.detail, phase)
+
     async def _prepare_evidence_snapshot(self, record, *, phase):
         self.snapshot = SimpleNamespace(id=f"snapshot-{phase}", phase=phase)
         return self.snapshot

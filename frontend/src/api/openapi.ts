@@ -1818,6 +1818,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/enterprise/artifacts/{artifact_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Artifact */
+        get: operations["download_artifact_api_enterprise_artifacts__artifact_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enterprise/artifacts/{artifact_id}": {
         parameters: {
             query?: never;
@@ -2421,6 +2438,8 @@ export interface components {
             competitors: string[];
             /** Dimensions */
             dimensions: string[];
+            /** Answer Requirements */
+            answer_requirements?: components["schemas"]["AnswerRequirement"][];
             /**
              * Complexity
              * @default medium
@@ -2496,6 +2515,77 @@ export interface components {
             reason: string;
             /** Depends On */
             depends_on?: string[];
+        };
+        /** AnswerBoundary */
+        AnswerBoundary: {
+            /** Snapshot Id */
+            snapshot_id: string;
+            requirement: components["schemas"]["AnswerRequirement"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "answer" | "partial" | "clarify" | "insufficient";
+            /**
+             * Allowed Fact Ids
+             * @default []
+             */
+            allowed_fact_ids: string[];
+            /**
+             * Withheld Fact Ids
+             * @default []
+             */
+            withheld_fact_ids: string[];
+            /**
+             * Missing Fields
+             * @default []
+             */
+            missing_fields: string[];
+            /**
+             * Clarification Fields
+             * @default []
+             */
+            clarification_fields: string[];
+            /**
+             * Fact Decisions
+             * @default []
+             */
+            fact_decisions: components["schemas"]["FactDecision"][];
+            /**
+             * View Source Ids
+             * @default []
+             */
+            view_source_ids: string[];
+            /**
+             * View Fact Ids
+             * @default []
+             */
+            view_fact_ids: string[];
+        };
+        /** AnswerRequirement */
+        AnswerRequirement: {
+            /** Competitor */
+            competitor: string;
+            /** Dimension */
+            dimension: string;
+            /**
+             * Intent
+             * @default facts
+             * @enum {string}
+             */
+            intent: "facts" | "source_guidance" | "recorded_price" | "current_price" | "price_comparison" | "total_cost" | "compliance";
+            /** Market */
+            market?: string | null;
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /**
+             * Context Json
+             * @default {}
+             */
+            context_json: string;
         };
         /** ArtifactCreateRequest */
         ArtifactCreateRequest: {
@@ -2766,6 +2856,21 @@ export interface components {
              * Format: date-time
              */
             created_at?: string;
+        };
+        /** AuditedReportClaim */
+        AuditedReportClaim: {
+            claim: components["schemas"]["ReportClaim"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "supported" | "rejected" | "unreviewed";
+            review?: components["schemas"]["ClaimReview"] | null;
+            /**
+             * Rule Reasons
+             * @default []
+             */
+            rule_reasons: string[];
         };
         /** BatchIngestItem */
         BatchIngestItem: {
@@ -3116,6 +3221,18 @@ export interface components {
              */
             created_at?: string;
         };
+        /** ClaimReview */
+        ClaimReview: {
+            /** Claim Id */
+            claim_id: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "supported" | "unsupported" | "uncertain";
+            /** Reason */
+            reason: string;
+        };
         /** ClaimValidationIssue */
         ClaimValidationIssue: {
             /** Id */
@@ -3320,6 +3437,32 @@ export interface components {
              */
             advanced_fetch_attempts: number;
         };
+        /** ComparisonAssessment */
+        ComparisonAssessment: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "comparable" | "insufficient_evidence" | "not_comparable";
+            /** Winner */
+            winner?: string | null;
+            /**
+             * Rationale
+             * @default
+             */
+            rationale: string;
+            /**
+             * Scenario
+             * @default
+             */
+            scenario: string;
+            /** Tradeoffs */
+            tradeoffs?: string[];
+            /** Gaps */
+            gaps?: string[];
+            /** Source Ids */
+            source_ids?: string[];
+        };
         /** ComparisonCell */
         ComparisonCell: {
             /** Competitor */
@@ -3356,8 +3499,16 @@ export interface components {
             winner_by_dimension?: {
                 [key: string]: string;
             };
+            /** Assessments */
+            assessments?: {
+                [key: string]: components["schemas"]["ComparisonAssessment"];
+            };
             /** Summary */
             summary?: string[];
+            /** Operation Alignment */
+            operation_alignment?: {
+                [key: string]: unknown;
+            }[];
         };
         /** CompetitorCandidate */
         CompetitorCandidate: {
@@ -4582,6 +4733,8 @@ export interface components {
             source_ids: string[];
             /** Requested Source Ids */
             requested_source_ids?: string[] | null;
+            /** Requested Fact Ids */
+            requested_fact_ids?: string[] | null;
             /**
              * Fact Ids
              * @default []
@@ -5222,6 +5375,25 @@ export interface components {
             document_project_id?: string | null;
             /** Payload Json */
             payload_json: string;
+        };
+        /** FactDecision */
+        FactDecision: {
+            /** Fact Id */
+            fact_id: string;
+            /** Source Id */
+            source_id: string;
+            /** Allowed */
+            allowed: boolean;
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: string[];
+            /**
+             * Missing Fields
+             * @default []
+             */
+            missing_fields: string[];
         };
         /** FeatureNode */
         FeatureNode: {
@@ -7262,6 +7434,37 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** ReportClaim */
+        ReportClaim: {
+            /** Id */
+            id: string;
+            /** Text */
+            text: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "fact" | "inference" | "hypothesis";
+            /** Competitor */
+            competitor: string;
+            /** Dimension */
+            dimension: string;
+            /** Fact Ids */
+            fact_ids: string[];
+            /** Source Ids */
+            source_ids: string[];
+            operation_binding?: components["schemas"]["ReportOperationBinding"] | null;
+        };
+        /** ReportConditionGroup */
+        ReportConditionGroup: {
+            /**
+             * Operator
+             * @constant
+             */
+            operator: "any_of";
+            /** Options */
+            options: string[];
+        };
         /** ReportDiffLine */
         ReportDiffLine: {
             /**
@@ -7271,6 +7474,30 @@ export interface components {
             kind: "unchanged" | "added" | "removed";
             /** Text */
             text: string;
+        };
+        /** ReportDimensionAudit */
+        ReportDimensionAudit: {
+            /** Competitor */
+            competitor: string;
+            /** Dimension */
+            dimension: string;
+            /** Consumption Id */
+            consumption_id: string;
+            /**
+             * Claims
+             * @default []
+             */
+            claims: components["schemas"]["AuditedReportClaim"][];
+            /**
+             * Gaps
+             * @default []
+             */
+            gaps: string[];
+            /**
+             * Review Context Bytes
+             * @default []
+             */
+            review_context_bytes: number[];
         };
         /** ReportLayer */
         ReportLayer: {
@@ -7307,6 +7534,46 @@ export interface components {
             claim_card_ids?: string[];
             /** Decision Card Ids */
             decision_card_ids?: string[];
+        };
+        /** ReportOperationBinding */
+        ReportOperationBinding: {
+            /** Observation Id */
+            observation_id: string;
+            /** Fact Id */
+            fact_id: string;
+            /** Source Id */
+            source_id: string;
+            /** Competitor */
+            competitor: string;
+            /** Dimension */
+            dimension: string;
+            /** Operation */
+            operation: string;
+            /** Object Type */
+            object_type: string | null;
+            /** Object Quote */
+            object_quote: string | null;
+            /** Role */
+            role: string | null;
+            /** Plan */
+            plan: string | null;
+            /** Access Scope */
+            access_scope: string | null;
+            /** Effect */
+            effect: string;
+            /** Prerequisites */
+            prerequisites: {
+                [key: string]: string;
+            }[];
+            /** Condition Evidence */
+            condition_evidence: string[];
+            /** Operation Quote */
+            operation_quote: string;
+            /**
+             * Condition Groups
+             * @default []
+             */
+            condition_groups: components["schemas"]["ReportConditionGroup"][];
         };
         /** ReportQualityAccount */
         ReportQualityAccount: {
@@ -7562,6 +7829,23 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * RetrievalIntent
+         * @description Caller-declared facts and presentation preferences, without scope authority.
+         */
+        RetrievalIntent: {
+            /** Fact Queries */
+            fact_queries: string[];
+            /** Required Terms */
+            required_terms?: string[];
+            /** Output Language */
+            output_language?: string | null;
+            /**
+             * Require Citations
+             * @default false
+             */
+            require_citations: boolean;
+        };
         /** RetrievalPreset */
         RetrievalPreset: {
             /** Name */
@@ -7653,6 +7937,13 @@ export interface components {
             max_age_days?: number | null;
             /** Query */
             query: string;
+            /**
+             * Intent Policy
+             * @default structured
+             * @enum {string}
+             */
+            intent_policy: "raw" | "structured";
+            retrieval_intent?: components["schemas"]["RetrievalIntent"] | null;
             /** Preset */
             preset?: string | null;
             /** Competitors */
@@ -7982,6 +8273,10 @@ export interface components {
             /** Section Briefs */
             section_briefs?: components["schemas"]["SectionBrief"][];
             report_artifact?: components["schemas"]["ReportArtifactV2"] | null;
+            /** Report Answer Boundaries */
+            report_answer_boundaries?: components["schemas"]["AnswerBoundary"][];
+            /** Report Dimension Audits */
+            report_dimension_audits?: components["schemas"]["ReportDimensionAudit"][];
             /** Raw Sources */
             raw_sources?: components["schemas"]["RawSource"][];
             /** Evidence Snapshots */
@@ -8116,6 +8411,8 @@ export interface components {
              * @constant
              */
             schema_version: "run_evidence_snapshot.v1";
+            /** Fact Market Policy Version */
+            fact_market_policy_version?: string | null;
             /** Id */
             id: string;
             /** Run Id */
@@ -8133,6 +8430,11 @@ export interface components {
              * @enum {string}
              */
             phase: "collect" | "analysis";
+            /**
+             * Competitors
+             * @default []
+             */
+            competitors: string[];
             /**
              * Sources
              * @default []
@@ -10035,7 +10337,11 @@ export interface operations {
     list_runs_api_runs_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10048,6 +10354,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -10094,7 +10409,11 @@ export interface operations {
             query?: {
                 include_trace_payloads?: boolean;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -10125,7 +10444,11 @@ export interface operations {
     import_user_research_materials_api_runs__run_id__user_research_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -10162,7 +10485,11 @@ export interface operations {
             query?: {
                 baseline_run_id?: string | null;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -10193,7 +10520,11 @@ export interface operations {
     stream_run_api_runs__run_id__stream_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -10481,7 +10812,11 @@ export interface operations {
     get_trace_api_runs__run_id__trace_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -10512,7 +10847,11 @@ export interface operations {
     get_trace_spans_api_runs__run_id__trace_spans_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -10543,7 +10882,11 @@ export interface operations {
     get_trace_otel_export_api_runs__run_id__trace_otel_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -10574,7 +10917,11 @@ export interface operations {
     get_trace_observability_report_api_runs__run_id__trace_observability_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -10605,7 +10952,11 @@ export interface operations {
     get_run_compliance_report_api_runs__run_id__compliance_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -10671,7 +11022,11 @@ export interface operations {
     get_decision_replay_api_runs__run_id__decision_replay_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -10702,7 +11057,11 @@ export interface operations {
     get_agent_messages_api_runs__run_id__trace_agent_messages_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -10733,7 +11092,11 @@ export interface operations {
     get_tool_call_messages_api_runs__run_id__trace_tool_calls_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -12009,7 +12372,11 @@ export interface operations {
     get_run_kb_api_runs__run_id__kb_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -12042,7 +12409,11 @@ export interface operations {
     get_run_revisions_api_runs__run_id__revisions_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path: {
                 run_id: string;
             };
@@ -14163,6 +14534,39 @@ export interface operations {
             };
         };
     };
+    download_artifact_api_enterprise_artifacts__artifact_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_artifact_api_enterprise_artifacts__artifact_id__get: {
         parameters: {
             query?: never;
@@ -14756,7 +15160,11 @@ export interface operations {
                 limit?: number;
                 judge_mode?: "heuristic" | "llm";
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -14791,7 +15199,11 @@ export interface operations {
                 judge_mode?: "heuristic" | "llm";
                 mode?: ("advisory" | "blocking") | null;
             };
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

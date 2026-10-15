@@ -103,9 +103,10 @@ def run_writer_quality_preflight(
         after_support_keys = h2_keys[first_support_index + 1 :]
 
     duplicate_section_count = _duplicate_identity_count(h2_identities)
+    from packages.agents.writer.dimension_writer import dimension_writing_enabled
     required_core_keys = (
         ["executive_summary", "competitive_findings"]
-        if detail.plan.research_depth == "quick" else [*REQUIRED_CORE_KEYS]
+        if detail.plan.research_depth == "quick" or dimension_writing_enabled(detail) else [*REQUIRED_CORE_KEYS]
     )
     if decision_brief_fields(detail.plan.decision_brief):
         required_core_keys.append("product_opportunities")
@@ -119,6 +120,13 @@ def run_writer_quality_preflight(
     ]
 
     failure_reasons: list[str] = []
+    if dimension_writing_enabled(detail):
+        from packages.business_intel.report_contract import compact_report_checks
+        missing_content = [key for key, ok in compact_report_checks(
+            markdown, output_language=detail.output_language) if not ok]
+        if missing_content:
+            failure_reasons.append("compact_report_contract")
+            missing_core_sections = list(dict.fromkeys([*missing_core_sections, *missing_content]))
     if duplicate_section_count:
         failure_reasons.append("duplicate_sections")
     if missing_core_sections:

@@ -1631,6 +1631,12 @@ class _WriterEvidencePackBuilder:
                 *latest_reflection.confidence_outliers,
                 *latest_reflection.cross_competitor_gaps,
             ]
+        collection_gaps = [issue for issue in self.detail.qa_findings
+                           if issue.target_agent == "collector" and issue.severity == "blocker"]
+        if collection_gaps:
+            gate_status = "block"
+            blocking_gaps.extend(issue.problem for issue in collection_gaps)
+            writer_constraints.append("Write a useful partial report: for each requested dimension list supported product content with citations and explicit missing evidence. Never infer a missing price, claim a complete comparison or name a winner for a dimension with a coverage gap.")
         qa_findings = [
             {
                 "id": issue.id,
@@ -2011,6 +2017,9 @@ class _WriterEvidencePackBuilder:
             return {"winner_by_dimension": {}, "summary": [], "cells": []}
         return {
             "winner_by_dimension": dict(matrix.winner_by_dimension),
+            "assessments": {
+                key: value.model_dump(mode="json") for key, value in matrix.assessments.items()
+            },
             "summary": list(matrix.summary),
             "cells": [
                 {

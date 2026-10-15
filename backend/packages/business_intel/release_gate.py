@@ -158,7 +158,8 @@ def evaluate_report_release_gate(
         issues = [item.model_copy(update={"severity": "warn"})
                   if item.rule_id in {
                       "report_structure_required", "report_depth_required", "readiness_required",
-                  }
+                  } and not (item.rule_id == "report_structure_required"
+                             and _compact_report_contract(report_version))
                   else item for item in issues]
     if analysis_plan.target_product is not None:
         issues = [item.model_copy(update={"metadata": {
@@ -206,6 +207,8 @@ def _internal_analysis_issues(
     report_version: ReportVersionRecord, plan: AnalysisPlan,
 ) -> list[BusinessQAFinding]:
     depth = plan.research_depth
+    if _compact_report_contract(report_version):
+        return _report_structure_issues(report_version)
     if depth != "quick":
         minimum = 1800 if depth == "deep" else 900
         issues = _report_structure_issues(report_version)
@@ -621,10 +624,22 @@ def _claim_evidence_quality_issues(
     return issues
 
 
+def _compact_report_contract(report_version):
+    from packages.business_intel.report_contract import dimension_report_profile
+    stored = report_version.quality_metadata.get("analysis_plan")
+    if (report_version.quality_metadata.get("execution_mode") != "real"
+            or not isinstance(stored, dict)):
+        return False
+    return dimension_report_profile(_report_analysis_plan(report_version, [], []),
+        topic=report_version.topic_normalized,
+        partial_evidence=report_version.quality_metadata.get('report_structure_profile') == 'audited_partial')
+
+
 def _report_structure_issues(report_version: ReportVersionRecord) -> list[BusinessQAFinding]:
     score, missing = _report_structure_score(report_version)
     hard_missing = [name for name in missing if name == "Claim Validation & Evidence Risk"]
-    if score >= MIN_REPORT_STRUCTURE_SCORE and not hard_missing:
+    if (not missing if _compact_report_contract(report_version)
+            else score >= MIN_REPORT_STRUCTURE_SCORE and not hard_missing):
         return []
     return [
         _gate_issue(
@@ -646,6 +661,10 @@ def _report_structure_issues(report_version: ReportVersionRecord) -> list[Busine
 
 def _report_structure_score(report_version: ReportVersionRecord) -> tuple[float, list[str]]:
     report_md = repair_mojibake_text(report_version.report_md)
+    if _compact_report_contract(report_version):
+        from packages.business_intel.report_contract import compact_report_checks
+        checks = compact_report_checks(report_md)
+        return sum(ok for _, ok in checks) / len(checks), [key for key, ok in checks if not ok]
     checks = [
         (
             "Executive Summary",
@@ -702,6 +721,9 @@ def _report_structure_score(report_version: ReportVersionRecord) -> tuple[float,
 
 
 def _report_depth_issues(report_version: ReportVersionRecord) -> list[BusinessQAFinding]:
+    if _compact_report_contract(report_version):
+        # The shared structure contract also checks actual prose and citations.
+        return []
     body_chars = len(report_version.report_md.strip())
     if body_chars >= MIN_REPORT_BODY_CHARS:
         return []
@@ -728,6 +750,8 @@ def _report_richness_issues(
     evidence: list[EvidenceRecord],
     dimensions: list[str],
 ) -> list[BusinessQAFinding]:
+    if _compact_report_contract(report_version):
+        return []  # Substantive compact checks replace enterprise SWOT/depth metrics.
     if len(competitors) < 2 or not report_version.report_md.strip():
         return []
     detail = _release_report_quality_detail(

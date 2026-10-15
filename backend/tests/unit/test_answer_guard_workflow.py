@@ -16,7 +16,7 @@ from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.orchestrator.service import RunRecord, RunService
 from packages.research.evidence.answer_models import AnswerRequirement
 from packages.research.evidence.normalization import normalized_pricing_fields_from_evidence_items
-from packages.research.evidence.snapshot import seal_snapshot
+from packages.research.evidence.snapshot import current_snapshot, seal_snapshot
 from packages.research.evidence.snapshot_models import canonical_json
 from packages.research.models import EvidenceItem
 from packages.schema.api_dto import RunDetail
@@ -161,7 +161,7 @@ def test_boundary_cannot_be_silently_dropped_to_fit_budget(runtime):
     evidence_context._DEPTH_BYTES["quick"] = 2600
     try:
         with pytest.raises(EvidenceUseRejectedError, match="budget"):
-            service._writer_segment_evidence(record, segment(record))
+            service._writer_segment_evidence(record, segment(record, required_h2_headings=["Mandatory contract " * 200]))
         assert record.detail.evidence_consumptions[-1].status == "rejected"
     finally:
         evidence_context._DEPTH_BYTES["quick"] = original
@@ -381,7 +381,7 @@ async def test_structured_complete_cost_requires_its_own_declared_sources(runtim
     "intent,context,expected,missing",
     [
         ("price_comparison", {}, "clarify", "channels"),
-        ("source_guidance", {}, "partial", "structured_facts"),
+        ("source_guidance", {}, "insufficient", "supporting_facts"),
         ("compliance", {}, "clarify", "industry"),
         (
             "total_cost",
@@ -431,6 +431,9 @@ async def test_four_offline_intents_preserve_methods_and_missing_fields(
     assert boundary["status"] == expected
     if missing:
         assert missing in boundary["missing_fields"] + boundary["clarification_fields"]
+    if intent == "source_guidance":
+        assert boundary["view_source_ids"] == [source.id]
+        assert current_snapshot(record.detail).sources[0].market is None
     record.detail.report_md = "Check original dated records and clarify the missing scope."
     rebind_payload(service, record)
     _, issues, _ = await service._final_qa_evidence(record)

@@ -12,6 +12,8 @@ import { useTranslation } from '../stores/i18n';
 import { displayLabel } from '../i18n/display';
 import { SystemMessage } from '../i18n/SystemMessage';
 
+import { KnowledgeScopeControl, knowledgeScopeUrl, useKnowledgeWorkScope } from '../features/knowledge/KnowledgeScopeControl';
+
 const PARAMS_STORAGE_KEY = 'retrieval_params';
 
 interface EvalRunSummary {
@@ -107,11 +109,17 @@ async function fileText(file: File): Promise<string> {
 
 export default function SearchPage() {
   const { t, locale } = useTranslation();
+  const workScope = useKnowledgeWorkScope();
+  const scopeKey = workScope.key;
+  const currentScope = useRef(scopeKey);
+  const scopeEpoch = useRef(0);
+  if (currentScope.current !== scopeKey) scopeEpoch.current += 1;
+  currentScope.current = scopeKey;
+  const generation = useRef(0);
   const {
     query,
     competitors,
     dimensions,
-    searchHistory,
     setQuery,
     setCompetitors,
     setDimensions,
@@ -120,7 +128,7 @@ export default function SearchPage() {
   const [hits, setHits] = useState<RetrievalHit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [history, setHistory] = useState(searchHistory);
+  const [history, setHistory] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [paramsOpen, setParamsOpen] = useState(false);
   const [params, setParams] = useState<RetrievalParams>(() => loadParams());
@@ -134,6 +142,10 @@ export default function SearchPage() {
   const abortRef = useRef<AbortController | null>(null);
 
   const runSearch = async (nextQuery = query, nextParams = params) => {
+    if (!workScope.ready) return;
+    const requestScope = scopeKey;
+    const epoch = scopeEpoch.current;
+    const token = ++generation.current;
     const trimmedQuery = nextQuery.trim();
     if (!trimmedQuery) {
       setHits([]);
@@ -152,6 +164,8 @@ export default function SearchPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          project_id: workScope.scope.projectId,
+          include_workspace_library: workScope.scope.includeWorkspaceLibrary,
           query: trimmedQuery,
           competitors,
           dimensions,
@@ -168,37 +182,47 @@ export default function SearchPage() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json() as { hits?: RetrievalHit[] };
+      if ((currentScope.current !== requestScope || scopeEpoch.current !== epoch) || token !== generation.current) return;
       const nextHistory = [
         trimmedQuery,
         ...history.filter((item) => item !== trimmedQuery),
       ].slice(0, 5);
-      sessionStorage.setItem('search_history', JSON.stringify(nextHistory));
+      sessionStorage.setItem(`search_history:${requestScope}`, JSON.stringify(nextHistory));
       setHistory(nextHistory);
       setHits(data.hits ?? []);
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
+      if ((currentScope.current === requestScope && scopeEpoch.current === epoch) && token === generation.current && err.name !== 'AbortError') {
         setError(err instanceof Error ? err.message : String(err));
       }
     } finally {
-      setLoading(false);
+      if ((currentScope.current === requestScope && scopeEpoch.current === epoch) && token === generation.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     localStorage.setItem(PARAMS_STORAGE_KEY, JSON.stringify(params));
-    if (!query.trim()) return;
+    if (!workScope.ready || !query.trim()) return;
     const timer = window.setTimeout(() => {
       void runSearch(query, params);
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [params]);
+  }, [params, workScope.ready, scopeKey]);
 
   useEffect(() => {
-    void apiFetch('/api/knowledge/eval/runs')
-      .then((res) => res.ok ? res.json() : [])
-      .then((data) => setEvalRuns(Array.isArray(data) ? data : []))
-      .catch(() => setEvalRuns([]));
-  }, []);
+    abortRef.current?.abort(); generation.current += 1;
+    setHits([]); setLoading(false); setError(null); setEvalResult(null);
+    setEvalRuns([]); setEvalError(null); setEvalLoading(false); setEvalLabels([]);
+    try { setHistory(JSON.parse(sessionStorage.getItem(`search_history:${scopeKey}`) ?? '[]')); }
+    catch { setHistory([]); }
+    if (!workScope.ready) return;
+    let active = true;
+    const controller = new AbortController();
+    void apiFetch(knowledgeScopeUrl('/api/knowledge/eval/runs', workScope.scope), { signal: controller.signal })
+      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
+      .then(data => { if (active && currentScope.current === scopeKey) setEvalRuns(Array.isArray(data) ? data : []); })
+      .catch(() => { if (active && currentScope.current === scopeKey) setEvalRuns([]); });
+    return () => { active = false; controller.abort(); abortRef.current?.abort(); generation.current += 1; };
+  }, [scopeKey, workScope.ready]);
 
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
@@ -220,36 +244,42 @@ export default function SearchPage() {
   };
 
   const handleEvalFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const requestScope = scopeKey;
+    const epoch = scopeEpoch.current;
     const file = event.target.files?.[0];
     if (!file) return;
     try {
       setEvalError(null);
-      setEvalLabels(parseJsonl(await fileText(file)));
+      const labels = parseJsonl(await fileText(file));
+      if ((currentScope.current === requestScope && scopeEpoch.current === epoch)) setEvalLabels(labels);
     } catch (err) {
-      setEvalError(err instanceof Error ? err.message : String(err));
+      if ((currentScope.current === requestScope && scopeEpoch.current === epoch)) setEvalError(err instanceof Error ? err.message : String(err));
     } finally {
       event.target.value = '';
     }
   };
 
   const runEval = async () => {
-    if (evalLabels.length === 0) return;
+    if (!workScope.ready || evalLabels.length === 0) return;
+    const requestScope = scopeKey;
+    const epoch = scopeEpoch.current;
     setEvalLoading(true);
     setEvalError(null);
     try {
       const res = await apiFetch('/api/knowledge/eval', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ labels: evalLabels, top_k: params.final_top_k }),
+        body: JSON.stringify({ labels: evalLabels, top_k: params.final_top_k, project_id: workScope.scope.projectId, include_workspace_library: workScope.scope.includeWorkspaceLibrary }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json() as EvalRunDetail;
+      if ((currentScope.current !== requestScope || scopeEpoch.current !== epoch)) return;
       setEvalResult(data);
       setEvalRuns((current) => [data, ...current.filter((run) => run.id !== data.id)].slice(0, 20));
     } catch (err) {
-      setEvalError(err instanceof Error ? err.message : String(err));
+      if ((currentScope.current === requestScope && scopeEpoch.current === epoch)) setEvalError(err instanceof Error ? err.message : String(err));
     } finally {
-      setEvalLoading(false);
+      if ((currentScope.current === requestScope && scopeEpoch.current === epoch)) setEvalLoading(false);
     }
   };
 
@@ -266,6 +296,7 @@ export default function SearchPage() {
         </button>
       </div>
 
+      <KnowledgeScopeControl value={workScope} />
       <form onSubmit={handleSearch} className="flex gap-2">
         <input
           className="input input-bordered flex-1"
@@ -273,7 +304,7 @@ export default function SearchPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <button className="btn btn-primary" type="submit" disabled={loading}>
+        <button className="btn btn-primary" type="submit" disabled={loading || !workScope.ready}>
           {loading ? `${t('trace.search')}...` : t('trace.search')}
         </button>
         <button
@@ -355,7 +386,7 @@ export default function SearchPage() {
               {t('search.uploadLabels')}
               <input className="hidden" type="file" accept=".jsonl,.json" onChange={handleEvalFile} />
             </label>
-            <button type="button" className="btn btn-primary btn-sm" disabled={evalLoading || evalLabels.length === 0} onClick={runEval}>
+            <button type="button" className="btn btn-primary btn-sm" disabled={!workScope.ready || evalLoading || evalLabels.length === 0} onClick={runEval}>
               {evalLoading ? `${t('common.running')}...` : t('search.runEval')}
             </button>
           </div>

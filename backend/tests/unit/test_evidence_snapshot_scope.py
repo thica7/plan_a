@@ -24,6 +24,8 @@ def context_api():
 def context_harness(tmp_path):
     class Context(context_api()):
         def __init__(self):
+            from packages.config import Settings
+            self._settings = Settings(demo_mode=True)
             self.journal = RunJournal(tmp_path / "journal.db")
             self.record = None
 
@@ -625,19 +627,22 @@ def test_task1_v1_snapshot_survives_journal_reopen_without_rewriting_history(tmp
 
 
 @pytest.mark.parametrize("case", ["non_kb", "kb_no_chunk"])
-def test_task1_v1_unchanged_input_reuses_snapshot_with_empty_new_chunk_refs(case):
+def test_task1_v1_adds_product_directory_once_without_rewriting_history(case):
     payload, documents = task1_v1_payload(case)
     detail = RunDetail.model_validate(payload)
     legacy = detail.evidence_snapshots[0]
     before = legacy.model_dump_json()
 
-    reused = seal_snapshot(detail, phase="analysis", canonical_documents=documents)
+    upgraded = seal_snapshot(detail, phase="analysis", canonical_documents=documents)
 
-    assert reused is legacy
-    assert reused.id == payload["evidence_snapshot_id"]
-    assert reused.content_hash == payload["evidence_snapshots"][0]["content_hash"]
-    assert len(detail.evidence_snapshots) == 1
+    assert upgraded is not legacy
+    assert upgraded.parent_id == legacy.id
+    assert upgraded.version == legacy.version + 1
+    assert set(upgraded.competitors) == set(detail.plan.competitors)
+    assert legacy.content_hash == payload["evidence_snapshots"][0]["content_hash"]
+    assert len(detail.evidence_snapshots) == 2
     assert detail.evidence_snapshots[0].model_dump_json() == before
+    assert seal_snapshot(detail, phase="analysis", canonical_documents=documents) is upgraded
 
 
 @pytest.mark.parametrize("case", ["non_kb", "kb_no_chunk", "kb_single_chunk"])

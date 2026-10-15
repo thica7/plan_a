@@ -8,6 +8,27 @@ from packages.tools.fetch_page import FetchPageResult
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('status,allow_browser,login', [(403, True, False), (403, False, False), (401, True, False), (403, True, True)])
+async def test_curated_public_document_can_retry_anonymous_browser(monkeypatch, status, allow_browser, login):
+    calls = []
+    async def basic(url, **kwargs):
+        return FetchPageResult(url=url, ok=False, status_code=status, title='', text='', content_hash='denied')
+    async def advanced(url, **kwargs):
+        calls.append(kwargs['mode'])
+        return AdvancedFetchResult(url=url, final_url=url, ok=True, fetch_method='browser',
+            title='Sign in' if login else 'Comment on docs',
+            text='Please sign in to continue. ' * 8 if login else 'People with comment access can comment on documents. ' * 8,
+            markdown='', status_code=200, quality=AdvancedFetchQuality(score=1, looks_like_login=login))
+    monkeypatch.setattr(evidence_fetch, 'fetch_page', basic)
+    monkeypatch.setattr(evidence_fetch, 'advanced_fetch_page', advanced)
+    result = await evidence_fetch.fetch_evidence_page('https://public.example/help/comments',
+        public_document_browser_retry=True, allow_advanced=allow_browser)
+    expected = status == 403 and allow_browser
+    assert calls == (['browser'] if expected else [])
+    assert result.ok == (expected and not login)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("title", "text", "expected_reason"),
     [

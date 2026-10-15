@@ -1,0 +1,372 @@
+{
+  "date": "2026-10-10",
+  "branch": "codex/pastoral-desktop",
+  "implementation_status": "implemented_and_regression_tested",
+  "full_report_acceptance": "not_passed",
+  "last_full_live_run": "R5_before_final_local_QA_fixes",
+  "final_fixes_verified_by": "offline replay of captured real outputs and unit/integration regressions",
+  "verification": {
+    "backend": {
+      "passed": 3270,
+      "skipped": 1,
+      "warnings": 152,
+      "seconds": 66.33
+    },
+    "targeted_final_QA": {
+      "passed": 132
+    },
+    "frontend": {
+      "files": 52,
+      "passed": 258
+    },
+    "dimension_panel": {
+      "passed": 8
+    },
+    "frontend_build": true,
+    "diff_check": true,
+    "independent_review": {
+      "unit_passed": 121,
+      "final_qa_integration_passed": 6,
+      "panel_passed": 8,
+      "remaining_reproducible_P1_P2": 0
+    }
+  },
+  "live_runs": [
+    {
+      "label": "R1",
+      "case_id": "notion-workspace",
+      "duration_seconds": 78.54,
+      "status": "failed",
+      "report_chars": 0,
+      "core_chars": 0,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "source_count": 6,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "provider_total_tokens_last_attempts": 155861,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 35243,
+          "completion_tokens": 6652,
+          "total_tokens": 41895,
+          "prompt_cache_hit_tokens": 896,
+          "prompt_cache_miss_tokens": 34347
+        },
+        "search": {
+          "prompt_tokens": 104823,
+          "completion_tokens": 9143,
+          "total_tokens": 113966,
+          "prompt_cache_hit_tokens": 9856,
+          "prompt_cache_miss_tokens": 94967
+        }
+      },
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 26,
+        "repairs": 0,
+        "tokens_charged": 155861,
+        "cost_charged_usd": 0.05781271199999999
+      },
+      "qa_issue_count": 0
+    },
+    {
+      "label": "R2",
+      "case_id": "notion-workspace",
+      "duration_seconds": 108.77,
+      "status": "completed_with_blockers",
+      "report_chars": 1616,
+      "core_chars": 841,
+      "citations_valid": true,
+      "unknown_citation_count": 0,
+      "source_count": 6,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": true,
+      "provider_total_tokens_last_attempts": 177303,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 50802,
+          "completion_tokens": 9375,
+          "total_tokens": 60177,
+          "prompt_cache_hit_tokens": 11648,
+          "prompt_cache_miss_tokens": 39154
+        },
+        "search": {
+          "prompt_tokens": 107941,
+          "completion_tokens": 9185,
+          "total_tokens": 117126,
+          "prompt_cache_hit_tokens": 17664,
+          "prompt_cache_miss_tokens": 90277
+        }
+      },
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 34,
+        "repairs": 6,
+        "tokens_charged": 185497,
+        "cost_charged_usd": 0.064373808
+      },
+      "qa_issue_count": 19
+    },
+    {
+      "label": "R3",
+      "case_id": "notion-workspace",
+      "duration_seconds": 119.76,
+      "status": "completed_with_blockers",
+      "report_chars": 1923,
+      "core_chars": 1026,
+      "citations_valid": true,
+      "unknown_citation_count": 0,
+      "source_count": 6,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": true,
+      "provider_total_tokens_last_attempts": 183974,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 42875,
+          "completion_tokens": 8368,
+          "total_tokens": 51243,
+          "prompt_cache_hit_tokens": 12032,
+          "prompt_cache_miss_tokens": 30843
+        },
+        "search": {
+          "prompt_tokens": 120982,
+          "completion_tokens": 11749,
+          "total_tokens": 132731,
+          "prompt_cache_hit_tokens": 14080,
+          "prompt_cache_miss_tokens": 106902
+        }
+      },
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 35,
+        "repairs": 7,
+        "tokens_charged": 189022,
+        "cost_charged_usd": 0.06763643999999999
+      },
+      "qa_issue_count": 15
+    },
+    {
+      "label": "R4",
+      "case_id": "notion-workspace",
+      "duration_seconds": 66.89,
+      "status": "failed",
+      "report_chars": 0,
+      "core_chars": 0,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "source_count": 6,
+      "partial_report_generated": false,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "provider_total_tokens_last_attempts": 131690,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 31094,
+          "completion_tokens": 4690,
+          "total_tokens": 35784,
+          "prompt_cache_hit_tokens": 1664,
+          "prompt_cache_miss_tokens": 29430
+        },
+        "search": {
+          "prompt_tokens": 87025,
+          "completion_tokens": 8881,
+          "total_tokens": 95906,
+          "prompt_cache_hit_tokens": 35072,
+          "prompt_cache_miss_tokens": 51953
+        }
+      },
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 24,
+        "repairs": 0,
+        "tokens_charged": 131690,
+        "cost_charged_usd": 0.040920516
+      },
+      "qa_issue_count": 3
+    },
+    {
+      "label": "R5",
+      "case_id": "notion-workspace",
+      "duration_seconds": 131.2,
+      "status": "completed_with_blockers",
+      "report_chars": 1481,
+      "core_chars": 853,
+      "citations_valid": true,
+      "unknown_citation_count": 0,
+      "source_count": 5,
+      "partial_report_generated": true,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": true,
+      "provider_total_tokens_last_attempts": 176704,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 50462,
+          "completion_tokens": 9239,
+          "total_tokens": 59701,
+          "prompt_cache_hit_tokens": 13568,
+          "prompt_cache_miss_tokens": 36894
+        },
+        "search": {
+          "prompt_tokens": 106071,
+          "completion_tokens": 10932,
+          "total_tokens": 117003,
+          "prompt_cache_hit_tokens": 27136,
+          "prompt_cache_miss_tokens": 78935
+        }
+      },
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 37,
+        "repairs": 9,
+        "tokens_charged": 182025,
+        "cost_charged_usd": 0.061727892
+      },
+      "qa_issue_count": 50
+    }
+  ],
+  "live_diagnostics_total": {
+    "provider_last_attempt_tokens": 825532,
+    "budget_charged_tokens": 844095,
+    "conservative_cost_estimate_usd": 0.292471368,
+    "actual_provider_bill": null
+  },
+  "semantic_quote_replay": {
+    "external_model_calls": 0,
+    "scope": "offline replay of prior real model outputs; not a semantic accuracy score",
+    "runs": [
+      {
+        "run": "live-r3",
+        "pages": [
+          {
+            "product": "Notion",
+            "url": "https://www.notion.com/help/collaborate-with-people",
+            "model_quote_count": 5,
+            "accepted_count": 3
+          },
+          {
+            "product": "Confluence",
+            "url": "https://www.atlassian.com/software/confluence/features",
+            "model_quote_count": 6,
+            "accepted_count": 3
+          },
+          {
+            "product": "Coda",
+            "url": "https://coda.io/product/whats-new",
+            "model_quote_count": 6,
+            "accepted_count": 1
+          },
+          {
+            "product": "Confluence",
+            "url": "https://support.atlassian.com/confluence-cloud/docs/learn-about-confluence-cloud-plans/",
+            "model_quote_count": 6,
+            "accepted_count": 0
+          },
+          {
+            "product": "Notion",
+            "url": "https://www.notion.com/help/comments-mentions-and-reminders",
+            "model_quote_count": 6,
+            "accepted_count": 0
+          }
+        ],
+        "accepted_total": 7
+      },
+      {
+        "run": "live-r5",
+        "pages": [
+          {
+            "product": "Confluence",
+            "url": "https://www.atlassian.com/software/confluence/features",
+            "model_quote_count": 6,
+            "accepted_count": 4
+          },
+          {
+            "product": "Notion",
+            "url": "https://www.notion.com/help/collaborate-with-people",
+            "model_quote_count": 6,
+            "accepted_count": 3
+          },
+          {
+            "product": "Confluence",
+            "url": "https://support.atlassian.com/confluence-cloud/docs/learn-about-confluence-cloud-plans/",
+            "model_quote_count": 6,
+            "accepted_count": 0
+          },
+          {
+            "product": "Coda",
+            "url": "https://coda.io/product/whats-new",
+            "model_quote_count": 6,
+            "accepted_count": 2
+          },
+          {
+            "product": "Notion",
+            "url": "https://www.notion.com/help/comments-mentions-and-reminders",
+            "model_quote_count": 6,
+            "accepted_count": 3
+          }
+        ],
+        "accepted_total": 12
+      }
+    ]
+  },
+  "final_qa_replay": {
+    "external_model_calls": 0,
+    "original_report_unchanged": true,
+    "before_issue_count": 50,
+    "before_collection_gaps": [
+      "No evidence sources were collected for pricing.",
+      "No feature source covers Notion.",
+      "No feature source covers Confluence.",
+      "run_qa_findings_unresolved: Report release requires a clean run-level QA result; unresolved blocker finding qc-issue-b6c055293ecb7e08: No evidence sources were collected for pricing.",
+      "run_qa_findings_unresolved: Report release requires a clean run-level QA result; unresolved blocker finding qc-issue-1bf8954bc85c652f: No feature source covers Notion.",
+      "run_qa_findings_unresolved: Report release requires a clean run-level QA result; unresolved blocker finding qc-issue-0f62e97745873c73: No feature source covers Confluence."
+    ],
+    "after_collection_gaps": [
+      "No evidence sources were collected for pricing."
+    ],
+    "status": "completed_with_blockers",
+    "issue_count": 16,
+    "coverage_snapshot_id": "evidence-snapshot-395a6206ac204e872570a491563401feca55bd97b4f9f7713fedbfe52c80d081",
+    "citation_snapshot_id": "evidence-snapshot-395a6206ac204e872570a491563401feca55bd97b4f9f7713fedbfe52c80d081"
+  },
+  "limits": [
+    "semantic extraction is limited to registered official feature documents",
+    "condition recognition is heuristic, not proof of exhaustive semantic conditions",
+    "capability hash is not a cross-product capability ontology",
+    "generation view may omit collected product evidence",
+    "current price completeness is not verified",
+    "RAG business quality is not certified",
+    "HTTP Qdrant, PostgreSQL RLS and Temporal were not accepted in this round"
+  ],
+  "core_file_sha256": {
+    "backend/packages/research/extraction/semantic.py": "f24e2a68745cd6dc0267816bb3f953f09969a38704c9734655107adfb483d600",
+    "backend/packages/research/evidence/admission.py": "45eebb8c741ac9c84ee5e885d12b077975b8a5eb69e5f05802903d822103cb5c",
+    "backend/packages/research/pipeline.py": "b13e965748740e834aed26afae2c43debe34f5d399ce0e4fbaa1a16ddaaebb6b",
+    "backend/packages/agents/collectors/logic.py": "656571def0dd77b7dec165b4ff136850e70522cf203e45fe69ffdfffe22523a8",
+    "backend/packages/agents/collectors/kb_bridge.py": "c69b7d45863611734b4f4e2a23b413b4cae28287ebfac86254e7a9894798ac92",
+    "backend/packages/agents/qa/logic.py": "d04227a35e91699387628844f15b06550e57bb7127d33698fdc6e8ae8cf3bbe5",
+    "backend/packages/agents/qa/evidence_alignment.py": "3ee13757f4f39179e0a4f9e3beb6615ec433138ae7b344810442f5025edcc7c3",
+    "backend/packages/agents/analysts/logic.py": "21f7301b6a9787d43c75c4134ede7e8d650b26ecc69728f0244805a87055e9b9",
+    "backend/packages/agents/comparator/logic.py": "35a67c6ffd69b1caf52f380ab7bf8bcda44bef1c9be5b8d36d4216a949e811aa",
+    "backend/packages/agents/writer/evidence_alignment.py": "79233fd1a49aea3edd4f3f83d66921eae12cb9bd7d0175e72475d3d0e6f3979f",
+    "backend/packages/orchestrator/evidence_context.py": "df9fd9a0e8bac9b0dd49d6236d329e63229ff7408aedb79ab9f5e16860d5e595",
+    "backend/packages/orchestrator/graph.py": "f51ebe13144de8b10c330e22521a47669f1326005cdd3e06336c68265df9564e",
+    "backend/packages/orchestrator/service.py": "33741fdea6e8b3bf8cccf24e6bdf94c3e33fb8bbd3e29d6141c5f7e980c2d187",
+    "backend/packages/orchestrator/llm_execution.py": "1dc4c8cd9f9f8a7a76b511e8c7559b9745c87d7fa184f0c16251d242b47dc18a",
+    "backend/packages/llm/doubao_client.py": "4f1a5b63bfa2ce66ebec7ddba6b3cfa4fc9dcad2a3a02962da85c74eb01f33b5",
+    "backend/scripts/eval_live_products.py": "597a4478186ac9d3eb69efdbac95e397148c7359d377cd545433ba12405e7262",
+    "backend/tests/unit/test_semantic_extraction.py": "fd595136b4c4926c73bf9fd9d96ee678bb14261702ea77470c8e61beea7d2241",
+    "backend/tests/unit/test_partial_report_gaps.py": "0fcf547f616919f8764a1849aba19289c5ddd89a69c11ec49a93e4dec8852d1c",
+    "frontend/src/features/run-detail/DimensionEvidencePanel.tsx": "4c7f37e80445f85d3dcd21d31437262b0a183196b4883ad4c1ec11f61a76a9f4",
+    "frontend/src/features/run-detail/DimensionEvidencePanel.test.tsx": "1d5a9340289fbeadc13b468e1f8ded6dd205037c6f70e2ffcd917069db93b753",
+    "frontend/src/features/run-detail/dimensionEvidence.css": "6ed5472548c8b57727d8692fad6802e4c1d553d44629ca1f1f7966847a76510b",
+    "frontend/src/features/run-detail/RunReportReviewStudio.tsx": "5ea12ddeb7c9a93f3ca6926620972821464b7826c8e493b86fe21e710f786d3b",
+    "frontend/src/stores/i18n.ts": "752808c37e0528f92070a8bbb5acbf11b083a49490d495c4b9a85b65a73d8005"
+  },
+  "draft_file_sha256": "fb116643590fac479cf293941d8df7646e0f0281dbd6cee4f00ab1af3db06415"
+}

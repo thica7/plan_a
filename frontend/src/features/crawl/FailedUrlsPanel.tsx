@@ -8,11 +8,13 @@ import { SystemMessage } from '../../i18n/SystemMessage';
 interface FailedUrlsPanelProps {
   jobs: CrawlJob[];
   sources: CrawlSource[];
+  canRetryJob?: (job: CrawlJob) => boolean;
+  canRetrySource?: (source: CrawlSource) => boolean;
   onRetryJob: (jobId: string) => Promise<void>;
   onRetrySource: (sourceId: string) => Promise<void>;
 }
 
-export function FailedUrlsPanel({ jobs, sources, onRetryJob, onRetrySource }: FailedUrlsPanelProps) {
+export function FailedUrlsPanel({ jobs, sources, onRetryJob, onRetrySource, canRetryJob, canRetrySource }: FailedUrlsPanelProps) {
   const { t, locale } = useTranslation();
   const failedJobs = jobs.filter((job) => job.status === 'failed' && job.error);
   const failedSources = sources.filter((source) => {
@@ -38,7 +40,7 @@ export function FailedUrlsPanel({ jobs, sources, onRetryJob, onRetrySource }: Fa
                 <p className="truncate text-sm font-semibold">{job.url}</p>
                 <p className="mt-1 text-xs text-error"><SystemMessage message={job.error || ''} /></p>
               </div>
-              <button type="button" className="btn btn-outline btn-error btn-xs gap-1" onClick={() => onRetryJob(job.id)}>
+              <button type="button" className="btn btn-outline btn-error btn-xs gap-1" disabled={canRetryJob ? !canRetryJob(job) : false} title={canRetryJob && !canRetryJob(job) ? '当前条目只读或尚未提供单任务重试，请从所属来源重新采集。' : undefined} onClick={() => onRetryJob(job.id)}>
                 <RotateCw className="h-3 w-3" />
                 {t('crawl.retry')}
               </button>
@@ -60,7 +62,7 @@ export function FailedUrlsPanel({ jobs, sources, onRetryJob, onRetrySource }: Fa
                   <p className="truncate text-sm font-semibold">{label}</p>
                   <p className="mt-1 text-xs text-error">{Number(progress?.failed ?? 0)} {t('crawl.failedUrlsIn')} {displayLabel(source.type, locale)} {t('crawl.source')}</p>
                 </div>
-                <button type="button" className="btn btn-outline btn-error btn-xs gap-1" onClick={() => onRetrySource(source.id)}>
+                <button type="button" className="btn btn-outline btn-error btn-xs gap-1" disabled={canRetrySource ? !canRetrySource(source) : false} title={canRetrySource && !canRetrySource(source) ? '公共库条目只读' : undefined} onClick={() => onRetrySource(source.id)}>
                   <RotateCw className="h-3 w-3" />
                   {t('crawl.retry')}
                 </button>

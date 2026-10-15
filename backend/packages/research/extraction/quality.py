@@ -5,8 +5,8 @@ import re
 _MAX_QUOTE_CHARS = 420
 
 HARDWARE_SPEC_RE = re.compile(
-    r"(?:\b\d+(?:\.\d+)?[\s-]*(?:gb|tb|mhz|ghz|hz|mah|watts?|inches?|inch)\b|"
-    r"\b\d{3,4}p\b|\d+(?:\.\d+)?\s*(?:英寸|毫米|厘米|毫安时|像素))",
+    r"(?:\b\d+(?:\.\d+)?[\s-]*(?:gb|tb|mhz|ghz|hz|mah|whr?|w|g|watts?|inches?|inch)\b|"
+    r"\b(?:wi-?fi)\s*\d+[a-z]*\b|\b\d{3,4}\s*[x×]\s*\d{3,4}\b|\b\d{3,4}p\b|\d+(?:\.\d+)?\s*(?:英寸|吋|毫米|厘米|毫安时|像素|克|瓦时|瓦時|瓦))",
     re.IGNORECASE,
 )
 
@@ -71,6 +71,9 @@ _DIMENSION_SIGNALS: dict[str, tuple[str, ...]] = {
         "teams",
         "enterprise",
         "use case",
+        "designed for",
+        "optimized for",
+        "is for",
         "workflow",
         "productivity",
         "organization",
@@ -87,15 +90,26 @@ _DIMENSION_SIGNALS: dict[str, tuple[str, ...]] = {
         "面向",
     ),
     "feature": (
+        "battery life",
+        "wifi",
+        "wi-fi",
+        "oled display",
+        "lcd screen",
+        "螢幕",
+        "屏幕",
         "feature",
         "具备",
         "支持",
         "提供",
         "可更换",
+        "可以",
         "包含",
-        "supports",
+        "support",
         "provides",
         "offers",
+        "can ",
+        "edit", "export", "download", "assign", "create", "share", "inspect", "comment", "permissions", "access",
+        "编辑", "导出", "下载", "分配", "创建", "共享", "评论",
         "model",
         "api",
         "agent",

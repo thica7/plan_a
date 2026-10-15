@@ -4,17 +4,19 @@ import { useTranslation } from '../../stores/i18n';
 import { SystemMessage } from '../../i18n/SystemMessage';
 
 interface ManualTabProps {
+  projectId?: string | null;
   competitor?: string;
   dimension?: string;
   priority: number;
   onSubmitted: () => void;
 }
 
-async function createManualSource(urls: string[], config: Record<string, unknown>) {
-  const res = await apiFetch('/api/crawl/sources', {
+async function createManualSource(urls: string[], config: Record<string, unknown>, projectId: string | null) {
+  const res = await apiFetch(`/api/crawl/sources?${new URLSearchParams({ ...(projectId ? { project_id: projectId } : {}), include_workspace_library: 'false' })}`,  {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      project_id: projectId,
       type: 'manual',
       config: { urls, max_urls: urls.length, ...config },
     }),
@@ -23,7 +25,7 @@ async function createManualSource(urls: string[], config: Record<string, unknown
   return res.json();
 }
 
-export function ManualTab({ competitor, dimension, priority, onSubmitted }: ManualTabProps) {
+export function ManualTab({ projectId = null, competitor, dimension, priority, onSubmitted }: ManualTabProps) {
   const { t } = useTranslation();
   const [value, setValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -38,7 +40,7 @@ export function ManualTab({ competitor, dimension, priority, onSubmitted }: Manu
     setSubmitting(true);
     setError(null);
     try {
-      await createManualSource(urls, { competitor, dimension, priority });
+      await createManualSource(urls, { competitor, dimension, priority }, projectId);
       setValue('');
       onSubmitted();
     } catch (err) {

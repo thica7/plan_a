@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 
 from packages.research.extraction.price_conditions import attach_price_conditions
-from packages.research.extraction.quality import quote_window_from_match
+from packages.research.extraction.pricing_cards import rendered_price_cards
+from packages.research.extraction.quality import quote_window_from_match, quote_quality_problem
 from packages.research.models import (
     CapturedPage,
     EvidenceQuote,
@@ -43,9 +44,12 @@ def extract_generic_pricing(brief: ResearchBrief, page: CapturedPage) -> Extract
         clause = raw_clause.strip()
         local_start = match.start() - start - leading_space
         local_match = _GENERIC_PRICE_RE.search(clause, local_start)
-        if local_match is None:
+        if local_match is None or _price_match_is_noise(clause, local_match):
             continue
-        clause_prices = list(_GENERIC_PRICE_RE.finditer(clause))
+        clause_prices = [
+            candidate for candidate in _GENERIC_PRICE_RE.finditer(clause)
+            if not _price_match_is_noise(clause, candidate)
+        ]
         name = brief.competitor.casefold()
         if len(clause_prices) > 1:
             prefix = clause[:clause_prices[0].start()].strip().casefold()
@@ -64,7 +68,7 @@ def extract_generic_pricing(brief: ResearchBrief, page: CapturedPage) -> Extract
             ):
                 continue
         prior_price_end = max(
-            (prior.end() for prior in _GENERIC_PRICE_RE.finditer(clause)
+            (prior.end() for prior in clause_prices
              if prior.end() <= local_start),
             default=0,
         )
@@ -116,7 +120,16 @@ def extract_generic_pricing(brief: ResearchBrief, page: CapturedPage) -> Extract
             )
         if len(rows) >= 8:
             break
-    rows = attach_price_conditions(rows, text)
+    card_rows = rendered_price_cards(brief.competitor, page)
+    if card_rows:
+        rows = card_rows
+        representative = next((row for row in rows
+                               if not quote_quality_problem(row['source_quote'], dimension='pricing')), rows[0])
+        first_quote = EvidenceQuote(
+            text=representative["source_quote"], source_url=page.final_url, field="price_points",
+        )
+    else:
+        rows = attach_price_conditions(rows, text)
     prices = _dedupe([row["price"] for row in rows])
     cycles = {row["billing_cycle"] for row in rows}
     model_type = (
@@ -244,7 +257,7 @@ def _price_rows(text: str) -> list[dict[str, str]]:
             if _price_match_is_noise(clause, match):
                 continue
             tier_name = _tier_name_near_price(clause, match)
-            if not tier_name and not _price_match_has_metered_unit(match.group(0)):
+            if not tier_name and not _price_match_has_pricing_unit(match.group(0)):
                 continue
             price = " ".join(match.group(0).split())
             key = (tier_name.casefold(), price.casefold(), physical_line)
@@ -278,6 +291,13 @@ def _pricing_clauses(text: str) -> list[str]:
 
 
 def _price_match_is_noise(clause: str, match: re.Match[str]) -> bool:
+    prefix = clause[max(0, match.start() - 80):match.start()]
+    if re.search(
+        r"(?:minimum\s+(?:invoice|billing|payment)(?:\s+(?:threshold|charge|amount))?|"
+        r"(?:invoice|billing|payment)\s+(?:threshold|minimum)|shipping(?:\s+(?:costs?|fees?))?)"
+        r"\b[^\d$]{0,35}$", prefix, flags=re.IGNORECASE,
+    ):
+        return True
     unit = match.group(0).casefold()
     if re.search(r"\b(per|/)\s*(?:month|mo|year|yr|user|seat|developer|1m|million|mtok|tokens?)\b", unit):
         return False
@@ -298,7 +318,7 @@ def _price_match_has_pricing_context(clause: str, match: re.Match[str]) -> bool:
     lowered = clause.casefold()
     if _tier_name_near_price(clause, match):
         return True
-    if _price_match_has_metered_unit(match.group(0)):
+    if _price_match_has_pricing_unit(match.group(0)):
         return True
     return bool(
         re.search(
@@ -309,10 +329,10 @@ def _price_match_has_pricing_context(clause: str, match: re.Match[str]) -> bool:
     )
 
 
-def _price_match_has_metered_unit(price: str) -> bool:
+def _price_match_has_pricing_unit(price: str) -> bool:
     return bool(
         re.search(
-            r"(?:/|per)\s*(?:1m|million|mtok|tokens?|active\s+day|day|request)",
+            r"(?:/|per)\s*(?:1m|million|mtok|tokens?|active\s+day|day|request|user|seat|developer|month|mo|year|yr)",
             price,
             flags=re.IGNORECASE,
         )
@@ -418,7 +438,7 @@ def _quotes(page: CapturedPage, fields: dict[str, object]) -> list[EvidenceQuote
         snippet = _window_for_field(text, field, value)
         if snippet:
             quotes.append(EvidenceQuote(text=snippet, source_url=page.final_url, field=field))
-    return quotes[:6]
+    return quotes
 
 
 def _window_for_field(text: str, field: str, value: object) -> str:

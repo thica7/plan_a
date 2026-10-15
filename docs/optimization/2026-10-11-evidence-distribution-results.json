@@ -1,0 +1,274 @@
+{
+  "date": "2026-10-11",
+  "branch": "codex/pastoral-desktop",
+  "scope": "product/dimension evidence allocation, conservative capability alignment, official price supplementation",
+  "acceptance": {
+    "status": "completed_with_blockers",
+    "current_node": "qa",
+    "pipeline_terminal": true,
+    "mechanical_pass": false,
+    "partial_report_generated": true,
+    "semantic_quality": null,
+    "has_product_analysis_signal": true,
+    "citations_valid": true,
+    "unknown_citation_count": 0,
+    "report_chars": 2226,
+    "core_chars": 1067,
+    "competitors": [
+      "Notion",
+      "Confluence",
+      "Coda"
+    ],
+    "source_count": 6,
+    "source_types": [
+      "webpage_verified"
+    ],
+    "native_llm_spans": 7,
+    "search_spans": 0,
+    "successful_search_spans": 0,
+    "provider_usage_by_kind": {
+      "llm": {
+        "prompt_tokens": 20817,
+        "completion_tokens": 5090,
+        "total_tokens": 25907,
+        "prompt_cache_hit_tokens": 13696,
+        "prompt_cache_miss_tokens": 7121
+      },
+      "search": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 0
+      }
+    },
+    "provider_total_tokens_last_attempts": 25907,
+    "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+    "budget_checkpoint": {
+      "calls": 7,
+      "repairs": 0,
+      "tokens_charged": 25907,
+      "cost_charged_usd": 0.008326476
+    },
+    "qa_issue_count": 10,
+    "last_writer_view": {
+      "facts_by_product": {
+        "Confluence": 3,
+        "Coda": 3,
+        "Notion": 3
+      },
+      "facts_by_branch": {
+        "Confluence/feature": 3,
+        "Coda/feature": 3,
+        "Notion/feature": 3
+      },
+      "actual_context_bytes": 8046,
+      "max_bytes": 8192
+    },
+    "mode": "frozen feature captures plus current official price capture; downstream model acceptance followed by one bounded Writer revalidation",
+    "writer_revalidation_additional_calls": 1
+  },
+  "tests": {
+    "backend": {
+      "passed": 3298,
+      "skipped": 1,
+      "warnings": 152,
+      "seconds": 72.58
+    },
+    "targeted": {
+      "passed": 405,
+      "seconds": 14.6
+    },
+    "frontend": {
+      "files": 2,
+      "passed": 16
+    },
+    "independent_review": "no remaining reproducible P1/P2; legacy migration assertions subsequently updated and passed"
+  },
+  "all_model_diagnostics": {
+    "calls": 19,
+    "tokens_charged": 69249,
+    "cost_estimate_usd": 0.024438168,
+    "cost_is_invoice": false,
+    "search_calls": 0
+  },
+  "pricing": [
+    {
+      "product": "Notion",
+      "pages": [
+        {
+          "url": "https://www.notion.com/pricing",
+          "status": "ok",
+          "title": "Notion Pricing Plans: Free, Plus, Business, & Enterprise.",
+          "chars": 5553,
+          "failure_reason": null
+        }
+      ],
+      "accepted_items": 3,
+      "sources": 1,
+      "pricing_rows": [
+        {
+          "plan": "Free",
+          "amount": 0.0,
+          "currency": "USD",
+          "amount_basis": "member",
+          "amount_period": "monthly",
+          "billing_interval": "unknown",
+          "tax_scope": "unknown",
+          "market": null,
+          "verified_at": "2026-10-10T12:52:19.716253+00:00"
+        },
+        {
+          "plan": "Plus",
+          "amount": 10.0,
+          "currency": "USD",
+          "amount_basis": "member",
+          "amount_period": "monthly",
+          "billing_interval": "unknown",
+          "tax_scope": "unknown",
+          "market": null,
+          "verified_at": "2026-10-10T12:52:19.716253+00:00"
+        },
+        {
+          "plan": "Business",
+          "amount": 20.0,
+          "currency": "USD",
+          "amount_basis": "member",
+          "amount_period": "monthly",
+          "billing_interval": "unknown",
+          "tax_scope": "unknown",
+          "market": null,
+          "verified_at": "2026-10-10T12:52:19.716253+00:00"
+        }
+      ],
+      "comparable_price": false
+    },
+    {
+      "product": "Confluence",
+      "pages": [
+        {
+          "url": "https://www.atlassian.com/software/confluence/pricing",
+          "status": "ok",
+          "title": "Confluence Pricing: Free and Paid Plans | Atlassian",
+          "chars": 130,
+          "failure_reason": null
+        },
+        {
+          "url": "https://support.atlassian.com/confluence-cloud/docs/learn-about-confluence-cloud-plans/",
+          "status": "ok",
+          "title": "Learn about the features of Confluence Cloud plans | Confluence Cloud | Atlassian Support",
+          "chars": 7667,
+          "failure_reason": null
+        }
+      ],
+      "accepted_items": 0,
+      "sources": 0,
+      "pricing_rows": [],
+      "comparable_price": false
+    },
+    {
+      "product": "Coda",
+      "pages": [
+        {
+          "url": "https://coda.io/pricing",
+          "status": "failed",
+          "title": "Coda official pricing",
+          "chars": 0,
+          "failure_reason": "browser_fetch_error"
+        },
+        {
+          "url": "https://help.coda.io/hc/articles/39555768266893",
+          "status": "failed",
+          "title": "Coda tables overview",
+          "chars": 0,
+          "failure_reason": "browser_fetch_error"
+        }
+      ],
+      "accepted_items": 0,
+      "sources": 0,
+      "pricing_rows": [],
+      "comparable_price": false
+    }
+  ],
+  "limitations": [
+    "Partial report only; semantic quality not scored",
+    "Some scenario recommendations and citation entailment remain insufficient",
+    "Notion price billing interval, market and tax remain unknown; price evidence omitted from final Writer view",
+    "Confluence visible price capture incomplete; hidden DOM values not admitted",
+    "Coda network connection closed",
+    "Full fresh discovery/search workflow not retested",
+    "HTTP Qdrant, real PostgreSQL RLS and Temporal not validated"
+  ],
+  "sha256": {
+    "backend/packages/research/evidence/views.py": "dcc09257621b2da51135432fde7925a3f7888a28b5befe5462f8c56bcf77b190",
+    "backend/packages/research/evidence/snapshot_models.py": "d4ffce7b4ddcac514d2247808a760f49d7cce8414d85d0a262a5afa44250aa46",
+    "backend/packages/research/evidence/snapshot.py": "45e7b00e49d934b3f78f0ad0e46c3d0de94bf47e3f5f5b56ff2f69206cd26966",
+    "backend/packages/research/evidence/capabilities.py": "5c3dff72be4ce5c1f0a96b7c1e92ade6865918f835900ecd1d803df97e4a17e7",
+    "backend/packages/agents/comparator/logic.py": "371e5e0a2b46ed979605504d397028fc0000551f166ce8b40b7f6972a803d124",
+    "backend/packages/agents/comparator/prompt_builder.py": "a9df83e716a870237b3507d08fc094e7f52ab188a7070f8d67ba8e218b3b8721",
+    "backend/packages/agents/writer/evidence_alignment.py": "25aa81321e794c0128ed3fb963dc30ac6a2e09512260388a560cc78cfb8caeda",
+    "backend/packages/agents/writer/logic.py": "c72c366cd3b1b3d9d7570045d916c21ebe5143b0299678ebd39bd6d44a371dd9",
+    "backend/packages/agents/writer/prompt_builder.py": "b720f779d4723df876cafdebef978541215f92b28d6ba6fe70920ecf8ae0bb92",
+    "backend/tests/unit/test_capability_alignment.py": "0a1553be17bcb4f9323c8b8ef1db93407d4bcd00b91c61f7554d49dbc5b31a82",
+    "backend/tests/unit/test_distributed_writer_context.py": "82257d77d3ecf605ffa56218102d959bdac78274e49b140fbda0e26850efd0c8",
+    "backend/tests/unit/test_stage_evidence_views.py": "cf0f5e6f2c486ee6dfd9dde2b9303ed1a309aa0cd38f788c979af11630b64b0e",
+    "backend/tests/unit/test_evidence_snapshot_scope.py": "466bf5f73bff08f5f1c3cf07ed091dd3f2853fc10a6cfe9eff951e33cfe79b37",
+    "backend/tests/unit/test_report_quality.py": "e35129083ab936b8d2eafa627ed26513d35828e53838df34e29d7b149a10a810",
+    "backend/tests/integration/test_agent_evidence_alignment.py": "9fcadcf89ca71ed4efaf0a48a2a70e387514419e63dc071d3e36545c1539ab34"
+  },
+  "draft_sha256": "64eeb6a6f1bfa6ec51129dd9b57ccea08e3aec13a95aafa9b5566dddad609cac",
+  "runtime_smoke": {
+    "backend": {
+      "url": "http://127.0.0.1:8000/api/health",
+      "http_status": 200,
+      "service_status": "error",
+      "checks": [
+        {
+          "name": "config",
+          "status": "ok"
+        },
+        {
+          "name": "llm_credentials",
+          "status": "ok"
+        },
+        {
+          "name": "web_search_credentials",
+          "status": "ok"
+        },
+        {
+          "name": "skills",
+          "status": "ok"
+        },
+        {
+          "name": "sqlite",
+          "status": "ok"
+        },
+        {
+          "name": "enterprise_store",
+          "status": "ok"
+        },
+        {
+          "name": "auth_policy",
+          "status": "ok"
+        },
+        {
+          "name": "temporal_cutover",
+          "status": "error"
+        },
+        {
+          "name": "temporal_server",
+          "status": "warn"
+        },
+        {
+          "name": "compliance",
+          "status": "ok"
+        }
+      ]
+    },
+    "frontend": {
+      "url": "http://127.0.0.1:5173/",
+      "http_status": 200
+    },
+    "note": "API and frontend reachable; health rollup remains error due to temporal_cutover and temporal_server not accepted in this scope."
+  }
+}

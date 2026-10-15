@@ -12,6 +12,7 @@ from ..knowledge.embeddings import (
 )
 from ..knowledge.models import KnowledgeScope, RetrievalIntent, RetrievalRequest, SourceRole
 from ..knowledge.repository import KnowledgeRepository
+from ..knowledge.reranker import get_reranker_provider_from_env
 from ..knowledge.retrieval import RetrievalService
 
 
@@ -62,11 +63,15 @@ async def rag_retrieve_tool(
             embed_fn = (
                 embedding_provider.embed_documents if embedding_provider else _empty_embeddings
             )
+        reranker = get_reranker_provider_from_env()
         service = RetrievalService(
             repo=repo,
             vector_store=vector_store,
             embed_fn=embed_fn,
             embedding_provider=embedding_provider,
+            rerank_fn=reranker.rerank if reranker else None,
+            rerank_model=reranker.model_version if reranker else None,
+            reranker_provider=reranker,
         )
         response = await service.retrieve(
             RetrievalRequest(
@@ -76,8 +81,8 @@ async def rag_retrieve_tool(
                 dimensions=dimensions,
                 top_k=top_k,
                 final_top_k=top_k,
-                enable_query_rewrite=retrieval_mode != "sparse",
-                num_rewrites=0 if retrieval_mode == "sparse" else 3,
+                enable_query_rewrite=False,
+                num_rewrites=0,
                 mode=retrieval_mode,
                 workspace_id=scope.workspace_id,
                 project_id=scope.project_id,

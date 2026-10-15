@@ -4,7 +4,9 @@ import sqlite3
 from pathlib import Path
 
 from app.events import RunEvent
+
 from packages.schema.api_dto import RunDetail, RunSummary
+from packages.schema.enterprise import EnterpriseRunProjection
 
 SUMMARY_COLUMNS: dict[str, str] = {
     "idempotency_key": "text not null default ''",
@@ -35,7 +37,24 @@ class RunJournal:
     def in_memory(cls) -> RunJournal:
         return cls(Path(":memory:"))
 
-    def save_run(self, detail: RunDetail) -> None:
+    def save_run(
+        self,
+        detail: RunDetail,
+        *,
+        projections: list[EnterpriseRunProjection] | None = None,
+    ) -> None:
+        for projection in projections or []:
+            version = projection.report_version
+            if (projection.run_id, projection.workspace_id, projection.project_id) != (
+                detail.id,
+                detail.workspace_id,
+                detail.project_id,
+            ) or (version.run_id, version.workspace_id, version.project_id) != (
+                detail.id,
+                detail.workspace_id,
+                detail.project_id,
+            ):
+                raise ValueError("Journal projection scope mismatch")
         conn = self._connect()
         try:
             conn.execute(
@@ -68,9 +87,30 @@ class RunJournal:
                     detail.updated_at.isoformat(),
                 ),
             )
+            for projection in projections or []:
+                conn.execute(
+                    """insert into report_projections (run_id, version_id, projection_json)
+                    values (?, ?, ?) on conflict(run_id, version_id) do update set
+                    projection_json = excluded.projection_json""",
+                    (detail.id, projection.report_version.id, projection.model_dump_json()),
+                )
             conn.commit()
         finally:
             self._close(conn)
+
+    def load_report_projections(self, run_id: str) -> list[EnterpriseRunProjection]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "select projection_json from report_projections where run_id = ?",
+                (run_id,),
+            ).fetchall()
+        finally:
+            self._close(conn)
+        return sorted(
+            (EnterpriseRunProjection.model_validate_json(row[0]) for row in rows),
+            key=lambda item: item.report_version.version_number,
+        )
 
     def append_event(self, event: RunEvent) -> None:
         conn = self._connect()
@@ -216,6 +256,9 @@ class RunJournal:
                 )
                 """
             )
+            conn.execute("""create table if not exists report_projections (
+                run_id text not null, version_id text not null, projection_json text not null,
+                primary key (run_id, version_id))""")
             added_summary_columns = self._ensure_summary_columns(conn)
             conn.execute(
                 """

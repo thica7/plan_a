@@ -13,6 +13,22 @@ from packages.research.models import CapturedPage, ResearchResult, SourceCandida
 from packages.search import SearchResult
 
 
+@pytest.mark.asyncio
+async def test_invalid_kb_reference_keeps_current_capture_and_removes_partial_reference(tmp_path, monkeypatch):
+    monkeypatch.setenv("KB_DB_PATH", str(tmp_path / "kb.db"))
+    service, detail = service_and_detail()
+    _, page, source, _ = capture_fixture(service, detail)
+    source.metadata.update(kb_document_id="old", kb_document_workspace_id="ws-a", kb_document_project_id="project-a", kb_fetched_at="old", captured_page_id=page.id, capture_verified_at=page.captured_at.isoformat())
+    async def invalid(*args, **kwargs): return False
+    monkeypatch.setattr(service, "_full_source_reference_is_valid", invalid)
+    before = source.snippet
+    result = await service._sync_collected_sources_to_kb(RunRecord(detail=detail), detail, [source])
+    assert result["ingested"] == 0
+    assert result["skipped"][0]["reason"] == "fresh_capture_reference_invalid"
+    assert not any(key.startswith("kb_") for key in source.metadata)
+    assert source.snippet == before
+
+
 def capture_fixture(service, detail):
     brief = service._research_brief(detail, "Vacuum X Pro", "feature")
     candidate = SourceCandidate(

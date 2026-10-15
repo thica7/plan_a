@@ -513,8 +513,13 @@ def _build_quality_metadata(
         source.id for source in detail.raw_sources if source.source_type == "llm_public_knowledge"
     ]
     research_source_ids = _classify_user_research_sources(detail.raw_sources)
+    from packages.agents.writer.dimension_writer import partial_report_mode
+    from packages.research.evidence.snapshot import current_snapshot
+    audited_partial = (partial_report_mode(detail, current_snapshot(detail))
+        and any(c.status == 'supported' for a in detail.report_dimension_audits for c in a.claims))
     return {
         "run_id": detail.id,
+        **({'report_structure_profile': 'audited_partial'} if audited_partial else {}),
         "schema_pass_rate": detail.metrics.schema_pass_rate,
         "memory_used": {
             "candidate_ids": detail.plan.memory_candidate_ids,

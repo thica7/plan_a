@@ -1,0 +1,242 @@
+{
+  "date": "2026-10-15",
+  "status": "engineering_verified_github_delivery_pending",
+  "source_tree_sha256": "31cbcc518dc419d38fe5e3d75051042191de1af45c272bb3b11dc2ec628f4e5b",
+  "source_files": 883,
+  "source_manifest_scope": "non-ignored backend/frontend/eval code/config/data; no env/secrets/runtime files",
+  "query_strategy": "intent-v3",
+  "lexical_strategy": "lexical-v3",
+  "index_tokenizer_changed": false,
+  "input_sha256": {
+    "product-research-independent-v1-corpus.jsonl": "3c6a30c613d967a18921216ddcab572511805c28f507c4a1f28d9e5a71cd3b95",
+    "product-research-independent-v1-queries.jsonl": "0d4b63a9fbd0ff27aee55b28aaea602415dabbeae0f09860d0b48823589fc578",
+    "product-research-independent-v1-labels.jsonl": "23d73f09e3b49c589a619470b87cfb0f66332fc61746309fd2d034fc1337271c"
+  },
+  "offline_retrieval": {
+    "dataset": "independent-v1",
+    "sources": 22,
+    "questions": 8,
+    "answer_questions": 6,
+    "eligible_sources_per_answer": 13,
+    "blind_holdout": false,
+    "semantic_quality_verified": false,
+    "external_model_calls": 0,
+    "network_attempts": 0,
+    "raw_comparison": "unplanned original query with current lexical strategy; not a frozen lexical-v1 engine",
+    "candidate_scope": "validated union of each fact query and modality before final ranking; not Recall@20",
+    "arms": {
+      "sparse": {
+        "answer_query_count": 6,
+        "per_query_candidate_top_k": 20,
+        "candidate_pool_policy": "union_before_final_ranking",
+        "candidate_recall": 0.0,
+        "recall_at_1": 0.0,
+        "recall_at_k": 0.0,
+        "mean_proof_excerpt_recall": 0.0,
+        "failed_answer_ids": [
+          "independent-v1-001",
+          "independent-v1-002",
+          "independent-v1-003",
+          "independent-v1-004",
+          "independent-v1-005",
+          "independent-v1-006"
+        ]
+      },
+      "hybrid": {
+        "answer_query_count": 6,
+        "per_query_candidate_top_k": 20,
+        "candidate_pool_policy": "union_before_final_ranking",
+        "candidate_recall": 1.0,
+        "recall_at_1": 1.0,
+        "recall_at_k": 1.0,
+        "mean_proof_excerpt_recall": 1.0,
+        "failed_answer_ids": []
+      },
+      "hybrid_rerank": {
+        "answer_query_count": 6,
+        "per_query_candidate_top_k": 20,
+        "candidate_pool_policy": "union_before_final_ranking",
+        "candidate_recall": 1.0,
+        "recall_at_1": 1.0,
+        "recall_at_k": 1.0,
+        "mean_proof_excerpt_recall": 1.0,
+        "failed_answer_ids": []
+      },
+      "sparse_structured": {
+        "answer_query_count": 6,
+        "per_query_candidate_top_k": 20,
+        "candidate_pool_policy": "union_before_final_ranking",
+        "candidate_recall": 0.8333333333333334,
+        "recall_at_1": 0.8333333333333334,
+        "recall_at_k": 0.8333333333333334,
+        "mean_proof_excerpt_recall": 0.8333333333333334,
+        "failed_answer_ids": [
+          "independent-v1-005"
+        ]
+      },
+      "hybrid_structured": {
+        "answer_query_count": 6,
+        "per_query_candidate_top_k": 20,
+        "candidate_pool_policy": "union_before_final_ranking",
+        "candidate_recall": 1.0,
+        "recall_at_1": 1.0,
+        "recall_at_k": 1.0,
+        "mean_proof_excerpt_recall": 1.0,
+        "failed_answer_ids": []
+      },
+      "hybrid_rerank_structured": {
+        "answer_query_count": 6,
+        "per_query_candidate_top_k": 20,
+        "candidate_pool_policy": "union_before_final_ranking",
+        "candidate_recall": 1.0,
+        "recall_at_1": 1.0,
+        "recall_at_k": 1.0,
+        "mean_proof_excerpt_recall": 1.0,
+        "failed_answer_ids": []
+      }
+    },
+    "proof_path": "/tmp/plan_a_v14_independent_retrieval.json",
+    "proof_sha256": "65b42296414f92892774659b8b8053f5de9ac0403ab5144da1ac2877008b97be"
+  },
+  "verification": {
+    "related_tests": {
+      "passed": 359,
+      "log": "/tmp/plan_a_v13_retrieval_scope_related_green.log"
+    },
+    "backend": {
+      "status": "passed",
+      "passed": 4091,
+      "skipped": 1,
+      "warnings": 202,
+      "seconds": 169.33,
+      "log": "/tmp/plan_a_v14_backend_tests.log",
+      "log_sha256": "d41c100f1997d0230a69b6cadf9f464578f25ca18315bccfa1b7e1439dfd1204",
+      "permission": "normal local permissions required for ps ownership check"
+    },
+    "frontend": {
+      "frontend_files_checked": 244,
+      "identical_to_v10": true,
+      "fresh_tests": {
+        "passed": 279,
+        "files": 55,
+        "log": "/tmp/plan_a_v11_frontend_tests.log"
+      },
+      "fresh_build": {
+        "status": "passed",
+        "log": "/tmp/plan_a_v11_frontend_build.log"
+      }
+    },
+    "openapi": {
+      "json_equal": true,
+      "same_as_type_generation_input": true
+    },
+    "reviews": {
+      "spec": {
+        "status": "pass",
+        "proof": "/tmp/plan_a_v14_spec_review.json",
+        "independent_tests_passed": 188,
+        "proof_sha256": "bdfecc1e027a7971698a64998defa4aeb60379a841cfed35da703c713f4e2349"
+      },
+      "quality": {
+        "status": "pass",
+        "proof": "/tmp/plan_a_v14_quality_review.json",
+        "independent_tests_passed": 130,
+        "proof_sha256": "7bf5c3c510b4f14f1aae54ecc4136ca1611744eec831ce6ab8ce9e35476fa1f6"
+      }
+    },
+    "secret_scan": {
+      "scope": "literal current configured credentials in nonignored text sources/docs/eval, built frontend and specified acceptance artifacts; excludes secret env bodies and Git history",
+      "configured_credential_count": 1,
+      "files_scanned": 1141,
+      "actual_secret_hit_paths": [],
+      "tracked_secret_config_paths": [],
+      "status": "pass"
+    },
+    "source_unchanged_between_model_reviews_tests": true,
+    "post_suite_formatting_delta": {
+      "file": "backend/tests/unit/test_fetch_html_comments.py",
+      "change": "remove redundant blank line at EOF",
+      "python_ast_equal": true,
+      "before_sha256": "700b8746420e7d681d541506f33ee812424a81c73ca9bccac0ce99f24c24d3d0",
+      "after_sha256": "1fd9dd04ac10a5199bd92552b1df7af32bbfe82b4773c99a2fa278510e13a3bf",
+      "business_code_changed": false,
+      "regression_log": "/tmp/plan_a_v14_whitespace_regression.log",
+      "only_changed_manifest_path": "backend/tests/unit/test_fetch_html_comments.py"
+    },
+    "staged_files": 270,
+    "provider_key_pattern_scan": "passed after staging all 270 files"
+  },
+  "intermediate_verification": [
+    {
+      "source_tree_sha256": "78d57a6c1399809b31e0b582d9762c2a188876144219c1ccd19fdb901853c3c1",
+      "sparse_structured_top3": "3/6",
+      "proof": "/tmp/plan_a_v11_independent_retrieval.json"
+    },
+    {
+      "source_tree_sha256": "da891a474cabf19cc392254838dc06ca86215f1495db7341fda2284df130cb33",
+      "sparse_structured_top3": "5/6",
+      "proof": "/tmp/plan_a_v12_independent_retrieval.json",
+      "limitations": "before upstream numeric and target-product regression fixes"
+    },
+    {
+      "suite": "v12",
+      "passed": 4069,
+      "failed": 6,
+      "skipped": 1,
+      "log": "/tmp/plan_a_v12_backend_tests.log",
+      "scope": "five product-query assertions/target scope failures plus sandbox ps denial; not final acceptance"
+    },
+    {
+      "suite": "v13",
+      "passed": 4071,
+      "failed": 16,
+      "skipped": 1,
+      "log": "/tmp/plan_a_v13_backend_tests.log",
+      "scope": "intermediate overbroad scope lookup broke short queries/cache/full-text reuse; not final acceptance"
+    }
+  ],
+  "integration_scope": {
+    "real": [
+      "rag_retrieve_tool",
+      "SQLite retrieval",
+      "extract/admit",
+      "canonical storage",
+      "snapshot",
+      "five-stage evidence consumption and dependency checks"
+    ],
+    "fixtures_or_replacements": [
+      "web capture",
+      "LLM outputs",
+      "report hardening"
+    ],
+    "full_report_publication_verified": false
+  },
+  "live_four_product_acceptance": {
+    "status": "not_started",
+    "reason": "workspace monthly token quota exceeded",
+    "last_creation_http_status": 429,
+    "new_run_created": false,
+    "quota_changed_this_round": false,
+    "external_model_calls_this_round": 0
+  },
+  "limitations": [
+    "已曝光小集，仅检索回归，不代表未知问题回答准确率或RAG整体合格",
+    "005缺少产品锚点，稀疏回退仍失败；复杂条件与格式歧义未全面解决",
+    "本小集未证明精排增益；资料不足/澄清未做生成答案评分或RAGAS",
+    "scope查找是长中文研究brief的有界产品名FTS路径，不是完整语义解析",
+    "HTTP Qdrant、Temporal、Redis多worker及实机Postgres RLS未验收",
+    "临时日志路径为本机证明，不是随Git分发的原始附件"
+  ],
+  "github_delivery": {
+    "status": "pending",
+    "branch": "codex/pastoral-desktop",
+    "excluded": [
+      "local secret configuration",
+      "runs/",
+      "data/artifacts/",
+      "model weights"
+    ],
+    "included_examples": "redacted acceptance samples under docs/optimization"
+  },
+  "delivery_source_tree_sha256": "ae6bc108111faa7b9f9d66d924085bc47c09453278d91664d3a872273dd9a62b"
+}

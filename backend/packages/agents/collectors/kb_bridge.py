@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from packages.agents import SubagentContext
 from packages.identity import compute_raw_source_id
-from packages.knowledge.models import KnowledgeScope, RetrievalHit, RetrievalRequest
+from packages.knowledge.models import KnowledgeScope, RetrievalHit, RetrievalIntent, RetrievalRequest
+from packages.knowledge.query_intent import resolve_retrieval_plan
+from packages.knowledge.runtime import retrieval_mode_from_env, semantic_indexing_enabled
 from packages.memory.report_reuse import FACT_TTL_DAYS, PRICE_VERSION_TTL_DAYS
 from packages.research.evidence.admission import capture_fact_verification_time
+from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.models import ResearchResult
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import RawSource
@@ -62,6 +66,18 @@ class CollectorKBBridgeMixin:
         product = detail.plan.target_product
         return product.market.strip() or None if product is not None else None
 
+    def _kb_source_market(self, detail: RunDetail, source: RawSource) -> str | None:
+        if "pricing" not in source.dimension.casefold():
+            return self._kb_market(detail)
+        # Price scope belongs to admitted source rows, never the request or a
+        # legacy directory label copied into source metadata.
+        markets = {
+            value.strip() or None if isinstance(value := row.get("market"), str) else None
+            for row in normalized_fields_from_source(source)
+            if row.get("kind") == "pricing"
+        }
+        return next(iter(markets)) if len(markets) == 1 else None
+
     @staticmethod
     def _kb_max_age_days(dimension: str) -> int:
         return (
@@ -88,12 +104,27 @@ class CollectorKBBridgeMixin:
             "competitors": [competitor],
             "dimensions": [dimension],
             "top_k": max(target_source_count * 3, 5),
-            "mode": "sparse",
+            "mode": retrieval_mode_from_env(),
             **self._kb_scope(detail).model_dump(),
             "market": self._kb_market(detail),
             "source_roles": ["source"],
             "max_age_days": self._kb_max_age_days(dimension),
+            "intent_policy": "structured",
         }
+        # Product/dimension authority stays in the filters. Planning uses the
+        # user's topic, so skill prose and web discovery instructions cannot
+        # become mandatory facts in the SQLite query.
+        plan = resolve_retrieval_plan(RetrievalRequest(
+            **request, enable_query_rewrite=False, num_rewrites=0,
+        ))
+        # The shared automatic planner owns clause-local numbers and unresolved
+        # conditions. Rewrapping it as explicit intent would append every number
+        # to every fact and discard those diagnostics.
+        if plan.origin not in {"auto", "dimension_scope_lookup"} and all(len(fact) <= 500 for fact in plan.queries):
+            request["retrieval_intent"] = RetrievalIntent(
+                fact_queries=list(plan.queries), output_language=plan.output_language,
+                require_citations=plan.require_citations,
+            ).model_dump()
         try:
             from packages.tools.rag_retrieve import rag_retrieve_tool
 
@@ -104,7 +135,7 @@ class CollectorKBBridgeMixin:
                 agent="collector",
                 subagent=context.subagent,
                 name="rag_kb_warm_start",
-                input_text=json.dumps(request, ensure_ascii=False),
+                input_text=json.dumps({"original_query": detail.topic, **request}, ensure_ascii=False),
                 output_text=json.dumps({"error": str(exc), "degraded": True}, ensure_ascii=False),
                 context=context,
                 metadata={"degraded": True, "source_count": 0},
@@ -188,7 +219,7 @@ class CollectorKBBridgeMixin:
             agent="collector",
             subagent=context.subagent,
             name="rag_kb_warm_start",
-            input_text=json.dumps(request, ensure_ascii=False),
+            input_text=json.dumps({"original_query": detail.topic, **request}, ensure_ascii=False),
             output_text=json.dumps(
                 {
                     "hit_count": len(hits),
@@ -353,26 +384,17 @@ class CollectorKBBridgeMixin:
             metadata["kb_collector_confidence"] = confidence
 
     def _kb_retrieval_query(self, detail: RunDetail, competitor: str, dimension: str) -> str:
-        if detail.plan.target_product is not None:
-            return self._web_search_query(detail, competitor, dimension)
-        skill = self._skill_registry.get(dimension)
-        parts = [
-            self._web_search_query(detail, competitor, dimension),
-            detail.topic,
-            competitor,
-            dimension,
-            skill.description if skill is not None else "",
-        ]
-        seen: set[str] = set()
-        terms: list[str] = []
-        for part in parts:
-            value = " ".join(str(part).split())
-            key = value.casefold()
-            if not value or key in seen:
-                continue
-            seen.add(key)
-            terms.append(value)
-        return " ".join(terms)
+        def name_pattern(name: str) -> str:
+            return r"(?<![A-Za-z0-9])" + re.escape(name) + r"(?![A-Za-z0-9])"
+
+        target_name = detail.plan.target_product.name if detail.plan.target_product is not None else ""
+        names = sorted(set([competitor, *detail.plan.competitors, target_name]), key=len, reverse=True)
+        query = re.sub("|".join(name_pattern(name) for name in names if name),
+            lambda match: competitor if match.group().casefold() == competitor.casefold() else " ",
+            detail.topic, flags=re.IGNORECASE)
+        if not re.search(name_pattern(competitor), query, re.IGNORECASE):
+            query = f"{competitor} {query}"
+        return query.strip()
 
     def _raw_source_from_kb_hit(
         self,
@@ -417,6 +439,7 @@ class CollectorKBBridgeMixin:
         metadata = {
             "kb_retrieved": True,
             "kb_retrieval_query": query,
+            "kb_retrieval_original_query": detail.topic,
             "kb_document_id": str(hit.get("document_id") or ""),
             "kb_document_workspace_id": hit.get("workspace_id"),
             "kb_document_project_id": hit.get("project_id"),
@@ -425,6 +448,7 @@ class CollectorKBBridgeMixin:
             "kb_chunk_id": str(hit.get("chunk_id") or ""),
             "kb_hit_score": score,
             "kb_rerank_score": hit.get("rerank_score"),
+            "kb_retrieval": hit_metadata.get("retrieval", {}),
             "kb_source_type": source_type,
             "kb_competitor": str(hit.get("competitor") or ""),
             "kb_dimension": str(hit.get("dimension") or ""),
@@ -531,7 +555,7 @@ class CollectorKBBridgeMixin:
                     source_type=source.source_type,
                     workspace_id=detail.workspace_id,
                     project_id=detail.project_id,
-                    market=self._kb_market(detail),
+                    market=self._kb_source_market(detail, source),
                     source_role="source",
                     fetched_at=captured_at,
                     last_verified_at=capture_fact_verification_time(
@@ -545,6 +569,7 @@ class CollectorKBBridgeMixin:
                     source_updated_at=_source_datetime(source.metadata.get("source_updated_at")),
                     metadata={
                         **source.metadata,
+                        "requested_market": self._kb_market(detail),
                         "source_material_level": "full_source",
                         "run_id": detail.id,
                         "raw_source_id": source.id,
@@ -553,7 +578,7 @@ class CollectorKBBridgeMixin:
                         "collector_fetch_method": source.fetch_method,
                     },
                     crawl_run_id=detail.id,
-                    index_vectors=False,
+                    index_vectors=semantic_indexing_enabled(),
                 )
                 source.metadata.update(
                     kb_document_id=reference["document_id"],
@@ -565,10 +590,15 @@ class CollectorKBBridgeMixin:
                     kb_last_verified_at=reference["last_verified_at"],
                     kb_source_updated_at=reference["source_updated_at"],
                     kb_full_source_ingest_status="stored",
+                    kb_indexing_status=reference.get("indexing_status"),
+                    kb_indexing_error=reference.get("indexing_error"),
                 )
                 failures.discard(failure_key)
                 diagnostics.append(
-                    {"source_id": source.id, "document_id": reference["document_id"]}
+                    {"source_id": source.id, "document_id": reference["document_id"],
+                     "indexing_status": reference.get("indexing_status"),
+                     "indexing_error": reference.get("indexing_error"),
+                     "embedding": reference.get("embedding")}
                 )
             except Exception as exc:  # noqa: BLE001 - persistence must not block true evidence.
                 diagnostics.append({"source_id": source.id, "error": str(exc)[:160]})
@@ -608,7 +638,10 @@ class CollectorKBBridgeMixin:
             and (not require_full or doc.project_id == detail.project_id)
             and doc.competitor == source.competitor
             and doc.dimension == source.dimension
-            and doc.market == self._kb_market(detail)
+            and doc.market == (
+                self._kb_source_market(detail, source)
+                if require_full else self._kb_market(detail)
+            )
             and doc.source_role == "source"
             and doc.version == source.metadata.get("kb_document_version")
             and doc.content_hash == source.metadata.get("kb_document_content_hash")
@@ -627,7 +660,7 @@ class CollectorKBBridgeMixin:
                 scope=scope,
                 competitor=source.competitor,
                 dimension=source.dimension,
-                market=self._kb_market(detail),
+                market=self._kb_source_market(detail, source),
             )
 
     async def _sync_collected_sources_to_kb(
@@ -638,12 +671,15 @@ class CollectorKBBridgeMixin:
         context: SubagentContext | None = None,
     ) -> dict[str, object]:
         try:
-            from packages.tools.ingest_document import ingest_document_tool
+            from packages.tools.ingest_document import ingest_document_reference
         except Exception as exc:  # noqa: BLE001 - KB persistence is non-blocking.
             return {"attempted": 0, "ingested": 0, "error": str(exc)}
 
         attempted = 0
         ingested = 0
+        indexed = 0
+        index_failed = 0
+        results: list[dict[str, object]] = []
         skipped: list[dict[str, str]] = []
         errors: list[str] = []
         for source in sources:
@@ -676,6 +712,14 @@ class CollectorKBBridgeMixin:
                         }
                     )
                     continue
+                if not retrieved and source.metadata.get("captured_page_id") and source.metadata.get("capture_verified_at"):
+                    # A failed/stale KB reference does not invalidate the current
+                    # server capture. Do not replace its full document with a snippet.
+                    for key in list(source.metadata):
+                        if key.startswith("kb_"):
+                            source.metadata.pop(key)
+                    skipped.append({"source_id": source.id, "reason": "fresh_capture_reference_invalid"})
+                    continue
                 for field in ("kb_document_id", "kb_document_version", "kb_document_content_hash"):
                     source.metadata.pop(field, None)
             source.metadata.pop("kb_retrieved", None)
@@ -695,8 +739,8 @@ class CollectorKBBridgeMixin:
                 continue
             attempted += 1
             try:
-                await ingest_document_tool.ainvoke(
-                    {
+                reference = await ingest_document_reference(
+                    **{
                         "url": str(source.url) if source.url else "",
                         "title": source.title or source.id,
                         "text": text[:50000],
@@ -705,7 +749,7 @@ class CollectorKBBridgeMixin:
                         "source_type": source.source_type or "webpage_verified",
                         "workspace_id": detail.workspace_id,
                         "project_id": detail.project_id,
-                        "market": self._kb_market(detail),
+                        "market": self._kb_source_market(detail, source),
                         "source_role": "source",
                         "fetched_at": _source_datetime(source.metadata.get("fetched_at"))
                         or _source_datetime(source.extracted_at),
@@ -720,6 +764,7 @@ class CollectorKBBridgeMixin:
                         ),
                         "metadata": {
                             **source.metadata,
+                            "requested_market": self._kb_market(detail),
                             "run_id": detail.id,
                             "raw_source_id": source.id,
                             "collector_confidence": source.confidence,
@@ -728,16 +773,30 @@ class CollectorKBBridgeMixin:
                             "source_material_level": "summary",
                         },
                         "crawl_run_id": detail.id,
-                        "index_vectors": False,
+                        "index_vectors": semantic_indexing_enabled(),
                     }
                 )
                 ingested += 1
+                indexed += int(reference.get("index_vectors_requested") is True
+                               and reference.get("indexing_status") == "ready")
+                index_failed += int(reference.get("index_vectors_requested") is True
+                                    and reference.get("indexing_status") == "failed")
+                results.append({
+                    "source_id": source.id,
+                    **{key: reference.get(key) for key in (
+                        "document_id", "index_vectors_requested", "indexing_status",
+                        "indexing_error", "embedding",
+                    )},
+                })
             except Exception as exc:  # noqa: BLE001 - one bad KB write must not block the run.
                 errors.append(f"{source.id}: {str(exc)[:160]}")
 
         summary: dict[str, object] = {
             "attempted": attempted,
             "ingested": ingested,
+            "indexed": indexed,
+            "index_failed": index_failed,
+            "results": results,
             "skipped": skipped[:12],
             "errors": errors[:5],
         }
@@ -754,6 +813,8 @@ class CollectorKBBridgeMixin:
             metadata={
                 "attempted": attempted,
                 "ingested": ingested,
+                "indexed": indexed,
+                "index_failed": index_failed,
                 "skipped": len(skipped),
                 "errors": len(errors),
             },

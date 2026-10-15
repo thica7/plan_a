@@ -20,11 +20,13 @@ from packages.agents.writer.assembler import (
     assemble_report_sections,
 )
 from packages.agents.writer.evidence_alignment import WriterEvidenceAlignmentMixin
+from packages.agents.writer.dimension_writer import DimensionWriterMixin, dimension_writing_enabled
 from packages.agents.writer.evidence_pack import (
     SEGMENT_INPUT_TARGET_CHARS,
     build_writer_evidence_pack,
 )
 from packages.agents.writer.execution import bounded_segment_map
+from packages.agents.writer.prompt_builder import WriterPromptBuilder
 from packages.agents.writer.publication_contract import (
     PublicationContractIssue,
     PublicationContractResult,
@@ -99,7 +101,7 @@ from packages.identity.source_resolver import (
 )
 from packages.llm.errors import LLMExecutionLimitError
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
-from packages.rag.grounded_prompt import build_run_grounding_prompt
+from packages.research.evidence.views import select_evidence_view
 from packages.research.budget import research_depth_budget
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.text import source_business_snippet
@@ -1153,7 +1155,7 @@ def _source_ids_from_structured_segments(
     return sorted(source_ids)
 
 
-class WriterAgentMixin(WriterEvidenceAlignmentMixin):
+class WriterAgentMixin(WriterEvidenceAlignmentMixin, DimensionWriterMixin):
     async def _write_report_draft(self, record: RunRecord) -> None:
         detail = record.detail
         detail.current_node = "writer"
@@ -1253,6 +1255,17 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
                 upstream_data_changed=upstream_data_changed,
             )
         else:
+            repair_plan = None
+        if repair_plan is not None and dimension_writing_enabled(detail):
+            # Report the scope the dimension writer can actually reuse.
+            reusable_audits, repair_targets = self._dimension_repair_audits(record, redo_issues)
+            scoped_repair = bool(reusable_audits and repair_targets)
+            writer_repair_mode = 'section' if scoped_repair else 'full'
+            writer_repair_sections = repair_plan.sections if scoped_repair else []
+            writer_repair_decision = (
+                'Regenerate scoped claims and audit changed observations.'
+                if scoped_repair else 'Regenerate all dimension claims; no reusable audited producer.'
+            )
             repair_plan = None
         timeout_seconds = max(0.05, float(self._settings.writer_timeout_seconds))
         assemble_repair_succeeded = False
@@ -1466,6 +1479,7 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
                 structured_enabled = (
                     self._settings.writer_structured_report_enabled
                     and detail.plan.research_depth != "quick"
+                    and not dimension_writing_enabled(detail)
                 )
                 schema_contract_report_generated = False
                 segmented_writer_required = bool(
@@ -1474,7 +1488,7 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
                         "segmented_writer_required",
                         False,
                     )
-                )
+                ) and not dimension_writing_enabled(detail)
                 if structured_enabled:
                     try:
                         report_md = await self._writer_schema_contract_segment_report(
@@ -1738,7 +1752,7 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
                             report_md = await self._writer_markdown_report_from_evidence_pack(
                                 record,
                                 evidence_pack_result,
-                                timeout_seconds,
+                                timeout_seconds, **({'repair_issues': redo_issues} if redo_issues else {}),
                             )
                             writer_mode = (
                                 "real segmented LLM call"
@@ -1749,7 +1763,7 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
                     report_md = await self._writer_markdown_report_from_evidence_pack(
                         record,
                         evidence_pack_result,
-                        timeout_seconds,
+                        timeout_seconds, **({'repair_issues': redo_issues} if redo_issues else {}),
                     )
                     writer_mode = (
                         "real segmented LLM call"
@@ -2162,40 +2176,15 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
         record: RunRecord,
         evidence_pack_result,
         timeout_seconds: float,
+        *,
+        repair_issues=None,
     ) -> str:
         detail = record.detail
-        depth_budget = research_depth_budget(detail.plan.research_depth)
-        report_chars = depth_budget.report_chars if depth_budget is not None else "16,000-20,000"
-        core_depth_instruction = (
-            "Summarize the target product, core competitor comparison, evidence, "
-            "limitations and next validation step concisely. "
-            if detail.plan.research_depth == "quick" else
-            "Core section minimums: Decision Summary 800+ characters; "
-            "Competitive Findings 1,200+; User Review Themes 1,000+ when "
-            "review, community, survey, interview, or persona evidence exists; "
-            "Competitor Deep Dives 1,400+ and every competitor covered; SWOT "
-            "1,400+ with explicit Strengths, Weaknesses, Opportunities, and "
-            "Threats for every competitor; Matrix Interpretation 900+; "
-            "Layer-specific Battlecard/Workflow/Market section 1,200+. "
-        )
-        allocation_instruction = (
-            "Focus on the core summary, product comparison, evidence and limitations. "
-            if detail.plan.research_depth == "quick" else
-            "Use about 70-80% of the report on the Core analysis layer: decision summary, "
-            "competitive findings, user review themes, competitor deep dives, SWOT, "
-            "matrix interpretation, and layer-specific implications. "
-        )
-        layer_instruction = (
-            "For quick research, use only the requested compact sections and disclose limitations."
-            if detail.plan.research_depth == "quick" else
-            "Use the requested competitive layer to choose the report shape: L1 "
-            "is a direct battlecard, L2 is adjacent workflow and enterprise-risk "
-            "analysis, and L3 is market landscape and category strategy."
-        )
+        if dimension_writing_enabled(detail):
+            return await self._writer_dimension_report(record, timeout_seconds, repair_issues=repair_issues)
         layer_context = self._writer_layer_context(detail)
         memory_context = "\n".join(detail.plan.memory_prompt_context) or "none"
         required_sections = self._writer_required_sections(detail)
-        grounding_prompt = await self._writer_grounding_prompt(detail)
         user_research_policy = writer_user_research_policy_text()
         language_guidance = language_instruction(detail.output_language)
         if (
@@ -2218,6 +2207,21 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
             "segment_name": "full_report",
         })
         writer_context_json = self._writer_evidence_context_json(selected)
+        view = select_evidence_view(
+            self._current_evidence_snapshot(self._evidence_live_record(record)),
+            agent="writer", competitor=evidence_use.competitor,
+            dimension=evidence_use.dimension, source_ids=evidence_use.requested_source_ids,
+            max_bytes=evidence_use.view_max_bytes or evidence_use.max_bytes,
+        )
+        grounded_detail, _ = self._project_evidence_detail(record, [view])
+        grounding_prompt = await self._writer_grounding_prompt(grounded_detail)
+        prompt = WriterPromptBuilder().first_draft_prompt(
+            detail, language_guidance=language_guidance,
+            user_research_policy=user_research_policy, memory_context=memory_context,
+            layer_context=layer_context, grounding_prompt=grounding_prompt,
+            community_policy_text=self._writer_community_policy_text(),
+            writer_context_json=writer_context_json, required_sections=required_sections,
+        )
         result = await asyncio.wait_for(
             self._trace_llm_text(
                 record,
@@ -2225,55 +2229,10 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
                 subagent=None,
                 name="report_writer",
                 system=(
-                    "You are a senior enterprise competitive-intelligence analyst. "
-                    "Produce a concise decision-grade markdown first draft, not a short "
-                    "summary. Use an analysis-first structure: lead with an executive "
-                    "takeaway, decision summary, competitive findings, competitor deep "
-                    "dives, and the selected layer-specific analysis. Put source quality, "
-                    "scenario QA, claim risk, RAG gap-fill, verification tasks, and the "
-                    "evidence appendix after the core analysis as support material. Write "
-                    "with consulting depth: side-by-side matrices, dimension analysis, "
-                    "risks, buying implications, and explicit next validation tasks. Cite "
-                    "factual claims with existing source IDs using [source:ID]. Do not "
-                    "invent source IDs. "
-                    "Preserve the exact numerical values, decimal points and units in cited evidence. "
-                    "When a field is absent from the evidence pack, say it was not captured in "
-                    "this research; do not claim the original page omits it. "
-                    "Do not use web_search_result or confidence < 0.75 as the sole support "
-                    "for a winner, legal/security certification, pricing, or procurement "
-                    "recommendation. If evidence is incomplete, say the conclusion is "
-                    "tentative and list the exact evidence gap. Do not claim all sources "
-                    "are verified when any source_type is web_search_result or "
-                    "llm_public_knowledge. "
-                    "Follow the Grounded Evidence Contract exactly. "
-                    f"{language_guidance} "
-                    f"{user_research_policy} "
-                    "Honor confirmed memory guidance when it does not conflict with "
-                    "evidence, schema requirements, or compliance policy. "
-                    f"{layer_instruction}"
+                    prompt.system
                 ),
                 user=(
-                    f"Topic: {detail.topic}\n"
-                    f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                    f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                    f"{decision_brief_prompt_context(detail.plan.decision_brief)}"
-                    f"Competitive Layer: {detail.plan.competitor_layer}\n"
-                    f"Scenario ID: {detail.plan.scenario_id or 'auto'}\n"
-                    "Scenario Recommended Dimensions: "
-                    f"{', '.join(detail.plan.scenario_recommended_dimensions)}\n"
-                    f"QA Rule IDs: {', '.join(detail.plan.qa_rule_ids)}\n"
-                    f"Confirmed Memory Preferences:\n{memory_context}\n"
-                    f"Layer Report Context: {layer_context}\n"
-                    f"{grounding_prompt}\n"
-                    f"{self._writer_community_policy_text()}\n"
-                    f"Report Evidence Context JSON: {writer_context_json}\n\n"
-                    f"Required sections:\n{required_sections}\n"
-                    f"Target {report_chars} characters for the first draft. "
-                    f"{allocation_instruction}"
-                    f"{core_depth_instruction}Keep "
-                    "the Support/audit layer concise and complete; it is the audit trail, "
-                    "not the main readout. Prefer deeper cited analysis and decision "
-                    "implications over repeated source IDs or QA boilerplate."
+                    prompt.user
                 ),
             ),
             timeout=timeout_seconds,
@@ -3405,6 +3364,22 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
                         f"truncation retry: {segment['segment_name']}: "
                         f"{truncation_error}"
                     )
+            if validation.status != "pass" and contract.section_id == "product_opportunities":
+                fallback = "\n".join(self._backfill_product_opportunities_section(detail)).strip()
+                fallback_validation = validate_segment_contract(fallback, contract)
+                fallback_citations = evidence_pack_result.validate_segment_citations(
+                    fallback, allowed_source_ids=allowed_source_ids,
+                )
+                if (fallback_validation.status == "pass" and not fallback_citations
+                        and not self._writer_segment_truncation_error(fallback)
+                        and not self._writer_segment_publication_hygiene_errors(fallback)):
+                    segment_md, validation = fallback, fallback_validation
+                    await self.emit(
+                        detail.id, "node_completed", "writer", None,
+                        "Product opportunities replaced with a validated user-task hypothesis.",
+                        {"section_id": contract.section_id, "reason": "contract_retry_failed",
+                         "outcome": "validated_opportunity_hypothesis_fallback"},
+                    )
             if validation.status != "pass":
                 raise RuntimeError(
                     "Writer segment violated heading contract after retry: "
@@ -3987,6 +3962,29 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
                 "Write exactly one canonical report section or allowed section group from those notes.\n"
             )
         user_research_policy = writer_user_research_policy_text()
+        prompt = WriterPromptBuilder().segment_prompt(
+            detail,
+            segment=segment,
+            segment_json=segment_json,
+            retry_count=retry_count,
+            allowed_h2_headings=allowed_h2_headings,
+            required_h2_headings=required_h2_headings,
+            forbidden_h2_headings=forbidden_h2_headings,
+            segment_outline=segment_outline,
+            citation_warning=citation_warning,
+            contract_warning=contract_warning,
+            user_research_gap_instruction=user_research_gap_instruction,
+            shard_instruction=shard_instruction,
+            language_guidance=language_guidance,
+            user_research_policy=user_research_policy,
+            memory_context=memory_context,
+            layer_context=layer_context,
+            community_policy_text=self._writer_community_policy_text(),
+            required_sections=required_sections,
+            heading_language_instruction=heading_language_instruction,
+            publication_repair_instruction=publication_repair_instruction,
+            report_target_instruction=report_target_instruction,
+        )
         result = await asyncio.wait_for(
             self._trace_llm_text(
                 record,
@@ -3995,57 +3993,10 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
                 name="report_writer_segment",
                 is_repair=retry_count > 0 or bool(segment.get("repair_targets")),
                 system=(
-                    "You are a senior enterprise competitive-intelligence analyst writing "
-                    "one section group of a larger markdown report. Return only markdown "
-                    "for this segment. Cite factual claims only with source IDs in "
-                    "the segment's citation source list. Do not invent source IDs. "
-                    "Use exact [source:ID] syntax with no space after source:. Do not "
-                    "combine multiple source IDs inside one [source:...] token; write "
-                    "consecutive citations like [source:A][source:B]. "
-                    "Do not use web_search_result or confidence < 0.75 as the sole support "
-                    "for a winner, legal/security certification, pricing, or procurement "
-                    "recommendation. If evidence is incomplete, say the conclusion is "
-                    "tentative and list the exact evidence gap. Do not claim all sources "
-                    "are verified when any source_type is web_search_result or "
-                    "llm_public_knowledge. "
-                    f"{user_research_policy} "
-                    f"{language_guidance}"
+                    prompt.system
                 ),
                 user=(
-                    f"Topic: {detail.topic}\n"
-                    f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                    f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                    f"{decision_brief_prompt_context(detail.plan.decision_brief)}"
-                    f"segment_name={segment['segment_name']}\n"
-                    f"segment_kind={segment.get('segment_kind', 'section_fragment')}\n"
-                    f"section_id={segment.get('section_id', segment['segment_name'])}\n"
-                    f"segment_competitor={segment.get('segment_competitor') or 'all'}\n"
-                    f"retry_count={retry_count}\n"
-                    "Allowed H2 headings for this segment: "
-                    f"{allowed_h2_headings or 'none'}\n"
-                    "Required H2 headings for this segment: "
-                    f"{required_h2_headings or 'none'}\n"
-                    "Forbidden H2 headings for this segment: "
-                    f"{forbidden_h2_headings or 'none'}\n"
-                    f"{heading_language_instruction}"
-                    f"{segment_outline}\n"
-                    f"{citation_warning}"
-                    f"{contract_warning}"
-                    f"{user_research_gap_instruction}"
-                    f"{publication_repair_instruction}"
-                    f"{shard_instruction}"
-                    "Do not write headings outside this segment's contract. "
-                    "Do not write support or appendix sections unless "
-                    "segment_kind=support_fragment. If segment_kind=evidence_shard, "
-                    "do not write any ## H2 headings.\n"
-                    f"Confirmed Memory Preferences:\n{memory_context}\n"
-                    f"Layer Report Context: {layer_context}\n"
-                    f"{self._writer_community_policy_text()}\n"
-                    f"Segment Context JSON: {segment_json}\n\n"
-                    f"Required sections for full report:\n{required_sections}\n"
-                    f"{report_target_instruction}"
-                    "Write with consulting depth for this segment. Keep support material "
-                    "concise and preserve [source:ID] citation syntax."
+                    prompt.user
                 ),
             ),
             timeout=timeout_seconds,
@@ -4180,6 +4131,13 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
                 "repair_part_count": len(writer_context_jsons),
             })
             writer_context_json = self._writer_evidence_context_json(selected)
+            prompt = WriterPromptBuilder().section_repair_prompt(
+                detail, sections=sections, section_headings=section_headings,
+                language_guidance=language_guidance,
+                community_policy_text=self._writer_community_policy_text(),
+                writer_context_json=writer_context_json, previous_report=previous_report,
+                publication_repair_instruction=self._writer_publication_repair_instruction(publication_issues),
+            )
             repaired_sections.append(
                 await self._trace_llm_text(
                     record,
@@ -4188,26 +4146,10 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
                     name="report_section_repair",
                     is_repair=True,
                     system=(
-                        "You are a senior enterprise competitive-intelligence analyst repairing "
-                        "one section of an existing markdown report. Return only the requested "
-                        "section markdown. Preserve existing [source:ID] syntax, never invent "
-                        "source IDs, and cite factual claims with available source IDs. "
-                        f"{language_guidance}"
+                        prompt.system
                     ),
                     user=(
-                        f"Topic: {detail.topic}\n"
-                        f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                        f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                        f"Repair only these sections: {', '.join(sections)}\n"
-                        f"Expected section headings:\n{section_headings}\n"
-                        "return only the requested section markdown; do not rewrite unrelated "
-                        "sections or include commentary outside the section.\n"
-                        "Use the exact requested level-2 heading for each returned section.\n"
-                        "You must preserve existing [source:ID] syntax.\n"
-                        f"{self._writer_community_policy_text()}\n"
-                        f"{self._writer_publication_repair_instruction(publication_issues)}"
-                        f"Report Evidence Context JSON: {writer_context_json}\n\n"
-                        f"Previous report:\n{previous_report}"
+                        prompt.user
                     ),
                 )
             )
@@ -5112,7 +5054,7 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
         return lines
 
     def _harden_report_markdown(self, detail: RunDetail, markdown: str) -> str:
-        if detail.plan.research_depth == "quick":
+        if detail.plan.research_depth == "quick" or dimension_writing_enabled(detail):
             # The quick writer emits free-form Markdown. Preserve its grounded
             # findings and replace only malformed opportunities with a hypothesis.
             repaired = self._replace_invalid_product_opportunities_section(detail, markdown)
@@ -5156,7 +5098,7 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
         hardened = markdown.strip()
         if not hardened:
             raise RuntimeError("Writer returned empty report content")
-        if detail.plan.research_depth == "quick":
+        if detail.plan.research_depth == "quick" or dimension_writing_enabled(detail):
             return hardened
         source_ids = self._matrix_source_ids(detail)
         executive_headings = self._report_label_aliases(
@@ -5835,21 +5777,18 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
         ]
         return "\n".join([*core_lines, *support_lines])
 
-    async def _writer_grounding_prompt(self, detail: RunDetail) -> str:
-        grounding = build_run_grounding_prompt(
-            sources=detail.raw_sources,
-            qa_findings=detail.qa_findings,
+    async def _writer_grounding_prompt(self, _detail: RunDetail) -> str:
+        # Evidence data belongs to the measured view only. An independent full
+        # source registry would bypass both selection and provenance credentials.
+        return (
+            "## Grounded Evidence Contract\n"
+            "Use only evidence_view and answer_boundaries in Report Evidence Context JSON "
+            "for factual claims and citations, including KB-reused evidence. "
+            "Source IDs, types, confidence and original quotes are in that view. "
+            "Resolve quote_ref only there; do not cite another source from memory. "
+            "context_budget_exceeded means already collected material was omitted, "
+            "not an uncollected product or a truncated original quote."
         )
-        kb_source_ids = [
-            source.id for source in detail.raw_sources if source.candidate_origin == "rag_kb"
-        ]
-        if kb_source_ids:
-            grounding += "\n\n## KB-Reused Evidence\n"
-            grounding += (
-                "Use KB-reused evidence only through these existing source tokens: "
-                f"{', '.join(f'[source:{source_id}]' for source_id in kb_source_ids[:8])}.\n"
-            )
-        return grounding
 
     def _writer_context_package(self, detail: RunDetail) -> dict[str, object]:
         return {
@@ -6218,9 +6157,12 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin):
             return {"winner_by_dimension": {}, "summary": [], "cells": []}
         return {
             "winner_by_dimension": detail.comparison_matrix.winner_by_dimension,
+            "assessments": {
+                key: value.model_dump(mode="json")
+                for key, value in detail.comparison_matrix.assessments.items()
+            },
             "summary": [
-                self._writer_matrix_summary_item(item)
-                for item in detail.comparison_matrix.summary
+                self._writer_matrix_summary_item(item) for item in detail.comparison_matrix.summary
             ],
             "cells": [
                 {

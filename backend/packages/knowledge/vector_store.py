@@ -8,6 +8,8 @@ import math
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, TypeVar
 
 from qdrant_client import QdrantClient
@@ -32,11 +34,19 @@ _RETRY_BASE_SECONDS = 0.2
 T = TypeVar("T")
 
 
+@lru_cache(maxsize=4)
+def _local_client(path: str) -> QdrantClient:
+    # One client per persistent directory avoids Qdrant's process file lock conflict.
+    return QdrantClient(path=path)
+
+
 class VectorStore:
     """Async-friendly Qdrant adapter. Uses sync client under the hood with
     async wrappers so it integrates cleanly with the FastAPI event loop."""
 
     def __init__(self, url: str | None = None, *, client: QdrantClient | None = None) -> None:
+        self._local_path = (os.getenv("KB_QDRANT_LOCAL_PATH")
+                            if url is None and client is None else None)
         url = url or os.getenv("QDRANT_URL", "http://localhost:6333")
         self._client = client
         self._url = url
@@ -70,6 +80,8 @@ class VectorStore:
     def status(self) -> dict[str, Any]:
         return {
             "collection": self.collection_name,
+            "backend": ("qdrant-local" if self._local_path
+                        else "qdrant-client" if self._client else "qdrant-http"),
             "index_version": self._index_version,
             "model_version": self._model_version,
             "dimensions": self._dimensions,
@@ -79,7 +91,8 @@ class VectorStore:
         if self._initialised:
             return
         if self._client is None:
-            self._client = QdrantClient(url=self._url)
+            self._client = (_local_client(str(Path(self._local_path).expanduser().resolve()))
+                            if self._local_path else QdrantClient(url=self._url))
         collections = self._client.get_collections().collections
         names = {c.name for c in collections}
         if self.collection_name not in names:

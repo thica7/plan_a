@@ -448,10 +448,10 @@ def test_collector_redo_preserves_sources_cited_by_current_report() -> None:
     assert target_competitors == ["Windsurf"]
     assert {source.id for source in detail.raw_sources} == {
         "raw-source-cited",
+        "raw-source-uncited",
         "raw-source-feature",
     }
-    preserved = next(source for source in detail.raw_sources if source.id == "raw-source-cited")
-    assert preserved.metadata["redo_preserved_for_existing_citation"] is True
+    assert not detail.evidence_retired_source_ids
 
 
 def test_dimension_collector_redo_preserves_sources_cited_by_current_report() -> None:
@@ -522,8 +522,10 @@ def test_dimension_collector_redo_preserves_sources_cited_by_current_report() ->
     assert target_competitors == []
     assert {source.id for source in detail.raw_sources} == {
         "raw-source-pricing-cited",
+        "raw-source-pricing-uncited",
         "raw-source-persona",
     }
+    assert not detail.evidence_retired_source_ids
 
 
 def _blocked_release_gate() -> ReportReleaseGate:
@@ -1308,7 +1310,7 @@ async def test_survey_interview_enrichment_emits_research_evidence_payload() -> 
             topic="Cursor persona adoption research",
             competitors=["Cursor"],
             dimensions=["persona"],
-            execution_mode="real",
+            execution_mode="demo",
         )
     )
     record = service._runs[detail.id]
@@ -5564,7 +5566,8 @@ async def test_comparator_empty_payload_retries_and_uses_successful_payload() ->
     assert completed.payload["fallback"]["used"] is False
     assert completed.payload["fallback"]["attempts"] == 3
     assert completed.payload["module_status"] == "llm"
-    assert "Recovered after empty comparator responses." in record.detail.comparison_matrix.summary
+    assert "Recovered after empty comparator responses." not in record.detail.comparison_matrix.summary
+    assert any("原文" in item for item in record.detail.comparison_matrix.summary)
 
 
 @pytest.mark.asyncio
@@ -5696,12 +5699,16 @@ async def test_collect_join_ingests_verified_raw_sources_into_kb(
 ) -> None:
     calls: list[dict[str, object]] = []
 
-    class FakeIngestTool:
-        async def ainvoke(self, payload):  # noqa: ANN001, ANN202
-            calls.append(payload)
-            return "doc-ingested"
+    async def fake_ingest_reference(**payload):
+        calls.append(payload)
+        return {
+            "document_id": "doc-ingested", "index_vectors_requested": False,
+            "indexing_status": "pending", "indexing_error": None, "embedding": None,
+        }
 
-    monkeypatch.setattr("packages.tools.ingest_document.ingest_document_tool", FakeIngestTool())
+    monkeypatch.setattr(
+        "packages.tools.ingest_document.ingest_document_reference", fake_ingest_reference
+    )
     service = RunService(
         skill_registry=SkillRegistry.from_default_path(),
         settings=Settings(
@@ -6605,11 +6612,25 @@ def test_collector_redo_removing_cross_source_clears_all_dependent_feature_outpu
         rationale="redo Windsurf feature evidence",
     )
 
+    from packages.research.evidence.snapshot import seal_snapshot, current_snapshot
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    before = seal_snapshot(detail, phase="analysis", canonical_documents={})
+    original = detail.model_copy(deep=True)
     dimensions, target_competitors = service._prepare_redo_scope_inputs(detail, scope)
+    assert detail.raw_sources == original.raw_sources
+    assert detail.competitor_knowledge == original.competitor_knowledge
+    assert detail.competitor_kbs == original.competitor_kbs
+    # The server confirms the old shared source is invalid at acceptance.
+    detail.evidence_retired_source_ids.append("cross-feature-old")
+    asyncio.run(service._prepare_evidence_snapshot(record, phase="collect"))
+    asyncio.run(service._prepare_evidence_snapshot(record, phase="analysis"))
+    assert current_snapshot(detail).id != before.id
+    assert "cross-feature-old" not in {source.id for source in current_snapshot(detail).sources}
 
     assert dimensions == ["feature"]
     assert target_competitors == ["Windsurf"]
-    assert [source.id for source in detail.raw_sources] == ["claude-pricing"]
+    assert [source.id for source in current_snapshot(detail).sources] == ["claude-pricing"]
     assert "feature" not in detail.competitor_kbs["Claude Code"].slices
     assert "feature" not in detail.competitor_kbs["Windsurf"].slices
     assert detail.competitor_knowledge["Claude Code"].feature_tree.nodes == []
@@ -6698,7 +6719,19 @@ def test_collector_redo_clears_removed_review_summary_source_ids(dimension: str)
         rationale=f"redo Cursor {dimension} evidence",
     )
 
+    from packages.research.evidence.snapshot import seal_snapshot, current_snapshot
+    record = RunRecord(detail=detail)
+    service._runs[detail.id] = record
+    before = seal_snapshot(detail, phase="analysis", canonical_documents={})
+    original = detail.model_copy(deep=True)
     dimensions, target_competitors = service._prepare_redo_scope_inputs(detail, scope)
+    assert detail.raw_sources == original.raw_sources
+    assert detail.competitor_knowledge == original.competitor_knowledge
+    # Only accepted server retirement now invalidates the producer dependency.
+    detail.evidence_retired_source_ids.append(f"old-{dimension}-survey")
+    asyncio.run(service._prepare_evidence_snapshot(record, phase="collect"))
+    asyncio.run(service._prepare_evidence_snapshot(record, phase="analysis"))
+    assert current_snapshot(detail).id != before.id
 
     review_summary = detail.competitor_knowledge["Cursor"].review_summary
     removed_source_id = f"old-{dimension}-survey"
@@ -6725,7 +6758,7 @@ def test_collector_redo_clears_removed_review_summary_source_ids(dimension: str)
     ]
     assert dimensions == [dimension]
     assert target_competitors == ["Cursor"]
-    assert [source.id for source in detail.raw_sources] == ["cursor-pricing"]
+    assert [source.id for source in current_snapshot(detail).sources] == ["cursor-pricing"]
     assert review_summary.source_ids == ["cursor-pricing"]
     assert "Packaging clarity" in theme_texts
     assert "Onboarding friction" not in theme_texts
@@ -10413,7 +10446,10 @@ def test_structured_repair_selection_not_emitted_when_markdown_fallback_used(
         record,
         evidence_pack_result,
         timeout_seconds,
+        *,
+        repair_issues=None,
     ):
+        assert repair_issues
         return "## 鎵ц鎽樿\n\nFallback report. [source:raw-source-a]\n"
 
     monkeypatch.setattr(
@@ -12366,8 +12402,9 @@ async def test_writer_segment_support_prompt_uses_reader_safe_evidence_labels(
     assert "decision_cards" not in prompt
     assert "source_index" in prompt
     assert "citation_source_ids" in prompt
-    assert "evidence_claims" in prompt
-    assert "decision_guidance" in prompt
+    # Empty legacy card arrays are omitted; the authenticated facts remain.
+    assert "evidence_view" in prompt
+    assert "answer_boundaries" in prompt
     assert "raw-source-cursor-pricing" in prompt
     assert "claim-cursor-pricing" not in prompt
     assert "decision-cursor" not in prompt
@@ -16928,6 +16965,13 @@ async def test_collector_and_analyst_trace_spans_have_independent_contexts() -> 
         service._real_collector_branch_step(record, "pricing", "A"),
         service._real_collector_branch_step(record, "feature", "A"),
     )
+    # Analyst contexts require accepted evidence; model-only summaries are gaps.
+    detail.raw_sources.extend(RawSource(
+        id=f'context-official-{dimension}', competitor='A', dimension=dimension,
+        source_type='official_docs', title=f'A official {dimension}',
+        url=f'https://a.example/{dimension}', snippet=f'A {dimension} captured source text.',
+        confidence=.95, content_hash=f'context-body-{dimension}',
+    ) for dimension in ['pricing', 'feature'])
     await service._prepare_evidence_snapshot(record, phase="analysis")
     await asyncio.gather(
         service._real_analyst_branch_step(record, "pricing", "A"),
@@ -16955,7 +16999,8 @@ async def test_collector_and_analyst_trace_spans_have_independent_contexts() -> 
 async def test_collector_react_runner_searches_fetches_and_finishes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_fetch_page(url: str):  # noqa: ANN202
+    async def fake_fetch_page(url: str, *, require_price_content=False):  # noqa: ANN202
+        assert require_price_content
         return FetchPageResult(
             url=url,
             ok=True,
@@ -17075,7 +17120,8 @@ async def test_collector_react_runner_searches_fetches_and_finishes(
 async def test_collector_react_finish_fetches_uninspected_urls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_fetch_page(url: str):  # noqa: ANN202
+    async def fake_fetch_page(url: str, *, require_price_content=False):  # noqa: ANN202
+        assert require_price_content
         return FetchPageResult(
             url=url,
             ok=True,
@@ -17148,7 +17194,8 @@ async def test_collector_react_finish_fetches_uninspected_urls(
 async def test_collector_react_fetches_materialize_without_finish_sources(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_fetch_page(url: str):  # noqa: ANN202
+    async def fake_fetch_page(url: str, *, require_price_content=False):  # noqa: ANN202
+        assert require_price_content
         return FetchPageResult(
             url="https://devin.ai/pricing" if url == "https://windsurf.com/pricing" else url,
             ok=True,
@@ -19351,6 +19398,18 @@ async def test_real_scoped_redo_runs_through_langgraph() -> None:
 
     async def fake_collector(record, dimension, competitor):  # noqa: ANN001, ANN202
         order.append(f"collector:{competitor}:{dimension}")
+        # The old accepted source survives preparation. A successful new body
+        # for the same page is admitted before acceptance supersedes the old one.
+        original = next(source for source in record.detail.raw_sources if source.id == "pricing-1")
+        assert original.id not in record.detail.evidence_retired_source_ids
+        replacement = original.model_copy(deep=True)
+        replacement.id = "pricing-2"
+        replacement.content_hash = "corrected-pricing-body"
+        replacement.snippet = "A costs $12."
+        replacement.fetch_method = "test_fetch"
+        replacement.metadata.update(captured_page_id="corrected-page", capture_content_hash="corrected-pricing-body",
+                                    fetched_at=_now().isoformat(), source_material_level="full_source")
+        record.detail.raw_sources.append(replacement)
 
     async def fake_analyst(
         record, dimension, competitor, *, expected_snapshot_id=None
@@ -19419,6 +19478,8 @@ async def test_real_scoped_redo_runs_through_langgraph() -> None:
                 confidence=0.8,
             ),
         ]
+        record.detail.raw_sources = service._normalize_collected_sources(record.detail, ["pricing", "feature"])
+        before = await service._prepare_evidence_snapshot(record, phase="analysis")
         record.detail.qa_findings = [
             QCIssue(
                 id="missing-pricing",
@@ -19450,8 +19511,13 @@ async def test_real_scoped_redo_runs_through_langgraph() -> None:
         assert updated is not None
         assert updated.status == "completed"
         assert updated.revisions[0].stage == "collector"
-        assert all(source.dimension != "pricing" for source in updated.raw_sources)
-        assert any(source.dimension == "feature" for source in updated.raw_sources)
+        assert {source.id for source in updated.raw_sources} == {"pricing-1", "pricing-2", "feature-1"}
+        assert "pricing-1" in updated.evidence_retired_source_ids
+        from packages.research.evidence.snapshot import current_snapshot
+        accepted = current_snapshot(updated)
+        assert {source.id for source in accepted.sources} == {"pricing-2", "feature-1"}
+        assert accepted.id != before.id
+        assert updated.evidence_snapshots[0] == before
     finally:
         await service._graph_checkpointer.aclose()
 

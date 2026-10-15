@@ -364,6 +364,18 @@ class ComparisonCell(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class ComparisonAssessment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["comparable", "insufficient_evidence", "not_comparable"]
+    winner: str | None = None
+    rationale: str = ""
+    scenario: str = ""
+    tradeoffs: list[str] = Field(default_factory=list)
+    gaps: list[str] = Field(default_factory=list)
+    source_ids: list[str] = Field(default_factory=list)
+
+
 class ComparisonMatrix(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -372,7 +384,9 @@ class ComparisonMatrix(BaseModel):
     dimensions: list[str]
     cells: list[ComparisonCell] = Field(default_factory=list)
     winner_by_dimension: dict[str, str] = Field(default_factory=dict)
+    assessments: dict[str, ComparisonAssessment] = Field(default_factory=dict)
     summary: list[str] = Field(default_factory=list)
+    operation_alignment: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class CompetitorCandidate(BaseModel):

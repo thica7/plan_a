@@ -126,6 +126,9 @@ class DoubaoClient:
         self._usage_context.set(None)
         self._response_context.set(None)
         output_limit = self._settings.llm_max_output_tokens
+        execution = current_llm_execution.get()
+        if execution is not None and execution.max_output_tokens:
+            output_limit = min(output_limit or execution.max_output_tokens, execution.max_output_tokens)
         budget_enabled = self._settings.run_llm_max_tokens or self._settings.run_llm_max_cost_usd
         if not output_limit and budget_enabled:
             output_limit = 4096

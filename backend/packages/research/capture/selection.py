@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from packages.research.capture.policy import (
     fallback_candidate_reason,
@@ -40,6 +41,20 @@ def select_capture_candidates(
     if "pricing" not in brief.dimension.casefold():
         if brief.product_name or brief.product_category:
             ordered = [*preferred, *[candidate for candidate, _ in fallback]]
+            from packages.research.evidence.operations import required_operations
+            if brief.dimension == 'feature' and required_operations(brief.topic, brief.product_use_cases):
+                def operation_priority(candidate):
+                    text = candidate.title + ' ' + candidate.url
+                    targets = brief.metadata.get('operation_repair_targets', [])
+                    terms = {'read':r'view|read|阅读', 'comment':r'comment|评论',
+                             'create':r'creat|publish|创建', 'edit':r'edit|编辑',
+                             'share':r'shar(?:e|ing)|分享', 'manage_access':r'permissions?|roles?|access|权限|角色'}
+                    return (sum(bool(re.search(terms[op], text, re.I)) for op in targets if op in terms),
+                            10 if re.search(r'permissions?|roles?|access|权限|角色', text, re.I) else
+                            5 if re.search(r'shar(?:e|ing)|分享', text, re.I) else
+                            4 if re.search(r'creat|publish|edit|协作|创建|编辑', text, re.I) else
+                            1 if re.search(r'comments?|评论', text, re.I) else 0)
+                ordered.sort(key=operation_priority, reverse=True)
             initial_limit = min(brief.max_fetches, brief.target_source_count)
             selected = ordered[:initial_limit]
             # Cached candidates do not consume network fetches; the capture loop

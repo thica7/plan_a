@@ -26,7 +26,7 @@ from packages.business_intel import (
     get_scenario_pack,
     validate_project_claims,
 )
-from packages.business_intel.entity_resolver import normalize_competitor_key
+from packages.business_intel.entity_resolver import normalize_competitor_key, trusted_source_candidates
 from packages.business_intel.homepage import verify_homepages
 from packages.business_intel.release_repair import (
     apply_release_gate_warning_report_repair,
@@ -59,9 +59,7 @@ from packages.identity import (
     compute_run_id_for_idempotency_key,
     compute_topic_normalized,
     new_run_id,
-    normalize_source_token,
     runtime_prefixed_id,
-    source_tokens,
     stable_prefixed_id,
 )
 from packages.llm import DoubaoClient
@@ -89,7 +87,7 @@ from packages.orchestrator.graph import (
 from packages.orchestrator.llm_execution import LLMExecutionMixin
 from packages.orchestrator.search_execution import SearchExecutionMixin
 from packages.quality import FinalQualityResult, build_final_quality_result
-from packages.refs import merge_ordered_refs, normalize_dimension_refs
+from packages.refs import normalize_dimension_refs
 from packages.research.budget import (
     ResearchDepthBudget,
     research_depth_budget,
@@ -283,6 +281,9 @@ class RunRecord:
     detail: RunDetail
     evidence_origin: "RunRecord | None" = None
     writer_preserved_report: bool = False
+    collector_redo_snapshot_id: str | None = None
+    collector_redo_no_new_evidence: bool = False
+    collector_redo_qa_findings: list[QCIssue] = field(default_factory=list)
     events: list[RunEvent] = field(default_factory=list)
     subscribers: list[asyncio.Queue[RunEvent]] = field(default_factory=list)
     pending_interrupts: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -296,6 +297,7 @@ class RunRecord:
     llm_budget: RunLLMBudget | None = None
     search_cache: dict[str, tuple[float, list[SearchResult]]] = field(default_factory=dict)
     search_locks: dict[str, asyncio.Lock] = field(default_factory=dict)
+    semantic_extraction_cache: dict[tuple[str, str, str], object] = field(default_factory=dict)
     resume_task: asyncio.Task[None] | None = None
 
 
@@ -678,12 +680,27 @@ class RunService(
     def ensure_workspace_quota_allows_run(self, workspace_id: str) -> None:
         self._ensure_workspace_quota_allows_run(workspace_id)
 
-    def list_runs(self) -> list[RunSummary]:
+    def peek_run_summary(self, run_id: str) -> RunSummary | None:
+        if self._journal is not None:
+            summary = self._journal.load_run_summary(run_id)
+            if summary is not None:
+                return summary
+        record = self._runs.get(run_id)
+        return (
+            RunSummary(**{key: getattr(record.detail, key) for key in RunSummary.model_fields})
+            if record
+            else None
+        )
+
+    def list_runs(self, workspace_id: str | None = None) -> list[RunSummary]:
         for record in self._runs.values():
+            if workspace_id is not None and record.detail.workspace_id != workspace_id:
+                continue
             self._repair_inconsistent_hitl_status(record)
             self._hydrate_pending_interrupt_from_detail(record)
         if self._journal is not None:
-            return self._journal.load_run_summaries()
+            return [item for item in self._journal.load_run_summaries()
+                    if workspace_id is None or item.workspace_id == workspace_id]
         return [
             RunSummary(
                 id=record.detail.id,
@@ -701,6 +718,7 @@ class RunService(
                 key=lambda item: item.detail.created_at,
                 reverse=True,
             )
+            if workspace_id is None or record.detail.workspace_id == workspace_id
         ]
 
     def get_run(
@@ -1680,21 +1698,34 @@ class RunService(
         try:
             snapshot = current_snapshot(record.detail)
             if snapshot is not None:
-                self._current_evidence_snapshot(record)
-            elif isinstance(graph_input, Command) and record.detail.current_node in {
+                # A control-flow pointer may predate the fact policy. Nodes still
+                # require the current policy before consuming evidence.
+                self._current_evidence_snapshot(record, require_current_policy=False)
+            qa_redo_control = False
+            if isinstance(graph_input, Command) and record.detail.current_node == "qa_hitl":
+                resumed = graph_input.resume
+                decision = (
+                    resumed.decision if isinstance(resumed, HitlResumeRequest)
+                    else resumed.get("decision") if isinstance(resumed, dict) else None
+                )
+                qa_redo_control = decision == "redo" and self._qa_redo_available(record.detail)
+            if isinstance(graph_input, Command) and record.detail.current_node in {
                 "analyst_dispatch", "analyst", "analyst_join", "analyst_qa",
                 "comparator", "reflector", "writer", "qa", "qa_hitl",
-            }:
-                # Only historical downstream recovery needs an initial analysis
-                # snapshot. Planner/evidence resumes reach normal freeze nodes.
-                snapshot = await self._prepare_evidence_snapshot(record, phase="analysis")
+            } and not qa_redo_control:
+                # Downstream recovery upgrades only accepted original inputs.
+                # Planner/evidence resumes reach the formal acceptance nodes.
+                snapshot = await self._ensure_analysis_evidence(record)
                 graph_input = replace(
                     graph_input,
                     update={**(graph_input.update or {}), "evidence_snapshot_id": snapshot.id},
                 )
-            elif isinstance(graph_input, Command) and record.detail.current_node not in {
-                "planner_hitl", "evidence_hitl",
-            }:
+            elif (
+                snapshot is None
+                and isinstance(graph_input, Command)
+                and record.detail.current_node not in {"planner_hitl", "evidence_hitl"}
+                and not qa_redo_control
+            ):
                 raise ValueError("evidence snapshot required at an unknown recovery entry")
             if kind == "real":
                 graph = await self._get_real_graph()
@@ -1715,6 +1746,12 @@ class RunService(
                 return False
             if record.detail.status in {"interrupted", "failed"}:
                 return False
+            if qa_redo_control:
+                # Redo is control flow, not approval of the old report. A redo
+                # that ends without newly accepted evidence cannot complete.
+                accepted = self._current_evidence_snapshot(record)
+                if accepted.phase != "analysis":
+                    raise EvidenceUseRejectedError("QA redo requires accepted analysis evidence")
             record.active_graph_kind = None
             record.active_thread_id = None
             record.detail.interrupt_graph_kind = None
@@ -2460,6 +2497,8 @@ class RunService(
 
     async def _run_real_scoped_redo(self, record: RunRecord, scope: RedoScope) -> None:
         detail = record.detail
+        if scope.kind == "collector":
+            self._reset_collector_redo_allowance(record, scope)
         dimensions, target_competitors = self._prepare_redo_scope_inputs(detail, scope)
         completed = await self._invoke_graph(
             record,
@@ -2487,6 +2526,18 @@ class RunService(
         if not completed:
             return
 
+    def _reset_collector_redo_allowance(self, record, scope):
+        dimensions = [scope.target_subagent] if scope.target_subagent else record.detail.plan.dimensions
+        competitors = scope.target_competitors or ([scope.target_competitor] if scope.target_competitor else record.detail.plan.competitors)
+        for dimension in dimensions:
+            for competitor in competitors:
+                record.detail.collector_research_usage.pop(self._analyst_branch_id(dimension, competitor), None)
+                for key in list(record.semantic_extraction_cache):
+                    if key[:2] == (competitor, dimension):
+                        record.semantic_extraction_cache.pop(key)
+        # Only the reviewed branches receive another depth-limited allowance.
+        # The global model call/token/cost budget remains charged across redos.
+
     def _prepare_redo_scope_inputs(
         self, detail: RunDetail, scope: RedoScope
     ) -> tuple[list[str], list[str]]:
@@ -2503,32 +2554,17 @@ class RunService(
                 [scope.target_competitor] if scope.target_competitor else []
             )
             if scope.kind == "collector":
-                if scoped_competitors:
-                    target_competitors = scoped_competitors
-                    cited_source_ids = self._report_cited_raw_source_ids(detail.report_md)
-                    removed_source_ids = self._remove_sources_for_collector_redo(
-                        detail,
-                        dimension=dimension,
-                        scoped_competitors=scoped_competitors,
-                        preserve_source_ids=cited_source_ids,
+                # Recollection stages candidates; acceptance decides whether old
+                # evidence and its producer chain actually became invalid.
+                target_competitors = scoped_competitors
+                record = self._runs.get(detail.id)
+                if record is not None:
+                    snapshot = current_snapshot(detail)
+                    record.collector_redo_snapshot_id = (
+                        snapshot.id if snapshot is not None and snapshot.phase == "analysis" else None
                     )
-                    dependent_competitors = self._competitors_with_removed_source_dependency(
-                        detail,
-                        dimension=dimension,
-                        removed_source_ids=removed_source_ids,
-                    )
-                    for competitor in merge_ordered_refs(
-                        [*scoped_competitors, *dependent_competitors]
-                    ):
-                        self._clear_competitor_dimension_output(detail, competitor, dimension)
-                else:
-                    self._remove_sources_for_collector_redo(
-                        detail,
-                        dimension=dimension,
-                        scoped_competitors=[],
-                        preserve_source_ids=self._report_cited_raw_source_ids(detail.report_md),
-                    )
-                    self._clear_dimension_outputs(detail, dimension)
+                    record.collector_redo_no_new_evidence = False
+                    record.collector_redo_qa_findings = [issue.model_copy(deep=True) for issue in detail.qa_findings]
             elif scoped_competitors:
                 target_competitors = scoped_competitors
                 for competitor in scoped_competitors:
@@ -2545,90 +2581,22 @@ class RunService(
             detail.qa_findings = []
             detail.report_md = ""
 
-        if scope.kind in {"collector", "analyst", "comparator", "full"}:
+        if scope.kind in {"analyst", "comparator", "full"}:
             detail.comparison_matrix = None
             detail.reflections = []
         detail.updated_at = datetime.utcnow()
         self._persist_run(detail.id)
         return dimensions, target_competitors
 
-    def _remove_sources_for_collector_redo(
-        self,
-        detail: RunDetail,
-        *,
-        dimension: str,
-        scoped_competitors: list[str],
-        preserve_source_ids: set[str] | None = None,
-    ) -> set[str]:
-        preserve_source_ids = preserve_source_ids or set()
-        removed_source_ids: set[str] = set()
-        retained_sources: list[RawSource] = []
-        for source in detail.raw_sources:
-            should_remove = source.dimension == dimension and (
-                not scoped_competitors
-                or any(
-                    self._source_matches_competitor(source, competitor)
-                    for competitor in scoped_competitors
-                )
-            )
-            if should_remove:
-                removed_source_ids.add(source.id)
-                detail.evidence_inputs_dirty = True
-                if source.id in preserve_source_ids:
-                    if source.id not in detail.evidence_retired_source_ids:
-                        detail.evidence_retired_source_ids.append(source.id)
-                    metadata = {
-                        **source.metadata,
-                        "redo_preserved_for_existing_citation": True,
-                        "redo_preserved_dimension": dimension,
-                        "redo_preserved_competitors": scoped_competitors,
-                    }
-                    retained_sources.append(source.model_copy(update={"metadata": metadata}))
-                    continue
-                removed_source_ids.add(source.id)
-                continue
-            retained_sources.append(source)
-        detail.raw_sources = retained_sources
-        return removed_source_ids
-
-    @staticmethod
-    def _report_cited_raw_source_ids(report_md: str) -> set[str]:
-        return {
-            normalized
-            for token in source_tokens(report_md)
-            if (normalized := normalize_source_token(token))
-        }
-
-    def _competitors_with_removed_source_dependency(
-        self,
-        detail: RunDetail,
-        *,
-        dimension: str,
-        removed_source_ids: set[str],
-    ) -> list[str]:
-        if not removed_source_ids:
-            return []
-        dependent: list[str] = []
-        for competitor in detail.plan.competitors:
-            kb = detail.competitor_kbs.get(competitor)
-            knowledge = detail.competitor_knowledge.get(competitor)
-            serialized = json.dumps(
-                {
-                    "kb_slice": kb.slices.get(dimension, []) if kb else [],
-                    "knowledge": knowledge.model_dump(mode="json") if knowledge else {},
-                },
-                ensure_ascii=False,
-            )
-            if any(source_id in serialized for source_id in removed_source_ids):
-                dependent.append(competitor)
-        return dependent
+    def _qa_redo_available(self, detail: RunDetail) -> bool:
+        return bool(detail.qa_findings) and not self._redo_limit_reached(detail)
 
     async def _prepare_graph_redo_from_qa(self, record: RunRecord) -> dict[str, object]:
         detail = record.detail
         if not detail.qa_findings:
             await self.emit(detail.id, "node_completed", "hitl", "qa", "No QA findings to redo.")
             return {"redo_kind": "end"}
-        if self._redo_limit_reached(detail):
+        if not self._qa_redo_available(detail):
             detail.status = "failed"
             detail.current_node = "qa_hitl"
             detail.updated_at = datetime.utcnow()
@@ -3903,10 +3871,149 @@ class RunService(
         )
         self._enterprise_store.upsert_notification(notification)
 
+    def current_manual_claims(self, version, evidence) -> dict[str, set[str]]:
+        """Reuse only unchanged claims tied to the live writer and source hashes."""
+        from packages.agents.qa.evidence_alignment import audit_dimension_claims
+        from packages.business_intel.manual_revision import _format_equivalent
+        from packages.business_intel.source_reconciliation import evidence_by_source_token
+        from packages.sources import normalize_report_source_tokens
+
+        record = self._runs.get(version.run_id)
+        if record is None or record.detail.evidence_inputs_dirty:
+            return {}
+        detail = record.detail
+        if (
+            (version.workspace_id, version.project_id, version.run_id)
+            != (detail.workspace_id, detail.project_id, detail.id)
+            or normalize_report_source_tokens(detail.report_md, evidence).report_md
+            != version.report_md
+            or not detail.report_dimension_audits
+        ):
+            return {}
+        if not self._evidence_artifact_valid(
+            record, kind="writer", payload=self._writer_evidence_artifact_payload(detail)
+        ):
+            return {}
+        try:
+            snapshot = self._current_evidence_snapshot(record)
+            if audit_dimension_claims(self, record, snapshot, producer_verified=True):
+                return {}
+        except (ValueError, EvidenceUseRejectedError):
+            return {}
+        by_token = evidence_by_source_token(evidence)
+        current_hashes = {source.id: source.content_hash for source in snapshot.sources}
+        live_hashes = {source.id: source.content_hash for source in detail.raw_sources}
+        verified = {}
+        for audit in detail.report_dimension_audits:
+            for item in audit.claims:
+                if item.status != "supported":
+                    continue
+                selected = [by_token.get(token) for token in item.claim.source_ids]
+                if not selected or any(
+                    source is None
+                    or source.quality_label in {"rejected", "stale"}
+                    or source.content_hash != current_hashes.get(source.raw_source_id)
+                    or source.content_hash != live_hashes.get(source.raw_source_id)
+                    for source in selected
+                ):
+                    continue
+                verified[_format_equivalent(item.claim.text)] = {source.id for source in selected}
+        return verified
+
+    def persist_report_versions(self, run_id: str) -> None:
+        """Persist the current body and version lineage after an enterprise edit."""
+        record = self._runs.get(run_id) or self._load_run_record(run_id)
+        if record is None:
+            return
+        self._with_enterprise_projection(record.detail)
+        record.detail.updated_at = datetime.utcnow()
+        self._persist_run(run_id)
+
+    def _restore_report_projections(self, detail: RunDetail) -> None:
+        # The journal is a local MemoryStore recovery boundary. A durable enterprise
+        # repository remains authoritative and must never be overwritten by it.
+        from packages.enterprise.store import EnterpriseMemoryStore
+
+        if type(self._enterprise_store) is not EnterpriseMemoryStore or self._journal is None:
+            return
+        store = self._enterprise_store
+        projections = self._journal.load_report_projections(detail.id)
+        if not projections and detail.enterprise_projection is not None:
+            projections = [detail.enterprise_projection]
+        valid = []
+        for projection in projections:
+            version = projection.report_version
+            scope = (detail.workspace_id, detail.project_id, detail.id)
+            if (
+                (projection.workspace_id, projection.project_id, projection.run_id) != scope
+                or (version.workspace_id, version.project_id, version.run_id) != scope
+                or any(
+                    (item.workspace_id, item.project_id) != scope[:2]
+                    for item in [*projection.evidence_records, *projection.claim_records]
+                )
+                or not set(version.evidence_ids)
+                <= {item.id for item in projection.evidence_records}
+                or not set(version.claim_ids) <= {item.id for item in projection.claim_records}
+            ):
+                continue
+            parent = version.parent_version_id
+            if parent and not any(item.report_version.id == parent for item in valid):
+                existing_parent = store.get_report_version(parent)
+                if (
+                    existing_parent is None
+                    or (
+                        existing_parent.workspace_id,
+                        existing_parent.project_id,
+                        existing_parent.run_id,
+                    )
+                    != scope
+                ):
+                    continue
+            valid.append(projection)
+        if not valid:
+            return
+        existing = store.get_run_projection(detail.id)
+        if existing is not None:
+            # Even lower versions/claims can have changed since the journal snapshot.
+            return
+        project = store.get_project(detail.project_id)
+        if project is not None and project.workspace_id != detail.workspace_id:
+            return
+        store.start_run(detail, workspace_id=detail.workspace_id, project_id=detail.project_id)
+        for projection in valid:
+            if store.get_report_version(projection.report_version.id) is None:
+                store.save_projection(projection)
+
+    def _journal_report_projections(self, detail: RunDetail) -> list[EnterpriseRunProjection]:
+        current = [detail.enterprise_projection] if detail.enterprise_projection else []
+        if self._enterprise_store is None or detail.project_id is None:
+            return current
+        store = self._enterprise_store
+        try:
+            evidence = {item.id: item for item in store.list_evidence(detail.project_id)}
+            claims = {item.id: item for item in store.list_claims(detail.project_id)}
+            versions = store.list_report_versions(detail.project_id)
+        except Exception:  # noqa: BLE001 - optional history must not block run persistence.
+            # Keep the current validated projection; save_run retains saved parent snapshots.
+            return current
+        return [
+            EnterpriseRunProjection(
+                workspace_id=version.workspace_id,
+                project_id=version.project_id,
+                run_id=detail.id,
+                report_version=version,
+                evidence_records=[evidence[eid] for eid in version.evidence_ids if eid in evidence],
+                claim_records=[claims[cid] for cid in version.claim_ids if cid in claims],
+            )
+            for version in versions
+            if (version.run_id, version.workspace_id) == (detail.id, detail.workspace_id)
+        ]
+
     def _hydrate_runs(self) -> None:
         if self._journal is None:
             return
         for detail in self._journal.load_runs():
+            self._restore_report_projections(detail)
             record = RunRecord(
                 detail=detail,
                 events=self._journal.load_events(detail.id),
@@ -3931,6 +4038,7 @@ class RunService(
         return self._upsert_journal_run(detail)
 
     def _upsert_journal_run(self, detail: RunDetail) -> RunRecord:
+        self._restore_report_projections(detail)
         events = self._journal.load_events(detail.id) if self._journal is not None else []
         record = self._runs.get(detail.id)
         if record is None:
@@ -4001,7 +4109,9 @@ class RunService(
         record = self._runs.get(run_id)
         if record is not None:
             record.detail.pending_graph_redo = record.pending_graph_redo
-            self._journal.save_run(record.detail)
+            self._journal.save_run(
+                record.detail, projections=self._journal_report_projections(record.detail),
+            )
 
     async def _record_revision(
         self,
@@ -4366,10 +4476,10 @@ class RunService(
         subagent: str | None,
         context: SubagentContext | None,
     ) -> tuple[CollectorResearchUsage, ResearchDepthBudget] | None:
-        budget = research_depth_budget(record.detail.plan.research_depth)
+        key = context.subagent if context is not None else subagent or "collector"
+        budget = research_depth_budget(record.detail.plan.research_depth, dimension=key.split('::')[0])
         if agent != "collector" or budget is None:
             return None
-        key = context.subagent if context is not None else subagent or "collector"
         usage = record.detail.collector_research_usage.setdefault(
             key, CollectorResearchUsage()
         )
@@ -4426,10 +4536,16 @@ class RunService(
         started = time.perf_counter()
         if context is not None:
             context.add_tool_call("fetch_page", url)
-        result = (
-            await fetch_evidence_page(url)
-            if allow_advanced else await fetch_evidence_page(url, allow_advanced=False)
-        )
+        fetch_options = {} if allow_advanced else {"allow_advanced": False}
+        if agent == "collector" and subagent and "pricing" in subagent.split("::", 1)[0].casefold():
+            fetch_options["require_price_content"] = True
+        if agent == "collector" and any(
+            source.source_kind == "public_document" and source.url.rstrip("/") == url.rstrip("/")
+            for product in record.detail.plan.competitors
+            for source in trusted_source_candidates(product, "feature")
+        ):
+            fetch_options["public_document_browser_retry"] = True
+        result = await fetch_evidence_page(url, **fetch_options)
         if advanced_reserved and not getattr(result, "advanced_fetch_attempted", False):
             usage.advanced_fetch_attempts -= 1
         metadata: dict[str, str | int | float | bool | None] = {
@@ -4442,6 +4558,7 @@ class RunService(
             "quality_score": getattr(result, "quality_score", None),
             "text_length": getattr(result, "text_length", None),
             "failure_reason": getattr(result, "failure_reason", None),
+            "price_content_found": getattr(result, "capture_metadata", {}).get("price_content_found"),
         }
         span_id = self._append_trace_span(
             record,

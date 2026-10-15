@@ -41,6 +41,9 @@ class ExtractionCandidate:
 class ExtractionResult:
     method: str
     candidates: list[ExtractionCandidate] = field(default_factory=list)
+    headings: list[tuple[int, str]] = field(default_factory=list)
+    pricing_control_html: list[str] = field(default_factory=list)
+    pricing_offer_json: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

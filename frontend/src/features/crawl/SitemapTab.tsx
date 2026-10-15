@@ -5,6 +5,7 @@ import { useTranslation } from '../../stores/i18n';
 import { SystemMessage } from '../../i18n/SystemMessage';
 
 interface SitemapTabProps {
+  projectId?: string | null;
   competitor?: string;
   dimension?: string;
   priority: number;
@@ -18,11 +19,12 @@ function parseSitemapUrls(xml: string) {
     .filter(Boolean);
 }
 
-async function createSitemapSource(url: string, config: Record<string, unknown>) {
-  const res = await apiFetch('/api/crawl/sources', {
+async function createSitemapSource(url: string, config: Record<string, unknown>, projectId: string | null) {
+  const res = await apiFetch(`/api/crawl/sources?${new URLSearchParams({ ...(projectId ? { project_id: projectId } : {}), include_workspace_library: 'false' })}`,  {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      project_id: projectId,
       type: 'sitemap',
       config: { url, ...config },
     }),
@@ -31,7 +33,7 @@ async function createSitemapSource(url: string, config: Record<string, unknown>)
   return res.json();
 }
 
-export function SitemapTab({ competitor, dimension, priority, onSubmitted }: SitemapTabProps) {
+export function SitemapTab({ projectId = null, competitor, dimension, priority, onSubmitted }: SitemapTabProps) {
   const { t } = useTranslation();
   const [url, setUrl] = useState('');
   const [maxUrls, setMaxUrls] = useState(100);
@@ -61,7 +63,7 @@ export function SitemapTab({ competitor, dimension, priority, onSubmitted }: Sit
     setSubmitting(true);
     setError(null);
     try {
-      await createSitemapSource(url.trim(), { competitor, dimension, priority, max_urls: maxUrls });
+      await createSitemapSource(url.trim(), { competitor, dimension, priority, max_urls: maxUrls }, projectId);
       setUrl('');
       setPreview([]);
       onSubmitted();

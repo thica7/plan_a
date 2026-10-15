@@ -8,11 +8,17 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from pydantic import ValidationError
+
 from packages.agents.comparator.decision_cards import build_decision_card_bundle
+from packages.agents.comparator.prompt_builder import build_comparator_prompt
+from packages.llm.errors import LLMExecutionLimitError
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.refs import merge_ordered_refs
+from packages.research.evidence.capabilities import capability_alignment, capability_keys
 from packages.schema.api_dto import RunDetail
 from packages.schema.models import (
+    ComparisonAssessment,
     ComparisonCell,
     ComparisonMatrix,
     FeatureNode,
@@ -52,6 +58,12 @@ COMMUNITY_MATRIX_SOURCE_TYPES = {
 COMPARATOR_LLM_MAX_ATTEMPTS = 3
 
 
+def _comparison_term_is_known(value: object) -> bool:
+    return isinstance(value, str) and value.strip().casefold() not in {
+        "", "unknown", "n/a", "none", "null", "未知", "未确认", "未采集",
+    }
+
+
 class ComparatorAgentMixin:
     async def _real_comparator_step(self, record: RunRecord) -> None:
         detail = record.detail
@@ -72,23 +84,65 @@ class ComparatorAgentMixin:
             record,
             timeout_seconds=timeout_seconds,
             evidence_view=view, evidence_detail=projected,
+            context_max_bytes=use.max_bytes,
         )
         if fallback.get("used"):
             payload = self._deterministic_comparator_payload(timeout_seconds)
+        if not isinstance(payload.get("assessments"), dict):
+            payload["assessments"] = {
+                dimension: {"status": "insufficient_evidence", "winner": None,
+                            "gaps": ["No validated task-specific assessment was produced."]}
+                for dimension in detail.plan.dimensions
+            }
         module_status = "fallback" if fallback.get("used") else "llm"
         matrix = self._build_comparison_matrix(
             projected,
             payload,
             fallback_used=bool(fallback.get("used")),
+            evidence_view=view,
         )
         # Compare matching semantic slots/tier names; keep time and other basis qualifiers.
         incomparable = set()
+        basis_status = {}
+        alignment = capability_alignment(view, projected.plan.competitors)
+        from packages.research.evidence.operations import operation_alignment, required_operations
+        required = required_operations(projected.topic, projected.plan.target_product.use_cases if projected.plan.target_product else ())
+        if required and 'feature' in projected.plan.dimensions:
+            matrix.operation_alignment = operation_alignment(view, projected.plan.competitors, required)
+            for row in matrix.operation_alignment:
+                if row['comparison_status'] != 'comparable':
+                    incomparable.add('feature')
+                    basis_status['feature'] = 'insufficient_evidence'
+                    dependency_gaps.append(f"Not comparable: feature / operation.{row['operation']}; {row['comparison_status']}; {row['product_statuses']}.")
+        for row in alignment:
+            if row["comparison_status"] != "comparable":
+                incomparable.add("feature")
+                basis_status["feature"] = "insufficient_evidence"
+                dependency_gaps.append(f"Not comparable: feature / {row['capability_key']}; "
+                                       f"{row['comparison_status']}; {row['product_statuses']}.")
         for dimension in projected.plan.dimensions:
             groups = {}
             for fact in view.facts:
                 if fact.dimension != dimension:
                     continue
-                qualifiers = fact.qualifiers
+                qualifiers = dict(fact.qualifiers)
+                if dimension == 'pricing' and fact.field not in {'price', 'usage_limit', 'capacity'}:
+                    # Plan names and billing labels are attributes to display,
+                    # not assertions that all vendors sell identically named plans.
+                    continue
+                keys = capability_keys(fact, projected.plan.competitors)
+                if dimension == "feature" and str(qualifiers.get("slot", "")).startswith(("semantic_capability_", "capability_")):
+                    if fact.field == "evidence_terms" and not keys:
+                        incomparable.add("feature")
+                        basis_status["feature"] = "insufficient_evidence"
+                        dependency_gaps.append(f"Unmapped feature observation: {fact.competitor}; "
+                                               f"fact_id={fact.id}; capability interpretation needs review.")
+                    continue
+                if dimension == "feature" and keys:
+                    # A raw page ordinal/hash identifies an observation, not a
+                    # comparable capability. Presence is aligned above; distinct
+                    # quotes remain intact, and conditions do not imply parity.
+                    continue
                 slot = tuple(
                     (key, str(qualifiers.pop(key)))
                     for key in ("slot", "tier_name")
@@ -104,6 +158,16 @@ class ComparatorAgentMixin:
                 ]
                 if missing:
                     incomparable.add(dimension)
+                    basis_status.setdefault(dimension, "insufficient_evidence")
+                    if dimension == 'pricing':
+                        plans = {product: sorted({str(fact.qualifiers.get('plan') or fact.qualifiers.get('tier_name'))
+                                                  for fact in view.facts if fact.dimension == dimension and fact.field == field
+                                                  and fact.competitor == product}) for product in projected.plan.competitors}
+                        message = (f'Not comparable: pricing / {field}; plan_alignment_unverified: {plans}; '
+                                   'select plans for the shared task before ranking prices.')
+                        if message not in dependency_gaps:
+                            dependency_gaps.append(message)
+                        continue
                     dependency_gaps.append(
                         f"Not comparable: {dimension} / {field} / {dict(slot)}; "
                         f"comparison_counterpart_missing: {', '.join(missing)}."
@@ -111,7 +175,15 @@ class ComparatorAgentMixin:
                     continue
                 quantitative = field in {"price", "usage_limit", "capacity"}
                 unknown = quantitative and any(
-                    not fact.unit or not fact.market for fact, _ in members
+                    not _comparison_term_is_known(fact.unit)
+                    or not _comparison_term_is_known(fact.market)
+                    or (field == "price" and (
+                        not _comparison_term_is_known(
+                            qualifiers.get("billing_interval") or qualifiers.get("billing_cycle")
+                        )
+                        or not _comparison_term_is_known(qualifiers.get("tax_scope"))
+                    ))
+                    for fact, qualifiers in members
                 )
                 contexts = {
                     (fact.unit, fact.market, json.dumps(qualifiers, sort_keys=True))
@@ -119,14 +191,60 @@ class ComparatorAgentMixin:
                 }
                 if unknown or len(contexts) > 1:
                     incomparable.add(dimension)
-                    reason = "comparison_basis_unknown" if unknown else "comparison_basis_differs"
+                    known_market_unit_difference = (
+                        all(_comparison_term_is_known(fact.unit)
+                            and _comparison_term_is_known(fact.market) for fact, _ in members)
+                        and len({(fact.unit, fact.market) for fact, _ in members}) > 1
+                    )
+                    differs = known_market_unit_difference or not unknown
+                    if differs:
+                        basis_status[dimension] = "not_comparable"
+                    else:
+                        basis_status.setdefault(dimension, "insufficient_evidence")
+                    reason = "comparison_basis_differs" if differs else "comparison_basis_unknown"
                     dependency_gaps.append(
                         f"Not comparable: {dimension} / {field}; {reason}; "
                         "unit, market or time/qualifier context is unknown or differs."
                     )
         for dimension in incomparable:
-            matrix.winner_by_dimension[dimension] = "tie"
+            if dimension in matrix.assessments:
+                matrix.winner_by_dimension.pop(dimension, None)
+                assessment = matrix.assessments[dimension]
+                assessment.status = basis_status[dimension]
+                assessment.winner = None
+                gaps = [
+                    gap
+                    for gap in dependency_gaps
+                    if gap.startswith(f"Not comparable: {dimension} /")
+                ]
+                assessment.gaps.extend(gaps)
+                assessment.rationale = "Comparison withheld: " + "; ".join(gaps)
+            else:
+                matrix.winner_by_dimension[dimension] = "tie"
+        for dimension, assessment in matrix.assessments.items():
+            gaps = [
+                gap
+                for gap in dependency_gaps
+                if gap.startswith(("Analysis dependency unavailable:", "Analysis context omitted:")) and f"/ {dimension};" in gap
+            ]
+            if gaps and assessment.status == "comparable":
+                assessment.status = "insufficient_evidence"
+                assessment.winner = None
+                assessment.gaps.extend(gaps)
+                assessment.rationale = "Comparison withheld: " + "; ".join(gaps)
+                matrix.winner_by_dimension.pop(dimension, None)
+        for dimension, assessment in matrix.assessments.items():
+            coverage_gaps = [issue.problem for issue in detail.qa_findings
+                             if issue.target_agent == "collector" and issue.severity == "blocker"
+                             and issue.target_subagent == dimension]
+            if coverage_gaps:
+                assessment.status = "insufficient_evidence"
+                assessment.winner = None
+                assessment.gaps.extend(gap for gap in coverage_gaps if gap not in assessment.gaps)
+                assessment.rationale = "Comparison withheld: " + "; ".join(coverage_gaps)
+                matrix.winner_by_dimension.pop(dimension, None)
         matrix.summary.extend(dependency_gaps)
+        self._sync_comparison_assessment_summary(matrix)
         self._validate_evidence_use(record, use)
         if baseline != self._analysis_artifacts_hash(detail):
             raise EvidenceUseRejectedError("Comparator analysis artifacts changed before commit")
@@ -176,22 +294,27 @@ class ComparatorAgentMixin:
             {"matrix": payload, "fallback": fallback, "module_status": module_status},
         )
 
+        self._finish_delivery_phase(record, 'comparator', None)
+
     async def _comparator_payload_with_retries(
         self,
         record: RunRecord,
         *,
         timeout_seconds: float,
         evidence_view=None, evidence_detail=None,
+        context_max_bytes=None,
     ) -> tuple[dict[str, object], dict[str, object]]:
         detail = evidence_detail or record.detail
+        from packages.research.evidence.projection import analysis_fact_refs
         analysis_json = self._bounded_analysis_json(
             evidence_view,
-            {
-                "kbs": json.loads(self._competitor_kb_json(detail)),
-                "knowledge": json.loads(self._competitor_knowledge_json(detail)),
-            },
+            analysis_fact_refs(evidence_view),
+            max_bytes=context_max_bytes,
         )
         evidence_json = evidence_view.to_prompt_json()
+        prompt = build_comparator_prompt(
+            detail, analysis_json=analysis_json, evidence_json=evidence_json,
+        )
         last_error: BaseException | None = None
         last_reason = "empty_content"
         for attempt in range(1, COMPARATOR_LLM_MAX_ATTEMPTS + 1):
@@ -203,21 +326,9 @@ class ComparatorAgentMixin:
                         subagent=None,
                         name="comparison_matrix",
                         is_repair=attempt > 1,
-                        system=(
-                            "You are a comparator. Build a compact cross-competitor matrix summary."
-                        ),
-                        user=(
-                            f"Topic: {detail.topic}\n"
-                            f"Target product: {detail.plan.target_product.name if detail.plan.target_product else 'none'}\n"
-                            f"Competitors: {', '.join(detail.plan.competitors)}\n"
-                            f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
-                            f"Analysis JSON: {analysis_json}\n"
-                            f"Evidence View JSON: {evidence_json}"
-                        ),
-                        schema_hint=(
-                            '{"matrix_summary":["row"],'
-                            '"winner_by_dimension":{"dimension":"competitor or tie"}}'
-                        ),
+                        system=prompt.system,
+                        user=prompt.user,
+                        schema_hint=prompt.schema_hint,
                     ),
                     timeout=timeout_seconds,
                 )
@@ -238,6 +349,9 @@ class ComparatorAgentMixin:
                 last_error = exc
             except EvidenceUseRejectedError:
                 raise
+            except LLMExecutionLimitError as exc:
+                last_reason, last_error = str(exc), exc
+                break
             except Exception as exc:  # noqa: BLE001 - comparator can degrade after retries.
                 last_reason = "llm_error"
                 last_error = exc
@@ -246,7 +360,7 @@ class ComparatorAgentMixin:
             "used": True,
             "reason": last_reason,
             "timeout_seconds": timeout_seconds,
-            "attempts": COMPARATOR_LLM_MAX_ATTEMPTS,
+            "attempts": attempt,
             "max_attempts": COMPARATOR_LLM_MAX_ATTEMPTS,
             "deterministic_fallback": True,
         }
@@ -268,6 +382,9 @@ class ComparatorAgentMixin:
     def _comparator_payload_has_content(self, payload: object) -> bool:
         if not isinstance(payload, dict):
             return False
+        assessments = payload.get("assessments")
+        if isinstance(assessments, dict) and assessments:
+            return True
         summary = payload.get("matrix_summary")
         if isinstance(summary, list) and any(str(item).strip() for item in summary):
             return True
@@ -293,6 +410,7 @@ class ComparatorAgentMixin:
         payload: dict,
         *,
         fallback_used: bool = False,
+        evidence_view=None,
     ) -> ComparisonMatrix:
         cells: list[ComparisonCell] = []
         for dimension in detail.plan.dimensions:
@@ -305,7 +423,11 @@ class ComparatorAgentMixin:
                         detail, competitor, dimension
                     )
                 ]
-                value = self._structured_matrix_value(detail, competitor, dimension)
+                from packages.research.evidence.projection import matrix_fact_value
+                value = (matrix_fact_value(evidence_view, competitor, dimension)
+                         if evidence_view is not None else None)
+                if value is None:
+                    value = self._structured_matrix_value(detail, competitor, dimension)
                 if not value:
                     value = "; ".join(findings[:2])
                 if not value and related_sources:
@@ -342,19 +464,120 @@ class ComparatorAgentMixin:
                 voted_winners,
             )
             vote_summary = [*vote_summary, *fallback_summary]
-        return ComparisonMatrix(
+        assessments = self._validated_comparison_assessments(
+            detail, payload, evidence_view=evidence_view
+        )
+        for dimension, assessment in assessments.items():
+            # An explicit task assessment overrides page-count voting, including abstentions.
+            voted_winners.pop(dimension, None)
+            vote_summary = [
+                row for row in vote_summary if not row.startswith(f"[majority-vote:{dimension}]")
+            ]
+            if assessment.status == "comparable" and assessment.winner:
+                voted_winners[dimension] = assessment.winner
+        matrix = ComparisonMatrix(
             competitors=detail.plan.competitors,
-            target_product=(detail.plan.target_product.name if detail.plan.target_product else None),
+            target_product=(
+                detail.plan.target_product.name if detail.plan.target_product else None
+            ),
             dimensions=detail.plan.dimensions,
             cells=cells,
             winner_by_dimension=voted_winners,
+            assessments=assessments,
             summary=[
                 *self._matrix_standardization_summary(detail),
                 *self._community_matrix_summary(detail),
-                *self._string_list(payload.get("matrix_summary")),
+                *(self._string_list(payload.get("matrix_summary")) if evidence_view is None
+                  else ["矩阵单元格按当前已验证事实生成，原文及条件保持完整；模型摘要未作为正式事实发布。"]),
                 *vote_summary,
             ],
         )
+        self._sync_comparison_assessment_summary(matrix)
+        return matrix
+
+    @staticmethod
+    def _sync_comparison_assessment_summary(matrix: ComparisonMatrix) -> None:
+        matrix.summary = [row for row in matrix.summary if not row.startswith("[assessment:")]
+        matrix.summary.extend(
+            f"[assessment:{dimension}] {assessment.status}; {assessment.rationale}; "
+            f"scenario={assessment.scenario}; tradeoffs={assessment.tradeoffs}; "
+            f"gaps={assessment.gaps}"
+            for dimension, assessment in matrix.assessments.items()
+        )
+
+    def _validated_comparison_assessments(
+        self, detail: RunDetail, payload: dict, *, evidence_view=None
+    ) -> dict[str, ComparisonAssessment]:
+        raw = payload.get("assessments")
+        if not isinstance(raw, dict):
+            return {}
+        sources = {source.id: source for source in detail.raw_sources}
+        result = {}
+        for dimension in detail.plan.dimensions:
+            problems = []
+            try:
+                assessment = ComparisonAssessment.model_validate(raw.get(dimension))
+            except ValidationError:
+                assessment = ComparisonAssessment(
+                    status="insufficient_evidence",
+                    gaps=["Missing or invalid dimension assessment."],
+                )
+            valid_ids = [source_id for source_id in assessment.source_ids
+                         if source_id in sources and sources[source_id].dimension == dimension
+                         and sources[source_id].competitor in detail.plan.competitors]
+            if len(valid_ids) != len(assessment.source_ids):
+                problems.append("Unknown or out-of-scope citation.")
+            assessment.source_ids = list(dict.fromkeys(valid_ids))
+            if assessment.status == "comparable":
+                cited_products = {
+                    sources[source_id].competitor
+                    for source_id in valid_ids
+                    if sources[source_id].confidence >= 0.75
+                    and sources[source_id].source_type
+                    not in {"web_search_result", "llm_public_knowledge"}
+                    and self._matrix_source_is_official_signal(sources[source_id])
+                }
+                if set(detail.plan.competitors) - cited_products:
+                    problems.append("Source-backed facts are missing for a compared product.")
+                if evidence_view is not None:
+                    supported_products = {
+                        fact.competitor for fact in evidence_view.facts
+                        if fact.dimension == dimension and fact.source_id in valid_ids
+                        and fact.status == "supported" and fact.confidence >= 0.75
+                        and ("pricing" not in dimension.casefold() or fact.field == "price")
+                    }
+                    if set(detail.plan.competitors) - supported_products:
+                        problems.append(
+                            "Current evidence view lacks supporting facts "
+                            "for each compared product."
+                        )
+                if assessment.winner not in [None, "tie", *detail.plan.competitors]:
+                    problems.append("Winner is outside the researched product scope.")
+                if not assessment.rationale.strip() or not assessment.scenario.strip():
+                    problems.append("Comparable conclusion requires rationale and scenario.")
+            if problems:
+                assessment.status = "insufficient_evidence"
+                assessment.gaps.extend(problems)
+                assessment.rationale = "Comparison withheld: " + "; ".join(problems)
+            if evidence_view is not None:
+                # Citation IDs validate scope, not the model's restatement of
+                # people, plans or prices. Originals remain in matrix cells;
+                # unreviewed comparison prose stays in the model trace only.
+                assessment.rationale = (
+                    "功能观察按原文与完整条件保留在矩阵；模型比较主张尚未逐条审核。"
+                    if dimension == 'feature' else
+                    "标价按套餐与付款周期保留在矩阵；适用价格须核对币种、席位、税费和地区。"
+                    if dimension == 'pricing' else
+                    "原始事实保留在矩阵；模型比较主张尚未逐条审核。"
+                )
+                brief = detail.plan.decision_brief
+                assessment.scenario = (brief.primary_job if brief else None) or detail.topic
+                assessment.tradeoffs = []
+                assessment.gaps = problems
+            if assessment.status != "comparable":
+                assessment.winner = None
+            result[dimension] = assessment
+        return result
 
     def _conservative_fallback_winners(
         self,

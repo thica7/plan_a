@@ -15,6 +15,22 @@ from packages.tools.web_search import WebSearchRequest, web_search
 class SearchExecutionMixin:
     """Run-scoped search reuse, native model admission and trace accounting."""
 
+    @staticmethod
+    def _search_cache_key(query, max_results, filters=None):
+        return json.dumps(
+            [query, max_results, filters.payload() if filters else {}],
+            ensure_ascii=False, sort_keys=True,
+        )
+
+    def _has_reusable_native_search_cache(self, record, query, max_results, filters=None):
+        if (
+            self._settings.web_search_provider != "deepseek" or not self._search.is_enabled
+            or record.detail.evidence_refresh_active
+        ):
+            return False
+        cached = record.search_cache.get(self._search_cache_key(query, max_results, filters))
+        return cached is not None and time.monotonic() - cached[0] < 300
+
     async def _trace_search(
         self,
         record,
@@ -28,11 +44,7 @@ class SearchExecutionMixin:
     ) -> list[SearchResult]:
         started = time.perf_counter()
         native = self._settings.web_search_provider == "deepseek" and self._search.is_enabled
-        cache_key = json.dumps(
-            [query, max_results, filters.payload() if filters else {}],
-            ensure_ascii=False,
-            sort_keys=True,
-        )
+        cache_key = self._search_cache_key(query, max_results, filters)
         metadata = {
             "provider": self._settings.web_search_provider,
             "filters": json.dumps(filters.payload(), ensure_ascii=False) if filters else "",
@@ -58,6 +70,7 @@ class SearchExecutionMixin:
                 ):
                     results = list(cached[1])
                     metadata.update(
+                        module_status="cache",
                         search_cache_hit=True,
                         llm_request_attempts=0,
                         llm_tokens_charged=0,
@@ -81,6 +94,7 @@ class SearchExecutionMixin:
                         execution = LLMCallExecution(
                             self._run_llm_budget(record),
                             is_repair=record.pending_graph_redo is not None,
+                            phase=self._llm_phase(agent, subagent),
                             input_tokens=len((query + filter_text).encode("utf-8"))
                             + 512
                             + SEARCH_INPUT_RESERVE_PER_USE
@@ -99,7 +113,7 @@ class SearchExecutionMixin:
                             filter_mode="prompt_preferences_and_domain_postfilter",
                         )
                         async with self._llm_semaphore:
-                            execution.reserve()
+                            await self._admit_llm_call(execution)
                             token = current_llm_execution.set(execution)
                             try:
                                 results = await web_search(
@@ -127,6 +141,11 @@ class SearchExecutionMixin:
             metadata["error"] = output
             if isinstance(exc, LLMExecutionLimitError):
                 metadata["degradation_reason"] = str(exc)
+                if str(exc) == 'run_llm_budget_reserved_for_delivery':
+                    output = '为保留分析、比较、反思、写作与审核额度，跳过本次搜索。'
+                    metadata['module_status'] = 'skipped'
+                    metadata['budget_exhausted'] = True
+                    return []
             raise
         finally:
             if execution is not None:

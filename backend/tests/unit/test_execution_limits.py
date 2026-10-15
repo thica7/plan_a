@@ -56,6 +56,27 @@ async def _text_call(service, record, **kwargs):
 
 
 @pytest.mark.asyncio
+async def test_text_call_reserves_and_transports_its_explicit_output_limit():
+    service, record = await _service(run_llm_max_tokens=500)
+    # This adapter test starts at Writer; preceding pipeline stages are complete.
+    budget = service._run_llm_budget(record)
+    for phase in list(budget.delivery_reserves):
+        if phase != 'writer:run':
+            budget.finish_delivery(phase)
+    payloads = []
+
+    async def post(url, payload, headers):
+        payloads.append(payload)
+        return httpx.Response(200, json={'choices': [{'message': {'content': 'ok'}}],
+                                        'usage': {'prompt_tokens': 10, 'completion_tokens': 2}})
+
+    service._llm._post_chat_completion = post
+    assert await _text_call(service, record, max_output_tokens=128) == 'ok'
+    assert payloads[0]['max_tokens'] == 128
+    assert record.detail.trace_spans[-1].metadata['llm_max_output_tokens'] == 128
+
+
+@pytest.mark.asyncio
 async def test_llm_concurrency_and_queue_time_are_bounded() -> None:
     service, record = await _service(llm_max_concurrency=2)
     active = peak = 0
@@ -75,6 +96,86 @@ async def test_llm_concurrency_and_queue_time_are_bounded() -> None:
     spans = [span for span in record.detail.trace_spans if span.kind == "llm"]
     assert any(span.metadata["queue_wait_ms"] >= 10 for span in spans)
     assert sum(span.metadata["llm_request_attempts"] for span in spans) == 6
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('limit', ['tokens', 'cost'])
+async def test_parallel_reservations_wait_for_actual_usage_before_rejecting(limit):
+    cap = {'run_llm_max_tokens': 500} if limit == 'tokens' else {'run_llm_max_cost_usd': .0001}
+    service, record = await _service(llm_max_concurrency=2, llm_max_output_tokens=10, **cap)
+    entered, release = asyncio.Event(), asyncio.Event()
+    requests = 0
+    async def post(url, payload, headers):
+        nonlocal requests
+        requests += 1
+        entered.set()
+        await release.wait()
+        return httpx.Response(200, json={'choices': [{'message': {'content': 'ok'}}],
+                                        'usage': {'prompt_tokens': 10, 'completion_tokens': 2}})
+    service._llm._post_chat_completion = post
+    first = asyncio.create_task(_text_call(service, record))
+    await entered.wait()
+    second = asyncio.create_task(_text_call(service, record))
+    try:
+        await asyncio.sleep(.02)
+        assert not second.done() and requests == 1
+        release.set()
+        assert await asyncio.gather(first, second) == ['ok', 'ok']
+        assert record.llm_budget.calls == 2 and record.llm_budget.tokens_used == 24
+        assert record.llm_budget.tokens_reserved == 0
+    finally:
+        release.set()
+        await asyncio.gather(first, second, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_waiting_reservation_still_rejects_unknown_charged_usage():
+    service, record = await _service(llm_max_concurrency=2, run_llm_max_tokens=500, llm_max_output_tokens=10)
+    entered, release = asyncio.Event(), asyncio.Event()
+    async def complete_text(**kwargs):
+        entered.set()
+        await release.wait()
+        return 'ok'
+    service._llm.complete_text = complete_text
+    first = asyncio.create_task(_text_call(service, record))
+    await entered.wait()
+    second = asyncio.create_task(_text_call(service, record))
+    await asyncio.sleep(.02)
+    release.set()
+    try:
+        assert await first == 'ok'
+        with pytest.raises(LLMError, match='token_budget'):
+            await second
+        assert record.llm_budget.calls == 1 and record.llm_budget.tokens_reserved == 0
+    finally:
+        await asyncio.gather(first, second, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_cancelling_budget_waiter_does_not_charge_unstarted_call():
+    service, record = await _service(llm_max_concurrency=2, run_llm_max_tokens=500, llm_max_output_tokens=10)
+    entered, release = asyncio.Event(), asyncio.Event()
+    async def complete_text(**kwargs):
+        entered.set()
+        await release.wait()
+        return 'ok'
+    service._llm.complete_text = complete_text
+    first = asyncio.create_task(_text_call(service, record))
+    await entered.wait()
+    second = asyncio.create_task(_text_call(service, record))
+    await asyncio.sleep(.02)
+    second.cancel()
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await second
+        assert record.llm_budget.calls == 1
+        assert record.detail.trace_spans[-1].metadata['llm_request_attempts'] == 0
+        release.set()
+        assert await first == 'ok'
+        assert record.llm_budget.tokens_reserved == 0
+    finally:
+        release.set()
+        await asyncio.gather(first, second, return_exceptions=True)
 
 
 @pytest.mark.asyncio

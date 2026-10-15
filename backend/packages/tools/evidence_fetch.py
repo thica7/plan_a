@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from packages.tools.advanced_fetch import AdvancedFetchResult, advanced_fetch_page
-from packages.tools.fetch_page import FetchPageResult, fetch_page
+from packages.tools.fetch_page import FetchPageResult, _pricing_controls, fetch_page
 
 
 @dataclass(frozen=True)
@@ -41,6 +41,8 @@ async def fetch_evidence_page(
     timeout_seconds: float = 12.0,
     min_text_chars: int = 120,
     advanced_quality_threshold: float = 0.55,
+    require_price_content: bool = False,
+    public_document_browser_retry: bool = False,
 ) -> EvidenceFetchResult:
     """Fetch evidence through the fast HTTP path, then webfetch_v2 when quality is weak."""
 
@@ -51,20 +53,30 @@ async def fetch_evidence_page(
             fetch_method="basic_httpx_policy_blocked",
             failure_reason="policy_blocked",
         )
-    if basic.status_code in {401, 403}:
+    retry_public_document = public_document_browser_retry and allow_advanced and basic.status_code == 403
+    if basic.status_code in {401, 403} and not retry_public_document:
         return _from_basic_fetch(
-            basic, fetch_method="basic_httpx_access_blocked",
+            basic,
+            fetch_method="basic_httpx_access_blocked",
             failure_reason="access_denied",
         )
     content_problem = _basic_content_problem(basic)
     if content_problem in {"login_page", "captcha_page"}:
         return _from_basic_fetch(
-            basic, fetch_method="basic_httpx_access_blocked",
+            basic,
+            fetch_method="basic_httpx_access_blocked",
             failure_reason=content_problem,
         )
-    if not content_problem and _basic_fetch_is_sufficient(basic, min_text_chars=min_text_chars):
-        return _from_basic_fetch(basic)
+    basic_sufficient = not content_problem and _basic_fetch_is_sufficient(
+        basic,
+        min_text_chars=min_text_chars,
+    )
+    price_missing = require_price_content and not _has_currency_amount(basic.text)
+    if basic_sufficient and not price_missing:
+        return _with_price_check(_from_basic_fetch(basic), require_price_content)
     if not allow_advanced:
+        if basic_sufficient:
+            return _with_price_check(_from_basic_fetch(basic), require_price_content)
         return _from_basic_fetch(
             basic,
             fetch_method="basic_httpx_low_quality",
@@ -73,15 +85,34 @@ async def fetch_evidence_page(
 
     advanced = await advanced_fetch_page(
         url,
-        mode="auto",
+        mode="browser" if price_missing or retry_public_document else "auto",
         timeout_seconds=max(15.0, timeout_seconds),
         quality_threshold=advanced_quality_threshold,
         capture_network=True,
     )
     if _advanced_fetch_is_better(advanced, basic, advanced_quality_threshold):
-        return _from_advanced_fetch(advanced)
+        captured = _with_price_check(_from_advanced_fetch(advanced), require_price_content)
+        if retry_public_document:
+            captured = replace(captured, capture_metadata={**captured.capture_metadata,
+                "http_status_before_browser": 403, "public_document_browser_retry": True})
+        return captured
 
     if basic.ok:
+        if basic_sufficient:
+            fallback = _with_price_check(
+                _from_basic_fetch(basic, advanced_fetch_attempted=True),
+                require_price_content,
+            )
+            if require_price_content:
+                fallback = replace(
+                    fallback,
+                    capture_metadata={
+                        **fallback.capture_metadata,
+                        "price_capture_failure_reason": advanced.failure_reason
+                        or "advanced_result_rejected",
+                    },
+                )
+            return fallback
         return _from_basic_fetch(
             basic,
             fetch_method="basic_httpx_low_quality",
@@ -89,6 +120,32 @@ async def fetch_evidence_page(
             advanced_fetch_attempted=True,
         )
     return _from_failed_fetch(basic, advanced)
+
+
+def _has_currency_amount(text: str) -> bool:
+    return bool(
+        re.search(
+            r"[$¥￥€£]\s*\d|\b(?:USD|CNY|RMB|EUR|GBP|JPY|AUD|CAD)\s*\d|"
+            r"\d[\d,.]*\s*(?:元|USD|CNY|RMB|EUR|GBP|JPY|AUD|CAD)\b",
+            text,
+            re.I,
+        )
+    )
+
+
+def _with_price_check(result: EvidenceFetchResult, requested: bool) -> EvidenceFetchResult:
+    if not requested:
+        return result
+    # This is only a capture diagnostic. Research extraction/admission/coverage
+    # decide whether an amount actually supports the requested product price.
+    return replace(
+        result,
+        capture_metadata={
+            **result.capture_metadata,
+            "price_content_check": "currency_amount_presence",
+            "price_content_found": _has_currency_amount(result.text),
+        },
+    )
 
 
 def _basic_fetch_is_sufficient(result: FetchPageResult, *, min_text_chars: int) -> bool:
@@ -146,10 +203,16 @@ def _advanced_fetch_is_better(
         advanced.quality.has_captcha
         or advanced.quality.looks_like_login
         or advanced.quality.looks_like_block
-        or _basic_content_problem(FetchPageResult(
-            url=advanced.final_url, ok=True, title=advanced.title,
-            text=advanced.text or advanced.markdown, content_hash="",
-        )) in {"login_page", "captcha_page", "soft_404", "navigation_only"}
+        or _basic_content_problem(
+            FetchPageResult(
+                url=advanced.final_url,
+                ok=True,
+                title=advanced.title,
+                text=advanced.text or advanced.markdown,
+                content_hash="",
+            )
+        )
+        in {"login_page", "captcha_page", "soft_404", "navigation_only"}
     ):
         return False
     if advanced.quality.score >= quality_threshold:
@@ -178,9 +241,16 @@ def _from_basic_fetch(
         text_length=len(result.text),
         failure_reason=failure_reason,
         content_type=result.content_type,
+        capture_metadata={"document_headings": list(result.document_headings),
+                          "pricing_controls": list(result.pricing_controls),
+                          "pricing_offer_json": list(result.pricing_offer_json)},
         source_material_level=(
-            "full_source" if result.ok and failure_reason is None and result.text.strip()
-            and "summary" not in fetch_method.casefold() else "unknown"
+            "full_source"
+            if result.ok
+            and failure_reason is None
+            and result.text.strip()
+            and "summary" not in fetch_method.casefold()
+            else "unknown"
         ),
     )
 
@@ -190,10 +260,15 @@ def _from_advanced_fetch(result: AdvancedFetchResult) -> EvidenceFetchResult:
     artifacts = result.raw.get("artifacts")
     network = result.raw.get("network")
     diagnostics = result.raw.get("diagnostics")
-    network_summary = [
-        {"url": item.get("url"), "status": item.get("status")}
-        for item in network[:20] if isinstance(item, dict)
-    ] if isinstance(network, list) else []
+    network_summary = (
+        [
+            {"url": item.get("url"), "status": item.get("status")}
+            for item in network[:20]
+            if isinstance(item, dict)
+        ]
+        if isinstance(network, list)
+        else []
+    )
     return EvidenceFetchResult(
         url=result.final_url or result.url,
         ok=result.ok,
@@ -209,10 +284,18 @@ def _from_advanced_fetch(result: AdvancedFetchResult) -> EvidenceFetchResult:
         failure_reason=result.failure_reason,
         content_type=result.content_type,
         source_material_level=(
-            "full_source" if result.ok and not result.failure_reason and text.strip()
-            and "summary" not in result.fetch_method.casefold() else "unknown"
+            "full_source"
+            if result.ok
+            and not result.failure_reason
+            and text.strip()
+            and "summary" not in result.fetch_method.casefold()
+            else "unknown"
         ),
         capture_metadata={
+            "document_headings": (result.raw.get('extraction') or {}).get('headings', []),
+            "pricing_controls": list(_pricing_controls(
+                ''.join((result.raw.get('extraction') or {}).get('pricing_control_html', [])))),
+            "pricing_offer_json": (result.raw.get('extraction') or {}).get('pricing_offer_json', []),
             "webfetch_artifacts": artifacts if isinstance(artifacts, dict) else {},
             "webfetch_network": network_summary,
             "webfetch_diagnostics": diagnostics if isinstance(diagnostics, dict) else {},

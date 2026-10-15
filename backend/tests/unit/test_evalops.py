@@ -661,7 +661,7 @@ class _FakeRunService:
     def __init__(self, runs: list[RunDetail]) -> None:
         self._runs = {run.id: run for run in runs}
 
-    def list_runs(self) -> list[RunSummary]:
+    def list_runs(self, workspace_id=None) -> list[RunSummary]:
         return [
             RunSummary(
                 id=run.id,
@@ -674,6 +674,7 @@ class _FakeRunService:
                 updated_at=run.updated_at,
             )
             for run in self._runs.values()
+            if workspace_id is None or run.workspace_id == workspace_id
         ]
 
     def get_run(self, run_id: str) -> RunDetail | None:

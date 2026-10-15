@@ -31,7 +31,6 @@ from packages.agents import (
 )
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.orchestrator.state import GraphState
-from packages.research.evidence.snapshot import current_snapshot
 
 _FINAL_QA_REDO_ROUTES = {"writer_only", "comparator", "analyst", "collector", "full"}
 
@@ -55,7 +54,7 @@ def build_real_analysis_graph(service: Any, checkpointer: Any | None = None):
     graph.add_conditional_edges(
         "evidence_hitl",
         _route_evidence,
-        {"accept": "analyst_dispatch", "redo": "collector_dispatch"},
+        {"accept": "analyst_dispatch", "redo": "collector_dispatch", "no_new_evidence": "qa_hitl"},
     )
     graph.add_conditional_edges("analyst_dispatch", _send_analysts, ["analyst"])
     graph.add_edge("analyst", "analyst_join")
@@ -105,11 +104,7 @@ def build_scoped_redo_graph(service: Any, checkpointer: Any | None = None):
         kind = state.get("redo_kind") or "full"
         result = {"current_node": "redo_router", "redo_kind": kind}
         if kind in {"writer_only", "comparator"}:
-            snapshot = current_snapshot(record.detail)
-            if snapshot is None:
-                snapshot = await service._prepare_evidence_snapshot(record, phase="analysis")
-            else:
-                snapshot = service._current_evidence_snapshot(record)
+            snapshot = await service._ensure_analysis_evidence(record)
             if snapshot.phase != "analysis":
                 raise EvidenceUseRejectedError("scoped redo requires an accepted analysis snapshot")
             result["evidence_snapshot_id"] = snapshot.id
@@ -154,7 +149,7 @@ def build_scoped_redo_graph(service: Any, checkpointer: Any | None = None):
     graph.add_conditional_edges(
         "evidence_hitl",
         _route_evidence,
-        {"accept": "analyst_dispatch", "redo": "collector_dispatch"},
+        {"accept": "analyst_dispatch", "redo": "collector_dispatch", "no_new_evidence": "qa_hitl"},
     )
     graph.add_conditional_edges("analyst_dispatch", _send_analysts, ["analyst"])
     graph.add_edge("analyst", "analyst_join")
@@ -207,7 +202,7 @@ def build_demo_analysis_graph(service: Any, checkpointer: Any | None = None):
     graph.add_conditional_edges(
         "evidence_hitl",
         _route_evidence,
-        {"accept": "analyst_dispatch", "redo": "collector_dispatch"},
+        {"accept": "analyst_dispatch", "redo": "collector_dispatch", "no_new_evidence": "qa_hitl"},
     )
     graph.add_conditional_edges("analyst_dispatch", _send_analysts, ["analyst"])
     graph.add_edge("analyst", "analyst_join")
@@ -304,7 +299,7 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
         record = service._runs[state["run_id"]]
         dimensions = state.get("dimensions") or record.detail.plan.dimensions
         competitors = state.get("target_competitors") or record.detail.plan.competitors
-        snapshot = await service._prepare_evidence_snapshot(record, phase="analysis")
+        snapshot = await service._ensure_analysis_evidence(record)
         await analyst_agent.dispatch(service, record, list(dimensions), list(competitors))
         return {
             "current_node": "analyst_dispatch",
@@ -351,15 +346,22 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
         snapshot = await service._prepare_evidence_snapshot(record, phase="collect")
         await qa_agent.run_phase(service, record, "collect")
         attempts = state.get("collect_qa_attempts", 0)
-        blockers = service._blocking_phase_issues(record.detail, "collect")
+        blockers = service._phase_retry_blockers(record, "collect")
         if blockers:
             attempts += 1
+        partial = bool(blockers) and attempts >= record.detail.max_iterations and service._can_continue_partial_report(record.detail, blockers)
+        pending = getattr(record, "pending_graph_redo", None)
+        scoped = getattr(record, "active_graph_kind", None) == "scoped_redo" and pending is not None and pending.redo_scope.kind in {"collector", "analyst"}
+        partial_dimensions = ([pending.redo_scope.target_subagent] if scoped and pending.redo_scope.target_subagent else list(record.detail.plan.dimensions))
+        partial_competitors = (pending.redo_scope.target_competitors or ([pending.redo_scope.target_competitor] if pending.redo_scope.target_competitor else [])) if scoped else []
         next_dimensions = (
+            partial_dimensions if partial else
             sorted(service._issue_dimensions(record.detail, blockers))
             if blockers
             else list(state.get("dimensions") or record.detail.plan.dimensions)
         )
         next_competitors = (
+            partial_competitors if partial else
             sorted(service._issue_target_competitors(record.detail, blockers))
             if blockers
             else list(state.get("target_competitors") or [])
@@ -375,19 +377,25 @@ def _add_real_nodes(graph: StateGraph, service: Any) -> None:
     async def evidence_hitl(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
         if getattr(record.detail.plan, "collaboration_mode", None) != "assisted":
-            return {"current_node": "evidence_hitl", "evidence_route": "accept"}
-        route_state = await service._real_evidence_hitl_step(
-            record,
-            list(state.get("dimensions") or record.detail.plan.dimensions),
-            list(state.get("target_competitors") or record.detail.plan.competitors),
-        )
+            route_state = {"evidence_route": "accept"}
+        else:
+            route_state = await service._real_evidence_hitl_step(
+                record,
+                list(state.get("dimensions") or record.detail.plan.dimensions),
+                list(state.get("target_competitors") or record.detail.plan.competitors),
+            )
+        if route_state.get("evidence_route") == "accept":
+            snapshot = await service._prepare_evidence_snapshot(record, phase="analysis")
+            route_state = {**route_state, "evidence_snapshot_id": snapshot.id}
+            if getattr(record, "collector_redo_no_new_evidence", False):
+                route_state["evidence_route"] = "no_new_evidence"
         return {"current_node": "evidence_hitl", **route_state}
 
     async def analyst_qa(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
         await qa_agent.run_phase(service, record, "analyst")
         attempts = state.get("analyst_qa_attempts", 0)
-        blockers = service._blocking_phase_issues(record.detail, "analyst")
+        blockers = service._phase_retry_blockers(record, "analyst")
         if blockers:
             attempts += 1
         next_dimensions = (
@@ -527,19 +535,25 @@ def _add_demo_nodes(graph: StateGraph, service: Any) -> None:
     async def evidence_hitl(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
         if getattr(record.detail.plan, "collaboration_mode", None) != "assisted":
-            return {"current_node": "evidence_hitl", "evidence_route": "accept"}
-        route_state = await service._real_evidence_hitl_step(
-            record,
-            list(state.get("dimensions") or record.detail.plan.dimensions),
-            list(state.get("target_competitors") or record.detail.plan.competitors),
-        )
+            route_state = {"evidence_route": "accept"}
+        else:
+            route_state = await service._real_evidence_hitl_step(
+                record,
+                list(state.get("dimensions") or record.detail.plan.dimensions),
+                list(state.get("target_competitors") or record.detail.plan.competitors),
+            )
+        if route_state.get("evidence_route") == "accept":
+            snapshot = await service._prepare_evidence_snapshot(record, phase="analysis")
+            route_state = {**route_state, "evidence_snapshot_id": snapshot.id}
+            if getattr(record, "collector_redo_no_new_evidence", False):
+                route_state["evidence_route"] = "no_new_evidence"
         return {"current_node": "evidence_hitl", **route_state}
 
     async def analyst_dispatch(state: GraphState) -> GraphState:
         record = service._runs[state["run_id"]]
         dimensions = state.get("dimensions") or record.detail.plan.dimensions
         competitors = state.get("target_competitors") or record.detail.plan.competitors
-        snapshot = await service._prepare_evidence_snapshot(record, phase="analysis")
+        snapshot = await service._ensure_analysis_evidence(record)
         await analyst_agent.dispatch(service, record, list(dimensions), list(competitors))
         return {
             "current_node": "analyst_dispatch",
@@ -690,7 +704,8 @@ def _route_final_qa(state: GraphState) -> str:
 
 
 def _route_evidence(state: GraphState) -> str:
-    return "redo" if state.get("evidence_route") == "redo" else "accept"
+    route = state.get("evidence_route")
+    return route if route in {"redo", "no_new_evidence"} else "accept"
 
 
 def _route_after_writer(service: Any, state: GraphState) -> str:

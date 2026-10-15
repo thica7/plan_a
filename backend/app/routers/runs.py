@@ -9,9 +9,10 @@ from app.deps import (
     get_enterprise_user_context,
     get_run_service,
     get_runtime_command_service,
+    require_run_access,
 )
 from app.rate_limit import RateLimitDecision, SlidingWindowRateLimiter
-from packages.auth import EnterpriseUserContext
+from packages.auth import EnterpriseUserContext, can_access_workspace
 from packages.business_intel import compare_run_quality
 from packages.config import Settings
 from packages.orchestrator.service import RunService
@@ -78,16 +79,23 @@ async def create_run(
 
 
 @router.get("/runs", response_model=list[RunSummary])
-async def list_runs(service: RunServiceDep) -> list[RunSummary]:
-    return service.list_runs()
+async def list_runs(service: RunServiceDep, user: EnterpriseUserDep) -> list[RunSummary]:
+    if user.workspace_id is not None and not can_access_workspace(
+        user, user.workspace_id, "report:read",
+    ):
+        raise HTTPException(status_code=403, detail="Insufficient workspace permission")
+    return [item for item in service.list_runs(workspace_id=user.workspace_id)
+            if can_access_workspace(user, item.workspace_id, "report:read")]
 
 
 @router.get("/runs/{run_id}", response_model=RunDetail)
 async def get_run(
     run_id: str,
     service: RunServiceDep,
+    user: EnterpriseUserDep,
     include_trace_payloads: bool = Query(default=False),
 ) -> RunDetail:
+    require_run_access(service, run_id, user, "report:read")
     detail = service.get_run(run_id, include_trace_payloads=include_trace_payloads)
     if detail is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -99,7 +107,10 @@ async def import_user_research_materials(
     run_id: str,
     request: UserResearchImportRequest,
     service: RunServiceDep,
+    user: EnterpriseUserDep,
 ) -> UserResearchImportResult:
+    require_run_access(service, run_id, user, "evidence:write")
+    request = request.model_copy(update={"imported_by": user.user_id})
     result = service.import_user_research_materials(run_id, request)
     if result is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -110,13 +121,16 @@ async def import_user_research_materials(
 async def get_run_quality_comparison(
     run_id: str,
     service: RunServiceDep,
+    user: EnterpriseUserDep,
     baseline_run_id: str | None = Query(default=None),
 ) -> RunQualityComparison:
+    require_run_access(service, run_id, user, "report:read")
     detail = service.get_run(run_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Run not found")
     baseline = None
     if baseline_run_id:
+        require_run_access(service, baseline_run_id, user)
         baseline = service.get_run(baseline_run_id)
         if baseline is None:
             raise HTTPException(status_code=404, detail="Baseline run not found")

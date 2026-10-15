@@ -149,18 +149,16 @@ class HttpRerankerProvider(RerankerProvider):
 
 
 def get_reranker_provider_from_env() -> RerankerProvider | None:
-    provider = os.getenv("KB_RERANKER_PROVIDER", "hash").strip().lower()
+    provider = os.getenv("KB_RERANKER_PROVIDER", "none").strip().lower()
     if provider in {"", "none", "disabled", "off"}:
         return None
 
     batch_size = _env_int("KB_RERANKER_BATCH_SIZE", 32)
     timeout = _env_float("KB_RERANKER_TIMEOUT_SECONDS", 30.0)
-    if provider in {"bge-reranker-v2-m3", "bge-v2-m3", "bge"}:
-        return BgeRerankerV2M3Provider(
-            model_name=os.getenv("KB_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
-            batch_size=batch_size,
-            timeout_seconds=timeout,
-        )
+    if provider in {"local", "local-cross-encoder", "bge-reranker-v2-m3", "bge-v2-m3", "bge"}:
+        from .local_models import get_local_provider_from_env
+
+        return get_local_provider_from_env("reranker")
     if provider == "http":
         url = os.getenv("KB_RERANKER_HTTP_URL")
         if not url:

@@ -213,12 +213,14 @@ def _load_intent_plans(
 
 
 def _lexical_plan(query: str, product: str, policy: str, version: str) -> dict[str, Any]:
-    plan = lexical.build_lexical_plan(query, [product])
+    plan = lexical.build_lexical_plan(query, [product] if product else [])
     return {
         "query": query,
         "version": version,
         "strict_query": KnowledgeRepository._to_fts_query(query),
         "fallback_query": plan.fallback_query if policy == "bounded" else None,
+        "title_query": plan.title_query if policy == "bounded" else None,
+        "title_body_query": plan.title_body_query if policy == "bounded" else None,
         "concepts": plan.concepts if policy == "bounded" else [],
         "literals": plan.literals if policy == "bounded" else [],
         "disabled_reason": plan.disabled_reason if policy == "bounded" else "policy_disabled",
@@ -240,6 +242,7 @@ async def run_product_benchmark(
     enable_rerank: bool = False,
     embedding_provider: Any = None,
     reranker_provider: Any = None,
+    product_scope: str = "product",
 ) -> dict[str, Any]:
     """Run scoped offline sparse retrieval over a single fixed corpus snapshot."""
     if mode not in {"formal", "candidate-diagnostic", "tuning-diagnostic"}:
@@ -248,13 +251,17 @@ async def run_product_benchmark(
         raise ValueError("lexical_policy must be strict or bounded")
     if intent_policy not in {"raw", "structured"}:
         raise ValueError("intent_policy must be raw or structured")
+    if product_scope not in {"product", "broad"}:
+        raise ValueError("product_scope must be product or broad")
     if intent_policy == "raw" and intent_plan_path is not None:
         raise ValueError("raw intent_policy cannot include an intent plan")
     if not 1 <= top_k <= 100:
         raise ValueError("top_k must be between 1 and 100")
     if retrieval_mode not in {"sparse", "dense", "hybrid"}:
         raise ValueError("retrieval_mode must be sparse, dense, or hybrid")
-    if retrieval_mode != "sparse" and not top_k <= candidate_top_k <= 100:
+    if retrieval_mode == "sparse":
+        candidate_top_k = max(top_k, candidate_top_k)
+    if not top_k <= candidate_top_k <= 100:
         raise ValueError("candidate_top_k must be between top_k and 100")
     if retrieval_mode != "sparse" and (
         embedding_provider is None
@@ -394,15 +401,25 @@ async def run_product_benchmark(
                     query = dataset.queries[query_id]
                     lexical_plan = {
                         **_lexical_plan(
-                            query["query"], query["product"], lexical_policy, policy_version
+                            query["query"], query["product"] if product_scope == "product" else "",
+                            lexical_policy, policy_version
                         ),
                         "legacy_original": True,
                     }
                     repo.as_of = date.fromisoformat(query["as_of"])
+                    competitors = [query["product"]] if product_scope == "product" else []
+                    retrieval_filters = {
+                        "competitors": competitors,
+                        "market": query["market"],
+                        "source_roles": ["source"],
+                        "as_of": query["as_of"],
+                        "include_workspace_library": False,
+                        **_SCOPE,
+                    }
                     date_exclusions = [
                         {"source_id": source["id"], "reason": "source_date_after_as_of"}
                         for source in dataset.sources.values()
-                        if source["product"] == query["product"]
+                        if (not competitors or source["product"] in competitors)
                         and source["market"] == query["market"]
                         and source["role"] == "source"
                         and _source_after_as_of(source, repo.as_of)
@@ -428,11 +445,11 @@ async def run_product_benchmark(
                         query=query["query"],
                         intent_policy=intent_policy,
                         retrieval_intent=intent_plans.get(query_id),
-                        competitors=[query["product"]],
+                        competitors=competitors,
                         market=query["market"],
                         source_roles=["source"],
                         mode=retrieval_mode,
-                        top_k=candidate_top_k if retrieval_mode != "sparse" else top_k,
+                        top_k=candidate_top_k,
                         final_top_k=top_k,
                         rerank_top_k=candidate_top_k if enable_rerank else 0,
                         mmr_lambda=0,
@@ -466,7 +483,8 @@ async def run_product_benchmark(
                     query_plan = response.diagnostics["query_plan"]
                     lexical_plans = [
                         _lexical_plan(
-                            search_query, query["product"], lexical_policy, policy_version
+                            search_query, query["product"] if product_scope == "product" else "",
+                            lexical_policy, policy_version
                         )
                         for search_query in query_plan["queries"]
                     ]
@@ -513,6 +531,19 @@ async def run_product_benchmark(
                             }
                         )
                     proof_ids = list(dict.fromkeys(proof["source_id"] for proof in label["proofs"]))
+                    candidate_source_ids = []
+                    for ref in diagnostics.get("candidate_refs", []):
+                        document = stored_docs.get(ref["document_id"])
+                        chunk = stored_chunks.get(ref["chunk_id"])
+                        if (document is None or chunk is None or chunk.document_id != document.id
+                                or document.version != ref["document_version"]
+                                or document.content_hash != ref["content_hash"]):
+                            raise RuntimeError("candidate differs from stored corpus snapshot")
+                        source_id = document.metadata.get("eval_source_id")
+                        if source_id not in candidate_source_ids:
+                            candidate_source_ids.append(source_id)
+                    candidate_recall = (len(set(candidate_source_ids) & set(proof_ids)) / len(proof_ids)
+                                        if label["expected_outcome"] == "answer" else None)
                     retrieved = {hit["source_id"] for hit in hits}
                     metrics = None
                     if label["expected_outcome"] == "answer":
@@ -549,7 +580,7 @@ async def run_product_benchmark(
                     if any(not proof["quote_in_retrieved_excerpt"] for proof in proof_checks):
                         failure_reasons.append("proof_excerpt_not_retrieved")
                     eligible_count = sum(
-                        source["product"] == query["product"]
+                        (not competitors or source["product"] in competitors)
                         and source["market"] == query["market"]
                         and source["role"] == "source"
                         and not _source_after_as_of(source, repo.as_of)
@@ -566,6 +597,9 @@ async def run_product_benchmark(
                         {
                             "query_id": query_id,
                             "eligible_source_count": eligible_count,
+                            "top_k": top_k,
+                            "top_k_covers_all_eligible": top_k >= eligible_count,
+                            "retrieval_filters": retrieval_filters,
                             "retrieval_diagnostics": diagnostics,
                             "proof_excerpt_in_top_1": any(
                                 proof["quote_in_retrieved_excerpt"]
@@ -590,6 +624,10 @@ async def run_product_benchmark(
                             "product": query["product"],
                             "as_of": query["as_of"],
                             "hits": hits,
+                            "candidate_source_ids": candidate_source_ids,
+                            "candidate_chunk_count": len(diagnostics.get("candidate_refs", [])),
+                            "candidate_recall": candidate_recall,
+                            "per_query_candidate_top_k": candidate_top_k,
                             "metrics": metrics,
                             "proofs": proof_checks,
                             "proof_excerpt_recall": (
@@ -670,6 +708,7 @@ async def run_product_benchmark(
         "dataset_reasons": dataset_reasons,
         "lexical_policy": lexical_policy_report,
         "intent_policy": intent_policy,
+        "product_scope": product_scope,
         "intent_plan_sha256": intent_plan_sha256,
         "semantic_quality_verified": False,
         "provider": provider,
@@ -686,8 +725,13 @@ async def run_product_benchmark(
                     "status": "completed",
                     "top_k": top_k,
                     "candidate_top_k": candidate_top_k,
+                    "per_query_candidate_top_k": candidate_top_k,
+                    "candidate_pool_policy": "union_before_final_ranking",
                     "query_count": len(rows),
                     "answer_query_count": len(scored),
+                    "candidate_recall": statistics.mean(row["candidate_recall"] for row in rows
+                                                        if row["candidate_recall"] is not None)
+                    if scored else None,
                     "recall_at_k": mean("recall_at_k"),
                     "recall_at_1": mean("recall_at_1"),
                     "mrr": mean("mrr"),
@@ -730,7 +774,7 @@ async def run_product_benchmark(
                 "retrieval_empty": sum(row["retrieval_empty"] for row in group),
                 "retrieval_noise_count": sum(row["retrieval_noise_count"] or 0 for row in group),
             }
-            for outcome in ("clarify", "insufficient")
+            for outcome in ("answer", "clarify", "insufficient")
             if (group := [row for row in rows if row["expected_outcome"] == outcome])
         },
         "groups": {
@@ -768,6 +812,7 @@ async def run_product_benchmark(
         },
         "snapshot": {
             "scope": _SCOPE,
+            "product_scope": product_scope,
             "source_roles": ["source"],
             "date_rule": "exclude dates after as_of; undated sources require fetched_at <= as_of",
         },
@@ -784,6 +829,7 @@ def main() -> int:
     parser.add_argument("--lexical-policy", choices=["strict", "bounded"], default="bounded")
     parser.add_argument("--intent-policy", choices=["raw", "structured"], default="raw")
     parser.add_argument("--intent-plan", type=Path)
+    parser.add_argument("--product-scope", choices=["product", "broad"], default="product")
     parser.add_argument("--corpus", type=Path, default=_ROOT / "eval/product-research-corpus.jsonl")
     parser.add_argument(
         "--queries", type=Path, default=_ROOT / "eval/product-research-queries-draft.jsonl"
@@ -803,6 +849,7 @@ def main() -> int:
                 top_k=args.top_k,
                 intent_policy=args.intent_policy,
                 intent_plan_path=args.intent_plan,
+                product_scope=args.product_scope,
             )
         )
     except DatasetValidationError as exc:

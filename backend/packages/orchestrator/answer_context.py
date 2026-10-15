@@ -106,6 +106,9 @@ def build_answer_boundaries(detail, view) -> list[AnswerBoundary]:
                 if _same(item.competitor, competitor) and _same(item.dimension, dimension)
             ]
             if not requirements:
+                # Plain facts record original page observations. A source's
+                # directory market cannot turn that into regional applicability.
+                intent = _DIMENSION_INTENTS.get(dimension.strip().casefold(), 'facts')
                 markets = {
                     source.market
                     for source in view.sources
@@ -120,8 +123,8 @@ def build_answer_boundaries(detail, view) -> list[AnswerBoundary]:
                     AnswerRequirement(
                         competitor=competitor,
                         dimension=dimension,
-                        intent=_DIMENSION_INTENTS.get(dimension.strip().casefold(), "facts"),
-                        market=next(iter(markets)) if len(markets) == 1 else None,
+                        intent=intent,
+                        market=next(iter(markets)) if intent != "facts" and len(markets) == 1 else None,
                         as_of=as_of,
                     )
                 ]
@@ -208,7 +211,13 @@ def _money_pattern(facts):
 
 
 def _amount_issues(service, snapshot, text, path, boundaries, facts, cited, pattern):
-    candidates = [boundary for boundary in boundaries if set(boundary.view_source_ids) & cited]
+    from packages.research.evidence.report_claims import recorded_price_scope_assertion
+    content = text.replace("页面采集标价（不代表适用报价）：", "").replace("Captured page price (not an applicable quote): ", "")
+    recorded_label = ("页面采集标价（不代表适用报价）：" in text
+                      or "Captured page price (not an applicable quote): " in text)
+    recorded_label = recorded_label and not recorded_price_scope_assertion(content)
+    candidates = [boundary for boundary in boundaries if set(boundary.view_source_ids) & cited
+                  and (boundary.requirement.intent != "recorded_price" or recorded_label)]
     local_allowed = {fact_id for boundary in candidates for fact_id in boundary.allowed_fact_ids}
     supported_money = {
         _money_value(facts[fact_id])

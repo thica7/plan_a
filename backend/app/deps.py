@@ -7,7 +7,7 @@ from fastapi import Depends, Header, HTTPException, Request
 from app.middleware import auth
 from app.rate_limit import SlidingWindowRateLimiter
 from packages.artifacts import ArtifactStorage, build_artifact_storage
-from packages.auth import EnterpriseUserContext, normalize_role
+from packages.auth import EnterpriseUserContext, can_access_workspace, normalize_role
 from packages.config import Settings, get_settings
 from packages.enterprise import EnterpriseMemoryStore, EnterprisePostgresStore, EnterpriseStore
 from packages.enterprise.store import DEFAULT_USER_ID
@@ -100,8 +100,15 @@ def get_enterprise_user_context(
         subject = getattr(request.state, "enterprise_user", None)
         if not isinstance(subject, dict):
             raise HTTPException(status_code=401, detail="Authenticated subject is missing")
+        if not all(
+            isinstance(subject.get(key), str) and subject[key].strip()
+            for key in ("user_id", "workspace_id")
+        ):
+            raise HTTPException(
+                status_code=403, detail="Authenticated subject needs user and workspace scope"
+            )
         return EnterpriseUserContext(
-            user_id=str(subject.get("user_id") or DEFAULT_USER_ID),
+            user_id=subject["user_id"],
             role=normalize_role(str(subject.get("role") or "")),
             workspace_id=subject.get("workspace_id") or None,
             policy_engine=settings.auth_policy_engine,
@@ -185,3 +192,17 @@ def get_runtime_command_service(
         enterprise_store=enterprise_store,
         preference_memory=preference_memory,
     )
+
+
+def require_run_access(
+    service: RunService,
+    run_id: str,
+    user: EnterpriseUserContext,
+    action: str = "report:read",
+) -> None:
+    """Authorize the stored scope before hydration, repair, or streaming side effects."""
+    summary = service.peek_run_summary(run_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if not can_access_workspace(user, summary.workspace_id, action):
+        raise HTTPException(status_code=403, detail="Insufficient workspace permission")

@@ -1,0 +1,158 @@
+{
+  "source_tree_sha256": "3557c1e23e4f9b1ca97f1f2fefad288e7b3f98ed503a8fc2b47a1d521d9157d1",
+  "source_files": 880,
+  "source_before_after_equal": true,
+  "tests": {
+    "backend_passed": 3997,
+    "backend_skipped": 1,
+    "backend_warning_count": 202,
+    "frontend_passed": 279,
+    "frontend_files": 55,
+    "build": "pass",
+    "openapi_json_equal": true,
+    "generated_types_equal": true,
+    "diff_check": "pass",
+    "literal_configured_credential_scan_hits": 0
+  },
+  "review": {
+    "spec": "PASS after original P1 repaired",
+    "quality": "PASS",
+    "no_op_live_exercised": false,
+    "no_op_offline_proven": true
+  },
+  "api_operations": {
+    "status": "completed",
+    "duration_seconds": 147.93,
+    "mechanical_pass": true,
+    "report_chars": 5780,
+    "core_chars": 4518,
+    "source_count": 11,
+    "citations_valid": true,
+    "qa_issue_count": 31,
+    "llm_transport_attempts": 29,
+    "unknown_transport_spans": 10,
+    "module_status_counts": {
+      "llm": 6
+    },
+    "provider_usage_unknown_transport_spans": 2,
+    "configured_cost_estimate": {
+      "provider_bill_usd": null,
+      "usage_complete": false,
+      "trace_estimate_range_usd": [
+        0.019553268,
+        0.054033
+      ],
+      "rates_usd_per_million": {
+        "input": 0.3,
+        "cache": 0.006,
+        "output": 1.2
+      },
+      "scope": "configured trace token estimates; cache extremes; not a billing bound; search tool fees unknown"
+    },
+    "failure_messages": null,
+    "run_id": "run-d5fabe5c920583a0938ff62e80a673fa",
+    "project_id": "project-acceptance-2637264dcceb4cd9",
+    "report_url": "http://127.0.0.1:5173/runs/run-d5fabe5c920583a0938ff62e80a673fa?view=report",
+    "supported_operation_cells": 16,
+    "total_operation_cells": 24,
+    "all_four_analysts_executed": true,
+    "writer_and_review_each_product_executed": true,
+    "budget_charged_tokens": 135265,
+    "business_delivery": "partial; same-operation conditions not fully covered",
+    "discovered_semantic_defect": {
+      "claim_id": "claim-4207e655a1bc6d3316ea",
+      "operation_quote": "not manage access",
+      "incorrect_bound_effect": "allowed",
+      "claim_text_polarity": "denied",
+      "state": "must repair; model review alone did not catch structured contradiction"
+    }
+  },
+  "hardware": {
+    "status": "completed_with_blockers",
+    "duration_seconds": 149.1,
+    "mechanical_pass": false,
+    "report_chars": 21105,
+    "core_chars": 11578,
+    "source_count": 2,
+    "citations_valid": true,
+    "qa_issue_count": 30,
+    "llm_transport_attempts": 32,
+    "unknown_transport_spans": 18,
+    "module_status_counts": {
+      "skipped": 3,
+      "llm": 3
+    },
+    "provider_usage_unknown_transport_spans": 1,
+    "configured_cost_estimate": {
+      "provider_bill_usd": null,
+      "usage_complete": false,
+      "trace_estimate_range_usd": [
+        0.03331407,
+        0.0796323
+      ],
+      "rates_usd_per_million": {
+        "input": 0.3,
+        "cache": 0.006,
+        "output": 1.2
+      },
+      "scope": "configured trace token estimates; cache extremes; not a billing bound; search tool fees unknown"
+    },
+    "failure_messages": [],
+    "budget_charged_tokens": 185221,
+    "business_delivery": "blocked by evidence gaps",
+    "saved_full_report": "original export masked; offline deterministic readback matches 21105 chars, 11578 core chars and all section indexes/audit text; original full byte/hash identity not certified",
+    "manual_quality_findings": [
+      "Repeated missing-evidence prose makes the report too long for its two accepted sources",
+      "LCD positioning paragraph introduces uncited common-knowledge product narrative despite absent LCD sources",
+      "No broad same-scenario hardware winner is supportable; release remains blocked"
+    ]
+  },
+  "project_rag": {
+    "documents": 11,
+    "indexing_status_counts": {
+      "ready": 11
+    },
+    "all_hits_in_scope": true,
+    "external_model_calls": 0,
+    "queries": [
+      {
+        "query": "谁可以阅读、评论和编辑页面，公开分享有什么前提？",
+        "candidates": {
+          "dense": 12,
+          "sparse": 0,
+          "reranked": 8
+        },
+        "degraded": false
+      },
+      {
+        "query": "Who can read, comment and edit pages, and what are the public sharing conditions?",
+        "candidates": {
+          "dense": 12,
+          "sparse": 0,
+          "reranked": 8
+        },
+        "degraded": false
+      }
+    ]
+  },
+  "retrieval_benchmark": {
+    "corpus_sources": 22,
+    "queries": 8,
+    "answer_queries": 6,
+    "sparse_recall_at_1": 0.0,
+    "hybrid_recall_at_1": 1.0,
+    "hybrid_rerank_recall_at_1": 1.0,
+    "network_attempts": 0,
+    "external_model_calls": 0,
+    "blind_holdout": false,
+    "answer_behavior_and_ragas": "not_run"
+  },
+  "limitations": [
+    "No broad answer accuracy or RAGAS proof",
+    "No precision gain from reranker proven on this exposed small set",
+    "These two app queries had zero sparse candidates; hybrid lexical gain not proven",
+    "Local LangGraph/SQLite/Qdrant local only; HTTP Qdrant/Temporal/Redis multiworker/Postgres RLS unverified",
+    "Health aggregation error from Temporal cutover remains",
+    "Standalone unreferenced projects in Memory enterprise store do not survive restart; local journal restores report-associated projection only"
+  ]
+}

@@ -377,6 +377,7 @@ class NormalizedFeatureField(ResearchBaseModel):
     dimension: str = "feature"
     competitor: str = ""
     slot: str
+    qualifiers: dict[str, Any] = Field(default_factory=dict)
     support_level: str = ""
     evidence_terms: list[str] = Field(default_factory=list)
     evidence_quote: str = ""

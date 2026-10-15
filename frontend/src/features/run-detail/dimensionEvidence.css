@@ -1,0 +1,8 @@
+.dimension-evidence-panel { margin-block: 16px; }
+.dimension-evidence-section + .dimension-evidence-section { margin-top: 20px; }
+.dimension-evidence-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 12px; }
+.dimension-evidence-product { border: 2px solid var(--border, #b99c65); padding: 12px; background: var(--surface, #fff9de); }
+.dimension-evidence-product h4 { margin: 0 0 10px; }
+.dimension-evidence-product blockquote { margin: 8px 0; padding-left: 10px; border-left: 3px solid #9bb87d; overflow-wrap: anywhere; white-space: pre-wrap; }
+.dimension-evidence-label { font-weight: 600; margin-bottom: 4px; }
+.dimension-evidence-gap { color: var(--text, #513d28); overflow-wrap: anywhere; }

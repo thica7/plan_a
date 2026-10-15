@@ -1,0 +1,2016 @@
+{
+  "date": "2026-10-11",
+  "git": {
+    "branch": "codex/pastoral-desktop",
+    "head": "40e0f520b7923959c791fb197b741cfdff713200",
+    "uncommitted_changes_preserved": true,
+    "file_sha256": {
+      "backend/packages/agents/analysts/logic.py": "3484f07e1c10163ede48b76825b539cf8c3662ced89a06ff5081c859c12286c2",
+      "backend/packages/agents/collectors/logic.py": "250f6eed6846df81ef606ab3c340e0d7e0a3410c350f7122edfad335b9d43870",
+      "backend/packages/agents/comparator/logic.py": "4b43cdbbbe6e645513e16bf703e7c5e68ea6873b8c0c6f7b1219ddd075783d37",
+      "backend/packages/agents/reflector/logic.py": "805c835fc3a4c66f8b0e9761c15bd84a0ceee7a014bb12ff488b80c6d6b792c3",
+      "backend/packages/agents/writer/dimension_writer.py": "ac2f74b82be48b0d143e853439443eee6ada215de85dc80c736e4d21de156534",
+      "backend/packages/business_intel/entity_resolver.py": "ece13e1b090e53a771d582b15f1996b2644d60f720ea90d5768902e5746be0fb",
+      "backend/packages/orchestrator/evidence_context.py": "c9d2b4f56bf4d78ea44283edf8ac383d9f8f2349ccecc7983fd7bfa40a0cc1e8",
+      "backend/packages/orchestrator/llm_execution.py": "a5651e116135f19245ef2b3c790ed033bd70946a2d39b13ec8d3ebe1ef2bc9e1",
+      "backend/packages/orchestrator/search_execution.py": "46dc51e49e22107e1aed79734d688a59a20c3a973625f89cf3dc2242d800a1c3",
+      "backend/packages/llm/execution_budget.py": "3529f69ab1c1ef175bc511eb571ab72380ec25e651679491423b029c5adf377c",
+      "backend/packages/research/evidence/projection.py": "890019ab5f43a1f2f013fd4bb42443541f36a9793b91d84d2995af49e6655f26",
+      "backend/packages/research/evidence/capabilities.py": "6d7979851e45f2f84a079e189165ba5e27f2e9cbc93e23f210bddfc39b3327a8",
+      "backend/packages/research/evidence/report_claims.py": "7ee339967e6f59a01363bbad1d0486ceb896e7ae2469e4a80e0b09d5320521d3",
+      "backend/packages/research/evidence/views.py": "9088f95e841045afeae876b444c6eb8ff48b04f611dba316be0abed73f79208d",
+      "backend/packages/research/extraction/semantic.py": "8fc5666775e6ef335a7230e13780f10150f09d841401a64aef2724b225243a2d",
+      "backend/packages/research/extraction/pricing_cards.py": "6551c2fa85b11ddc7d2243192489732bac426b78cd6bc5321d5f19d731f5db67",
+      "backend/packages/research/budget.py": "ba66c2da428c88a7091d08afcb3df3b48246d17470d32b344589c0828ac5d16c",
+      "backend/packages/tools/fetch_page.py": "45549684aa32039cdf02b2bbb2b206b416c062312c4d4db69e4e768caef84991",
+      "backend/packages/tools/evidence_fetch.py": "6fb8c32e307b7a779e6692d61c332f9d62176b16c1f27986652fb0c40d71b23c",
+      "third_party/webfetch_v2/webfetch_v2/fetcher.py": "50bb576841938e91a3c0be071df783f93c68130e8e55f74ac68a15b3660e9599",
+      "third_party/webfetch_v2/webfetch_v2/models.py": "59d2ed20ad439df5a45288daa01ced9ad88b2af6ead3c3f73a81e6c4451d07a1"
+    }
+  },
+  "case": {
+    "id": "notion-three-products",
+    "topic": "研究 Notion、Confluence、Coda（现 Superhuman Docs）作为小团队文档知识协作工具，核实三家评论、共享编辑和权限边界，以及官方页面价格、收费席位与付款周期。请固定这三家，不增加其他竞品。不要把未知税费、默认人数或年付折月当成完整采购账单。输出极简中文产品分析。",
+    "competitors": [
+      "Confluence",
+      "Coda"
+    ],
+    "target_product": {
+      "name": "Notion",
+      "official_url": "https://www.notion.com/",
+      "category": "文档与知识协作软件",
+      "audience": "十人产品团队",
+      "use_cases": [
+        "团队知识整理",
+        "产品文档协作"
+      ],
+      "market": "US"
+    },
+    "dimensions": [
+      "feature",
+      "pricing"
+    ],
+    "decision_brief": {
+      "decision_question": "十人团队如何判断这三家文档协作工具的能力和收费差异？",
+      "primary_job": "共同维护产品文档和团队知识",
+      "success_metric": "说明同一能力的三方证据、计划限制和标价条件，保留未知项"
+    }
+  },
+  "attempts": [
+    {
+      "attempt": "live",
+      "manual_outcome": "旧生产者凭据失效、角色和共同轴不足；未达交付",
+      "case_id": "notion-three-products",
+      "timed_out": false,
+      "error_type": null,
+      "duration_seconds": 424.38,
+      "failure_messages": [],
+      "status": "completed_with_blockers",
+      "current_node": null,
+      "pipeline_terminal": true,
+      "mechanical_pass": false,
+      "partial_report_generated": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "citations_valid": true,
+      "unknown_citation_count": 0,
+      "report_chars": 2942,
+      "core_chars": 1972,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 9,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {
+        "feature": {
+          "status": "insufficient_evidence",
+          "winner": null,
+          "rationale": "Comparison withheld: Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown'}.",
+          "scenario": "共同维护产品文档和团队知识",
+          "tradeoffs": [],
+          "gaps": [
+            "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+            "Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'unknown', 'Confluence': 'unknown', 'Coda': 'documented_with_conditions'}.",
+            "Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown'}."
+          ],
+          "source_ids": []
+        },
+        "pricing": {
+          "status": "insufficient_evidence",
+          "winner": null,
+          "rationale": "Comparison withheld: Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.; Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.",
+          "scenario": "共同维护产品文档和团队知识",
+          "tradeoffs": [],
+          "gaps": [
+            "Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.",
+            "Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs."
+          ],
+          "source_ids": []
+        }
+      },
+      "native_llm_spans": 36,
+      "search_spans": 29,
+      "successful_search_spans": 8,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 101037,
+          "completion_tokens": 11068,
+          "total_tokens": 112105,
+          "prompt_cache_hit_tokens": 8704,
+          "prompt_cache_miss_tokens": 92333
+        },
+        "search": {
+          "prompt_tokens": 67270,
+          "completion_tokens": 6539,
+          "total_tokens": 73809,
+          "prompt_cache_hit_tokens": 5632,
+          "prompt_cache_miss_tokens": 61638
+        }
+      },
+      "provider_total_tokens_last_attempts": 185914,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 37,
+        "repairs": 5,
+        "tokens_charged": 185914,
+        "cost_charged_usd": 0.067405716
+      },
+      "qa_issue_count": 7
+    },
+    {
+      "attempt": "final",
+      "manual_outcome": "受沙箱浏览器启动和视图构造性能影响；无报告",
+      "case_id": "notion-three-products",
+      "timed_out": false,
+      "error_type": null,
+      "duration_seconds": 594.85,
+      "failure_messages": [
+        "Writer failed before report generation: writer LLM exceeded 240s",
+        "Run failed: Writer failed before report generation: writer LLM exceeded 240s"
+      ],
+      "status": "failed",
+      "current_node": null,
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "partial_report_generated": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "report_chars": 0,
+      "core_chars": 0,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 7,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {
+        "feature": {
+          "status": "insufficient_evidence",
+          "winner": null,
+          "rationale": "Comparison withheld: Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown'}.; Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+          "scenario": "共同维护产品文档和团队知识",
+          "tradeoffs": [],
+          "gaps": [
+            "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+            "Not comparable: feature / permissions; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown'}.",
+            "Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}."
+          ],
+          "source_ids": [
+            "raw-source-1cda8c45e8876df4f36c",
+            "raw-source-34a67281db3b66591d6c",
+            "raw-source-859c368a1a9cd092356d",
+            "raw-source-940ce7ba9cc5de38d91a",
+            "raw-source-a5a35d9a74b6bc0454f0",
+            "raw-source-b92f96c0c5e5d2643df7",
+            "raw-source-f7a81bf787f1e9e932e7"
+          ]
+        },
+        "pricing": {
+          "status": "insufficient_evidence",
+          "winner": null,
+          "rationale": "Comparison withheld: No evidence sources were collected for pricing.",
+          "scenario": "共同维护产品文档和团队知识",
+          "tradeoffs": [],
+          "gaps": [
+            "Unknown or out-of-scope citation.",
+            "No evidence sources were collected for pricing."
+          ],
+          "source_ids": []
+        }
+      },
+      "native_llm_spans": 19,
+      "search_spans": 25,
+      "successful_search_spans": 7,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 77265,
+          "completion_tokens": 6873,
+          "total_tokens": 84138,
+          "prompt_cache_hit_tokens": 15360,
+          "prompt_cache_miss_tokens": 61905
+        },
+        "search": {
+          "prompt_tokens": 61116,
+          "completion_tokens": 5179,
+          "total_tokens": 66295,
+          "prompt_cache_hit_tokens": 21632,
+          "prompt_cache_miss_tokens": 39484
+        }
+      },
+      "provider_total_tokens_last_attempts": 150433,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 26,
+        "repairs": 0,
+        "tokens_charged": 173293,
+        "cost_charged_usd": 0.055645451999999984
+      },
+      "qa_issue_count": 1
+    },
+    {
+      "attempt": "verified",
+      "manual_outcome": "并发 token 预占误判，取消在途分支；无报告",
+      "case_id": "notion-three-products",
+      "timed_out": false,
+      "error_type": null,
+      "duration_seconds": 53.4,
+      "failure_messages": [
+        "Run failed: run_llm_token_budget_exhausted"
+      ],
+      "status": "failed",
+      "current_node": null,
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "partial_report_generated": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "report_chars": 0,
+      "core_chars": 0,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 11,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {},
+      "native_llm_spans": 19,
+      "search_spans": 24,
+      "successful_search_spans": 6,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 22094,
+          "completion_tokens": 2870,
+          "total_tokens": 24964,
+          "prompt_cache_hit_tokens": 19712,
+          "prompt_cache_miss_tokens": 2382
+        },
+        "search": {
+          "prompt_tokens": 56379,
+          "completion_tokens": 4978,
+          "total_tokens": 61357,
+          "prompt_cache_hit_tokens": 3072,
+          "prompt_cache_miss_tokens": 53307
+        }
+      },
+      "provider_total_tokens_last_attempts": 86321,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 21,
+        "repairs": 0,
+        "tokens_charged": 188905,
+        "cost_charged_usd": 0.068095404
+      },
+      "qa_issue_count": 0
+    },
+    {
+      "attempt": "delivery",
+      "manual_outcome": "最后价格 QA 无法入预算，整份 writer 失败",
+      "case_id": "notion-three-products",
+      "timed_out": false,
+      "error_type": null,
+      "duration_seconds": 98.18,
+      "failure_messages": [
+        "Writer failed before report generation: run_llm_token_budget_exhausted",
+        "Run failed: Writer failed before report generation: run_llm_token_budget_exhausted"
+      ],
+      "status": "failed",
+      "current_node": null,
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "partial_report_generated": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "report_chars": 0,
+      "core_chars": 0,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 10,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {
+        "feature": {
+          "status": "insufficient_evidence",
+          "winner": null,
+          "rationale": "Comparison withheld: Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown'}.",
+          "scenario": "共同维护产品文档和团队知识",
+          "tradeoffs": [],
+          "gaps": [
+            "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+            "Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+            "Not comparable: feature / shared_editing; insufficient_evidence; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'unknown'}."
+          ],
+          "source_ids": []
+        },
+        "pricing": {
+          "status": "insufficient_evidence",
+          "winner": null,
+          "rationale": "Comparison withheld: Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.; Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.",
+          "scenario": "共同维护产品文档和团队知识",
+          "tradeoffs": [],
+          "gaps": [
+            "Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.",
+            "Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs."
+          ],
+          "source_ids": []
+        }
+      },
+      "native_llm_spans": 31,
+      "search_spans": 24,
+      "successful_search_spans": 6,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 93938,
+          "completion_tokens": 10702,
+          "total_tokens": 104640,
+          "prompt_cache_hit_tokens": 19072,
+          "prompt_cache_miss_tokens": 74866
+        },
+        "search": {
+          "prompt_tokens": 62049,
+          "completion_tokens": 5189,
+          "total_tokens": 67238,
+          "prompt_cache_hit_tokens": 12160,
+          "prompt_cache_miss_tokens": 49889
+        }
+      },
+      "provider_total_tokens_last_attempts": 171878,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 32,
+        "repairs": 0,
+        "tokens_charged": 180151,
+        "cost_charged_usd": 0.059931960000000006
+      },
+      "qa_issue_count": 0
+    },
+    {
+      "attempt": "acceptance",
+      "manual_outcome": "11 报价展示，但人数误审、身份误拒和跨事实权限组合未过人工验收",
+      "case_id": "notion-three-products",
+      "timed_out": false,
+      "error_type": null,
+      "duration_seconds": 117.64,
+      "failure_messages": [],
+      "status": "completed",
+      "current_node": null,
+      "pipeline_terminal": true,
+      "mechanical_pass": true,
+      "partial_report_generated": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": true,
+      "citations_valid": true,
+      "unknown_citation_count": 0,
+      "report_chars": 4568,
+      "core_chars": 3289,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 12,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {
+        "feature": {
+          "status": "insufficient_evidence",
+          "winner": null,
+          "rationale": "Comparison withheld: Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+          "scenario": "共同维护产品文档和团队知识",
+          "tradeoffs": [],
+          "gaps": [
+            "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+            "Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+            "Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}."
+          ],
+          "source_ids": []
+        },
+        "pricing": {
+          "status": "insufficient_evidence",
+          "winner": null,
+          "rationale": "Comparison withheld: Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.; Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.",
+          "scenario": "共同维护产品文档和团队知识",
+          "tradeoffs": [],
+          "gaps": [
+            "Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.",
+            "Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs."
+          ],
+          "source_ids": []
+        }
+      },
+      "native_llm_spans": 32,
+      "search_spans": 24,
+      "successful_search_spans": 6,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 104059,
+          "completion_tokens": 11265,
+          "total_tokens": 115324,
+          "prompt_cache_hit_tokens": 4736,
+          "prompt_cache_miss_tokens": 99323
+        },
+        "search": {
+          "prompt_tokens": 47762,
+          "completion_tokens": 4777,
+          "total_tokens": 52539,
+          "prompt_cache_hit_tokens": 4480,
+          "prompt_cache_miss_tokens": 43282
+        }
+      },
+      "provider_total_tokens_last_attempts": 167863,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 34,
+        "repairs": 0,
+        "tokens_charged": 177651,
+        "cost_charged_usd": 0.06583826400000001
+      },
+      "qa_issue_count": 30
+    },
+    {
+      "attempt": "release",
+      "manual_outcome": "人数正文已改；动态币种缺证引发补证，重分析耗尽预算，失败草稿不得发布",
+      "case_id": "notion-three-products",
+      "timed_out": false,
+      "error_type": null,
+      "duration_seconds": 162.93,
+      "failure_messages": [
+        "Scoped redo failed: run_llm_token_budget_exhausted"
+      ],
+      "status": "failed",
+      "current_node": null,
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "partial_report_generated": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": true,
+      "citations_valid": true,
+      "unknown_citation_count": 0,
+      "report_chars": 3654,
+      "core_chars": 2559,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 12,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {},
+      "native_llm_spans": 34,
+      "search_spans": 29,
+      "successful_search_spans": 8,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 86645,
+          "completion_tokens": 10034,
+          "total_tokens": 96679,
+          "prompt_cache_hit_tokens": 21760,
+          "prompt_cache_miss_tokens": 64885
+        },
+        "search": {
+          "prompt_tokens": 76759,
+          "completion_tokens": 6507,
+          "total_tokens": 83266,
+          "prompt_cache_hit_tokens": 14592,
+          "prompt_cache_miss_tokens": 62167
+        }
+      },
+      "provider_total_tokens_last_attempts": 179945,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 35,
+        "repairs": 1,
+        "tokens_charged": 199298,
+        "cost_charged_usd": 0.065551548
+      },
+      "qa_issue_count": 0
+    },
+    {
+      "attempt": "hardened",
+      "manual_outcome": "9 功能主张已审；2 家价格 QA 无法入预算，保留缺口报告",
+      "case_id": "notion-three-products",
+      "timed_out": false,
+      "error_type": null,
+      "duration_seconds": 114.47,
+      "failure_messages": [],
+      "status": "completed",
+      "current_node": null,
+      "pipeline_terminal": true,
+      "mechanical_pass": true,
+      "partial_report_generated": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": true,
+      "citations_valid": true,
+      "unknown_citation_count": 0,
+      "report_chars": 4106,
+      "core_chars": 2899,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 12,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {
+        "feature": {
+          "status": "insufficient_evidence",
+          "winner": null,
+          "rationale": "Comparison withheld: Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+          "scenario": "共同维护产品文档和团队知识",
+          "tradeoffs": [],
+          "gaps": [
+            "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+            "Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+            "Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}."
+          ],
+          "source_ids": []
+        },
+        "pricing": {
+          "status": "insufficient_evidence",
+          "winner": null,
+          "rationale": "Comparison withheld: Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.; Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.",
+          "scenario": "共同维护产品文档和团队知识",
+          "tradeoffs": [],
+          "gaps": [
+            "Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.",
+            "Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices."
+          ],
+          "source_ids": []
+        }
+      },
+      "native_llm_spans": 33,
+      "search_spans": 24,
+      "successful_search_spans": 6,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 87982,
+          "completion_tokens": 10314,
+          "total_tokens": 98296,
+          "prompt_cache_hit_tokens": 30208,
+          "prompt_cache_miss_tokens": 57774
+        },
+        "search": {
+          "prompt_tokens": 62743,
+          "completion_tokens": 5767,
+          "total_tokens": 68510,
+          "prompt_cache_hit_tokens": 2944,
+          "prompt_cache_miss_tokens": 59799
+        }
+      },
+      "provider_total_tokens_last_attempts": 166806,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 33,
+        "repairs": 0,
+        "tokens_charged": 186154,
+        "cost_charged_usd": 0.060707663999999995
+      },
+      "qa_issue_count": 33
+    },
+    {
+      "attempt": "compact",
+      "manual_outcome": "9 功能主张与11报价全审；基础覆盖通过，决策交付仍有缺口",
+      "case_id": "notion-three-products",
+      "timed_out": false,
+      "error_type": null,
+      "duration_seconds": 117.34,
+      "failure_messages": [],
+      "status": "completed",
+      "current_node": null,
+      "pipeline_terminal": true,
+      "mechanical_pass": true,
+      "partial_report_generated": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": true,
+      "citations_valid": true,
+      "unknown_citation_count": 0,
+      "report_chars": 5003,
+      "core_chars": 3604,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 12,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {
+        "feature": {
+          "status": "insufficient_evidence",
+          "winner": null,
+          "rationale": "Comparison withheld: Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+          "scenario": "共同维护产品文档和团队知识",
+          "tradeoffs": [],
+          "gaps": [
+            "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+            "Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+            "Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}."
+          ],
+          "source_ids": []
+        },
+        "pricing": {
+          "status": "insufficient_evidence",
+          "winner": null,
+          "rationale": "Comparison withheld: Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.; Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.",
+          "scenario": "共同维护产品文档和团队知识",
+          "tradeoffs": [],
+          "gaps": [
+            "Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.",
+            "Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs."
+          ],
+          "source_ids": []
+        }
+      },
+      "native_llm_spans": 31,
+      "search_spans": 24,
+      "successful_search_spans": 6,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 97115,
+          "completion_tokens": 10739,
+          "total_tokens": 107854,
+          "prompt_cache_hit_tokens": 31616,
+          "prompt_cache_miss_tokens": 65499
+        },
+        "search": {
+          "prompt_tokens": 53574,
+          "completion_tokens": 4982,
+          "total_tokens": 58556,
+          "prompt_cache_hit_tokens": 14336,
+          "prompt_cache_miss_tokens": 39238
+        }
+      },
+      "provider_total_tokens_last_attempts": 166410,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 33,
+        "repairs": 0,
+        "tokens_charged": 166410,
+        "cost_charged_usd": 0.05056201199999999
+      },
+      "qa_issue_count": 37
+    }
+  ],
+  "final_run_id": "run-13d374effbeb91d38f2a4c099962cf77",
+  "final_summary": {
+    "attempt": "compact",
+    "manual_outcome": "9 功能主张与11报价全审；基础覆盖通过，决策交付仍有缺口",
+    "case_id": "notion-three-products",
+    "timed_out": false,
+    "error_type": null,
+    "duration_seconds": 117.34,
+    "failure_messages": [],
+    "status": "completed",
+    "current_node": null,
+    "pipeline_terminal": true,
+    "mechanical_pass": true,
+    "partial_report_generated": false,
+    "semantic_quality": null,
+    "has_product_analysis_signal": true,
+    "citations_valid": true,
+    "unknown_citation_count": 0,
+    "report_chars": 5003,
+    "core_chars": 3604,
+    "competitors": [
+      "Notion",
+      "Confluence",
+      "Coda"
+    ],
+    "source_count": 12,
+    "source_types": [
+      "webpage_verified"
+    ],
+    "assessments": {
+      "feature": {
+        "status": "insufficient_evidence",
+        "winner": null,
+        "rationale": "Comparison withheld: Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+        "scenario": "共同维护产品文档和团队知识",
+        "tradeoffs": [],
+        "gaps": [
+          "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+          "Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+          "Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}."
+        ],
+        "source_ids": []
+      },
+      "pricing": {
+        "status": "insufficient_evidence",
+        "winner": null,
+        "rationale": "Comparison withheld: Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.; Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.",
+        "scenario": "共同维护产品文档和团队知识",
+        "tradeoffs": [],
+        "gaps": [
+          "Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.",
+          "Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs."
+        ],
+        "source_ids": []
+      }
+    },
+    "native_llm_spans": 31,
+    "search_spans": 24,
+    "successful_search_spans": 6,
+    "provider_usage_by_kind": {
+      "llm": {
+        "prompt_tokens": 97115,
+        "completion_tokens": 10739,
+        "total_tokens": 107854,
+        "prompt_cache_hit_tokens": 31616,
+        "prompt_cache_miss_tokens": 65499
+      },
+      "search": {
+        "prompt_tokens": 53574,
+        "completion_tokens": 4982,
+        "total_tokens": 58556,
+        "prompt_cache_hit_tokens": 14336,
+        "prompt_cache_miss_tokens": 39238
+      }
+    },
+    "provider_total_tokens_last_attempts": 166410,
+    "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+    "budget_checkpoint": {
+      "calls": 33,
+      "repairs": 0,
+      "tokens_charged": 166410,
+      "cost_charged_usd": 0.05056201199999999
+    },
+    "qa_issue_count": 37
+  },
+  "manual_acceptance": {
+    "fact_projection_regression": "pass",
+    "coarse_common_axis_coverage": "9/9 cells contain reviewed observations",
+    "observed_prices_reviewed_and_published": "11/11",
+    "feature_claims_reviewed": "9/9",
+    "same_task_permission_comparison": "partial; editing, creating and management rules differ",
+    "price_conditions": "partial; captured billing selection/currency/default 300 users recorded; applicable ten-user quote, paid role mix, tax and plan inclusion unresolved",
+    "procurement_report_deliverable": false,
+    "rag_production_qualified": false,
+    "remaining_model_uncertainty": "One task does not establish stable semantic accuracy; known counterexamples are regression-tested."
+  },
+  "report": {
+    "path": "2026-10-11-fact-projection-live-draft.md",
+    "sha256": "0bb422da7a9f6528bbd6e139a161a110f2c1724c2b000afd743ce961cd7af4cf",
+    "unchanged_pipeline_output": true
+  },
+  "sources": [
+    {
+      "id": "raw-source-1cda8c45e8876df4f36c",
+      "competitor": "Notion",
+      "dimension": "feature",
+      "title": "Sharing & permissions settings in Notion | Notion Help – Notion Help Center",
+      "url": "https://www.notion.com/help/sharing-and-permissions",
+      "extracted_at": "2026-10-11T14:37:05.895320",
+      "content_hash": "d6b0659dacdd7b7c"
+    },
+    {
+      "id": "raw-source-b92f96c0c5e5d2643df7",
+      "competitor": "Notion",
+      "dimension": "feature",
+      "title": "Comments, mentions & reactions in Notion | Notion Help – Notion Help Center",
+      "url": "https://www.notion.com/help/comments-mentions-and-reminders",
+      "extracted_at": "2026-10-11T14:37:04.725514",
+      "content_hash": "65b9a307cc2f882d"
+    },
+    {
+      "id": "raw-source-f7a81bf787f1e9e932e7",
+      "competitor": "Notion",
+      "dimension": "feature",
+      "title": "Collaborate with people in Notion | Notion Help – Notion Help Center",
+      "url": "https://www.notion.com/help/collaborate-with-people",
+      "extracted_at": "2026-10-11T14:37:03.722156",
+      "content_hash": "b68a8ad86f73b797"
+    },
+    {
+      "id": "raw-source-84d93774a937707e285a",
+      "competitor": "Notion",
+      "dimension": "pricing",
+      "title": "Notion Pricing Plans: Free, Plus, Business, & Enterprise.",
+      "url": "https://www.notion.com/pricing",
+      "extracted_at": "2026-10-11T14:37:10.898733",
+      "content_hash": "159c90750a77542d"
+    },
+    {
+      "id": "raw-source-a5a35d9a74b6bc0454f0",
+      "competitor": "Confluence",
+      "dimension": "feature",
+      "title": "Create, update, and manage written content | Confluence Cloud | Atlassian Support",
+      "url": "https://support.atlassian.com/confluence-cloud/docs/create-edit-and-publish-a-page/",
+      "extracted_at": "2026-10-11T14:37:03.609435",
+      "content_hash": "1659f564bd7dc6f6"
+    },
+    {
+      "id": "raw-source-940ce7ba9cc5de38d91a",
+      "competitor": "Confluence",
+      "dimension": "feature",
+      "title": "Change who can find content and what they can do with it | Confluence Cloud | Atlassian Support",
+      "url": "https://support.atlassian.com/confluence-cloud/docs/add-or-remove-page-restrictions/",
+      "extracted_at": "2026-10-11T14:37:05.681227",
+      "content_hash": "c9289cd9e65ece92"
+    },
+    {
+      "id": "raw-source-859c368a1a9cd092356d",
+      "competitor": "Confluence",
+      "dimension": "feature",
+      "title": "Confluence Features - What's New in Confluence? | Atlassian",
+      "url": "https://www.atlassian.com/software/confluence/features",
+      "extracted_at": "2026-10-11T14:37:06.870153",
+      "content_hash": "7797d82ad4244bd3"
+    },
+    {
+      "id": "raw-source-b0da424f12358e533863",
+      "competitor": "Confluence",
+      "dimension": "pricing",
+      "title": "Confluence Pricing: Free and Paid Plans | Atlassian",
+      "url": "https://www.atlassian.com/software/confluence/pricing",
+      "extracted_at": "2026-10-11T14:37:26.646744",
+      "content_hash": "10db615e9179f77d"
+    },
+    {
+      "id": "raw-source-970d5d3dabcdab0bf470",
+      "competitor": "Coda",
+      "dimension": "feature",
+      "title": "Share your doc – Superhuman Help Center",
+      "url": "https://help.superhuman.com/hc/en-us/articles/46210173956109-Share-your-doc",
+      "extracted_at": "2026-10-11T14:37:28.610293",
+      "content_hash": "f51bb5cb9406222b"
+    },
+    {
+      "id": "raw-source-cfd5046889caadc3c3bd",
+      "competitor": "Coda",
+      "dimension": "feature",
+      "title": "Comment on docs – Superhuman Help Center",
+      "url": "https://help.superhuman.com/hc/en-us/articles/46210367411469-Comment-on-docs",
+      "extracted_at": "2026-10-11T14:37:17.288594",
+      "content_hash": "262c8cbb9d8471d4"
+    },
+    {
+      "id": "raw-source-34a67281db3b66591d6c",
+      "competitor": "Coda",
+      "dimension": "feature",
+      "title": "Superhuman Docs: Collaborative docs that go way beyond words",
+      "url": "https://superhuman.com/docs/use-cases/collaborative-docs",
+      "extracted_at": "2026-10-11T14:37:30.751545",
+      "content_hash": "796f1d82eadbbba2"
+    },
+    {
+      "id": "raw-source-2ee7fb10b23da736180d",
+      "competitor": "Coda",
+      "dimension": "pricing",
+      "title": "Superhuman Docs | Pricing & Plans",
+      "url": "https://superhuman.com/plans/docs",
+      "extracted_at": "2026-10-11T14:37:37.275882",
+      "content_hash": "2623c47d0f862774"
+    }
+  ],
+  "pricing_models": {
+    "Notion": [
+      {
+        "name": "Free",
+        "price": "$0",
+        "billing_cycle": "unknown",
+        "limits": [
+          "{\"amount\": 0.0, \"amount_basis\": \"member\", \"amount_period\": \"monthly\", \"billing_cycle\": \"unknown\", \"billing_interval\": \"unknown\", \"currency\": \"USD\", \"plan\": \"Free\", \"price_scope\": \"listed_unit\", \"price_type\": \"official_current\", \"tax_scope\": \"unknown\", \"tier_name\": \"Free\", \"verification_event_at\": \"2026-10-11T14:37:12.595909+00:00\", \"verification_method\": \"deterministic_body_row_reparse_v1\", \"verified_at\": \"2026-10-11T14:37:10.898733+00:00\"}"
+        ],
+        "claims": [
+          {
+            "claim": "Price in\nUSD\nEssentials for staying organized.\nFree\n$0\nper member / month",
+            "source_ids": [
+              "raw-source-84d93774a937707e285a"
+            ],
+            "confidence": 0.8
+          }
+        ]
+      },
+      {
+        "name": "Plus",
+        "price": "$10",
+        "billing_cycle": "annual",
+        "limits": [
+          "{\"amount\": 10.0, \"amount_basis\": \"member\", \"amount_period\": \"monthly\", \"billing_cycle\": \"annual\", \"billing_interval\": \"annual\", \"billing_selection_evidence\": {\"checked\": true, \"interval\": \"annual\", \"name\": \"billingInterval\", \"value\": \"year\"}, \"currency\": \"USD\", \"plan\": \"Plus\", \"price_scope\": \"listed_unit\", \"price_type\": \"official_current\", \"tax_scope\": \"unknown\", \"tier_name\": \"Plus\", \"verification_event_at\": \"2026-10-11T14:37:12.595909+00:00\", \"verification_method\": \"deterministic_body_row_reparse_v1\", \"verified_at\": \"2026-10-11T14:37:10.898733+00:00\"}"
+        ],
+        "claims": [
+          {
+            "claim": "Price in\nUSD\nEssentials for staying organized.\nFree\n$0\nper member / month\n\nFor individuals to organize personal projects and life.\n\nSign up\n\nIncludes:\n\nTrial of Notion AI\nBasic forms\nBasic sites\nNotion Calendar\nDatabases including subtasks, dependencies, custom properties and more\nPlus\n$10\nper member / month",
+            "source_ids": [
+              "raw-source-84d93774a937707e285a"
+            ],
+            "confidence": 0.8
+          }
+        ]
+      },
+      {
+        "name": "Business",
+        "price": "$20",
+        "billing_cycle": "annual",
+        "limits": [
+          "{\"amount\": 20.0, \"amount_basis\": \"member\", \"amount_period\": \"monthly\", \"billing_cycle\": \"annual\", \"billing_interval\": \"annual\", \"billing_selection_evidence\": {\"checked\": true, \"interval\": \"annual\", \"name\": \"billingInterval\", \"value\": \"year\"}, \"currency\": \"USD\", \"plan\": \"Business\", \"price_scope\": \"listed_unit\", \"price_type\": \"official_current\", \"tax_scope\": \"unknown\", \"tier_name\": \"Business\", \"verification_event_at\": \"2026-10-11T14:37:12.595909+00:00\", \"verification_method\": \"deterministic_body_row_reparse_v1\", \"verified_at\": \"2026-10-11T14:37:10.898733+00:00\"}"
+        ],
+        "claims": [
+          {
+            "claim": "Price in\nUSD\nEssentials for staying organized.\nFree\n$0\nper member / month\n\nFor individuals to organize personal projects and life.\n\nSign up\n\nIncludes:\n\nTrial of Notion AI\nBasic forms\nBasic sites\nNotion Calendar\nDatabases including subtasks, dependencies, custom properties and more\nPlus\n$10\nper member / month\n\nFor small teams and professionals to work together.\n\nGet started\n\nEverything in Free, and:\n\nTrial of Notion AI\nCustom forms\nCustom sites\nUnlimited charts\nUnlimited collaborative blocks\nUnlimited file uploads\nBasic connections\nThe AI workspace for work that matters.\nBusiness\nRecommended\n$20\nper member / month",
+            "source_ids": [
+              "raw-source-84d93774a937707e285a"
+            ],
+            "confidence": 0.8
+          }
+        ]
+      }
+    ],
+    "Coda": [
+      {
+        "name": "Business",
+        "price": "$33 USD / month",
+        "billing_cycle": "annual",
+        "limits": [
+          "{\"amount\": 33.0, \"amount_basis\": \"doc_maker\", \"amount_period\": \"monthly\", \"billing_cycle\": \"annual\", \"billing_interval\": \"annual\", \"currency\": \"USD\", \"plan\": \"Business\", \"price_scope\": \"listed_unit\", \"price_type\": \"official_current\", \"tax_scope\": \"unknown\", \"tier_name\": \"Business\", \"verification_event_at\": \"2026-10-11T14:37:39.492217+00:00\", \"verification_method\": \"deterministic_body_row_reparse_v1\", \"verified_at\": \"2026-10-11T14:37:37.275882+00:00\"}"
+        ],
+        "claims": [
+          {
+            "claim": "Business\n\n$33 USD / month\n\nper \nDoc Maker\n, billed annually",
+            "source_ids": [
+              "raw-source-2ee7fb10b23da736180d"
+            ],
+            "confidence": 0.8
+          }
+        ]
+      },
+      {
+        "name": "Business",
+        "price": "$40 when billed monthly",
+        "billing_cycle": "monthly",
+        "limits": [
+          "{\"amount\": 40.0, \"amount_basis\": \"doc_maker\", \"amount_period\": \"monthly\", \"billing_cycle\": \"monthly\", \"billing_interval\": \"monthly\", \"currency\": \"USD\", \"plan\": \"Business\", \"price_scope\": \"listed_unit\", \"price_type\": \"official_current\", \"tax_scope\": \"unknown\", \"tier_name\": \"Business\", \"verification_event_at\": \"2026-10-11T14:37:39.492217+00:00\", \"verification_method\": \"deterministic_body_row_reparse_v1\", \"verified_at\": \"2026-10-11T14:37:37.275882+00:00\"}"
+        ],
+        "claims": [
+          {
+            "claim": "Business\n\n$33 USD / month\n\nper \nDoc Maker\n, billed annually\n\n$40 when billed monthly",
+            "source_ids": [
+              "raw-source-2ee7fb10b23da736180d"
+            ],
+            "confidence": 0.8
+          }
+        ]
+      },
+      {
+        "name": "Free",
+        "price": "$0 USD",
+        "billing_cycle": "unknown",
+        "limits": [
+          "{\"amount\": 0.0, \"amount_period\": \"unknown\", \"billing_cycle\": \"unknown\", \"billing_interval\": \"unknown\", \"currency\": \"USD\", \"plan\": \"Free\", \"price_scope\": \"listed_unit\", \"price_type\": \"official_current\", \"tax_scope\": \"unknown\", \"tier_name\": \"Free\", \"verification_event_at\": \"2026-10-11T14:37:39.492217+00:00\", \"verification_method\": \"deterministic_body_row_reparse_v1\", \"verified_at\": \"2026-10-11T14:37:37.275882+00:00\"}"
+        ],
+        "claims": [
+          {
+            "claim": "Free\n\n$0 USD",
+            "source_ids": [
+              "raw-source-2ee7fb10b23da736180d"
+            ],
+            "confidence": 0.8
+          }
+        ]
+      },
+      {
+        "name": "Pro",
+        "price": "$12 USD / month",
+        "billing_cycle": "annual",
+        "limits": [
+          "{\"amount\": 12.0, \"amount_basis\": \"doc_maker\", \"amount_period\": \"monthly\", \"billing_cycle\": \"annual\", \"billing_interval\": \"annual\", \"currency\": \"USD\", \"plan\": \"Pro\", \"price_scope\": \"listed_unit\", \"price_type\": \"official_current\", \"tax_scope\": \"unknown\", \"tier_name\": \"Pro\", \"verification_event_at\": \"2026-10-11T14:37:39.492217+00:00\", \"verification_method\": \"deterministic_body_row_reparse_v1\", \"verified_at\": \"2026-10-11T14:37:37.275882+00:00\"}"
+        ],
+        "claims": [
+          {
+            "claim": "Pro\n\n$12 USD / month\n\nper \nDoc Maker\n, billed annually",
+            "source_ids": [
+              "raw-source-2ee7fb10b23da736180d"
+            ],
+            "confidence": 0.8
+          }
+        ]
+      },
+      {
+        "name": "Pro",
+        "price": "$15 when billed monthly",
+        "billing_cycle": "monthly",
+        "limits": [
+          "{\"amount\": 15.0, \"amount_basis\": \"doc_maker\", \"amount_period\": \"monthly\", \"billing_cycle\": \"monthly\", \"billing_interval\": \"monthly\", \"currency\": \"USD\", \"plan\": \"Pro\", \"price_scope\": \"listed_unit\", \"price_type\": \"official_current\", \"tax_scope\": \"unknown\", \"tier_name\": \"Pro\", \"verification_event_at\": \"2026-10-11T14:37:39.492217+00:00\", \"verification_method\": \"deterministic_body_row_reparse_v1\", \"verified_at\": \"2026-10-11T14:37:37.275882+00:00\"}"
+        ],
+        "claims": [
+          {
+            "claim": "Pro\n\n$12 USD / month\n\nper \nDoc Maker\n, billed annually\n\n$15 when billed monthly",
+            "source_ids": [
+              "raw-source-2ee7fb10b23da736180d"
+            ],
+            "confidence": 0.8
+          }
+        ]
+      }
+    ],
+    "Confluence": [
+      {
+        "name": "Free",
+        "price": "$0",
+        "billing_cycle": "unknown",
+        "limits": [
+          "{\"amount\": 0.0, \"amount_period\": \"unknown\", \"billing_cycle\": \"unknown\", \"billing_interval\": \"unknown\", \"currency\": \"USD\", \"currency_evidence\": {\"method\": \"same_page_matching_json_ld_offer\", \"offer_hash\": \"9c30b223662b0e1063a6d10d9b3cf94687c288e51989148b41ace2773d3ceb68\", \"plan\": \"Free\", \"price\": \"0\", \"priceCurrency\": \"USD\", \"product\": \"Confluence\"}, \"plan\": \"Free\", \"tax_scope\": \"unknown\", \"tier_name\": \"Free\", \"verification_event_at\": \"2026-10-11T14:37:27.798354+00:00\", \"verification_method\": \"deterministic_body_row_reparse_v1\"}"
+        ],
+        "claims": [
+          {
+            "claim": "Free\nFree forever for 10 users\n$0",
+            "source_ids": [
+              "raw-source-b0da424f12358e533863"
+            ],
+            "confidence": 0.8
+          }
+        ]
+      },
+      {
+        "name": "Premium",
+        "price": "$10.44",
+        "billing_cycle": "monthly",
+        "limits": [
+          "{\"amount\": 10.44, \"amount_basis\": \"user\", \"amount_period\": \"monthly\", \"billing_cycle\": \"monthly\", \"billing_interval\": \"monthly\", \"billing_selection_evidence\": {\"checked\": true, \"interval\": \"monthly\", \"name\": \"billing\", \"value\": null}, \"currency\": \"USD\", \"currency_evidence\": {\"method\": \"same_page_matching_json_ld_offer\", \"offer_hash\": \"4c1a8a285eae2d465eefe174222776894eea0e7e0eb00c23e8f58f5de8b4cd4c\", \"plan\": \"Premium\", \"price\": \"10.44\", \"priceCurrency\": \"USD\", \"product\": \"Confluence\"}, \"plan\": \"Premium\", \"quoted_user_count\": 300, \"tax_scope\": \"unknown\", \"tier_name\": \"Premium\", \"verification_event_at\": \"2026-10-11T14:37:27.798354+00:00\", \"verification_method\": \"deterministic_body_row_reparse_v1\"}"
+        ],
+        "claims": [
+          {
+            "claim": "Premium\nConnect work across teams\n$10.44\nper user / month",
+            "source_ids": [
+              "raw-source-b0da424f12358e533863"
+            ],
+            "confidence": 0.8
+          }
+        ]
+      },
+      {
+        "name": "Standard",
+        "price": "$5.42",
+        "billing_cycle": "monthly",
+        "limits": [
+          "{\"amount\": 5.42, \"amount_basis\": \"user\", \"amount_period\": \"monthly\", \"billing_cycle\": \"monthly\", \"billing_interval\": \"monthly\", \"billing_selection_evidence\": {\"checked\": true, \"interval\": \"monthly\", \"name\": \"billing\", \"value\": null}, \"currency\": \"USD\", \"currency_evidence\": {\"method\": \"same_page_matching_json_ld_offer\", \"offer_hash\": \"21e84268c6bfb389046adfb4deabe54c766e3f53df683f474fbc3ccbf43eefd5\", \"plan\": \"Standard\", \"price\": \"5.42\", \"priceCurrency\": \"USD\", \"product\": \"Confluence\"}, \"plan\": \"Standard\", \"quoted_user_count\": 300, \"tax_scope\": \"unknown\", \"tier_name\": \"Standard\", \"verification_event_at\": \"2026-10-11T14:37:27.798354+00:00\", \"verification_method\": \"deterministic_body_row_reparse_v1\"}"
+        ],
+        "claims": [
+          {
+            "claim": "Standard\nEverything you need to get started\n$5.42\nper user / month",
+            "source_ids": [
+              "raw-source-b0da424f12358e533863"
+            ],
+            "confidence": 0.8
+          }
+        ]
+      }
+    ]
+  },
+  "price_facts": [
+    {
+      "id": "evidence-fact-record-7c6913d3646433e5bdcb65483aaecc09674349b7222f4f8cd5192e5a7e15ad4e",
+      "semantic_id": "evidence-fact-91fc2e6e4ab94fc011ddca153edb5602ca7b5ca861c23ff6ba28c510f3212e26",
+      "evidence_item_ids": [
+        "evidence-item-763dbce8c55aa548bf64"
+      ],
+      "source_id": "raw-source-2ee7fb10b23da736180d",
+      "competitor": "Coda",
+      "dimension": "pricing",
+      "field": "price",
+      "value_json": "\"$33 USD / month\"",
+      "unit": null,
+      "market": "US",
+      "qualifiers_json": "{\"amount\":33.0,\"amount_basis\":\"doc_maker\",\"amount_period\":\"monthly\",\"billing_cycle\":\"annual\",\"billing_interval\":\"annual\",\"currency\":\"USD\",\"plan\":\"Business\",\"price_scope\":\"listed_unit\",\"price_type\":\"official_current\",\"tax_scope\":\"unknown\",\"tier_name\":\"Business\",\"verification_event_at\":\"2026-10-11T14:37:39.492217+00:00\",\"verification_method\":\"deterministic_body_row_reparse_v1\",\"verified_at\":\"2026-10-11T14:37:37.275882+00:00\"}",
+      "quote": "Business\n\n$33 USD / month\n\nper \nDoc Maker\n, billed annually",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-988af54edc777008978b44161f38ed27ee48b3ba5ac131e7d4bec090d0ac733f",
+      "semantic_id": "evidence-fact-a9a86373f3d9350472f6b3fe7b31ff51453f77b0c7732115a4fdf3a45bdb15de",
+      "evidence_item_ids": [
+        "evidence-item-763dbce8c55aa548bf64"
+      ],
+      "source_id": "raw-source-2ee7fb10b23da736180d",
+      "competitor": "Coda",
+      "dimension": "pricing",
+      "field": "price",
+      "value_json": "\"$12 USD / month\"",
+      "unit": null,
+      "market": "US",
+      "qualifiers_json": "{\"amount\":12.0,\"amount_basis\":\"doc_maker\",\"amount_period\":\"monthly\",\"billing_cycle\":\"annual\",\"billing_interval\":\"annual\",\"currency\":\"USD\",\"plan\":\"Pro\",\"price_scope\":\"listed_unit\",\"price_type\":\"official_current\",\"tax_scope\":\"unknown\",\"tier_name\":\"Pro\",\"verification_event_at\":\"2026-10-11T14:37:39.492217+00:00\",\"verification_method\":\"deterministic_body_row_reparse_v1\",\"verified_at\":\"2026-10-11T14:37:37.275882+00:00\"}",
+      "quote": "Pro\n\n$12 USD / month\n\nper \nDoc Maker\n, billed annually",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-dc3096c94c89281a0261ff18df3b82b0f091d2680a32896967794c046b8be199",
+      "semantic_id": "evidence-fact-97dd325cb3318ff9b76ec6f451c23946caf41c0e5ab2f3506c77af301000b228",
+      "evidence_item_ids": [
+        "evidence-item-763dbce8c55aa548bf64"
+      ],
+      "source_id": "raw-source-2ee7fb10b23da736180d",
+      "competitor": "Coda",
+      "dimension": "pricing",
+      "field": "price",
+      "value_json": "\"$40 when billed monthly\"",
+      "unit": null,
+      "market": "US",
+      "qualifiers_json": "{\"amount\":40.0,\"amount_basis\":\"doc_maker\",\"amount_period\":\"monthly\",\"billing_cycle\":\"monthly\",\"billing_interval\":\"monthly\",\"currency\":\"USD\",\"plan\":\"Business\",\"price_scope\":\"listed_unit\",\"price_type\":\"official_current\",\"tax_scope\":\"unknown\",\"tier_name\":\"Business\",\"verification_event_at\":\"2026-10-11T14:37:39.492217+00:00\",\"verification_method\":\"deterministic_body_row_reparse_v1\",\"verified_at\":\"2026-10-11T14:37:37.275882+00:00\"}",
+      "quote": "Business\n\n$33 USD / month\n\nper \nDoc Maker\n, billed annually\n\n$40 when billed monthly",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-dd37989179fd07563d70176402ee85c16bfb574e780328f8a2c8cf79b0b3831a",
+      "semantic_id": "evidence-fact-de17439ae53e958a500348cfbda634312bf2aac2d22bc0fd4650c9112540119a",
+      "evidence_item_ids": [
+        "evidence-item-763dbce8c55aa548bf64"
+      ],
+      "source_id": "raw-source-2ee7fb10b23da736180d",
+      "competitor": "Coda",
+      "dimension": "pricing",
+      "field": "price",
+      "value_json": "\"$15 when billed monthly\"",
+      "unit": null,
+      "market": "US",
+      "qualifiers_json": "{\"amount\":15.0,\"amount_basis\":\"doc_maker\",\"amount_period\":\"monthly\",\"billing_cycle\":\"monthly\",\"billing_interval\":\"monthly\",\"currency\":\"USD\",\"plan\":\"Pro\",\"price_scope\":\"listed_unit\",\"price_type\":\"official_current\",\"tax_scope\":\"unknown\",\"tier_name\":\"Pro\",\"verification_event_at\":\"2026-10-11T14:37:39.492217+00:00\",\"verification_method\":\"deterministic_body_row_reparse_v1\",\"verified_at\":\"2026-10-11T14:37:37.275882+00:00\"}",
+      "quote": "Pro\n\n$12 USD / month\n\nper \nDoc Maker\n, billed annually\n\n$15 when billed monthly",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-e2a6bded4599aaf3c73a3160537fdbcbf4436c8ea444da2183179477c819f542",
+      "semantic_id": "evidence-fact-3199586985060db687d836b12421914dd8b42c88f54c59d45a752ea68719227c",
+      "evidence_item_ids": [
+        "evidence-item-763dbce8c55aa548bf64"
+      ],
+      "source_id": "raw-source-2ee7fb10b23da736180d",
+      "competitor": "Coda",
+      "dimension": "pricing",
+      "field": "price",
+      "value_json": "\"$0 USD\"",
+      "unit": null,
+      "market": "US",
+      "qualifiers_json": "{\"amount\":0.0,\"amount_period\":\"unknown\",\"billing_cycle\":\"unknown\",\"billing_interval\":\"unknown\",\"currency\":\"USD\",\"plan\":\"Free\",\"price_scope\":\"listed_unit\",\"price_type\":\"official_current\",\"tax_scope\":\"unknown\",\"tier_name\":\"Free\",\"verification_event_at\":\"2026-10-11T14:37:39.492217+00:00\",\"verification_method\":\"deterministic_body_row_reparse_v1\",\"verified_at\":\"2026-10-11T14:37:37.275882+00:00\"}",
+      "quote": "Free\n\n$0 USD",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-16c8ea4420f804808c6f4f0b9a4fa0cffe4573850a8f1cf151f96e15334e8004",
+      "semantic_id": "evidence-fact-4ef2ae8dccaf5f27a2a9e0e64eaa2d14e36086dd1dc7e1f081ec8b23e275f8fa",
+      "evidence_item_ids": [
+        "evidence-item-31f1ec797c45ced48692"
+      ],
+      "source_id": "raw-source-b0da424f12358e533863",
+      "competitor": "Confluence",
+      "dimension": "pricing",
+      "field": "price",
+      "value_json": "\"$10.44\"",
+      "unit": null,
+      "market": "US",
+      "qualifiers_json": "{\"amount\":10.44,\"amount_basis\":\"user\",\"amount_period\":\"monthly\",\"billing_cycle\":\"monthly\",\"billing_interval\":\"monthly\",\"billing_selection_evidence\":{\"checked\":true,\"interval\":\"monthly\",\"name\":\"billing\",\"value\":null},\"currency\":\"USD\",\"currency_evidence\":{\"method\":\"same_page_matching_json_ld_offer\",\"offer_hash\":\"4c1a8a285eae2d465eefe174222776894eea0e7e0eb00c23e8f58f5de8b4cd4c\",\"plan\":\"Premium\",\"price\":\"10.44\",\"priceCurrency\":\"USD\",\"product\":\"Confluence\"},\"plan\":\"Premium\",\"quoted_user_count\":300,\"tax_scope\":\"unknown\",\"tier_name\":\"Premium\",\"verification_event_at\":\"2026-10-11T14:37:27.798354+00:00\",\"verification_method\":\"deterministic_body_row_reparse_v1\"}",
+      "quote": "Premium\nConnect work across teams\n$10.44\nper user / month",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-30e5a72af4dd852e42308006b63057b3389a8d026456301ac8ad72cb5de64a70",
+      "semantic_id": "evidence-fact-c6c36360f8fa15b4b415d99cdeab50ca9cf4bb23a49d3e768674ba54e65314d0",
+      "evidence_item_ids": [
+        "evidence-item-31f1ec797c45ced48692"
+      ],
+      "source_id": "raw-source-b0da424f12358e533863",
+      "competitor": "Confluence",
+      "dimension": "pricing",
+      "field": "price",
+      "value_json": "\"$0\"",
+      "unit": null,
+      "market": "US",
+      "qualifiers_json": "{\"amount\":0.0,\"amount_period\":\"unknown\",\"billing_cycle\":\"unknown\",\"billing_interval\":\"unknown\",\"currency\":\"USD\",\"currency_evidence\":{\"method\":\"same_page_matching_json_ld_offer\",\"offer_hash\":\"9c30b223662b0e1063a6d10d9b3cf94687c288e51989148b41ace2773d3ceb68\",\"plan\":\"Free\",\"price\":\"0\",\"priceCurrency\":\"USD\",\"product\":\"Confluence\"},\"plan\":\"Free\",\"tax_scope\":\"unknown\",\"tier_name\":\"Free\",\"verification_event_at\":\"2026-10-11T14:37:27.798354+00:00\",\"verification_method\":\"deterministic_body_row_reparse_v1\"}",
+      "quote": "Free\nFree forever for 10 users\n$0",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-488848c5e0d4511b8aea8403721d58bcc487a2ab074b1240544622b007dc6955",
+      "semantic_id": "evidence-fact-f332cfaa5fc2ef2c90483412dfcbb554c69d8b0fc8696857420eb88b49649733",
+      "evidence_item_ids": [
+        "evidence-item-31f1ec797c45ced48692"
+      ],
+      "source_id": "raw-source-b0da424f12358e533863",
+      "competitor": "Confluence",
+      "dimension": "pricing",
+      "field": "price",
+      "value_json": "\"$5.42\"",
+      "unit": null,
+      "market": "US",
+      "qualifiers_json": "{\"amount\":5.42,\"amount_basis\":\"user\",\"amount_period\":\"monthly\",\"billing_cycle\":\"monthly\",\"billing_interval\":\"monthly\",\"billing_selection_evidence\":{\"checked\":true,\"interval\":\"monthly\",\"name\":\"billing\",\"value\":null},\"currency\":\"USD\",\"currency_evidence\":{\"method\":\"same_page_matching_json_ld_offer\",\"offer_hash\":\"21e84268c6bfb389046adfb4deabe54c766e3f53df683f474fbc3ccbf43eefd5\",\"plan\":\"Standard\",\"price\":\"5.42\",\"priceCurrency\":\"USD\",\"product\":\"Confluence\"},\"plan\":\"Standard\",\"quoted_user_count\":300,\"tax_scope\":\"unknown\",\"tier_name\":\"Standard\",\"verification_event_at\":\"2026-10-11T14:37:27.798354+00:00\",\"verification_method\":\"deterministic_body_row_reparse_v1\"}",
+      "quote": "Standard\nEverything you need to get started\n$5.42\nper user / month",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-1c6b69e833c9d7e22ff9495cbc90d659797e6056d468ce2b99c79e1d37771724",
+      "semantic_id": "evidence-fact-1c1116cded18a9a40a7c983c3d9924fa9f1a0efe2e4d7bc3809cb13067d608d1",
+      "evidence_item_ids": [
+        "evidence-item-0f8cc78b499f57c83e7e"
+      ],
+      "source_id": "raw-source-84d93774a937707e285a",
+      "competitor": "Notion",
+      "dimension": "pricing",
+      "field": "price",
+      "value_json": "\"$0\"",
+      "unit": null,
+      "market": "US",
+      "qualifiers_json": "{\"amount\":0.0,\"amount_basis\":\"member\",\"amount_period\":\"monthly\",\"billing_cycle\":\"unknown\",\"billing_interval\":\"unknown\",\"currency\":\"USD\",\"plan\":\"Free\",\"price_scope\":\"listed_unit\",\"price_type\":\"official_current\",\"tax_scope\":\"unknown\",\"tier_name\":\"Free\",\"verification_event_at\":\"2026-10-11T14:37:12.595909+00:00\",\"verification_method\":\"deterministic_body_row_reparse_v1\",\"verified_at\":\"2026-10-11T14:37:10.898733+00:00\"}",
+      "quote": "Price in\nUSD\nEssentials for staying organized.\nFree\n$0\nper member / month",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-cfdc2d617b07790430a0dd4168178e620ede78b0ae2af9d9f64c593b8623fd8b",
+      "semantic_id": "evidence-fact-7d5f3fae3859933c2a7791f0db20fdaed1d15a37aa2ba35f0b2ff83921fb32fd",
+      "evidence_item_ids": [
+        "evidence-item-0f8cc78b499f57c83e7e"
+      ],
+      "source_id": "raw-source-84d93774a937707e285a",
+      "competitor": "Notion",
+      "dimension": "pricing",
+      "field": "price",
+      "value_json": "\"$10\"",
+      "unit": null,
+      "market": "US",
+      "qualifiers_json": "{\"amount\":10.0,\"amount_basis\":\"member\",\"amount_period\":\"monthly\",\"billing_cycle\":\"annual\",\"billing_interval\":\"annual\",\"billing_selection_evidence\":{\"checked\":true,\"interval\":\"annual\",\"name\":\"billingInterval\",\"value\":\"year\"},\"currency\":\"USD\",\"plan\":\"Plus\",\"price_scope\":\"listed_unit\",\"price_type\":\"official_current\",\"tax_scope\":\"unknown\",\"tier_name\":\"Plus\",\"verification_event_at\":\"2026-10-11T14:37:12.595909+00:00\",\"verification_method\":\"deterministic_body_row_reparse_v1\",\"verified_at\":\"2026-10-11T14:37:10.898733+00:00\"}",
+      "quote": "Price in\nUSD\nEssentials for staying organized.\nFree\n$0\nper member / month\n\nFor individuals to organize personal projects and life.\n\nSign up\n\nIncludes:\n\nTrial of Notion AI\nBasic forms\nBasic sites\nNotion Calendar\nDatabases including subtasks, dependencies, custom properties and more\nPlus\n$10\nper member / month",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-ea3122cb1d2b39b30447a707d9f65107587907e9ad65527121539e869d94c8bb",
+      "semantic_id": "evidence-fact-6e876783bd3324466db97acea5baa86593a94f8fe89ba4e4adaf0bb75624f0ba",
+      "evidence_item_ids": [
+        "evidence-item-0f8cc78b499f57c83e7e"
+      ],
+      "source_id": "raw-source-84d93774a937707e285a",
+      "competitor": "Notion",
+      "dimension": "pricing",
+      "field": "price",
+      "value_json": "\"$20\"",
+      "unit": null,
+      "market": "US",
+      "qualifiers_json": "{\"amount\":20.0,\"amount_basis\":\"member\",\"amount_period\":\"monthly\",\"billing_cycle\":\"annual\",\"billing_interval\":\"annual\",\"billing_selection_evidence\":{\"checked\":true,\"interval\":\"annual\",\"name\":\"billingInterval\",\"value\":\"year\"},\"currency\":\"USD\",\"plan\":\"Business\",\"price_scope\":\"listed_unit\",\"price_type\":\"official_current\",\"tax_scope\":\"unknown\",\"tier_name\":\"Business\",\"verification_event_at\":\"2026-10-11T14:37:12.595909+00:00\",\"verification_method\":\"deterministic_body_row_reparse_v1\",\"verified_at\":\"2026-10-11T14:37:10.898733+00:00\"}",
+      "quote": "Price in\nUSD\nEssentials for staying organized.\nFree\n$0\nper member / month\n\nFor individuals to organize personal projects and life.\n\nSign up\n\nIncludes:\n\nTrial of Notion AI\nBasic forms\nBasic sites\nNotion Calendar\nDatabases including subtasks, dependencies, custom properties and more\nPlus\n$10\nper member / month\n\nFor small teams and professionals to work together.\n\nGet started\n\nEverything in Free, and:\n\nTrial of Notion AI\nCustom forms\nCustom sites\nUnlimited charts\nUnlimited collaborative blocks\nUnlimited file uploads\nBasic connections\nThe AI workspace for work that matters.\nBusiness\nRecommended\n$20\nper member / month",
+      "status": "supported",
+      "confidence": 0.8
+    }
+  ],
+  "dimension_audits": [
+    {
+      "competitor": "Notion",
+      "dimension": "feature",
+      "consumption_id": "evidence-use-cd30aeb7e8754533b553b210789d61c2",
+      "claims": [
+        {
+          "claim": {
+            "id": "claim-440115b825161037e684",
+            "text": "Notion 支持多人同时编辑同一页面：官方说明称你可以与不限人数的人同时编辑同一页面。",
+            "kind": "fact",
+            "competitor": "Notion",
+            "dimension": "feature",
+            "fact_ids": [
+              "evidence-fact-record-48932658ddf38e0127e6ecfeefbe1dead227e22af524ba2d8f2724e3db756287"
+            ],
+            "source_ids": [
+              "raw-source-f7a81bf787f1e9e932e7"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-440115b825161037e684",
+            "verdict": "supported",
+            "reason": "The bound evidence_terms value includes the verbatim line 'You can edit the same page at the same time with an unlimited number of people,' which directly supports simultaneous editing with unlimited people. The claim's '官方说明称' framing is consistent with this documented source text."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-269d26002594b3785f70",
+            "text": "Notion 的评论可见性：页面顶部的时间记录可显示谁在何时做了哪些更改，并且你也能看到人们在哪里留下了评论。",
+            "kind": "fact",
+            "competitor": "Notion",
+            "dimension": "feature",
+            "fact_ids": [
+              "evidence-fact-record-a4f4e009a7b42065e2f4232e2d530dd3c4e42fb50e0c70d4019b692bd5771686"
+            ],
+            "source_ids": [
+              "raw-source-f7a81bf787f1e9e932e7"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-269d26002594b3785f70",
+            "verdict": "supported",
+            "reason": "The bound evidence_terms value includes 'Click 🕘 at the top of the page to see who made what changes and when' and 'You can also see where people have left comments,' supporting both the time-record change visibility and comment-location visibility subclaims."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-79a4b5b3b0ad74d6c249",
+            "text": "Notion 的“Can edit”权限级别：选择该访问级别的人可以编辑页面内容，但不能将页面分享给他人。",
+            "kind": "fact",
+            "competitor": "Notion",
+            "dimension": "feature",
+            "fact_ids": [
+              "evidence-fact-record-a668f200a1bc269c792e24c46e5c82931f69a5dd18258b32561866f2d6920a60"
+            ],
+            "source_ids": [
+              "raw-source-1cda8c45e8876df4f36c"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-79a4b5b3b0ad74d6c249",
+            "verdict": "supported",
+            "reason": "The bound evidence_terms value and quote q0 state that the 'Can edit' access level lets people edit page content but not share the page with others, matching the claim exactly."
+          },
+          "rule_reasons": []
+        }
+      ],
+      "gaps": [
+        "context_budget_exceeded"
+      ],
+      "review_context_bytes": [
+        5773
+      ]
+    },
+    {
+      "competitor": "Confluence",
+      "dimension": "feature",
+      "consumption_id": "evidence-use-6a9785a6e0314ff2be2c1b0f8a960ca7",
+      "claims": [
+        {
+          "claim": {
+            "id": "claim-0fdae236373198e6a187",
+            "text": "Confluence 支持实时协作编辑：你和最多29名队友可以同时实时编辑同一页面，更改会自动保存和同步，使所有正在编辑的人看到相同内容。",
+            "kind": "fact",
+            "competitor": "Confluence",
+            "dimension": "feature",
+            "fact_ids": [
+              "evidence-fact-record-6630f7617dca79e9360bdfdd30c5fd96ed69bd0a3f6b1e70f68ce0c07dae92fb"
+            ],
+            "source_ids": [
+              "raw-source-a5a35d9a74b6bc0454f0"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-0fdae236373198e6a187",
+            "verdict": "supported",
+            "reason": "The bound evidence_terms value and quote q2 state 'You and up to 29 teammates can edit a page together in real time in Confluence. Changes save and sync automatically so that everyone editing sees the same thing.' This matches the claim's subclaims: real-time collaborative editing, you plus up to 29 teammates, automatic save/sync, and all editors seeing the same content."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-e425b1e161e2a69b50b1",
+            "text": "Confluence 支持在编辑页面时添加行内评论；只有处于该编辑会话中的人可以查看、回复和解决这些评论，页面发布后任何未解决的评论可被页面查看者看到。",
+            "kind": "fact",
+            "competitor": "Confluence",
+            "dimension": "feature",
+            "fact_ids": [
+              "evidence-fact-record-65ca58f2cc9decdf953b47f72acbb90bccce99bdc9d2cfa44a41db3dde4d0d2b"
+            ],
+            "source_ids": [
+              "raw-source-a5a35d9a74b6bc0454f0"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-e425b1e161e2a69b50b1",
+            "verdict": "supported",
+            "reason": "The bound evidence_terms value and quote q0 state 'Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers.' This matches the claim's subclaims about inline comments during editing, visibility/reply/resolve limited to the editing session, and unresolved comments visible to page viewers after publication."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-cc68e134621fa49ef955",
+            "text": "在 Confluence 中创建页面或博客文章，需要拥有该空间的“Add content”权限。",
+            "kind": "fact",
+            "competitor": "Confluence",
+            "dimension": "feature",
+            "fact_ids": [
+              "evidence-fact-record-a6981ef70e4f6aa1044c8df11b3222bbdb2987c7922f79a53844a9c437355d68"
+            ],
+            "source_ids": [
+              "raw-source-a5a35d9a74b6bc0454f0"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-cc68e134621fa49ef955",
+            "verdict": "supported",
+            "reason": "The bound evidence_terms value and quote q1 state 'To create a page or blog post, you need the Add content permissions for that space.' This directly supports the claim that creating a page or blog post in Confluence requires the 'Add content' permission for that space."
+          },
+          "rule_reasons": []
+        }
+      ],
+      "gaps": [
+        "context_budget_exceeded"
+      ],
+      "review_context_bytes": [
+        6770
+      ]
+    },
+    {
+      "competitor": "Coda",
+      "dimension": "feature",
+      "consumption_id": "evidence-use-25ad262e16d341ffad4e004f8975f4ed",
+      "claims": [
+        {
+          "claim": {
+            "id": "claim-7c815743047084cc385d",
+            "text": "Superhuman Docs 支持在同一文档中进行实时共同编辑和线程化评论，团队可以在文档内创建、编辑并给出反馈。",
+            "kind": "fact",
+            "competitor": "Coda",
+            "dimension": "feature",
+            "fact_ids": [
+              "evidence-fact-record-fd0a4637ad0785637cbd7742a1e9660da0819a145707530072b20019cb0006dc"
+            ],
+            "source_ids": [
+              "raw-source-34a67281db3b66591d6c"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-7c815743047084cc385d",
+            "verdict": "supported",
+            "reason": "The bound evidence_terms value and quote q1 state that with Superhuman Docs, teams can create, edit, and give feedback in the same document, and that Docs makes this possible with real-time co-editing and threaded comments. This directly supports real-time co-editing and threaded comments in the same document, with teams creating, editing, and giving feedback."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-7507359480a55879b437",
+            "text": "在 Superhuman Docs 中，可以以几种不同方式向文档的画布和表格添加评论。",
+            "kind": "fact",
+            "competitor": "Coda",
+            "dimension": "feature",
+            "fact_ids": [
+              "evidence-fact-record-aba7ec7a51698f558ab61c924a644e5c6fe7a61cce8d1e34a263eb78ad37fac6"
+            ],
+            "source_ids": [
+              "raw-source-cfd5046889caadc3c3bd"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-7507359480a55879b437",
+            "verdict": "supported",
+            "reason": "The bound evidence_terms value and quote q2 state: 'You can add comments to the canvas and tables of a doc in a few different ways,' which directly supports adding comments to the canvas and tables in a few different ways."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-6fefb4ffb7eb3042f5c2",
+            "text": "在 Superhuman Docs 中，Full access 权限面向需要帮助管理文档的可信协作者，除编辑权限外还包含其他管理能力。",
+            "kind": "fact",
+            "competitor": "Coda",
+            "dimension": "feature",
+            "fact_ids": [
+              "evidence-fact-record-a45ec73e5d0499e845630929f5fc5533c33174c6dd9f2b7b555b2c8aa742640c"
+            ],
+            "source_ids": [
+              "raw-source-970d5d3dabcdab0bf470"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-6fefb4ffb7eb3042f5c2",
+            "verdict": "supported",
+            "reason": "The bound evidence_terms value and quote q0 state: 'Full access | This permission is intended for trusted collaborators who need to help manage the doc. In addition to edit access, they can…' This supports that Full access is for trusted collaborators who need to help manage the doc and includes capabilities beyond edit access."
+          },
+          "rule_reasons": []
+        }
+      ],
+      "gaps": [
+        "context_budget_exceeded"
+      ],
+      "review_context_bytes": [
+        6848
+      ]
+    },
+    {
+      "competitor": "Notion",
+      "dimension": "pricing",
+      "consumption_id": "evidence-use-bf536d82b5e74aa692933d3329e43741",
+      "claims": [
+        {
+          "claim": {
+            "id": "claim-0d8449a7365d54e37e05",
+            "text": "Free 套餐页面标价为 0 USD。页面按每位成员每月展示。",
+            "kind": "fact",
+            "competitor": "Notion",
+            "dimension": "pricing",
+            "fact_ids": [
+              "evidence-fact-record-1c6b69e833c9d7e22ff9495cbc90d659797e6056d468ce2b99c79e1d37771724"
+            ],
+            "source_ids": [
+              "raw-source-84d93774a937707e285a"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-0d8449a7365d54e37e05",
+            "verdict": "supported",
+            "reason": "Quote q0 shows Free plan at $0 per member / month, matching the claimed 0 USD and per-member-per-month display."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-87e521fce64496c16768",
+            "text": "Plus 套餐页面标价为 10 USD。页面按每位成员每月展示。该标价对应页面所选的年付选项。",
+            "kind": "fact",
+            "competitor": "Notion",
+            "dimension": "pricing",
+            "fact_ids": [
+              "evidence-fact-record-cfdc2d617b07790430a0dd4168178e620ede78b0ae2af9d9f64c593b8623fd8b"
+            ],
+            "source_ids": [
+              "raw-source-84d93774a937707e285a"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-87e521fce64496c16768",
+            "verdict": "supported",
+            "reason": "Quote q1 shows Plus at $10 per member / month, and the fact qualifiers include billing_selection_evidence with checked annual interval, supporting the annual-selection qualifier."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-fcc2ad08c631ab3bcb2c",
+            "text": "Business 套餐页面标价为 20 USD。页面按每位成员每月展示。该标价对应页面所选的年付选项。",
+            "kind": "fact",
+            "competitor": "Notion",
+            "dimension": "pricing",
+            "fact_ids": [
+              "evidence-fact-record-ea3122cb1d2b39b30447a707d9f65107587907e9ad65527121539e869d94c8bb"
+            ],
+            "source_ids": [
+              "raw-source-84d93774a937707e285a"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-fcc2ad08c631ab3bcb2c",
+            "verdict": "supported",
+            "reason": "Quote q2 shows Business at $20 per member / month, and the fact qualifiers include billing_selection_evidence with checked annual interval, supporting the annual-selection qualifier."
+          },
+          "rule_reasons": []
+        }
+      ],
+      "gaps": [
+        "billing_interval",
+        "seat_type",
+        "tax_scope"
+      ],
+      "review_context_bytes": [
+        4580
+      ]
+    },
+    {
+      "competitor": "Confluence",
+      "dimension": "pricing",
+      "consumption_id": "evidence-use-cd3ee084f0174364b73ac4833377605b",
+      "claims": [
+        {
+          "claim": {
+            "id": "claim-5634a6a6d51bc118aa4e",
+            "text": "Premium 套餐页面标价为 10.44 USD。页面按每位用户每月展示。该标价对应页面所选的月付选项。页面所选人数为 300 名用户，尚未核验目标团队人数对应的报价。",
+            "kind": "fact",
+            "competitor": "Confluence",
+            "dimension": "pricing",
+            "fact_ids": [
+              "evidence-fact-record-16c8ea4420f804808c6f4f0b9a4fa0cffe4573850a8f1cf151f96e15334e8004"
+            ],
+            "source_ids": [
+              "raw-source-b0da424f12358e533863"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-5634a6a6d51bc118aa4e",
+            "verdict": "supported",
+            "reason": "Quote q0 shows Premium at $10.44 per user / month, and the fact qualifiers confirm currency USD, monthly billing selection, and quoted_user_count 300. The claim's caveat that the target team size quote is unverified matches the captured 300-user context."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-8b0cb71b2c7780d09f0a",
+            "text": "Free 套餐页面标价为 0 USD。",
+            "kind": "fact",
+            "competitor": "Confluence",
+            "dimension": "pricing",
+            "fact_ids": [
+              "evidence-fact-record-30e5a72af4dd852e42308006b63057b3389a8d026456301ac8ad72cb5de64a70"
+            ],
+            "source_ids": [
+              "raw-source-b0da424f12358e533863"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-8b0cb71b2c7780d09f0a",
+            "verdict": "supported",
+            "reason": "Quote q1 shows Free at $0, and the fact qualifiers confirm plan Free and currency USD. The claim asserts only the page-listed price, which is directly supported."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-730f4833db0d500d30ca",
+            "text": "Standard 套餐页面标价为 5.42 USD。页面按每位用户每月展示。该标价对应页面所选的月付选项。页面所选人数为 300 名用户，尚未核验目标团队人数对应的报价。",
+            "kind": "fact",
+            "competitor": "Confluence",
+            "dimension": "pricing",
+            "fact_ids": [
+              "evidence-fact-record-488848c5e0d4511b8aea8403721d58bcc487a2ab074b1240544622b007dc6955"
+            ],
+            "source_ids": [
+              "raw-source-b0da424f12358e533863"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-730f4833db0d500d30ca",
+            "verdict": "supported",
+            "reason": "Quote q2 shows Standard at $5.42 per user / month, and the fact qualifiers confirm currency USD, monthly billing selection, and quoted_user_count 300. The claim's caveat that the target team size quote is unverified matches the captured 300-user context."
+          },
+          "rule_reasons": []
+        }
+      ],
+      "gaps": [
+        "billing_interval",
+        "seat_type",
+        "tax_scope"
+      ],
+      "review_context_bytes": [
+        4202
+      ]
+    },
+    {
+      "competitor": "Coda",
+      "dimension": "pricing",
+      "consumption_id": "evidence-use-a984b5d68a854933acc2293112bab885",
+      "claims": [
+        {
+          "claim": {
+            "id": "claim-065e8b4a6614c0cf8cc0",
+            "text": "Business 套餐页面标价为 33 USD。页面按每位 Doc Maker 每月展示。该标价要求年付。",
+            "kind": "fact",
+            "competitor": "Coda",
+            "dimension": "pricing",
+            "fact_ids": [
+              "evidence-fact-record-7c6913d3646433e5bdcb65483aaecc09674349b7222f4f8cd5192e5a7e15ad4e"
+            ],
+            "source_ids": [
+              "raw-source-2ee7fb10b23da736180d"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-065e8b4a6614c0cf8cc0",
+            "verdict": "supported",
+            "reason": "Quote q0 shows Business $33 USD / month per Doc Maker, billed annually, matching amount, currency, plan, per-Doc-Maker monthly unit, and annual billing requirement."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-ffe0bfc42a69d4651193",
+            "text": "Pro 套餐页面标价为 12 USD。页面按每位 Doc Maker 每月展示。该标价要求年付。",
+            "kind": "fact",
+            "competitor": "Coda",
+            "dimension": "pricing",
+            "fact_ids": [
+              "evidence-fact-record-988af54edc777008978b44161f38ed27ee48b3ba5ac131e7d4bec090d0ac733f"
+            ],
+            "source_ids": [
+              "raw-source-2ee7fb10b23da736180d"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-ffe0bfc42a69d4651193",
+            "verdict": "supported",
+            "reason": "Quote q1 shows Pro $12 USD / month per Doc Maker, billed annually, matching amount, currency, plan, per-Doc-Maker monthly unit, and annual billing requirement."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-2d77211cb2a42ea631f6",
+            "text": "Business 套餐页面标价为 40 USD。页面按每位 Doc Maker 每月展示。该标价为月付。",
+            "kind": "fact",
+            "competitor": "Coda",
+            "dimension": "pricing",
+            "fact_ids": [
+              "evidence-fact-record-dc3096c94c89281a0261ff18df3b82b0f091d2680a32896967794c046b8be199"
+            ],
+            "source_ids": [
+              "raw-source-2ee7fb10b23da736180d"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-2d77211cb2a42ea631f6",
+            "verdict": "supported",
+            "reason": "Quote q2 shows Business $40 when billed monthly, and the fact qualifiers confirm per Doc Maker monthly basis, matching amount, currency, plan, unit, and monthly billing."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-a80fa2b29edd34dcda8b",
+            "text": "Pro 套餐页面标价为 15 USD。页面按每位 Doc Maker 每月展示。该标价为月付。",
+            "kind": "fact",
+            "competitor": "Coda",
+            "dimension": "pricing",
+            "fact_ids": [
+              "evidence-fact-record-dd37989179fd07563d70176402ee85c16bfb574e780328f8a2c8cf79b0b3831a"
+            ],
+            "source_ids": [
+              "raw-source-2ee7fb10b23da736180d"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-a80fa2b29edd34dcda8b",
+            "verdict": "supported",
+            "reason": "Quote q3 shows Pro $15 when billed monthly, and the fact qualifiers confirm per Doc Maker monthly basis, matching amount, currency, plan, unit, and monthly billing."
+          },
+          "rule_reasons": []
+        },
+        {
+          "claim": {
+            "id": "claim-4172f69bb83486d4ecd2",
+            "text": "Free 套餐页面标价为 0 USD。",
+            "kind": "fact",
+            "competitor": "Coda",
+            "dimension": "pricing",
+            "fact_ids": [
+              "evidence-fact-record-e2a6bded4599aaf3c73a3160537fdbcbf4436c8ea444da2183179477c819f542"
+            ],
+            "source_ids": [
+              "raw-source-2ee7fb10b23da736180d"
+            ]
+          },
+          "status": "supported",
+          "review": {
+            "claim_id": "claim-4172f69bb83486d4ecd2",
+            "verdict": "supported",
+            "reason": "Quote q4 shows Free $0 USD, matching the claimed plan and amount/currency."
+          },
+          "rule_reasons": []
+        }
+      ],
+      "gaps": [
+        "billing_interval",
+        "seat_type",
+        "tax_scope"
+      ],
+      "review_context_bytes": [
+        5897
+      ]
+    }
+  ],
+  "comparison_matrix": {
+    "competitors": [
+      "Notion",
+      "Confluence",
+      "Coda"
+    ],
+    "target_product": "Notion",
+    "dimensions": [
+      "feature",
+      "pricing"
+    ],
+    "cells": [
+      {
+        "competitor": "Notion",
+        "role": "target",
+        "dimension": "feature",
+        "value": "原文：- Can edit content : This permission level is only found on database pages. People with this level of access can create and edit pages within the database, and edit property values for those pages. However, they will not be able to change the structure of the database and its properties, views, sorts, or filters. Learn more about databases here →；完整条件：Sometimes you'll want to share a page with only select members of your workspace — like a meeting doc for 1:1s with your manager, or notes for a small project team. To share a page with specific people:\n原文：Notion is built for collaboration, so there are many ways to share your work with other people. Our permission levels ensure that your collaborators access your content exactly the way you want them to.；完整条件：Notion is built for collaboration, so there are many ways to share your work with other people. Our permission levels ensure that your collaborators access your content exactly the way you want them to.\nJump to FAQs\nSelect Share at the top of any page to:；Sometimes you'll want to share a page with only select members of your workspace — like a meeting doc for 1:1s with your manager, or notes for a small project team. To share a page with specific people:\n原文：- Can create : This permission level is only found on database pages and is available on Business and Enterprise plans. People with this level of access can create new pages within the database, but can’t view or edit existing pages they haven't been individually granted access to. This is useful when you want contributors to submit entries (like IT tickets, task requests, or form responses) without being able to see or modify other people's entries.；完整条件：Sometimes you'll want to share a page with only select members of your workspace — like a meeting doc for 1:1s with your manager, or notes for a small project team. To share a page with specific people:\n原文：You can edit the same page at the same time with an unlimited number of people.；完整条件：Notion has several features designed to improve and increase the velocity of communication with your team — whether you're all editing the same page or working across time zones.\nYou can edit the same page at the same time with an unlimited number of people.\n- Their profile photos will show you where they're looking or working on the page.\n- Edits and comments made by everyone will appear to you instantly.\n原文：- Full access : People with full access to a page can edit any of the content it contains and share the page with anyone they want.；完整条件：For every person, group, or teamspace you share a page with, you can assign a different permission level. This helps to keep private information private and gives you granular, precise control over your work.\nHere are the different permission levels in Notion:\n- Full access : People with full access to a page can edit any of the content it contains and share the page with anyone they want.；Sometimes you'll want to share a page with only select members of your workspace — like a meeting doc for 1:1s with your manager, or notes for a small project team. To share a page with specific people:\n原文：- Content added is highlighted in blue.\n  - Gray strikethrough shows what's been removed.\n  - You can also see where people have left comments.；完整条件：- Edits and comments made by everyone will appear to you instantly.\n- Click 🕘 at the top of the page to see who made what changes and when.\n  - Content added is highlighted in blue.\n  - Gray strikethrough shows what's been removed.\n  - You can also see where people have left comments.\nThere are several ways to communicate with your teammates inside Notion — hopefully helping you cut down on meetings and status checks.\nMention a teammate\n原文：- Can edit : Select this level of access for people who should be able to edit the content on the page, but not share the page with others.；完整条件：Sometimes you'll want to share a page with only select members of your workspace — like a meeting doc for 1:1s with your manager, or notes for a small project team. To share a page with specific people:\n原文：- Can comment : Select this level of access for people who should only have the ability to comment on a page. They won’t be able to edit or share the content.；完整条件：Sometimes you'll want to share a page with only select members of your workspace — like a meeting doc for 1:1s with your manager, or notes for a small project team. To share a page with specific people:",
+        "source_ids": [
+          "raw-source-1cda8c45e8876df4f36c",
+          "raw-source-f7a81bf787f1e9e932e7"
+        ],
+        "confidence": 0.7999999999999999
+      },
+      {
+        "competitor": "Confluence",
+        "role": "competitor",
+        "dimension": "feature",
+        "value": "原文：Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers.；完整条件：- Avatars — People who are currently editing have colored avatars, while people who made edits and left the page appear in greyscale.\n- Invite to edit —Select the plus sign to invite others to edit your page with you from inside the editor. Either copy and send them the page link, or send them a Confluence notification, which will reach them via email and workbox.\nInline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers.\n原文：You and up to 29 teammates can edit a page together in real time in Confluence. Changes save and sync automatically so that everyone editing sees the same thing.；完整条件：Collaborative editing\nYou and up to 29 teammates can edit a page together in real time in Confluence. Changes save and sync automatically so that everyone editing sees the same thing.\n- Avatars — People who are currently editing have colored avatars, while people who made edits and left the page appear in greyscale.\n- Invite to edit —Select the plus sign to invite others to edit your page with you from inside the editor. Either copy and send them the page link, or send them a Confluence notification, which will reach them via email and workbox.；Inline comments can be added while editing a page. Only those in your editing session can see, reply to, and resolve the comments. Once the page has been published, any unresolved comments can be seen by page viewers.\n原文：Public links\nShare view-only pages externally, such as release notes and customer FAQs.；完整条件：Page insights\nGet engagement analytics on page views and user views.\nPublic links\nShare view-only pages externally, such as release notes and customer FAQs.\nAnonymous access\nMake your Confluence site available to users outside of your organization.；Share view-only pages externally, such as release notes and customer FAQs.；Make your Confluence site available to users outside of your organization.\n原文：To create a page or blog post, you need the Add content permissions for that space.；完整条件：Adding content contextually puts it where you want it to live from the start. Made a mistake or changed your mind? Use the drag and drop feature in the content tree to drag the page where you want it or use drag and drop to reorder the pages.\nCan't create a page or blog?\nTo create a page or blog post, you need the Add content permissions for that space.；Can't create a page or blog?\n原文：You can set general access to 3 states of permissions:；完整条件：Even in a shared space, you may have content that you're not ready to share with everyone yet. Or perhaps you have some confidential content that's only meant for a few eyes. Whatever the reason, Confluence lets you set view and edit restrictions at the content level so you can keep your content as open or as closed as you need.；You can’t restrict access to content on the free plan.；Confluence’s core tenet is about getting the right knowledge to the right people in your organization. To support this, Confluence’s permissions are open by default, which means that the content wants to be available to everyone unless otherwise noted.；The fundamental piece of this open-by-default model is represented by General access. This refers to the general audience for the content item — everyone who has at least view access to the space a content item lives in, or, if a parent item is restricted, everyone who has at least view access to the parent item.；- If the content item is restricted by a parent, then you can check who has access to the parent item by selecting this parent in the line “Anyone on this parent”；- Restricted: Only specific people can view or edit\n原文：Commenting\nMake it a team effort with in-line and page comments, likes, and visual elements such as images, GIFs, and emojis.；完整条件：Real-time editing\nTake notes, plan projects, and refine ideas. Seamlessly edit content with the whole team at the same time or across time zones.\nCommenting\nMake it a team effort with in-line and page comments, likes, and visual elements such as images, GIFs, and emojis.\nNotifications\nAlert your teammates when you tag them or assign a task so everyone stays on top of progress.；Share view-only pages externally, such as release notes and customer FAQs.；Make your Confluence site available to users outside of your organization.\n原文：Real-time editing\nTake notes, plan projects, and refine ideas. Seamlessly edit content with the whole team at the same time or across time zones.；完整条件：Confluence is your organization’s single source of truth.\nGet on the same page\nReal-time editing\nTake notes, plan projects, and refine ideas. Seamlessly edit content with the whole team at the same time or across time zones.\nCommenting\nMake it a team effort with in-line and page comments, likes, and visual elements such as images, GIFs, and emojis.；Share view-only pages externally, such as release notes and customer FAQs.；Make your Confluence site available to users outside of your organization.",
+        "source_ids": [
+          "raw-source-859c368a1a9cd092356d",
+          "raw-source-940ce7ba9cc5de38d91a",
+          "raw-source-a5a35d9a74b6bc0454f0"
+        ],
+        "confidence": 0.7500000000000001
+      },
+      {
+        "competitor": "Coda",
+        "role": "competitor",
+        "dimension": "feature",
+        "value": "原文：When you share a doc, you decide what level of access the invitees will have. The following table covers all of the permission options for docs. Note that some permission levels are limited either to certain plan levels or to certain sharing methods.；完整条件：Doc permissions\nWhen you share a doc, you decide what level of access the invitees will have. The following table covers all of the permission options for docs. Note that some permission levels are limited either to certain plan levels or to certain sharing methods.\n| Permission level | Abilities include… | Exclusions |\n|---|---|---|；Continue reading to learn about the different sharing methods available to you.\n原文：You can only comment on the entire row；完整条件：\n原文：| Full access | This permission is intended for trusted collaborators who need to help manage the doc. In addition to edit access, they can… | |；完整条件：| Full access | This permission is intended for trusted collaborators who need to help manage the doc. In addition to edit access, they can… | |\nContinue reading to learn about the different sharing methods available to you.；Continue reading to learn about the different sharing methods available to you.\n原文：You can add comments to the canvas and tables of a doc in a few different ways；完整条件：\n原文：You can combine stickers and text in the same comment；完整条件：\n原文：Just as with the other sharing options, you can choose what level of access to grant these folks: can view, can comment, or can edit. If you’d like to learn more about sharing with domains, check out this article. As with workspace-wide sharing, full access isn’t available as an option for domain sharing.；完整条件：If you’re logged in to Superhuman Docs with a business email address (for example, @companyname.com - not @gmail.com), you’ll have the opportunity to share any docs that you own with everyone else that has the same domain as you (their email ends in the same @companyname.com as yours).\nWhile in your doc, click on Share in the upper-right corner of your doc. Then find the option that says Anyone with a [insert domain] email address. You may need to click on Anyone in [insert workspace name] workspace, then choose the email address option from the dropdown.\nJust as with the other sharing options, you can choose what level of access to grant these folks: can view, can comment, or can edit. If you’d like to learn more about sharing with domains, check out this article. As with workspace-wide sharing, full access isn’t available as an option for domain sharing.；Continue reading to learn about the different sharing methods available to you.\n原文：| Can edit | | *Ability to share the doc may be limited by the Allow anyone who can edit to change permissions and share setting mentioned in the section below. |；完整条件：Continue reading to learn about the different sharing methods available to you.\n原文：The most effective teams use collaborative docs to work on things like PRDs, project proposals, and briefs. With Superhuman Docs, teams can create, edit, and give feedback in the same document, keeping comments anchored to the work rather than scattered across Slack and email. Docs makes this possible with real-time co-editing, threaded comments, and interactive building blocks like tables, buttons, and reactions, so teams can gather input, check alignment, and make decisions without leaving the doc.；完整条件：Frequently asked questions\nThe most effective teams use collaborative docs to work on things like PRDs, project proposals, and briefs. With Superhuman Docs, teams can create, edit, and give feedback in the same document, keeping comments anchored to the work rather than scattered across Slack and email. Docs makes this possible with real-time co-editing, threaded comments, and interactive building blocks like tables, buttons, and reactions, so teams can gather input, check alignment, and make decisions without leaving the doc.\nYes, Superhuman offers a free plan that includes Docs and the Docs AI assistant, so you can start creating and collaborating on work documents right away. For advanced features and team functionality, paid plans are available at superhuman.com/plans.\nIf you can describe it, Docs can create it. Because Docs comes with built in tables, tools, content-rich media, and AI, there is no limit to the kind of documents you can create. Collaborate on briefs, proposals, documentation, project trackers, meeting notes, onboarding docs, and more.；Yes, Superhuman offers a free plan that includes Docs and the Docs AI assistant, so you can start creating and collaborating on work documents right away. For advanced features and team functionality, paid plans are available at superhuman.com/plans.",
+        "source_ids": [
+          "raw-source-34a67281db3b66591d6c",
+          "raw-source-970d5d3dabcdab0bf470",
+          "raw-source-cfd5046889caadc3c3bd"
+        ],
+        "confidence": 0.8
+      },
+      {
+        "competitor": "Notion",
+        "role": "target",
+        "dimension": "pricing",
+        "value": "Free：$0；币种：USD；计费单位：member；显示周期：monthly；付款周期：unknown；席位类型：unknown；税费：unknown；地区：unknown；采集时间：2026-10-11T14:37:10.898733+00:00；页面报价人数：unknown；原文：Price in\nUSD\nEssentials for staying organized.\nFree\n$0\nper member / month\nPlus：$10；币种：USD；计费单位：member；显示周期：monthly；付款周期：annual；席位类型：unknown；税费：unknown；地区：unknown；采集时间：2026-10-11T14:37:10.898733+00:00；页面报价人数：unknown；原文：Price in\nUSD\nEssentials for staying organized.\nFree\n$0\nper member / month\n\nFor individuals to organize personal projects and life.\n\nSign up\n\nIncludes:\n\nTrial of Notion AI\nBasic forms\nBasic sites\nNotion Calendar\nDatabases including subtasks, dependencies, custom properties and more\nPlus\n$10\nper member / month\nBusiness：$20；币种：USD；计费单位：member；显示周期：monthly；付款周期：annual；席位类型：unknown；税费：unknown；地区：unknown；采集时间：2026-10-11T14:37:10.898733+00:00；页面报价人数：unknown；原文：Price in\nUSD\nEssentials for staying organized.\nFree\n$0\nper member / month\n\nFor individuals to organize personal projects and life.\n\nSign up\n\nIncludes:\n\nTrial of Notion AI\nBasic forms\nBasic sites\nNotion Calendar\nDatabases including subtasks, dependencies, custom properties and more\nPlus\n$10\nper member / month\n\nFor small teams and professionals to work together.\n\nGet started\n\nEverything in Free, and:\n\nTrial of Notion AI\nCustom forms\nCustom sites\nUnlimited charts\nUnlimited collaborative blocks\nUnlimited file uploads\nBasic connections\nThe AI workspace for work that matters.\nBusiness\nRecommended\n$20\nper member / month",
+        "source_ids": [
+          "raw-source-84d93774a937707e285a"
+        ],
+        "confidence": 0.8000000000000002
+      },
+      {
+        "competitor": "Confluence",
+        "role": "competitor",
+        "dimension": "pricing",
+        "value": "Premium：$10.44；币种：USD；计费单位：user；显示周期：monthly；付款周期：monthly；席位类型：unknown；税费：unknown；地区：unknown；采集时间：unknown；页面报价人数：300；原文：Premium\nConnect work across teams\n$10.44\nper user / month\nFree：$0；币种：USD；计费单位：unknown；显示周期：unknown；付款周期：unknown；席位类型：unknown；税费：unknown；地区：unknown；采集时间：unknown；页面报价人数：unknown；原文：Free\nFree forever for 10 users\n$0\nStandard：$5.42；币种：USD；计费单位：user；显示周期：monthly；付款周期：monthly；席位类型：unknown；税费：unknown；地区：unknown；采集时间：unknown；页面报价人数：300；原文：Standard\nEverything you need to get started\n$5.42\nper user / month",
+        "source_ids": [
+          "raw-source-b0da424f12358e533863"
+        ],
+        "confidence": 0.8000000000000002
+      },
+      {
+        "competitor": "Coda",
+        "role": "competitor",
+        "dimension": "pricing",
+        "value": "Business：$33 USD / month；币种：USD；计费单位：doc_maker；显示周期：monthly；付款周期：annual；席位类型：unknown；税费：unknown；地区：unknown；采集时间：2026-10-11T14:37:37.275882+00:00；页面报价人数：unknown；原文：Business\n\n$33 USD / month\n\nper \nDoc Maker\n, billed annually\nPro：$12 USD / month；币种：USD；计费单位：doc_maker；显示周期：monthly；付款周期：annual；席位类型：unknown；税费：unknown；地区：unknown；采集时间：2026-10-11T14:37:37.275882+00:00；页面报价人数：unknown；原文：Pro\n\n$12 USD / month\n\nper \nDoc Maker\n, billed annually\nBusiness：$40 when billed monthly；币种：USD；计费单位：doc_maker；显示周期：monthly；付款周期：monthly；席位类型：unknown；税费：unknown；地区：unknown；采集时间：2026-10-11T14:37:37.275882+00:00；页面报价人数：unknown；原文：Business\n\n$33 USD / month\n\nper \nDoc Maker\n, billed annually\n\n$40 when billed monthly\nPro：$15 when billed monthly；币种：USD；计费单位：doc_maker；显示周期：monthly；付款周期：monthly；席位类型：unknown；税费：unknown；地区：unknown；采集时间：2026-10-11T14:37:37.275882+00:00；页面报价人数：unknown；原文：Pro\n\n$12 USD / month\n\nper \nDoc Maker\n, billed annually\n\n$15 when billed monthly\nFree：$0 USD；币种：USD；计费单位：unknown；显示周期：unknown；付款周期：unknown；席位类型：unknown；税费：unknown；地区：unknown；采集时间：2026-10-11T14:37:37.275882+00:00；页面报价人数：unknown；原文：Free\n\n$0 USD",
+        "source_ids": [
+          "raw-source-2ee7fb10b23da736180d"
+        ],
+        "confidence": 0.8
+      }
+    ],
+    "winner_by_dimension": {},
+    "assessments": {
+      "feature": {
+        "status": "insufficient_evidence",
+        "winner": null,
+        "rationale": "Comparison withheld: Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+        "scenario": "共同维护产品文档和团队知识",
+        "tradeoffs": [],
+        "gaps": [
+          "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+          "Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+          "Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}."
+        ],
+        "source_ids": []
+      },
+      "pricing": {
+        "status": "insufficient_evidence",
+        "winner": null,
+        "rationale": "Comparison withheld: Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.; Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.",
+        "scenario": "共同维护产品文档和团队知识",
+        "tradeoffs": [],
+        "gaps": [
+          "Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.",
+          "Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs."
+        ],
+        "source_ids": []
+      }
+    },
+    "summary": [
+      "[feature-standardization:feature] aligned_fields=feature_name,description,claim_count,child_count; Notion features=共享编辑(多人同时编辑同一页面的协作能力;claims=2;children=0)|评论(页面内评论与变更追溯能力;claims=2;children=0)|权限边界(页面与数据库的分享及权限级别控制;claims=5;children=0); Confluence features=共享编辑(多人实时协作编辑同一页面;claims=3;children=0)|评论(行内与页面级评论能力;claims=3;children=0)|权限边界(内容级访问与编辑权限控制;claims=5;children=0)|对外共享(面向外部人员的查看与匿名访问;claims=3;children=0); Coda features=共享编辑(多人实时在同一文档内协作编辑与反馈;claims=2;children=0)|评论(文档画布与表格中的评论能力;claims=4;children=0)|权限边界(共享文档时的访问级别与限制;claims=5;children=0)",
+      "[pricing-standardization:pricing] aligned_fields=tier_name,price,billing_cycle,limits; Notion tiers=Free=$0|Plus=$10/annual|Business=$20/annual; Confluence tiers=Free=$0|Premium=$10.44/monthly|Standard=$5.42/monthly; Coda tiers=Business=$33 USD / month/annual|Business=$40 when billed monthly|Free=$0 USD|Pro=$12 USD / month/annual|Pro=$15 when billed monthly",
+      "矩阵单元格按当前已验证事实生成，原文及条件保持完整；模型摘要未作为正式事实发布。",
+      "Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+      "Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+      "Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.",
+      "Unmapped feature observation: Confluence; fact_id=evidence-fact-record-85eb82ba417f2ab0c38938f2a82a0566bb12929d9e6381d80c5e437d342a2ca6; capability interpretation needs review.",
+      "Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.",
+      "Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.",
+      "[assessment:feature] insufficient_evidence; Comparison withheld: Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.; scenario=共同维护产品文档和团队知识; tradeoffs=[]; gaps=[\"Not comparable: feature / comments; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.\", \"Not comparable: feature / permissions; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.\", \"Not comparable: feature / shared_editing; needs_condition_review; {'Notion': 'documented_with_conditions', 'Confluence': 'documented_with_conditions', 'Coda': 'documented_with_conditions'}.\"]",
+      "[assessment:pricing] insufficient_evidence; Comparison withheld: Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.; Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.; scenario=共同维护产品文档和团队知识; tradeoffs=[]; gaps=[\"Not comparable: pricing / price; plan_alignment_unverified: {'Notion': ['Business', 'Free', 'Plus'], 'Confluence': ['Free', 'Premium', 'Standard'], 'Coda': ['Business', 'Free', 'Pro']}; select plans for the shared task before ranking prices.\", 'Not comparable: pricing / price; comparison_basis_unknown; unit, market or time/qualifier context is unknown or differs.']"
+    ]
+  },
+  "qa_severities": {
+    "warn": 37
+  },
+  "performance": {
+    "profile_before_seconds": 149.938,
+    "profile_before_calls": 524172033,
+    "profile_after_seconds": 2.1243039169348776,
+    "fact_count": 131,
+    "estimated_bytes": 97811,
+    "source": "same first-attempt snapshot, reflector 98304-byte view; cProfile overhead included"
+  },
+  "price_review_compaction": {
+    "Notion": {
+      "original_bytes": 11311,
+      "compact_bytes": 4580,
+      "price_claim_count": 3,
+      "all_qualifiers_retained": true
+    },
+    "Confluence": {
+      "original_bytes": 12027,
+      "compact_bytes": 4202,
+      "price_claim_count": 3,
+      "all_qualifiers_retained": true
+    },
+    "Coda": {
+      "original_bytes": 15996,
+      "compact_bytes": 5897,
+      "price_claim_count": 5,
+      "all_qualifiers_retained": true
+    }
+  },
+  "tests": {
+    "backend": {
+      "passed": 3442,
+      "skipped": 1,
+      "warnings": 152,
+      "seconds": 89.66
+    },
+    "frontend": {
+      "passed": 258,
+      "files": 52,
+      "seconds": 10.14,
+      "production_build_passed": true,
+      "frontend_changed_this_stage": false
+    },
+    "independent_final_review": {
+      "passed": 192,
+      "seconds": 15.99,
+      "remaining_reproducible_p1_p2": 0
+    }
+  },
+  "runtime_boundary": {
+    "real_model_search_fetch": true,
+    "orchestration": "production LangGraph",
+    "storage": "isolated in-memory harness",
+    "postgres_temporal_qdrant_http_accepted": false,
+    "api_http_status": 200,
+    "api_health_status": "error",
+    "temporal_cutover": "error",
+    "temporal_server": "warn",
+    "frontend_http_status": 200,
+    "new_run_written_to_old_browser_task": false
+  },
+  "all_attempts_estimated_usd": 0.49373802,
+  "cost_scope": "budget estimate, not vendor bill; includes conservatively charged unknown usage; provider last-attempt totals are a different scope"
+}

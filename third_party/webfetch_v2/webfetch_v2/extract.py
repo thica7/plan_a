@@ -32,15 +32,6 @@ CAPTCHA_PATTERNS = [
     r"verify you are human",
 ]
 
-LOGIN_PATTERNS = [
-    r"sign in",
-    r"log in",
-    r"login required",
-    r"create an account",
-    r"continue with google",
-    r"continue with microsoft",
-]
-
 JS_REQUIRED_PATTERNS = [
     r"enable javascript",
     r"javascript is required",
@@ -56,6 +47,15 @@ COOKIE_BANNER_PATTERNS = [
     r"同意.*cookie",
     r"接受.*cookie",
 ]
+
+EXTRACTOR_BONUS = {
+    "trafilatura": 0.08,
+    "readability": 0.06,
+    "article_text": 0.05,
+    "main_text": 0.03,
+    "body_text": 0.0,
+    "regex_body_text": -0.03,
+}
 
 
 @dataclass(frozen=True)
@@ -89,12 +89,13 @@ def extract_best_content(html_body: str, title: str, *, status_code: int | None 
 
     scored: list[tuple[str, str, float, int, str | None]] = []
     for method, text, error in raw_candidates:
-        text = collapse_space(text)
+        text = '\n'.join(collapse_space(line) for line in text.splitlines() if line.strip())
+        text = _restore_headings(html_body, text)
         quality = score_quality(title, text, status_code=status_code)
         score = _candidate_score(quality, method)
         scored.append((method, text, score, len(text), error))
 
-    best = max(scored, key=lambda item: (item[2], item[3]))
+    best = max(scored, key=lambda item: (item[2], EXTRACTOR_BONUS.get(item[0], 0.0), item[3]))
     candidates = [
         ExtractionCandidate(
             method=method,
@@ -107,8 +108,63 @@ def extract_best_content(html_body: str, title: str, *, status_code: int | None 
     ]
     return ExtractedContent(
         text=best[1],
-        extraction=ExtractionResult(method=best[0], candidates=candidates),
+        extraction=ExtractionResult(method=best[0], candidates=candidates, headings=extract_headings(html_body)),
     )
+
+
+def _restore_headings(html_body: str, text: str) -> str:
+    """Keep original section scope when a clean extractor omits headings."""
+    if not text or BeautifulSoup is None:
+        return text
+    soup = BeautifulSoup(html_body, 'html.parser')
+    for tag in soup(['nav', 'footer', 'script', 'style', 'noscript', 'svg', 'template']):
+        tag.decompose()
+    for tag in soup.select('[hidden], [aria-hidden="true"]'):
+        tag.decompose()
+    for tag in soup.find_all(style=re.compile(r'display\s*:\s*none|visibility\s*:\s*hidden', re.I)):
+        tag.decompose()
+    source_text = collapse_space(soup.get_text(' '))
+    nodes = soup.find_all(re.compile(r'^(?:h[1-6]|p|li|blockquote|table)$'))
+    insertions: dict[int, list[str]] = {}
+    for index, node in enumerate(nodes):
+        if not re.fullmatch(r'h[1-6]', node.name):
+            continue
+        heading = collapse_space(node.get_text(' '))
+        if not heading or re.search(r'(?m)^\s*' + re.escape(heading) + r'\s*$', text):
+            continue
+        for block in nodes[index + 1:index + 13]:
+            if re.fullmatch(r'h[1-6]', block.name):
+                break
+            anchor = collapse_space(block.get_text(' '))
+            if len(anchor) < 16:
+                continue
+            matches = list(re.finditer(r'\s+'.join(map(re.escape, anchor.split())), text))
+            if not matches:
+                continue
+            if len(matches) == 1 and source_text.count(anchor) == 1:
+                position = matches[0].start()
+                insertions.setdefault(position, []).append(heading)
+            # Repeated content cannot establish the original section position.
+            break
+    for position in sorted(insertions, reverse=True):
+        prefix = '\n' if position and text[position - 1] != '\n' else ''
+        text = text[:position] + prefix + '\n'.join(insertions[position]) + '\n' + text[position:]
+    return text
+
+
+def extract_headings(html_body: str) -> list[tuple[int, str]]:
+    if BeautifulSoup is None:
+        return [(int(match.group(1)), collapse_space(re.sub(r'(?s)<[^>]*>', ' ', match.group(2))))
+                for match in re.finditer(r'(?is)<h([1-6])\b[^>]*>(.*?)</h\1\s*>', html_body)]
+    soup = BeautifulSoup(html_body, 'html.parser')
+    for tag in soup(['nav', 'footer', 'script', 'style']):
+        tag.decompose()
+    for tag in soup.select('[hidden], [aria-hidden="true"]'):
+        tag.decompose()
+    for tag in soup.find_all(style=re.compile(r'display\s*:\s*none|visibility\s*:\s*hidden', re.I)):
+        tag.decompose()
+    return [(int(tag.name[1]), collapse_space(tag.get_text(' ')))
+            for tag in soup.find_all(re.compile(r'^h[1-6]$')) if tag.get_text().strip()]
 
 
 def html_to_text(html_body: str) -> str:
@@ -154,7 +210,25 @@ def score_quality(title: str, text: str, *, status_code: int | None = None) -> Q
     lowered = text.lower()
     has_captcha = any(re.search(pattern, lowered) for pattern in CAPTCHA_PATTERNS)
     looks_like_block = any(re.search(pattern, lowered) for pattern in BLOCK_PATTERNS)
-    looks_like_login = any(re.search(pattern, lowered) for pattern in LOGIN_PATTERNS)
+    # A public page's navigation commonly contains "Log in". Require an auth
+    # page title, an opening auth form, or an explicit access requirement.
+    looks_like_login = bool(
+        re.search(r"^(?:sign[ -]?in|log[ -]?in|登录|登入)(?:\b|\s|$)", title.strip(), re.IGNORECASE)
+        or re.search(
+            r"^(?:continue with (?:google|microsoft)|请(?:先)?登录)",
+            lowered.strip(),
+        )
+        or re.search(
+            r"(?:please (?:sign|log) in|login required|(?:sign|log) in "
+            r"(?:is required|to (?:continue|access|view))|请(?:先)?登录)",
+            lowered[:600],
+        )
+        or (
+            re.search(r"sign[ -]?in|log[ -]?in|登录|登入", lowered[:600])
+            and re.search(r"\bpassword\b|密码", lowered[:600])
+            and re.search(r"\b(?:email|username)\b|邮箱|用户名", lowered[:600])
+        )
+    )
     js_required = any(re.search(pattern, lowered) for pattern in JS_REQUIRED_PATTERNS)
     cookie_banner_detected = any(re.search(pattern, lowered) for pattern in COOKIE_BANNER_PATTERNS)
     text_length = len(text)
@@ -221,12 +295,12 @@ def _raw_extraction_candidates(html_body: str) -> list[tuple[str, str, str | Non
             tag.decompose()
         article = soup.find("article")
         if article:
-            candidates.append(("article_text", article.get_text(" "), None))
+            candidates.append(("article_text", article.get_text("\n"), None))
         main = soup.find("main")
         if main:
-            candidates.append(("main_text", main.get_text(" "), None))
+            candidates.append(("main_text", main.get_text("\n"), None))
         body = soup.body or soup
-        candidates.append(("body_text", body.get_text(" "), None))
+        candidates.append(("body_text", body.get_text("\n"), None))
     else:
         candidates.append(("regex_body_text", _baseline_body_text(html_body), None))
     return _dedupe_candidates(candidates)
@@ -283,12 +357,5 @@ def _dedupe_candidates(candidates: list[tuple[str, str, str | None]]) -> list[tu
 
 
 def _candidate_score(quality: Quality, method: str) -> float:
-    bonus = {
-        "trafilatura": 0.08,
-        "readability": 0.06,
-        "article_text": 0.05,
-        "main_text": 0.03,
-        "body_text": 0.0,
-        "regex_body_text": -0.03,
-    }.get(method, 0.0)
+    bonus = EXTRACTOR_BONUS.get(method, 0.0)
     return max(0.0, min(1.0, quality.score + bonus))

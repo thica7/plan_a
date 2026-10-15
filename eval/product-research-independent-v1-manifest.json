@@ -1,0 +1,74 @@
+{
+  "dataset_version": "product-research-independent-v1",
+  "new_queries": 8,
+  "new_sources": 6,
+  "distractor_sources": 16,
+  "corpus_sources": 22,
+  "expected_outcomes": {
+    "answer": 6,
+    "insufficient": 1,
+    "clarify": 1
+  },
+  "blind_holdout": false,
+  "exposure_note": "New fact topics, separate from the previous five human-reviewed questions. Prepared and inspected by an implementing agent, so not a blind third-party holdout. No human labels invented.",
+  "review_record": {
+    "dataset_version": "independent-v1-reviewed-boundaries",
+    "human_reviewed": 8,
+    "readiness": "reviewed_awaiting_validation",
+    "new_queries": 8,
+    "new_sources": 6,
+    "held_out_from_implementation_tuning": true,
+    "exposure_note": "New fact topics, separate from the previous five human-reviewed questions. Prepared and inspected by an implementing agent, so not a blind third-party holdout. No human labels invented.",
+    "sources": [
+      {
+        "id": "ind-obsidian-encryption",
+        "url": "https://obsidian.md/help/Obsidian%20Sync/Security%20and%20privacy",
+        "content_hash": "ba8eefe161b9eaefd0ac452374590b296a76e309ecd2e5635cdc37a0f79ace05"
+      },
+      {
+        "id": "ind-docs-offline",
+        "url": "https://support.google.com/docs/answer/6388102?hl=en-GB",
+        "content_hash": "8aa7dc3524796b2714ca225ba4f5a598a5b741fe3511ea77c5183b24238b0034"
+      },
+      {
+        "id": "ind-steam-oled-power",
+        "url": "https://www.steamdeck.com/en/tech/oled/",
+        "content_hash": "3c5f11aaa8746a5f7fbf19b7fef51bc1bd9d707c4b7c7b006c73180030f5454d"
+      },
+      {
+        "id": "ind-firefox-sync",
+        "url": "https://support.mozilla.org/en-US/kb/sync",
+        "content_hash": "b2fdcbe99443707f8c5e6c70572f2ec1849a8cb1caaf815d73a68b98946c4e5f"
+      },
+      {
+        "id": "ind-github-branches",
+        "url": "https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches",
+        "content_hash": "9cf7ac67f1fc18b7e2c446c7777368157e303dbbd1c36b5492a9a52b5fa2f5da"
+      },
+      {
+        "id": "ind-steam-lcd-power",
+        "url": "https://www.steamdeck.com/en/deck",
+        "content_hash": "af99b483ae3d07b1d643d0abaaf590d1f9f7472546ea03b87672bcbf6e19690d"
+      }
+    ],
+    "evaluation_constraint": "Use broad corpus and report eligible candidate count; product-filtered top5 with <=5 eligible sources cannot demonstrate meaningful recall.",
+    "copyright_note": "Authored summaries with short quotes, not full official page copies. Summaries must remain labeled as summaries; they are not new original source text.",
+    "reviewed_at": "2026-10-14T01:54:59.754660+00:00",
+    "review_source": "request_user_input_async_call_10e1726901774af98094b651290c4101",
+    "input_sha256": {
+      "corpus.jsonl": "49da0aeda59d1db0202a201a062173e06abf10ebf87f5a2611e0bec5d18b68b4",
+      "queries.jsonl": "0d4b63a9fbd0ff27aee55b28aaea602415dabbeae0f09860d0b48823589fc578",
+      "labels.jsonl": "23d73f09e3b49c589a619470b87cfb0f66332fc61746309fd2d034fc1337271c"
+    }
+  },
+  "distractor_corpus": "product-research-reviewed-v2-corpus.jsonl",
+  "distractor_corpus_sha256": "199323e2e17fd37c7433c3f49571ecd60df50064503fe729293447a7eb97290e",
+  "files_sha256": {
+    "product-research-independent-v1-corpus.jsonl": "3c6a30c613d967a18921216ddcab572511805c28f507c4a1f28d9e5a71cd3b95",
+    "product-research-independent-v1-queries.jsonl": "0d4b63a9fbd0ff27aee55b28aaea602415dabbeae0f09860d0b48823589fc578",
+    "product-research-independent-v1-labels.jsonl": "23d73f09e3b49c589a619470b87cfb0f66332fc61746309fd2d034fc1337271c"
+  },
+  "preparation_status": "reviewed and schema validated; formal retrieval and live report acceptance pending frozen source run",
+  "source_identity": "Six new sources are authored summaries with short official quotes, not continuous original page text. Capture-time pending-review scope notes are historical; subsequent review_record governs label review.",
+  "metric_scope": "Broad product scope; strict workspace/project/market/date/role; answer denominator 6, insufficient 1, clarify 1; exposed small sample cannot establish general accuracy."
+}

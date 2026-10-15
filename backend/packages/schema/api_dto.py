@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 from packages.i18n.language import DEFAULT_OUTPUT_LANGUAGE, OutputLanguage
 from packages.research.evidence.answer_models import AnswerBoundary
+from packages.research.evidence.report_claims import ReportDimensionAudit
 from packages.research.evidence.snapshot_models import (
     EvidenceArtifactDependency,
     EvidenceConsumption,
@@ -278,6 +279,7 @@ class RunDetail(RunSummary):
     section_briefs: list[SectionBrief] = Field(default_factory=list)
     report_artifact: ReportArtifactV2 | None = None
     report_answer_boundaries: list[AnswerBoundary] = Field(default_factory=list)
+    report_dimension_audits: list[ReportDimensionAudit] = Field(default_factory=list)
     raw_sources: list[RawSource] = Field(default_factory=list)
     evidence_snapshots: list[RunEvidenceSnapshot] = Field(default_factory=list)
     evidence_snapshot_id: str | None = None

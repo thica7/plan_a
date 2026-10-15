@@ -97,6 +97,27 @@ async def test_successful_search_reused_in_same_run_without_extra_cost(monkeypat
     assert span.input_tokens_estimate == span.output_tokens_estimate == 0
 
 
+@pytest.mark.parametrize("state", ["fresh", "expired", "refresh"])
+async def test_collector_may_reuse_cache_after_paid_search_budget_is_exhausted(monkeypatch, state):
+    from packages.agents import SubagentContext
+
+    requests = install_response(monkeypatch, native_response())
+    service, record = await make_service()
+    detail = record.detail
+    context = SubagentContext(run_id=detail.id, agent="collector", subagent="feature::Switch")
+    first = await service._search_research_candidates(record, detail, "feature", context, "A docs", 3)
+    assert first
+    if state == "expired":
+        for key, (_, results) in record.search_cache.items():
+            record.search_cache[key] = (0, results)
+    elif state == "refresh":
+        detail.evidence_refresh_active = True
+    second = await service._search_research_candidates(record, detail, "feature", context, "A docs", 3)
+    assert second == (first if state == "fresh" else [])
+    assert len(requests) == 1
+    assert detail.collector_research_usage[context.subagent].search_calls == 1
+
+
 async def test_concurrent_duplicate_search_uses_one_paid_request(monkeypatch):
     import httpx
 

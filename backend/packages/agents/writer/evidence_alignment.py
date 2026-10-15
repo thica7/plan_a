@@ -9,6 +9,7 @@ from packages.identity.source_resolver import resolve_source_token, source_token
 from packages.orchestrator.answer_context import ANSWER_GUARD_INSTRUCTIONS, build_answer_boundaries
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.research.evidence.answer_models import AnswerBoundary
+from packages.research.evidence.answer_guard import evaluate_answer_boundary
 from packages.research.evidence.snapshot_models import canonical_json
 from packages.research.evidence.views import select_evidence_view
 
@@ -53,6 +54,12 @@ class WriterEvidenceAlignmentMixin:
                     },
                 )
         projected, gaps = self._project_evidence_detail(record, views)
+        from packages.agents.writer.dimension_writer import partial_report_mode
+        if partial_report_mode(record.detail, snapshot):
+            # Only the audited partial route needs accepted missing-scope context.
+            # Its generation/review still use bounded views and live credentials.
+            projected.evidence_snapshots = [snapshot]
+            projected.evidence_snapshot_id = snapshot.id
         if projected.reflections and not self._evidence_artifact_valid(
             record, kind="reflector", payload=record.detail.reflections[-1].model_dump(mode="json")
         ):
@@ -62,6 +69,9 @@ class WriterEvidenceAlignmentMixin:
             record, detail=projected, evidence_origin=record, writer_preserved_report=False
         )
         draft.detail.report_answer_boundaries = []
+        draft.detail.report_dimension_audits = list(record.detail.report_dimension_audits) if (
+            self._evidence_artifact_valid(record, kind='writer', payload=previous_payload)
+        ) else []
         initial_messages = {
             item.id: item.model_dump(mode="json") for item in projected.agent_messages
         }
@@ -86,7 +96,16 @@ class WriterEvidenceAlignmentMixin:
             return
         if draft.writer_preserved_report:
             draft.detail.report_answer_boundaries = record.detail.report_answer_boundaries
-        for field in ("report_md", "report_artifact", "section_briefs", "report_answer_boundaries"):
+            draft.detail.report_dimension_audits = record.detail.report_dimension_audits
+        # Retained audits keep their original generation credential and review.
+        retained_ids = {audit.consumption_id for audit in draft.detail.report_dimension_audits} - {use.id for use in uses}
+        for use_id in retained_ids:
+            use = next((item for item in record.detail.evidence_consumptions if item.id == use_id), None)
+            if use is None:
+                raise EvidenceUseRejectedError('Retained dimension audit has no generation credential')
+            self._validate_evidence_use(record, use)
+            uses.append(use)
+        for field in ("report_md", "report_artifact", "section_briefs", "report_answer_boundaries", "report_dimension_audits"):
             setattr(record.detail, field, getattr(draft.detail, field))
         record.structured_report_snapshot = draft.structured_report_snapshot
         record.previous_structured_report_snapshot = draft.previous_structured_report_snapshot
@@ -173,36 +192,53 @@ class WriterEvidenceAlignmentMixin:
         )
         snapshot = self._current_evidence_snapshot(self._evidence_live_record(record))
         candidate_segment = dict(segment)
+        lower, upper = 1, view.max_bytes
+        best = None
+        first_resize = True
         while True:
             selected = self._writer_segment_context(record, candidate_segment, view, use)
             actual_bytes = len(self._writer_evidence_context_json(selected).encode("utf-8"))
             if actual_bytes <= use.max_bytes:
-                break
-            if selected.get("shard_notes"):
+                score = (len({fact.competitor for fact in view.facts}),
+                         len({(fact.competitor, fact.dimension) for fact in view.facts}),
+                         len(view.facts))
+                if best is None or score >= best[0]:
+                    best = (score, selected, view, actual_bytes)
+                lower = view.max_bytes + 1
+            elif selected.get("shard_notes"):
                 candidate_segment["shard_notes"] = []
                 candidate_segment["shard_notes_gap"] = "shard_notes_context_budget_exceeded"
                 continue
-            selection_budget = view.max_bytes - (actual_bytes - use.max_bytes) - 128
-            try:
-                view = select_evidence_view(
-                    snapshot,
-                    agent="writer",
-                    competitor=competitor,
-                    dimension=dimension,
-                    source_ids=use.requested_source_ids,
-                    max_bytes=selection_budget,
-                )
-            except ValueError as exc:
-                live = self._evidence_live_record(record)
-                rejected = use.model_copy(update={"status": "rejected"})
-                live.detail.evidence_consumptions = [
-                    rejected if item.id == use.id else item
-                    for item in live.detail.evidence_consumptions
-                ]
-                self._persist_run(live.detail.id)
-                raise EvidenceUseRejectedError(
-                    "Writer segment control contract exceeds context budget"
-                ) from exc
+            else:
+                upper = view.max_bytes - 1
+            # Dropping a price observation can also drop large denied-fact
+            # controls. Search the freed space locally instead of fixing the
+            # first smaller budget and starving another product permanently.
+            while lower <= upper:
+                selection_budget = ((lower + upper) // 2 if not first_resize else
+                                    max(lower, min(upper, use.max_bytes - (actual_bytes - view.estimated_bytes))))
+                first_resize = False
+                try:
+                    view = select_evidence_view(
+                        snapshot, agent="writer", competitor=competitor,
+                        dimension=dimension, source_ids=use.requested_source_ids,
+                        max_bytes=selection_budget,
+                    )
+                except ValueError:
+                    lower = selection_budget + 1
+                    continue
+                break
+            else:
+                break
+        if best is None:
+            live = self._evidence_live_record(record)
+            rejected = use.model_copy(update={"status": "rejected"})
+            live.detail.evidence_consumptions = [
+                rejected if item.id == use.id else item for item in live.detail.evidence_consumptions
+            ]
+            self._persist_run(live.detail.id)
+            raise EvidenceUseRejectedError("Writer segment control contract exceeds context budget")
+        _, selected, view, actual_bytes = best
         use = use.model_copy(
             update={
                 "dependency_hash": view.dependency_hash,
@@ -228,9 +264,62 @@ class WriterEvidenceAlignmentMixin:
     def _writer_evidence_context_json(segment):
         from packages.agents.writer.logic import _prompt_safe_writer_segment
 
-        return json.dumps(
-            _prompt_safe_writer_segment(segment), ensure_ascii=False, separators=(",", ":")
-        )
+        payload = _prompt_safe_writer_segment(segment)
+        for key in ("source_index", "evidence_claims", "decision_guidance"):
+            if payload.get(key) == []:
+                payload.pop(key)
+        # Persisted boundaries retain their full authenticated view IDs. In a
+        # model prompt those same IDs are already in evidence_view; reference it
+        # instead of duplicating the entire view once for every requirement.
+        if isinstance(payload.get("answer_boundaries"), list):
+            payload["answer_boundaries_view_ref"] = "evidence_view"
+            payload["answer_boundaries"] = [
+                {**{key: value for key, value in boundary.items()
+                    if key not in {"view_source_ids", "view_fact_ids", "snapshot_id", "fact_decisions"}},
+                 "fact_decisions": [
+                     {key: value for key, value in decision.items() if key != "source_id"}
+                     for decision in boundary.get("fact_decisions", [])
+                     if not decision.get("allowed") or decision.get("reasons")
+                 ]}
+                for boundary in payload["answer_boundaries"]
+            ]
+            facts = payload.get("evidence_view", {}).get("facts", [])
+            for boundary in payload["answer_boundaries"]:
+                requirement = boundary["requirement"]
+                scoped_ids = {fact["id"] for fact in facts
+                              if fact["competitor"] == requirement["competitor"]
+                              and fact["dimension"] == requirement["dimension"]}
+                if not scoped_ids and any(
+                    gap.get("reason") == "context_budget_exceeded"
+                    and gap.get("competitor") == requirement["competitor"]
+                    and gap.get("dimension") == requirement["dimension"]
+                    for gap in payload.get("evidence_view", {}).get("gaps", [])
+                ):
+                    boundary["evidence_status"] = "collected_but_omitted"
+                if scoped_ids and scoped_ids == set(boundary["allowed_fact_ids"]):
+                    boundary.pop("allowed_fact_ids")
+                    boundary["allowed_facts_ref"] = "all evidence_view facts for this competitor and dimension"
+                for key in ("withheld_fact_ids", "missing_fields", "clarification_fields", "fact_decisions"):
+                    if boundary.get(key) == []:
+                        boundary.pop(key)
+                if requirement.get("context_json") == "{}":
+                    requirement.pop("context_json")
+                if requirement.get("market") is None:
+                    requirement.pop("market", None)
+        if not payload.get("analysis") and payload.get("analysis_dependency_gaps"):
+            payload.pop("analysis_dependency_gaps")
+            payload["analysis_gap"] = "Branch summaries are not reused; use selected original facts. View omissions are not collection failures."
+        if payload.get("dimension") == "pricing" and payload.get("answer_boundaries") and all(
+            b["requirement"]["intent"] == "recorded_price" for b in payload["answer_boundaries"]
+        ):
+            # This branch formats original price facts, without branch summaries.
+            # Sources and capacity gaps are already bound in evidence_view.
+            payload.pop("analysis_gap", None)
+            if set(payload.get("citation_source_ids", [])) == {
+                source["id"] for source in payload["evidence_view"]["sources"]
+            }:
+                payload.pop("citation_source_ids", None)
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
     def _writer_segment_context(self, record, segment, view, use):
         """Pure local construction; original evidence values and quotes stay complete."""
@@ -263,6 +352,15 @@ class WriterEvidenceAlignmentMixin:
             boundary.model_dump(mode="json")
             for boundary in build_answer_boundaries(record.detail, view)
         ]
+        if segment.get("answer_intent") == "recorded_price" and view.dimension == "pricing":
+            selected["answer_boundaries"] = [
+                evaluate_answer_boundary(
+                    view, AnswerBoundary.model_validate(boundary).requirement.model_copy(
+                        update={"intent": "recorded_price", "market": None, "context_json": "{}"}
+                    )
+                ).model_dump(mode="json")
+                for boundary in selected["answer_boundaries"]
+            ]
         selected["answer_guard_instructions"] = ANSWER_GUARD_INSTRUCTIONS
         aliases = self._source_alias_map(self._evidence_live_record(record).detail)
         notes = segment.get("shard_notes", [])

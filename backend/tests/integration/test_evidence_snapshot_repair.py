@@ -121,6 +121,12 @@ async def test_cited_retired_source_is_auditable_but_not_publishable(tmp_path):
         ),
     )
     assert any(item.id == source_id for item in record.detail.raw_sources)
+    assert source_id not in record.detail.evidence_retired_source_ids
+    assert any(item.id == source_id for item in old.sources)
+    # Preparation preserves valid evidence. An explicit server retirement is
+    # accepted separately and must still block publication of the old citation.
+    record.detail.evidence_retired_source_ids.append(source_id)
+    await service._prepare_evidence_snapshot(record, phase="collect")
     new = await service._prepare_evidence_snapshot(record, phase="analysis")
     view, _ = service._begin_evidence_use(
         record, agent="analyst", competitor="Phone X", dimension="pricing"

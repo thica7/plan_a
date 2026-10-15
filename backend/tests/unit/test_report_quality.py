@@ -2640,7 +2640,7 @@ def test_writer_hardens_report_with_rag_gap_fill_context() -> None:
     assert "[source:source-0]" in report
 
 
-def test_writer_grounding_prompt_lists_allowed_sources_and_gap_queries() -> None:
+def test_writer_grounding_contract_refers_to_measured_view_without_source_bypass() -> None:
     import asyncio
     writer = _WriterHarness()
     detail = _run_detail(
@@ -2673,16 +2673,15 @@ def test_writer_grounding_prompt_lists_allowed_sources_and_gap_queries() -> None
 
     prompt = asyncio.run(writer._writer_grounding_prompt(detail))
 
-    assert "Grounded evidence contract" in prompt
-    assert "[source:source-0]" in prompt
-    assert "directional_user_research" in prompt
-    assert "lead_not_proof" in prompt
-    assert "low_confidence" in prompt
-    assert "gap=gap-security-evidence" in prompt
-    assert "suggested_query=Cursor security Missing official security evidence." in prompt
+    assert "Grounded Evidence Contract" in prompt
+    assert "evidence_view and answer_boundaries" in prompt
+    assert "Source IDs, types, confidence and original quotes are in that view" in prompt
+    assert "[source:source-0]" not in prompt
+    assert "gap-security-evidence" not in prompt
+    assert "Missing official security evidence." not in prompt
 
 
-def test_writer_grounding_prompt_lists_all_sources_without_duplicating_full_snippets() -> None:
+def test_writer_grounding_contract_does_not_duplicate_source_registry_or_snippets() -> None:
     import asyncio
 
     writer = _WriterHarness()
@@ -2708,7 +2707,8 @@ def test_writer_grounding_prompt_lists_all_sources_without_duplicating_full_snip
 
     prompt = asyncio.run(writer._writer_grounding_prompt(detail))
 
-    assert "[source:source-13]" in prompt
+    assert "[source:source-13]" not in prompt
+    assert "Report Evidence Context JSON" in prompt
     assert "snippet=" not in prompt
     assert long_tail not in prompt
 

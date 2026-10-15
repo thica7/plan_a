@@ -1,28 +1,16 @@
-import { apiFetch } from "../api/http";
+import { apiFetch } from '../api/http';
 import { create } from 'zustand';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface CrawlJob {
-  id: string;
-  run_id: string | null;
-  url: string;
-  competitor: string | null;
-  dimension: string | null;
-  status: string;  // pending | running | completed | failed
-  attempt_count: number;
-  error: string | null;
-  created_at: string;
-  updated_at: string;
-}
+import { knowledgeScopeUrl, type KnowledgeWorkScope } from '../features/knowledge/KnowledgeScopeControl';
+import type { CrawlJob } from '../api/crawl';
+export type { CrawlJob } from '../api/crawl';
 
 interface CrawlState {
   jobs: CrawlJob[];
+  scope: KnowledgeWorkScope | null;
   loading: boolean;
   error: string | null;
-  pollingIntervalId: any;
+  pollingIntervalId: ReturnType<typeof setInterval> | null;
+  setScope: (scope: KnowledgeWorkScope | null) => void;
   fetchJobs: () => Promise<void>;
   createJob: (url: string, opts?: { competitor?: string; dimension?: string }) => Promise<void>;
   deleteJob: (id: string) => Promise<void>;
@@ -32,97 +20,74 @@ interface CrawlState {
   stopPolling: () => void;
 }
 
-// ---------------------------------------------------------------------------
-// Store
-// ---------------------------------------------------------------------------
+let scopeGeneration = 0;
+let jobsRequest = 0;
+let controller: AbortController | null = null;
 
 export const useCrawlStore = create<CrawlState>((set, get) => ({
-  jobs: [],
-  loading: false,
-  error: null,
-  pollingIntervalId: null,
-
+  jobs: [], scope: null, loading: false, error: null, pollingIntervalId: null,
+  setScope: scope => {
+    scopeGeneration += 1; jobsRequest += 1; controller?.abort();
+    get().stopPolling();
+    set({ scope, jobs: [], loading: false, error: null });
+  },
   fetchJobs: async () => {
+    const scope = get().scope;
+    if (!scope) return;
+    const generation = scopeGeneration;
+    const request = ++jobsRequest;
+    controller?.abort(); controller = new AbortController();
     set({ loading: true, error: null });
     try {
-      const res = await apiFetch('/api/crawl/jobs');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const res = await apiFetch(knowledgeScopeUrl('/api/crawl/jobs', scope), { signal: controller.signal });
+      if (!res.ok) throw new Error(`任务读取失败（HTTP ${res.status}）`);
+      const data: CrawlJob[] = await res.json();
+      if (generation !== scopeGeneration || request !== jobsRequest) return;
       set({ jobs: data, loading: false });
-
-      // Auto-start polling after fetchJobs if running jobs exist
-      const hasRunning = data.some((job: CrawlJob) => job.status === 'pending' || job.status === 'running');
-      if (hasRunning) {
-        get().startPolling();
-      } else {
-        get().stopPolling();
-      }
+      if (data.some(job => ['pending', 'running'].includes(job.status))) get().startPolling();
+      else get().stopPolling();
     } catch (err) {
-      set({ error: String(err), loading: false });
+      if (generation !== scopeGeneration || request !== jobsRequest) return;
+      set({ error: err instanceof Error ? err.message : String(err), loading: false });
     }
   },
-
   createJob: async (url, opts = {}) => {
+    const scope = get().scope;
+    if (!scope) return;
+    const generation = scopeGeneration;
     try {
-      const res = await apiFetch('/api/crawl/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, ...opts }),
+      const res = await apiFetch(knowledgeScopeUrl('/api/crawl/jobs', scope, true), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, ...opts, project_id: scope.projectId }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error(`任务创建失败（HTTP ${res.status}）`);
       const job = await res.json();
-      set((s) => ({ jobs: [job, ...s.jobs] }));
+      if (generation !== scopeGeneration) return;
+      set(state => ({ jobs: [job, ...state.jobs] }));
+      get().startPolling();
     } catch (err) {
-      set({ error: String(err) });
+      if (generation === scopeGeneration) set({ error: err instanceof Error ? err.message : String(err) });
     }
   },
-
-  deleteJob: async (id) => {
-    try {
-      const res = await apiFetch(`/api/crawl/jobs/${id}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      set((s) => ({ jobs: s.jobs.filter((j) => j.id !== id) }));
-    } catch (err) {
-      set({ error: String(err) });
-    }
-  },
-
-  retryJob: async (id) => {
-    const job = get().jobs.find((j) => j.id === id);
-    if (!job) return;
-    const opts: { competitor?: string; dimension?: string } = {};
-    if (job.competitor !== null) opts.competitor = job.competitor;
-    if (job.dimension !== null) opts.dimension = job.dimension;
-    await get().createJob(job.url, opts);
-  },
-
+  // The server currently exposes retries/deletion for sources, not individual jobs.
+  deleteJob: async () => { set({ error: '尚未提供单任务删除，请在所属来源管理采集。' }); },
+  retryJob: async () => { set({ error: '尚未提供单任务重试，请从所属来源重新采集。' }); },
   bulkCreateJobs: async (urls, opts) => {
-    await Promise.all(urls.map((url) => get().createJob(url, opts)));
+    await Promise.all(urls.map(url => get().createJob(url, opts)));
   },
-
   startPolling: () => {
-    if (get().pollingIntervalId) return;
-
-    const intervalId = setInterval(async () => {
-      const hasRunning = get().jobs.some((job) => job.status === 'pending' || job.status === 'running');
-      if (hasRunning) {
-        await get().fetchJobs();
-      } else {
-        get().stopPolling();
-      }
+    if (get().pollingIntervalId || !get().scope) return;
+    const generation = scopeGeneration;
+    const interval = setInterval(() => {
+      if (generation !== scopeGeneration) return;
+      if (get().jobs.some(job => ['pending', 'running'].includes(job.status))) void get().fetchJobs();
+      else get().stopPolling();
     }, 3000);
-
-    set({ pollingIntervalId: intervalId });
+    set({ pollingIntervalId: interval });
   },
-
   stopPolling: () => {
-    const { pollingIntervalId } = get();
-    if (pollingIntervalId) {
-      clearInterval(pollingIntervalId);
-      set({ pollingIntervalId: null });
-    }
+    const interval = get().pollingIntervalId;
+    if (interval) clearInterval(interval);
+    set({ pollingIntervalId: null });
   },
 }));
-

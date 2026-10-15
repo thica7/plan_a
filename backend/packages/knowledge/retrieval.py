@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import math
 import os
 import time
@@ -21,9 +20,11 @@ from packages.llm import DoubaoClient
 
 from .embeddings import EmbeddingProvider
 from .models import KnowledgeScope, RetrievalHit, RetrievalRequest, RetrievalResponse
+from .lexical import LEXICAL_VERSION
 from .query_intent import PLAN_VERSION, RetrievalPlan, resolve_retrieval_plan
 from .repository import KnowledgeRepository
 from .reranker import RerankerProvider
+from .runtime import call_provider
 
 _DEFAULT_CACHE_TTL_SECONDS = 300.0
 _DEFAULT_CACHE_MAXSIZE = 256
@@ -287,7 +288,7 @@ class RetrievalService:
         started_at = time.monotonic()
         cache_hit = False
 
-        planned_search = plan.origin in {"explicit", "format_suffix"}
+        planned_search = plan.origin in {"explicit", "format_suffix", "auto", "dimension_scope_lookup"}
         if not planned_search and request.enable_query_rewrite and request.num_rewrites > 0:
             response = await self._retrieve_with_rewrites(request, plan)
         else:
@@ -364,13 +365,22 @@ class RetrievalService:
             "dimensions": None, "degraded": False, "reason": None,
         }
         reranker = self._reranker_provider.status() if self._reranker_provider is not None else None
-        reasons = [reason for reason in (self._dense_error, embedding.get("reason"),
-                   reranker.get("reason") if reranker else None) if reason]
+        reasons = [reason for reason in (
+            self._dense_error, self._rerank_error, embedding.get("reason"),
+            reranker.get("reason") if reranker else None,
+        ) if reason]
         index_status = getattr(self._vs, "status", None)
         return {"requested_mode": request.mode,
                 "effective_mode": "sparse" if self._dense_error else request.mode,
                 "embedding": embedding, "reranker": reranker,
                 "index": index_status() if callable(index_status) else None,
+                "candidates": {"dense": self._dense_hits, "sparse": self._sparse_hits,
+                               "reranked": self._reranked_hits},
+                "candidate_refs": list(self._candidate_refs.values()),
+                "semantic_enabled": embedding.get("effective_provider") in {
+                    "local-sentence-transformer", "http", "bge-m3"
+                } and not embedding.get("degraded") and not self._dense_error
+                and request.mode in {"dense", "hybrid"},
                 "degraded": bool(reasons), "reason": "; ".join(reasons) or None}
 
     async def _retrieve_with_rewrites(
@@ -429,17 +439,29 @@ class RetrievalService:
                     qvec, top_k=request.top_k, **filters,
                 )
             except Exception as exc:
-                if request.mode == "dense":
+                from .local_models import local_model_strict
+
+                local_provider = getattr(
+                    self._embedding_provider, "requested_provider", ""
+                ).startswith("local-")
+                if local_model_strict() or (request.mode == "dense" and not local_provider):
                     raise RuntimeError(f"Dense retrieval failed: {exc}") from exc
                 self._dense_error = f"Dense retrieval unavailable: {exc}"
             had_dense_candidates = bool(dense_hits)
             dense_hits = await self._refresh_canonical_hits(dense_hits, request, dense=True)
             if request.mode == "hybrid" and had_dense_candidates and not dense_hits:
                 self._dense_error = "Dense candidates rejected by canonical document validation"
+            if (request.mode == "hybrid" and not dense_hits and not self._dense_error
+                    and getattr(self._embedding_provider, "requested_provider", "").startswith(
+                        "local-")):
+                self._dense_error = (
+                    "No eligible dense candidates in configured model namespace; "
+                    "reindex may be required"
+                )
             dense_hits = _normalise_scores(dense_hits)
             self._dense_hits += len(dense_hits)
 
-        if request.mode in {"hybrid", "sparse"}:
+        if request.mode in {"hybrid", "sparse"} or self._dense_error:
             sparse_hits = await self._sparse_search(
                 query,
                 request.top_k,
@@ -448,15 +470,20 @@ class RetrievalService:
             self._sparse_hits += len(sparse_hits)
 
         if request.mode == "hybrid" and dense_hits and sparse_hits:
-            return _rrf_fusion(
+            candidates = _rrf_fusion(
                 dense_hits,
                 sparse_hits,
                 dense_weight=request.dense_weight,
                 sparse_weight=request.sparse_weight,
             )
-        if dense_hits:
-            return dense_hits
-        return sparse_hits
+        else:
+            candidates = dense_hits or sparse_hits
+        for hit in _filter_hits_by_request(candidates, request):
+            self._candidate_refs[hit.chunk_id] = {
+                "chunk_id": hit.chunk_id, "document_id": hit.document_id,
+                "document_version": hit.document_version, "content_hash": hit.content_hash,
+            }
+        return candidates
 
 
     async def _refresh_canonical_hits(
@@ -649,9 +676,21 @@ class RetrievalService:
     ) -> list[RetrievalHit]:
         if self._rerank_fn and hits and request.rerank_top_k > 0:
             rerank_count = min(request.rerank_top_k, len(hits))
-            self._reranked_hits += rerank_count
             rerank_hits = hits[:rerank_count]
-            scores = await _maybe_await(self._rerank_fn(query, [hit.text for hit in rerank_hits]))
+            try:
+                scores = await call_provider(
+                    self._rerank_fn, query, [hit.text for hit in rerank_hits]
+                )
+                if len(scores) != rerank_count or not all(math.isfinite(float(s)) for s in scores):
+                    raise ValueError("Reranker must return one finite score per candidate")
+            except Exception as exc:
+                from .local_models import local_model_strict
+
+                if local_model_strict():
+                    raise
+                self._rerank_error = f"Reranking unavailable: {exc}"
+                return _prefer_document_diversity(hits, final_top_k=request.final_top_k)
+            self._reranked_hits += rerank_count
             for hit, score in zip(rerank_hits, scores, strict=False):
                 hit.rerank_score = float(score)
                 hit.rerank_model = (
@@ -730,14 +769,17 @@ class RetrievalService:
         cached = self._embedding_cache.get(cache_key)
         if cached is not None:
             return cached
-        vector = (await _maybe_await(self._embed_fn([query])))[0]
+        if self._embedding_provider is not None:
+            vector = await call_provider(self._embedding_provider.embed_query, query)
+        else:
+            vector = (await call_provider(self._embed_fn, [query]))[0]
         self._embedding_cache.set(cache_key, vector)
         return vector
 
     async def _embed_texts(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        return await _maybe_await(self._embed_fn(texts))
+        return await call_provider(self._embed_fn, texts)
 
     @staticmethod
     def _cache_key(request: RetrievalRequest) -> str:
@@ -755,13 +797,15 @@ class RetrievalService:
             os.getenv("KB_INDEX_VERSION", "v1"),
             getattr(self._reranker_provider, "model_version", None), self._rerank_model,
         )
-        return f"{PLAN_VERSION}:{self._cache_key(request)}:{identity!r}"
+        return f"{PLAN_VERSION}:{LEXICAL_VERSION}:{self._cache_key(request)}:{identity!r}"
 
     def _reset_observability_counts(self) -> None:
         self._dense_error: str | None = None
+        self._rerank_error: str | None = None
         self._dense_hits = 0
         self._sparse_hits = 0
         self._reranked_hits = 0
+        self._candidate_refs: dict[str, dict[str, Any]] = {}
 
     async def _record_observability(
         self,
@@ -866,9 +910,3 @@ def _filter_hits_by_request(
                 continue
         filtered.append(hit)
     return filtered
-
-
-async def _maybe_await(value: Any) -> Any:
-    if inspect.isawaitable(value):
-        return await value
-    return value

@@ -1,5 +1,5 @@
 import { apiFetch } from "../api/http";
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { useCrawlStore } from '../stores/crawlStore';
 import { ManualTab } from '../features/crawl/ManualTab';
@@ -10,6 +10,8 @@ import { FailedUrlsPanel } from '../features/crawl/FailedUrlsPanel';
 import { useTranslation } from '../stores/i18n';
 import { SystemMessage } from '../i18n/SystemMessage';
 
+import { KnowledgeScopeControl, knowledgeScopeUrl, useKnowledgeWorkScope, type KnowledgeWorkScope } from '../features/knowledge/KnowledgeScopeControl';
+
 type SourceTab = 'manual' | 'sitemap' | 'rss';
 
 interface CrawlSourceDetail {
@@ -17,24 +19,29 @@ interface CrawlSourceDetail {
   progress: Record<string, number>;
 }
 
-async function listSources(): Promise<CrawlSource[]> {
-  const res = await apiFetch('/api/crawl/sources');
+async function listSources(scope: KnowledgeWorkScope): Promise<CrawlSource[]> {
+  const res = await apiFetch(knowledgeScopeUrl('/api/crawl/sources', scope));
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<CrawlSource[]>;
 }
 
-async function getSourceDetail(sourceId: string): Promise<CrawlSourceDetail> {
-  const res = await apiFetch(`/api/crawl/sources/${sourceId}`);
+async function getSourceDetail(sourceId: string, scope: KnowledgeWorkScope): Promise<CrawlSourceDetail> {
+  const res = await apiFetch(knowledgeScopeUrl(`/api/crawl/sources/${encodeURIComponent(sourceId)}`, scope));
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<CrawlSourceDetail>;
 }
 
-async function retrySource(sourceId: string): Promise<void> {
-  const res = await apiFetch(`/api/crawl/sources/${sourceId}/retry`, { method: 'POST' });
+async function retrySource(sourceId: string, scope: KnowledgeWorkScope): Promise<void> {
+  const res = await apiFetch(knowledgeScopeUrl(`/api/crawl/sources/${encodeURIComponent(sourceId)}/retry`, scope, true), { method: 'POST' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
 export default function CrawlPage() {
+  const workScope = useKnowledgeWorkScope();
+  return <div><KnowledgeScopeControl value={workScope} />{workScope.ready ? <ScopedCrawlPage key={workScope.key} scope={workScope.scope} /> : null}</div>;
+}
+
+function ScopedCrawlPage({ scope }: { scope: KnowledgeWorkScope }) {
   const { t } = useTranslation();
   const {
     jobs,
@@ -44,6 +51,8 @@ export default function CrawlPage() {
     retryJob,
   } = useCrawlStore();
 
+  const active = useRef(true);
+  const sourceRequest = useRef(0);
   const [sources, setSources] = useState<CrawlSource[]>([]);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SourceTab>('manual');
@@ -52,12 +61,14 @@ export default function CrawlPage() {
   const [priority, setPriority] = useState(100);
 
   const fetchSources = async () => {
+    if (!active.current) return;
+    const request = ++sourceRequest.current;
     setSourceError(null);
     try {
-      const listed = await listSources();
+      const listed = await listSources(scope);
       const withProgress = await Promise.all(listed.map(async (source) => {
         try {
-          const detail = await getSourceDetail(source.id);
+          const detail = await getSourceDetail(source.id, scope);
           return {
             ...detail.source,
             config: {
@@ -69,15 +80,18 @@ export default function CrawlPage() {
           return source;
         }
       }));
-      setSources(withProgress);
+      if (active.current && request === sourceRequest.current) setSources(withProgress);
     } catch (err) {
-      setSourceError(err instanceof Error ? err.message : String(err));
+      if (active.current && request === sourceRequest.current) setSourceError(err instanceof Error ? err.message : String(err));
     }
   };
 
   useEffect(() => {
+    active.current = true;
+    useCrawlStore.getState().setScope(scope);
     void fetchJobs();
     void fetchSources();
+    return () => { active.current = false; sourceRequest.current += 1; useCrawlStore.getState().setScope(null); };
   }, [fetchJobs]);
 
   useEffect(() => () => {
@@ -85,7 +99,7 @@ export default function CrawlPage() {
   }, []);
 
   const refreshAll = async () => {
-    await Promise.all([fetchJobs(), fetchSources()]);
+    if (active.current) await Promise.all([fetchJobs(), fetchSources()]);
   };
 
   const retryCrawlJob = async (jobId: string) => {
@@ -95,10 +109,12 @@ export default function CrawlPage() {
 
   const retryCrawlSource = async (sourceId: string) => {
     try {
-      await retrySource(sourceId);
+      const source = sources.find(item => item.id === sourceId);
+      if (!source || (source.project_id ?? null) !== scope.projectId) return;
+      await retrySource(sourceId, scope);
       await refreshAll();
     } catch (err) {
-      setSourceError(err instanceof Error ? err.message : String(err));
+      if (active.current) setSourceError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -107,6 +123,7 @@ export default function CrawlPage() {
   ), [jobs]);
 
   const sourceProps = {
+    projectId: scope.projectId,
     competitor: competitor.trim() || undefined,
     dimension: dimension.trim() || undefined,
     priority,
@@ -202,11 +219,15 @@ export default function CrawlPage() {
         </div>
       </div>
 
+      <p className="muted-line">尚未提供单任务重试或删除，请从所属来源重新采集。</p>
+      {sources.some(source => (source.project_id ?? null) !== scope.projectId) || jobs.some(job => (job.project_id ?? null) !== scope.projectId) ? <p className="muted-line">公共库条目只读</p> : null}
       <JobQueueTable
         jobs={jobs}
         sources={sources}
         onRetryJob={retryCrawlJob}
         onRetrySource={retryCrawlSource}
+        canRetryJob={() => false}
+        canRetrySource={source => (source.project_id ?? null) === scope.projectId}
       />
 
       <FailedUrlsPanel
@@ -214,6 +235,8 @@ export default function CrawlPage() {
         sources={sources}
         onRetryJob={retryCrawlJob}
         onRetrySource={retryCrawlSource}
+        canRetryJob={() => false}
+        canRetrySource={source => (source.project_id ?? null) === scope.projectId}
       />
     </div>
   );

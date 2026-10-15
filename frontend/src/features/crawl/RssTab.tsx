@@ -5,6 +5,7 @@ import { useTranslation } from '../../stores/i18n';
 import { SystemMessage } from '../../i18n/SystemMessage';
 
 interface RssTabProps {
+  projectId?: string | null;
   competitor?: string;
   dimension?: string;
   priority: number;
@@ -22,11 +23,12 @@ function parseFeedUrls(xml: string) {
   return [...entryLinks, ...itemLinks];
 }
 
-async function createRssSource(url: string, config: Record<string, unknown>) {
-  const res = await apiFetch('/api/crawl/sources', {
+async function createRssSource(url: string, config: Record<string, unknown>, projectId: string | null) {
+  const res = await apiFetch(`/api/crawl/sources?${new URLSearchParams({ ...(projectId ? { project_id: projectId } : {}), include_workspace_library: 'false' })}`,  {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      project_id: projectId,
       type: 'rss',
       config: { url, ...config },
     }),
@@ -35,7 +37,7 @@ async function createRssSource(url: string, config: Record<string, unknown>) {
   return res.json();
 }
 
-export function RssTab({ competitor, dimension, priority, onSubmitted }: RssTabProps) {
+export function RssTab({ projectId = null, competitor, dimension, priority, onSubmitted }: RssTabProps) {
   const { t } = useTranslation();
   const [url, setUrl] = useState('');
   const [maxUrls, setMaxUrls] = useState(100);
@@ -65,7 +67,7 @@ export function RssTab({ competitor, dimension, priority, onSubmitted }: RssTabP
     setSubmitting(true);
     setError(null);
     try {
-      await createRssSource(url.trim(), { competitor, dimension, priority, max_urls: maxUrls });
+      await createRssSource(url.trim(), { competitor, dimension, priority, max_urls: maxUrls }, projectId);
       setUrl('');
       setPreview([]);
       onSubmitted();

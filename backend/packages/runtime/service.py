@@ -613,9 +613,10 @@ class RuntimeCommandService:
             actor,
             "report:write",
         )
+        request = command.request.model_copy(update={"requested_by": actor.user_id})
         command_id = _command_id("request_approval", actor, version.id)
         try:
-            response = await self._workflow_service.start_report_approval(command.request)
+            response = await self._workflow_service.start_report_approval(request)
         except Exception as exc:  # noqa: BLE001 - command surface explains route failure.
             raise RuntimeCommandError(
                 503,
@@ -675,6 +676,7 @@ class RuntimeCommandService:
         actor: EnterpriseUserContext,
     ) -> RuntimeCommandResult:
         version = self._report_version_or_error(report_version_id, actor, "report:review")
+        request = request.model_copy(update={"approver_id": actor.user_id})
         command_id = _command_id(command_type, actor, version.id)
         try:
             if command_type == "approve_report":
@@ -950,7 +952,11 @@ class RuntimeCommandService:
         )
         evidence = [item for item in self._store.list_evidence(project_id=source.project_id)
                     if item.id in set(source.evidence_ids)]
-        claims, validation_metadata = validate_manual_revision(revision, evidence)
+        verified_claims = (self._run_service.current_manual_claims(source, evidence)
+                           if isinstance(self._run_service, RunService) else {})
+        claims, validation_metadata = validate_manual_revision(
+            revision, evidence, verified_claims=verified_claims,
+        )
         revision = revision.model_copy(update={
             "claim_ids": [claim.id for claim in claims],
             "quality_metadata": {**metadata, **validation_metadata},
@@ -1003,6 +1009,8 @@ class RuntimeCommandService:
             },
         )
         self._capture_manual_report_revision_memory(source, updated, request, actor)
+        if isinstance(self._run_service, RunService) and updated.run_id:
+            self._run_service.persist_report_versions(updated.run_id)
         return updated, command_id
 
     def _capture_manual_report_revision_memory(
@@ -1090,6 +1098,12 @@ class RuntimeCommandService:
         actor: EnterpriseUserContext,
         action: str,
     ) -> RunDetail:
+        if isinstance(self._run_service, RunService):
+            summary = self._run_service.peek_run_summary(run_id)
+            if summary is None:
+                raise RuntimeCommandError(404, "Run not found")
+            self._require_workspace_access(actor, summary.workspace_id, action,
+                                           target_type="run", target_id=run_id)
         detail = self._run_service.get_run(run_id)
         if detail is None:
             raise RuntimeCommandError(404, "Run not found")
@@ -1195,14 +1209,21 @@ class RuntimeCommandService:
     ) -> EvalOpsReleaseContract:
         runs = [
             detail
-            for summary in self._run_service.list_runs()
+            for summary in self._run_service.list_runs(workspace_id=version.workspace_id)
+            if summary.project_id == version.project_id
             if (detail := self._run_service.get_run(summary.id)) is not None
-            and detail.project_id == version.project_id
+            and (detail.project_id, detail.workspace_id) == (
+                version.project_id, version.workspace_id,
+            )
         ]
         if version.run_id and all(detail.id != version.run_id for detail in runs):
-            detail = self._run_service.get_run(version.run_id)
-            if detail is not None:
-                runs.append(detail)
+            summary = (self._run_service.peek_run_summary(version.run_id)
+                       if isinstance(self._run_service, RunService) else None)
+            if summary is not None and (summary.workspace_id, summary.project_id) == (
+                    version.workspace_id, version.project_id):
+                detail = self._run_service.get_run(version.run_id)
+                if detail is not None:
+                    runs.append(detail)
         report = build_enterprise_evalops_report(
             runs,
             limit=self._settings.evalops_release_limit,

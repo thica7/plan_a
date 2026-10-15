@@ -19,7 +19,7 @@ from packages.sqlite_locks import (
     write_lock_for,
 )
 
-from .lexical import build_lexical_plan
+from .lexical import build_lexical_plan, quantities_match
 from .models import (
     DocumentCreate,
     KnowledgeChunk,
@@ -265,6 +265,7 @@ class KnowledgeRepository:
         )
         self._db.row_factory = aiosqlite.Row
         await self._db.create_function("kb_tokens", 1, fts_tokens, deterministic=True)
+        await self._db.create_function("kb_quantity_matches", 2, quantities_match, deterministic=True)
         await self._db.create_function(
             "kb_casefold", 1, lambda value: value.casefold() if value is not None else None,
             deterministic=True,
@@ -854,6 +855,9 @@ class KnowledgeRepository:
             params.extend(item.casefold() for item in dimensions)
         self._add_scope_filters(clauses, params, scope=scope, market=market,
                                 source_roles=source_roles, max_age_days=max_age_days, prefix="d.")
+        if plan is not None:
+            clauses.append("kb_quantity_matches(d.text, ?) = 1")
+            params.append(query)
         async def fetch(match: str, count: int) -> list[KnowledgeDocument]:
             async with db.execute(
                 f"""
@@ -906,10 +910,14 @@ class KnowledgeRepository:
                 params.extend(item.casefold() for item in values)
         self._add_scope_filters(filters, params, scope=scope, market=market,
                                 source_roles=source_roles, max_age_days=max_age_days, prefix="d.")
+        if plan is not None:
+            filters.append("kb_quantity_matches(c.text, ?) = 1")
+            params.append(query)
         where = " AND ".join(filters)
         hits: dict[str, RetrievalHit] = {}
 
-        async def fetch(table: str, match: str, join: str, extra: str, path: str) -> None:
+        async def fetch(table: str, match: str, join: str, extra: str, path: str,
+                        extra_params: list[Any] | None = None) -> None:
             async with self._connection.execute(
                 f"""SELECT d.*, c.id AS hit_chunk_id, c.text AS hit_text,
                            bm25({table}) AS fts_rank
@@ -918,7 +926,7 @@ class KnowledgeRepository:
                     JOIN documents d ON d.id = c.document_id
                     WHERE {join} AND {table} MATCH ? AND {where} {extra}
                     ORDER BY fts_rank, d.id, c.chunk_index LIMIT ?""",
-                [match, *params, limit],
+                [match, *params, *(extra_params or []), limit],
             ) as cur:
                 rows = await cur.fetchall()
             for rank, row in enumerate(rows, 1):
@@ -931,7 +939,8 @@ class KnowledgeRepository:
                 else:
                     score = weight * (
                         (0.75 + 0.25 / rank) if path == "strict_body" else
-                        (0.5 + 0.25 / rank) if path == "fallback_body" else 0.1 / rank
+                        (0.5 + 0.25 / rank) if path == "fallback_body" else
+                        (0.4 + 0.2 / rank) if path == "fallback_title_body" else 0.1 / rank
                     )
                     metadata = {**doc.metadata, "lexical_retrieval": {
                         "version": plan.version, "path": path, "concepts": plan.concepts,
@@ -957,6 +966,13 @@ class KnowledgeRepository:
         if plan is not None and len(hits) < limit and plan.fallback_query:
             await fetch("chunks_fts", plan.fallback_query, "c.rowid = chunks_fts.rowid",
                         "", "fallback_body")
+        if plan is not None and len(hits) < limit and plan.title_query and plan.title_body_query:
+            # The exact product/model phrase must belong to the same canonical
+            # document as the matching body chunk. Never join titles by scope.
+            await fetch("chunks_fts", plan.title_body_query, "c.rowid = chunks_fts.rowid",
+                        "AND EXISTS (SELECT 1 FROM documents_fts "
+                        "WHERE documents_fts.rowid = d.rowid AND documents_fts MATCH ?)",
+                        "fallback_title_body", [f"title : ({plan.title_query})"])
         await fetch("documents_fts", f"title : ({match_query})",
                     "d.rowid = documents_fts.rowid",
                     "AND c.chunk_index = (SELECT MIN(c2.chunk_index) "

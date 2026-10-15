@@ -125,9 +125,16 @@ class LocalArtifactStorage:
         *,
         max_bytes: int = 2_000_000,
     ) -> tuple[bytes, bool] | None:
+        if artifact.storage_backend != "local":
+            return None
         if not artifact.uri.startswith("local://"):
             return None
         relative_path = Path(artifact.uri.removeprefix("local://"))
+        expected = Path(_safe_segment(artifact.workspace_id)) / artifact.id / artifact.filename
+        if (relative_path.is_absolute() or ".." in relative_path.parts
+                or relative_path.as_posix() != expected.as_posix()
+                or len(relative_path.parts) != 3):
+            raise ArtifactStorageError("Artifact path does not match its workspace and identity.")
         target_path = (self.root / relative_path).resolve()
         root_path = self.root.resolve()
         if root_path != target_path and root_path not in target_path.parents:
@@ -279,7 +286,7 @@ def _payload_bytes(request: ArtifactCreateRequest) -> bytes:
 
 def _safe_filename(value: str) -> str:
     candidate = value.replace("\\", "/").split("/")[-1].strip()
-    candidate = re.sub(r"[^A-Za-z0-9._-]+", "-", candidate).strip(".-")
+    candidate = re.sub(r"[^A-Za-z0-9\u4e00-\u9fff._-]+", "-", candidate).strip(".-")
     return candidate[:180] or "artifact.bin"
 
 

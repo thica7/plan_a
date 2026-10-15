@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import defaultdict, deque
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 
 from packages.research.evidence.snapshot import _identity, _verify
+from packages.research.evidence.capabilities import capability_keys
 from packages.research.evidence.snapshot_models import (
     EvidenceConflict,
     EvidenceFact,
@@ -141,12 +143,16 @@ def _build_view(
     competitor: str | None,
     dimension: str | None,
     requested_ids: tuple[str, ...] | None,
+    requested_fact_ids: tuple[str, ...] | None,
     max_bytes: int,
     sources: tuple[EvidenceSource, ...],
     facts: tuple[EvidenceFact, ...],
     conflicts: tuple[EvidenceConflict, ...],
     gaps: tuple[EvidenceGap, ...],
 ) -> StageEvidenceView:
+    products = tuple(sorted(set(snapshot.competitors) | {fact.competitor for fact in snapshot.facts} |
+                            {name for source in snapshot.sources
+                             for name in (source.competitor, *source.covered_competitors)}))
     dependencies = {
         "run_id": snapshot.run_id,
         "workspace_id": snapshot.workspace_id,
@@ -154,6 +160,7 @@ def _build_view(
         "agent": agent,
         "competitor": competitor.strip().casefold() if competitor else None,
         "dimension": dimension.strip().casefold() if dimension else None,
+        "comparison_products": products,
         "requested_source_ids": requested_ids,
         "max_bytes": max_bytes,
         "sources": [source.model_dump(mode="json") for source in sources],
@@ -161,6 +168,8 @@ def _build_view(
         "conflicts": [conflict.model_dump(mode="json") for conflict in conflicts],
         "gaps": [gap.model_dump(mode="json") for gap in gaps],
     }
+    if requested_fact_ids is not None:
+        dependencies['requested_fact_ids'] = requested_fact_ids
     dependency_hash = hashlib.sha256(canonical_json(dependencies).encode("utf-8")).hexdigest()
     view = StageEvidenceView(
         agent=agent,
@@ -172,6 +181,7 @@ def _build_view(
         content_hash=snapshot.content_hash,
         competitor=competitor,
         dimension=dimension,
+        comparison_products=products,
         sources=sources,
         source_ids=tuple(source.id for source in sources),
         facts=facts,
@@ -197,6 +207,7 @@ def select_evidence_view(
     competitor: str | None = None,
     dimension: str | None = None,
     source_ids: Iterable[str] | None = None,
+    fact_ids: Iterable[str] | None = None,
     max_bytes: int = 8192,
 ) -> StageEvidenceView:
     _verify(snapshot)
@@ -205,6 +216,7 @@ def select_evidence_view(
     if max_bytes < 1:
         raise ValueError("evidence view byte budget must be positive")
     requested_ids = tuple(sorted(set(source_ids))) if source_ids is not None else None
+    requested_fact_ids = tuple(sorted(set(fact_ids))) if fact_ids is not None else None
     allowed_sources = {
         source.id: source
         for source in snapshot.sources
@@ -242,10 +254,22 @@ def select_evidence_view(
         if source_problems:
             gaps.extend(_gap(problem, source=source) for problem in source_problems)
             problems[source.id] = source_problems
+    def observation_key(fact):
+        return (fact.source_id, fact.competitor, fact.dimension, fact.unit,
+                fact.market, fact.qualifiers_json, fact.quote, fact.evidence_item_ids)
+
+    requested_observations = ({observation_key(fact) for fact in snapshot.facts
+                               if fact.id in requested_fact_ids}
+                              if requested_fact_ids is not None else None)
+    if requested_fact_ids is not None:
+        known = {fact.id for fact in snapshot.facts}
+        gaps.extend(_gap('fact_not_in_snapshot', fact_id=fact_id, competitor=competitor, dimension=dimension)
+                    for fact_id in requested_fact_ids if fact_id not in known)
     facts = {}
     for fact in snapshot.facts:
         if (
             fact.source_id not in allowed_sources
+            or (requested_observations is not None and observation_key(fact) not in requested_observations)
             or not _matches(fact.competitor, competitor)
             or not _matches(fact.dimension, dimension)
         ):
@@ -256,7 +280,6 @@ def select_evidence_view(
         facts[fact.id] = fact.model_copy(update={"status": status})
     conflicts = []
     groups: list[set[str]] = []
-    grouped = set()
     for conflict in snapshot.conflicts:
         present = set(conflict.fact_ids) & facts.keys()
         if not present:
@@ -267,7 +290,6 @@ def select_evidence_view(
         if set(conflict.fact_ids) <= facts.keys():
             conflicts.append(conflict)
             groups.append(set(conflict.fact_ids))
-            grouped.update(conflict.fact_ids)
         else:
             gaps.append(
                 _gap(
@@ -277,7 +299,18 @@ def select_evidence_view(
                     dimension=dimension,
                 )
             )
-    groups.extend({fact_id} for fact_id in sorted(facts) if fact_id not in grouped)
+    # Keep an observation's value, support status and complete condition text
+    # together. Conflict components also carry each participant's full observation.
+    observations = defaultdict(set)
+    for fact in facts.values():
+        key = (fact.source_id, fact.competitor, fact.dimension, fact.unit,
+               fact.market, fact.qualifiers_json, fact.quote, fact.evidence_item_ids)
+        observations[key].add(fact.id)
+    for observation in observations.values():
+        overlapping = [group for group in groups if group & observation]
+        merged = set(observation).union(*overlapping)
+        groups = [group for group in groups if not group & merged]
+        groups.append(merged)
     groups.sort(
         key=lambda group: min(
             (
@@ -290,6 +323,42 @@ def select_evidence_view(
             for fact_id in group
         )
     )
+    # A small first observation from every product/dimension precedes another
+    # observation from an already represented branch. Names never consume a quota.
+    branches = defaultdict(list)
+    for group in groups:
+        branch = min((facts[item].competitor, facts[item].dimension) for item in group)
+        branches[branch].append(group)
+    capability_products = defaultdict(set)
+    fact_capabilities = {}
+    for fact in snapshot.facts:
+        if fact.field == 'evidence_terms':
+            from packages.research.evidence.operations import operation_observations
+            keys = (*capability_keys(fact, snapshot.competitors), *('operation.' + row['operation'] for row in operation_observations(fact, snapshot.competitors)))
+            fact_capabilities[fact.id] = keys if fact.id in facts and facts[fact.id].status == 'supported' else ()
+            for key in keys:
+                capability_products[key].add(fact.competitor)
+
+    def coverage_priority(group):
+        axes = {'shared_editing', 'comments', 'permissions', 'operation.read', 'operation.comment',
+                'operation.edit', 'operation.create', 'operation.share', 'operation.manage_access'}
+        branch = min((facts[item].competitor, facts[item].dimension) for item in group)
+        seen = {key for item in selected_facts if (facts[item].competitor, facts[item].dimension) == branch
+                and facts[item].field == 'evidence_terms'
+                for key in fact_capabilities.get(item, ())}
+        keys = {key for item in group if facts[item].field == 'evidence_terms'
+                for key in fact_capabilities.get(item, ())}
+        return -100 * len((keys & axes) - seen) - max(
+            (len(capability_products[key]) for key in keys), default=0)
+    queues = {branch: deque(sorted(items, key=lambda group: (
+        any(facts[item].status != "supported" for item in group),
+        sum(len(facts[item].value_json.encode("utf-8")) + len(facts[item].quote.encode("utf-8")) for item in group),
+        min(group),
+    ))) for branch, items in branches.items()}
+    # Reserve branch-specific omission records. They describe view capacity,
+    # not collection quality, and do not require extra retrieval.
+    budget_gaps = tuple(_gap("context_budget_exceeded", competitor=product, dimension=dim)
+                        for product, dim in sorted(branches))
     gap_records = tuple(sorted(set(gaps), key=lambda gap: gap.id))
     budget_gap = _gap("context_budget_exceeded", competitor=competitor, dimension=dimension)
     selected_facts: set[str] = set()
@@ -310,15 +379,19 @@ def select_evidence_view(
         chosen_conflicts = tuple(
             conflict for conflict in conflicts if set(conflict.fact_ids) <= fact_selection
         )
-        chosen_gaps = tuple(
-            sorted((*gap_records, *((budget_gap,) if extra_gap else ())), key=lambda gap: gap.id)
-        )
+        omitted_branches = {(facts[item].competitor, facts[item].dimension)
+                            for item in facts.keys() - fact_selection}
+        scoped_gaps = tuple(gap for gap in budget_gaps
+                            if (gap.competitor, gap.dimension) in omitted_branches)
+        chosen_gaps = tuple(sorted((*gap_records, *scoped_gaps,
+                                   *((budget_gap,) if extra_gap else ())), key=lambda gap: gap.id))
         return _build_view(
             snapshot,
             agent=agent,
             competitor=competitor,
             dimension=dimension,
             requested_ids=requested_ids,
+            requested_fact_ids=requested_fact_ids,
             max_bytes=max_bytes,
             sources=projected,
             facts=picked,
@@ -328,15 +401,36 @@ def select_evidence_view(
 
     # Reserve a complete diagnostic record before filling the evidence portion.
     view = build(set(), set(), True)
-    for group in groups:
-        candidate_facts = selected_facts | group
-        candidate_sources = selected_sources | {facts[fact_id].source_id for fact_id in group}
-        try:
-            candidate = build(candidate_facts, candidate_sources, True)
-        except ValueError:
-            has_budget_gap = True
-            continue
-        selected_facts, selected_sources, view = candidate_facts, candidate_sources, candidate
+    while any(queues.values()):
+        represented_products = {facts[item].competitor for item in selected_facts}
+        represented_branches = {(facts[item].competitor, facts[item].dimension) for item in selected_facts}
+        # Try an unrepresented product/branch's alternative sources before
+        # allocating more observations to an already represented branch.
+        branch = min((key for key, queue in queues.items() if queue), key=lambda key: (
+            key[0] in represented_products, key in represented_branches,
+            len(branches[key]) - len(queues[key]), key,
+        ))
+        candidates = []
+        reserve_coverage = len(branches) > 1 and branch not in represented_branches
+        for group in tuple(queues[branch]):
+            candidate_facts = selected_facts | group
+            candidate_sources = selected_sources | {facts[fact_id].source_id for fact_id in group}
+            try:
+                candidate = build(candidate_facts, candidate_sources, True)
+            except ValueError:
+                has_budget_gap = True
+                queues[branch].remove(group)
+                continue
+            candidates.append((any(facts[item].status != "supported" for item in group),
+                               candidate.estimated_bytes if reserve_coverage else 0,
+                               coverage_priority(group), -min(facts[item].confidence for item in group),
+                               candidate.estimated_bytes, min(group), group,
+                               candidate_facts, candidate_sources, candidate))
+        if candidates:
+            # Measure the whole source-paired prompt: a shorter quote can have
+            # a much larger page header than another equally valid observation.
+            _, _, _, _, _, _, group, selected_facts, selected_sources, view = min(candidates, key=lambda item: item[:6])
+            queues[branch].remove(group)
     source_has_facts = {fact.source_id for fact in snapshot.facts}
     for source_id in sorted(allowed_sources):
         if source_id in source_has_facts or "source_inactive" in problems.get(source_id, ()):

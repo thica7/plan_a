@@ -10,6 +10,11 @@ from urllib.parse import urlparse
 from packages.agents import SubagentContext
 from packages.agents.collectors.kb_bridge import CollectorKBBridgeMixin
 from packages.agents.collectors.skill_tools import collect_competitor_with_skill_tools
+from packages.agents.prompt_contract import EVIDENCE_RULES
+from packages.research.extraction.semantic import (
+    MAX_PAGE_CALLS, SEMANTIC_SCHEMA, SEMANTIC_SYSTEM,
+    semantic_extraction, semantic_page_allowed, semantic_body_window,
+)
 from packages.business_intel.entity_resolver import (
     identity_terms_for_competitor,
     is_trusted_url_for_competitor,
@@ -29,15 +34,19 @@ from packages.identity import compute_raw_source_id
 from packages.memory.report_reuse import report_reuse_candidates
 from packages.refs import merge_ordered_refs
 from packages.research.budget import research_depth_budget
+from packages.research.capture import capture_candidate
+from packages.research.coverage_contract import evaluate_coverage_contract
 from packages.research.discovery import (
     build_search_queries,
     homepage_candidates,
     trusted_registry_candidates,
 )
 from packages.research.evidence import (
+    admit_evidence_items,
     raw_sources_from_research_result,
     source_quality_problem,
 )
+from packages.research.extraction import extract_page
 from packages.research.models import ResearchBrief
 from packages.research.pipeline import run_research_pipeline
 from packages.schema.api_dto import RunDetail
@@ -82,8 +91,36 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         fetched_by_url: dict[str, tuple[str, Any]] = {}
         qa_feedback = self._qa_feedback_for_branch(detail, "collector", dimension, competitor)
         max_turns = self._collector_task_max_turns(detail.plan, dimension, competitor)
-        allowed_actions = self._collector_react_allowed_actions(dimension)
+        coverage_feedback = self._collector_coverage_for(
+            detail.id, context.subagent, competitor, dimension
+        )
+        pending_candidates = []
         for turn in range(1, max_turns + 1):
+            remaining_budget = self._collector_react_remaining_budget(record, context)
+            if remaining_budget is not None and not (
+                remaining_budget["remaining_search_calls"]
+                or remaining_budget["remaining_fetch_calls"]
+            ):
+                self._trace_local_tool(
+                    record, agent="collector", subagent=context.subagent,
+                    name="collector_react_skipped", input_text=competitor,
+                    output_text=json.dumps({
+                        "reason": "collector_tool_budget_exhausted",
+                        "remaining_budget": remaining_budget,
+                        "coverage": coverage_feedback,
+                    }, ensure_ascii=False), context=context,
+                    metadata={"reason": "collector_tool_budget_exhausted"},
+                )
+                break
+            allowed_actions = self._collector_react_allowed_actions(dimension)
+            if remaining_budget is not None:
+                exhausted = {
+                    action for action, key in (
+                        ("web_search", "remaining_search_calls"),
+                        ("fetch_page", "remaining_fetch_calls"),
+                    ) if remaining_budget[key] == 0
+                }
+                allowed_actions = [action for action in allowed_actions if action not in exhausted]
             payload = await self._trace_llm_json(
                 record,
                 agent="collector",
@@ -94,7 +131,13 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                     "and one dimension. "
                     f"Allowed actions are {', '.join(allowed_actions)}. "
                     "Use search/fetch evidence before finish. Return only sources for "
-                    "the assigned competitor."
+                    "the assigned competitor. "
+                    + EVIDENCE_RULES
+                    + "A successful HTTP fetch is not factual completion. Use coverage "
+                    "missing_intents and repair_hints for targeted search/fetch. If a current "
+                    "price is requested, billing policy alone is insufficient. Do not invent "
+                    "missing market, interval or tax conditions. Stop when coverage passes "
+                    "or the remaining turn budget is exhausted; disclose unresolved gaps."
                 ),
                 user=(
                     f"Topic: {detail.topic}\n"
@@ -103,6 +146,9 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                     f"Dimension description: {skill.description if skill else dimension}\n"
                     f"Homepage hint: {detail.plan.homepage_hints.get(competitor, '')}\n"
                     f"QA feedback for redo: {json.dumps(qa_feedback, ensure_ascii=False)}\n"
+                    f"Coverage feedback JSON: {json.dumps(coverage_feedback, ensure_ascii=False)}\n"
+                    f"Remaining tool budget JSON: {json.dumps(remaining_budget)}\n"
+                    f"remaining_turns={max_turns - turn + 1}\n"
                     f"Observations JSON: {json.dumps(observations, ensure_ascii=False)}\n\n"
                     "Return one action. For finish, include sources with title, url, "
                     "summary, confidence."
@@ -179,6 +225,12 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                     record, "collector", context.subagent, url, context
                 )
                 fetched_by_url[fetched.url] = (url, fetched)
+                coverage_feedback = await self._collector_react_fact_coverage(
+                    detail, dimension, competitor, fetched_by_url,
+                )
+                self._record_collector_coverage(
+                    detail.id, context.subagent, competitor, dimension, coverage_feedback
+                )
                 observations.append(
                     {
                         "turn": turn,
@@ -188,6 +240,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                         "title": fetched.title,
                         "snippet": fetched.snippet,
                         "content_hash": fetched.content_hash,
+                        "fact_coverage": coverage_feedback,
                     }
                 )
                 continue
@@ -255,6 +308,17 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                     },
                     default_competitor=competitor,
                 )
+                pending_candidates = candidates
+                if fetched_by_url and self._collector_coverage_failed(coverage_feedback):
+                    observations.append(
+                        {
+                            "turn": turn,
+                            "action": "finish",
+                            "error": "fact_coverage_incomplete",
+                            "coverage": coverage_feedback,
+                        }
+                    )
+                    continue
                 return [
                     *candidates,
                     *self._source_candidates_from_react_fetches(
@@ -267,11 +331,30 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             observations.append(
                 {"turn": turn, "action": action or "unknown", "error": "unsupported_action"}
             )
-        return self._source_candidates_from_react_fetches(
-            dimension,
-            competitor,
-            fetched_by_url,
+        return [*pending_candidates, *self._source_candidates_from_react_fetches(
+            dimension, competitor, fetched_by_url, start_rank=len(pending_candidates),
+        )]
+
+    async def _collector_react_fact_coverage(self, detail, dimension, competitor, fetched_by_url):
+        """Evaluate cached tool responses without fetching again or admitting unreviewed claims."""
+        brief = self._research_brief(detail, competitor, dimension)
+        candidates = self._source_candidates_from_react_fetches(
+            dimension, competitor, fetched_by_url
         )
+        responses = {requested: response for requested, response in fetched_by_url.values()}
+        responses.update({response.url: response for _, response in fetched_by_url.values()})
+
+        async def cached_fetch(url):
+            return responses[url]
+
+        pages = [await capture_candidate(candidate, cached_fetch) for candidate in candidates]
+        extractions = [extract_page(brief, page) for page in pages if page.status == "ok"]
+        items = admit_evidence_items(
+            extractions, brief=brief, captured_pages=pages, candidates=candidates
+        )
+        return evaluate_coverage_contract(
+            brief, candidates=candidates, pages=pages, evidence_items=items, ledger=[],
+        ).model_dump(mode="json")
 
     def _collector_react_allowed_actions(self, dimension: str) -> list[str]:
         skill = self._skill_registry.get(dimension)
@@ -285,6 +368,21 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             actions.extend(["web_search", "fetch_page"])
         actions.append("finish")
         return actions
+
+    def _collector_react_remaining_budget(self, record, context, subagent=None):
+        tracked = self._collector_research_budget_usage(
+            record, "collector", context.subagent if context else subagent, context,
+        )
+        if tracked is None:
+            return None
+        usage, budget = tracked
+        return {
+            "remaining_search_calls": max(0, budget.max_search_queries - usage.search_calls),
+            "remaining_fetch_calls": max(0, budget.max_fetches - usage.fetch_calls),
+            "remaining_advanced_fetches": max(
+                0, budget.max_advanced_fetches - usage.advanced_fetch_attempts,
+            ),
+        }
 
     def _force_source_competitor(
         self, raw_sources: object, competitor: str
@@ -473,11 +571,21 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             "agent": "collector", "subagent": context.subagent if context else dimension,
             "query": query, "max_results": max_results, "context": context,
         }
+        remaining = self._collector_react_remaining_budget(record, context, dimension)
+        if remaining is not None and remaining["remaining_search_calls"] == 0 and not (
+            self._has_reusable_native_search_cache(record, query, max_results, filters)
+        ):
+            return []
         if filters is None:
             return await self._trace_search(record, **kwargs)
         results = await self._trace_search(record, filters=filters, **kwargs)
         if results:
             return results
+        remaining = self._collector_react_remaining_budget(record, context, dimension)
+        if remaining is not None and remaining["remaining_search_calls"] == 0 and not (
+            self._has_reusable_native_search_cache(record, query, max_results)
+        ):
+            return []
         return await self._trace_search(record, **kwargs)
 
     async def _collect_competitor_with_research_pipeline(
@@ -531,7 +639,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         max_repair_rounds = (
             1 if enable_repair and self._requires_verified_web_evidence(detail, dimension) else 0
         )
-        depth_budget = research_depth_budget(detail.plan.research_depth)
+        depth_budget = research_depth_budget(detail.plan.research_depth, dimension=dimension)
         if depth_budget is not None:
             target_source_count = min(target_source_count, depth_budget.target_sources)
             max_repair_rounds = (
@@ -542,6 +650,9 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         allow_search_discovery = (
             enable_search and self._search.is_enabled and not refresh_candidates
         )
+        from packages.research.evidence.operations import operation_repair_rounds
+        max_repair_rounds = operation_repair_rounds(detail.topic, detail.plan.target_product.use_cases if detail.plan.target_product else (), dimension,
+            enabled=enable_repair and self._requires_verified_web_evidence(detail, dimension), depth_rounds=max_repair_rounds)
         brief = self._research_brief(detail, competitor, dimension).model_copy(
             update={
                 "target_source_count": target_source_count,
@@ -584,11 +695,16 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             except Exception:  # noqa: BLE001 - one failed candidate should not abort collection.
                 return None
 
+        async def semantic_extract(active_brief, page):
+            return await self._collector_semantic_extract(record, active_brief, page, context)
+
         result = await run_research_pipeline(
             brief,
             fetch=fetch,
             search=search if allow_search_discovery else None,
             seed_candidates=seed_candidates,
+            repair_tasks=self._collector_targeted_repairs(detail, competitor, dimension),
+            semantic_extract=semantic_extract if detail.execution_mode == "real" else None,
         )
         if result.coverage is not None:
             self._record_collector_coverage(
@@ -608,20 +724,6 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             rejection_diagnostics=admission_diagnostics,
         )
         await self._persist_captured_sources_to_kb(record, detail, sources, result, context)
-        readmitted_ids = {
-            source.id for source in sources
-            if source.id in detail.evidence_retired_source_ids
-        }
-        if readmitted_ids:
-            # These sources passed the server's capture and admission pipeline again.
-            detail.raw_sources = [
-                source for source in detail.raw_sources if source.id not in readmitted_ids
-            ]
-            detail.evidence_retired_source_ids = [
-                source_id for source_id in detail.evidence_retired_source_ids
-                if source_id not in readmitted_ids
-            ]
-            detail.evidence_inputs_dirty = True
         self._trace_local_tool(
             record,
             agent="collector",
@@ -640,6 +742,8 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                 {
                     "source_ids": [source.id for source in sources],
                     "gap_ids": [gap.id for gap in result.gaps],
+                    "operation_gaps": [gap.model_dump(mode='json') for gap in result.gaps
+                                       if gap.metadata.get('source') == 'operation_comparison'],
                     "repair_task_ids": [task.id for task in result.repair_tasks],
                     "metrics": result.metrics,
                     "admission_rejections": admission_diagnostics[:12],
@@ -679,6 +783,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                 ),
             },
         )
+        self._finish_delivery_phase(record, 'collector', f'{competitor}/{dimension}')
         return sources
 
     def _raw_sources_from_research_result(
@@ -877,6 +982,8 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         additions: list[RawSource],
         target_source_count: int,
     ) -> None:
+        if any(source.metadata.get('operation_repair_evidence_retained') for source in additions):
+            target_source_count += 1
         for source in additions:
             if len(target) >= target_source_count:
                 break
@@ -905,7 +1012,9 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         if not self._requires_verified_web_evidence(detail, dimension):
             return 1
         target = max(1, int(self._settings.collector_target_verified_sources_per_branch))
-        depth_budget = research_depth_budget(detail.plan.research_depth)
+        depth_budget = research_depth_budget(detail.plan.research_depth, dimension=dimension)
+        if detail.plan.research_depth == 'quick' and dimension == 'feature' and target >= 2:
+            target = max(target, 3)
         return min(target, depth_budget.target_sources) if depth_budget is not None else target
 
     def _collector_search_max_results(self) -> int:
@@ -925,7 +1034,8 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         normalized_url = url.rstrip("/")
         existing_sources = (
             batch_sources
-            if detail.evidence_refresh_active
+            if (detail.evidence_refresh_active or getattr(
+                self._runs.get(detail.id), "collector_redo_snapshot_id", None))
             else (*detail.raw_sources, *batch_sources)
         )
         for source in existing_sources:
@@ -1166,6 +1276,54 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             return ""
         return (urlparse(url).hostname or "").casefold().removeprefix("www.")
 
+    def _collector_targeted_repairs(self, detail, competitor, dimension):
+        from packages.research.models import RepairTask
+
+        feedback = self._qa_feedback_for_branch(detail, "collector", dimension, competitor)
+        return [RepairTask(
+            gap_id=str(issue["id"]), strategy="targeted_discovery", required_action="add_evidence",
+            competitor=competitor, dimension=dimension, target_fields=[str(issue["field_path"])],
+            query_hints=[f"{competitor} official current plan prices currency billing interval seat type"
+                         if "pricing" in dimension.casefold() else f"{competitor} official {dimension} {str(issue['problem'])[:160]}"],
+            acceptance_rule="Captured product-bound facts with exact quotes; preserve all price conditions and existing coverage requirements.",
+        ) for issue in feedback[:3]]
+
+    async def _collector_semantic_extract(self, record, brief, page, context):
+        if not semantic_page_allowed(brief, page):
+            return None
+        record = self._evidence_live_record(record)
+        body = page.text or page.markdown or page.snippet
+        key = (brief.competitor, brief.dimension, hashlib.sha256(body.encode()).hexdigest())
+        cache = record.semantic_extraction_cache
+        if key in cache:
+            return semantic_extraction(brief, page, cache[key]) if cache[key] is not None else None
+        page_limit = 3 if brief.research_depth == 'quick' and brief.dimension == 'feature' else MAX_PAGE_CALLS
+        if any(field.startswith('operation.') for field in brief.required_fields):
+            page_limit += 1
+        if sum(item[:2] == key[:2] for item in cache) >= page_limit:
+            return None
+        # Reserve the page before await, including failed attempts, across fallbacks.
+        cache[key] = None
+        from packages.research.evidence.operations import required_operations
+        try:
+            payload = await self._trace_llm_json(
+                record, agent="collector", subagent=context.subagent,
+                name="collector_semantic_extract", system=EVIDENCE_RULES + SEMANTIC_SYSTEM,
+                user=json.dumps({"product": brief.competitor, "dimension": brief.dimension,
+                                 "research_focus": {"question": brief.topic[:800],
+                                                    "use_cases": brief.product_use_cases[:6],
+                                                    "requested_operations": required_operations(brief.topic, brief.product_use_cases)},
+                                 "url": page.final_url, "title": page.title,
+                                 "body": semantic_body_window(brief, page)}, ensure_ascii=False),
+                schema_hint=SEMANTIC_SCHEMA, context=context,
+                timeout_seconds=30, max_output_tokens=1600,
+            )
+            result = semantic_extraction(brief, page, payload)
+            cache[key] = payload
+            return result
+        except Exception:  # bounded optional extraction must not lose deterministic evidence
+            return None
+
     def _research_brief(
         self,
         detail: RunDetail,
@@ -1173,7 +1331,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         dimension: str,
     ) -> ResearchBrief:
         target_source_count = self._collector_target_source_count(detail, dimension)
-        depth_budget = research_depth_budget(detail.plan.research_depth)
+        depth_budget = research_depth_budget(detail.plan.research_depth, dimension=dimension)
         return ResearchBrief(
             run_id=detail.id,
             topic=detail.topic,
@@ -2130,11 +2288,48 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
     ) -> list[RawSource]:
         scoped_dimensions = set(dimensions)
         normalized: list[RawSource] = []
-        seen: dict[tuple[str, str, str, str, str], int] = {}
+        seen: dict[tuple, int] = {}
         for source in detail.raw_sources:
             if scoped_dimensions and source.dimension not in scoped_dimensions:
                 normalized.append(source)
                 continue
+            # KB retrieval can return the same canonical body under a chunk ID
+            # with fewer extracted fields. Keep the full accepted source identity.
+            alias = next((item for item in normalized
+                if item.id not in detail.evidence_retired_source_ids
+                and source.id not in detail.evidence_retired_source_ids
+                and self._collector_same_accepted_evidence(item, source)), None)
+            if alias is not None:
+                verified_live_capture = (
+                    source.metadata.get("captured_page_id")
+                    and source.metadata.get("capture_content_hash")
+                    and source.metadata.get("kb_full_source_ingest_status") == "stored"
+                )
+                if detail.evidence_refresh_active or verified_live_capture:
+                    normalized[normalized.index(alias)] = self._merge_duplicate_refresh_source(alias, source)
+                continue
+            if detail.evidence_refresh_active:
+                # Legacy KB hits without a complete canonical credential cannot
+                # authorize reuse. Successful live refresh replaces their identity
+                # and keeps only prior_* provenance, as before.
+                unbound_kb = next((item for item in normalized
+                    if item.id not in detail.evidence_retired_source_ids
+                    and source.id not in detail.evidence_retired_source_ids
+                    and (item.candidate_origin == "rag_kb" or item.metadata.get("kb_retrieved"))
+                    and not item.metadata.get("kb_document_version")
+                    and not item.metadata.get("kb_document_content_hash")
+                    and (item.competitor, item.dimension, str(item.url), item.content_hash,
+                         item.source_type, item.metadata.get("source_role", "source"))
+                        == (source.competitor, source.dimension, str(source.url), source.content_hash,
+                            source.source_type, source.metadata.get("source_role", "source"))
+                    and not source.metadata.get("kb_document_id")
+                    and not source.metadata.get("normalized_fields")
+                    and not item.metadata.get("normalized_fields")), None)
+                if unbound_kb is not None:
+                    refreshed = self._merge_duplicate_refresh_source(unbound_kb, source)
+                    if refreshed.id == source.id:
+                        normalized[normalized.index(unbound_kb)] = refreshed
+                        continue
             covered_competitors = source.covered_competitors or self._normalize_covered_competitors(
                 detail, source.competitor
             )
@@ -2145,13 +2340,16 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                 source.content_hash,
                 source.title.strip().casefold(),
                 "|".join(covered_competitors),
+                self._collector_source_identity(source),
             )
             if key in seen:
-                if detail.evidence_refresh_active:
-                    index = seen[key]
-                    normalized[index] = self._merge_duplicate_refresh_source(
-                        normalized[index], source
-                    )
+                index = seen[key]
+                existing = normalized[index]
+                if existing.id in detail.evidence_retired_source_ids:
+                    if source.id not in detail.evidence_retired_source_ids:
+                        normalized[index] = source.model_copy(update={"covered_competitors": covered_competitors})
+                elif detail.evidence_refresh_active and source.id not in detail.evidence_retired_source_ids:
+                    normalized[index] = self._merge_duplicate_refresh_source(existing, source)
                 continue
             seen[key] = len(normalized)
             normalized.append(
@@ -2159,9 +2357,64 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             )
         return normalized
 
+    @staticmethod
+    def _collector_source_identity(source: RawSource) -> str:
+        metadata = source.metadata
+        return json.dumps({
+            "competitor": source.competitor, "source_type": source.source_type,
+            "role": metadata.get("kb_source_role", metadata.get("source_role", "source")),
+            "document_id": metadata.get("kb_document_id", metadata.get("document_id")),
+            "version": metadata.get("kb_document_version", metadata.get("document_version")),
+            "document_hash": metadata.get("kb_document_content_hash", metadata.get("kb_content_hash")),
+            "workspace": metadata.get("kb_document_workspace_id"),
+            "project": metadata.get("kb_document_project_id"),
+            "market": metadata.get("market"),
+            "material_level": metadata.get("source_material_level"),
+            "status": metadata.get("kb_document_status", "active"),
+            "flags": {key: metadata.get(key) for key in (
+                "fallback_synthetic", "survey_interview_synthetic", "community_evidence")},
+            "fields": metadata.get("normalized_fields"),
+        }, sort_keys=True, ensure_ascii=False)
+
+    def _collector_same_accepted_evidence(self, existing: RawSource, incoming: RawSource) -> bool:
+        if (existing.competitor, existing.dimension, str(existing.url), existing.content_hash,
+                sorted(existing.covered_competitors or [existing.competitor])) != (
+                incoming.competitor, incoming.dimension, str(incoming.url), incoming.content_hash,
+                sorted(incoming.covered_competitors or [incoming.competitor])):
+            return False
+        if (existing.failure_reason or incoming.failure_reason
+                or existing.source_type != incoming.source_type):
+            return False
+        old, new = existing.metadata, incoming.metadata
+        if new.get("kb_retrieved") is True or (
+                old.get("kb_document_id") and new.get("kb_full_source_ingest_status") == "stored"):
+            # Authority comes from the full original canonical reference, which
+            # acceptance checks against the current repository again.
+            keys = ("kb_document_id", "kb_document_version", "kb_document_content_hash",
+                    "kb_document_workspace_id", "kb_document_project_id")
+            if not all(old.get(key) == new.get(key) for key in keys):
+                return False
+            if not old.get("kb_document_id") or old.get("kb_document_version") is None:
+                return False
+            if new.get("kb_document_status", "active") != "active":
+                return False
+            for key in ("kb_source_role", "source_role"):
+                if key in new and new[key] != old.get(key, "source"):
+                    return False
+            if new.get("normalized_fields") and new["normalized_fields"] != old.get("normalized_fields"):
+                return False
+            return True
+        # An identical captured body with identical admitted fields can retain
+        # its accepted identity. A failed/unverified fetch cannot refresh dates.
+        return self._collector_source_identity(existing) == self._collector_source_identity(incoming)
+
     def _merge_duplicate_refresh_source(
         self, existing: RawSource, refreshed: RawSource
     ) -> RawSource:
+        if (refreshed.failure_reason or refreshed.candidate_origin == "rag_kb"
+                or refreshed.metadata.get("kb_retrieved")
+                or refreshed.fetch_method in {"", "rag_kb_retrieve"}):
+            return existing
         old_fetched = existing.metadata.get("fetched_at")
         new_fetched = refreshed.metadata.get("fetched_at")
         old_time = self._parse_refresh_fetch_time(old_fetched)

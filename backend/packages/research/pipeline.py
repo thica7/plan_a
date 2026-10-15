@@ -23,7 +23,9 @@ from packages.research.evidence import (
     normalized_fields_from_evidence_items,
     raw_sources_from_research_result,
 )
+from packages.research.evidence.operations import operation_gaps, required_operations
 from packages.research.extraction import extract_page
+from packages.research.extraction.semantic import extract_operation_rules
 from packages.research.models import (
     CandidateLedgerEntry,
     CapturedPage,
@@ -42,6 +44,7 @@ from packages.search import SearchResult
 
 FetchCallable = Callable[[str], Awaitable[Any]]
 SearchCallable = Callable[[str, int], Awaitable[list[SearchResult]]]
+SemanticCallable = Callable[[ResearchBrief, CapturedPage], Awaitable[ExtractionResult | None]]
 
 
 @dataclass
@@ -63,6 +66,7 @@ async def run_research_pipeline(
     seed_candidates: list[SourceCandidate] | None = None,
     repair_tasks: list[RepairTask] | None = None,
     capture_cache: CaptureCache | None = None,
+    semantic_extract: SemanticCallable | None = None,
 ) -> ResearchResult:
     cache = capture_cache or CaptureCache()
     search_calls = 0
@@ -97,6 +101,11 @@ async def run_research_pipeline(
             3 if brief.research_depth == "standard" else 5 if brief.research_depth == "deep" else 3,
         )
         initial_brief = brief.model_copy(update={"max_fetches": initial_fetch_limit})
+    requested_operations = required_operations(brief.topic, brief.product_use_cases) if brief.dimension == 'feature' else ()
+    if requested_operations and semantic_extract is not None and brief.max_repair_rounds:
+        # Reserve a discovery query for gaps visible only after semantic admission.
+        initial_brief = initial_brief.model_copy(update={'max_search_queries': 0,
+            'max_candidates': max(1, brief.max_candidates - 1)})
     first_pass = await _run_research_pass(
         initial_brief,
         fetch=active_fetch,
@@ -113,9 +122,23 @@ async def run_research_pipeline(
     gaps = first_pass.gaps
     coverage = first_pass.coverage
     capture_metrics = dict(first_pass.capture_metrics)
+    semantic_page_ids = set()
+    if requested_operations and semantic_extract is not None:
+        for page in captured_pages:
+            if page.status == 'ok':
+                semantic_page_ids.add(page.id)
+                supplemental = await semantic_extract(brief, page)
+                if supplemental is not None and supplemental.fields:
+                    extractions = dedupe_by_id([*extractions, supplemental])
+        evidence_items = admit_evidence_items(extractions, brief=brief, captured_pages=captured_pages, candidates=candidates)
+        gaps = [*evaluate_research_quality(brief, extractions, evidence_items), *operation_gaps(brief, evidence_items)]
+        coverage = evaluate_coverage_contract(brief, candidates=candidates, pages=captured_pages, evidence_items=evidence_items,
+            ledger=_candidate_ledger(brief, candidates=candidates, pages=captured_pages, evidence_items=evidence_items, capture_metrics=capture_metrics))
     planned_repairs = repair_tasks_from_gaps(gaps)
 
     repair_round_count = 0
+    operation_repair_round_count = 0
+    semantic_required_fields = set(brief.required_fields)
     repair_candidate_count = 0
     repair_capture_count = 0
     initial_gap_count = len(gaps)
@@ -137,6 +160,8 @@ async def run_research_pipeline(
         ):
             break
         repair_brief = _repair_brief(brief, active_repairs, round_index=round_index + 1)
+        semantic_required_fields.update(field for task in active_repairs
+            if task.metadata.get('source') == 'operation_comparison' for field in task.target_fields)
         existing_candidate_ids: set[str] | None = None
         remaining_candidates: int | None = None
         if brief.research_depth is not None:
@@ -199,12 +224,61 @@ async def run_research_pipeline(
         )
         planned_repairs = repair_tasks_from_gaps(gaps)
         repair_round_count += 1
+        if any(task.metadata.get("source") == "operation_comparison" for task in active_repairs):
+            operation_repair_round_count += 1
         repair_candidate_count += len(repair_pass.candidates)
         repair_capture_count += len(repair_pass.captured_pages)
         capture_metrics = _merge_numeric_metrics(capture_metrics, repair_pass.capture_metrics)
         if not gaps and coverage.passed:
             break
 
+    if semantic_extract is not None:
+        semantic_brief = brief.model_copy(update={"required_fields": sorted(semantic_required_fields)})
+        for page in captured_pages:
+            if page.status != "ok" or page.id in semantic_page_ids:
+                continue
+            semantic_page_ids.add(page.id)
+            supplemental = await semantic_extract(semantic_brief, page)
+            if supplemental is not None and supplemental.fields:
+                extractions = dedupe_by_id([*extractions, supplemental])
+        evidence_items = admit_evidence_items(extractions, brief=semantic_brief, captured_pages=captured_pages, candidates=candidates)
+        gaps = evaluate_research_quality(brief, extractions, evidence_items)
+        gaps.extend(operation_gaps(brief, evidence_items))
+        planned_repairs = repair_tasks_from_gaps(gaps)
+    operation_tasks = [task for task in _same_branch_repairs(brief, planned_repairs) if task.metadata.get('source') == 'operation_comparison']
+    remaining_fetches = brief.max_fetches - fetch_calls
+    remaining_searches = brief.max_search_queries - search_calls
+    if (semantic_extract is not None and operation_tasks and repair_round_count < brief.max_repair_rounds
+            and remaining_fetches > 0 and remaining_searches > 0 and search is not None
+            and len(candidates) < brief.max_candidates):
+        search_task = operation_tasks[0]
+        repair_brief = _repair_brief(brief, operation_tasks, round_index=repair_round_count + 1)
+        repair_brief = repair_brief.model_copy(update={
+            'max_search_queries': min(1, remaining_searches), 'max_fetches': remaining_fetches,
+            'include_homepage_candidates': False, 'include_trusted_sources': False,
+            'target_source_count': 1,
+            'metadata': {**repair_brief.metadata, 'excluded_operation_urls': list({normalize_url(page.final_url) for page in captured_pages})},
+        })
+        repair_pass = await _run_research_pass(repair_brief, fetch=active_fetch, search=active_search,
+            seed_candidates=[], repair_tasks=[search_task], capture_cache=cache,
+            existing_candidate_ids={candidate.id for candidate in candidates},
+            max_new_candidates=max(0, brief.max_candidates - len(candidates)))
+        candidates = dedupe_by_id([*candidates, *repair_pass.candidates])
+        captured_pages = dedupe_by_id([*captured_pages, *repair_pass.captured_pages])
+        extractions = dedupe_by_id([*extractions, *repair_pass.extractions])
+        for page in repair_pass.captured_pages:
+            if page.status == 'ok':
+                supplemental = await semantic_extract(repair_brief, page)
+                if supplemental is not None and supplemental.fields:
+                    extractions = dedupe_by_id([*extractions, supplemental])
+        evidence_items = admit_evidence_items(extractions, brief=repair_brief, captured_pages=captured_pages, candidates=candidates)
+        gaps = [*evaluate_research_quality(brief, extractions, evidence_items), *operation_gaps(brief, evidence_items)]
+        planned_repairs = repair_tasks_from_gaps(gaps)
+        capture_metrics = _merge_numeric_metrics(capture_metrics, repair_pass.capture_metrics)
+        operation_repair_round_count = 1
+        repair_round_count += 1
+        repair_candidate_count += len(repair_pass.candidates)
+        repair_capture_count += len(repair_pass.captured_pages)
     normalized_fields = normalized_fields_from_evidence_items(evidence_items)
     candidate_ledger = _candidate_ledger(
         brief,
@@ -246,6 +320,7 @@ async def run_research_pipeline(
             "initial_gap_count": initial_gap_count,
             "remaining_gap_count": len(gaps),
             "repair_round_count": repair_round_count,
+            "operation_repair_round_count": operation_repair_round_count,
             "repair_task_count": len(planned_repairs),
             "repair_candidate_count": repair_candidate_count,
             "repair_capture_count": repair_capture_count,
@@ -373,7 +448,7 @@ async def _run_research_pass(
         remaining_brief = remaining_brief.model_copy(
             update={
                 "target_source_count": max(1, prior_coverage.metadata["missing_source_count"]),
-                "max_fetches": 0 if prior_coverage.passed else remaining_brief.max_fetches,
+                "max_fetches": 0 if prior_coverage.passed and not repair_tasks else remaining_brief.max_fetches,
             }
         )
     new_pages, capture_metrics, overflow_queue = await _capture_candidates(
@@ -443,6 +518,9 @@ async def _discover_candidates(
             )
     if brief.include_homepage_candidates:
         candidates.extend(homepage_candidates(brief))
+    excluded = set(brief.metadata.get('excluded_operation_urls', []))
+    if excluded:
+        candidates = [candidate for candidate in candidates if normalize_url(candidate.url) not in excluded]
     return rank_and_dedupe_candidates(
         candidates,
         competitor=brief.competitor,
@@ -517,6 +595,9 @@ def _evaluate_capture_set(
         for page in pages
         if page.status == "ok" and (page.text or page.markdown or page.snippet)
     ]
+    extractions.extend(extract_operation_rules(brief, page) for page in pages
+                       if page.status == 'ok' and brief.dimension == 'feature'
+                       and required_operations(brief.topic, brief.product_use_cases))
     evidence_items = admit_evidence_items(
         extractions,
         brief=brief,
@@ -524,6 +605,7 @@ def _evaluate_capture_set(
         candidates=candidates,
     )
     gaps = evaluate_research_quality(brief, extractions, evidence_items)
+    gaps.extend(operation_gaps(brief, evidence_items))
     ledger = _candidate_ledger(
         brief,
         candidates=candidates,
@@ -652,6 +734,8 @@ def _repair_brief(
     round_index: int,
 ) -> ResearchBrief:
     explicit_depth = brief.research_depth is not None
+    operation_tasks = [task for task in repair_tasks if task.metadata.get('source') == 'operation_comparison']
+    absent = [task for task in operation_tasks if 'operation_evidence' in task.metadata.get('missing_fields', [])]
     return brief.model_copy(
         update={
             "max_search_queries": brief.max_search_queries if explicit_depth else max(
@@ -674,17 +758,20 @@ def _repair_brief(
                 **brief.metadata,
                 "repair_round": round_index,
                 "repair_task_ids": [task.id for task in repair_tasks],
+                "operation_repair_targets": list(dict.fromkeys(task.metadata['operation'] for task in absent or operation_tasks)),
             },
         }
     )
 
 
 def _same_branch_repairs(brief: ResearchBrief, repair_tasks: list[RepairTask]) -> list[RepairTask]:
-    return [
+    selected = [
         task
         for task in repair_tasks
         if task.dimension == brief.dimension and task.competitor in {None, brief.competitor}
     ]
+    return sorted(selected, key=lambda task: (task.metadata.get('severity') != 'blocker',
+        'operation_evidence' not in task.metadata.get('missing_fields', [])))
 
 
 def _dedupe_strings(values: list[str]) -> list[str]:

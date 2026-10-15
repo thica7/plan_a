@@ -19,7 +19,7 @@ class AnswerRequirement(_FrozenRecord):
     competitor: str
     dimension: str
     intent: Literal[
-        "facts", "source_guidance", "current_price", "price_comparison", "total_cost", "compliance"
+        "facts", "source_guidance", "recorded_price", "current_price", "price_comparison", "total_cost", "compliance"
     ] = "facts"
     market: str | None = None
     as_of: date

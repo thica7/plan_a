@@ -1,0 +1,440 @@
+{
+  "date": "2026-10-13T15:35:30.545357+00:00",
+  "scope": "read-only audit of current local worktree and existing real run; no new external model calls; no production data mutation",
+  "git_head": "40e0f520b7923959c791fb197b741cfdff713200",
+  "source_sha_still_matches_last_live": true,
+  "source_sha_count": 15,
+  "active_runtime": {
+    "backend_runtime": {
+      "http_status": 200,
+      "default_execution_mode": "real",
+      "run_orchestration_backend": "langgraph",
+      "demo_mode": false,
+      "web_search_provider": "deepseek",
+      "has_web_search_key": true,
+      "has_ark_api_key": true,
+      "has_ark_model": true,
+      "ark_model": "deepseek-flash",
+      "auto_redo_enabled": true,
+      "auto_redo_warn_enabled": true,
+      "hitl_enabled": false,
+      "hitl_review_checkpoints": [
+        "planner_hitl",
+        "qa_hitl"
+      ],
+      "temporal_cutover_ready": false,
+      "temporal_traffic_percent": 0,
+      "pydantic_ai_model_backed_enabled": false,
+      "pydantic_ai_model_backed_ready": false,
+      "artifact_storage_backend": "local"
+    },
+    "frontend_proxy_runtime": {
+      "http_status": 200,
+      "default_execution_mode": "real",
+      "run_orchestration_backend": "langgraph",
+      "demo_mode": false,
+      "web_search_provider": "deepseek",
+      "has_web_search_key": true,
+      "has_ark_api_key": true,
+      "has_ark_model": true,
+      "ark_model": "deepseek-flash",
+      "auto_redo_enabled": true,
+      "auto_redo_warn_enabled": true,
+      "hitl_enabled": false,
+      "hitl_review_checkpoints": [
+        "planner_hitl",
+        "qa_hitl"
+      ],
+      "temporal_cutover_ready": false,
+      "temporal_traffic_percent": 0,
+      "pydantic_ai_model_backed_enabled": false,
+      "pydantic_ai_model_backed_ready": false,
+      "artifact_storage_backend": "local"
+    },
+    "health": {
+      "http_status": 200,
+      "status": "error",
+      "checks": [
+        {
+          "name": "config",
+          "status": "ok",
+          "detail": "default_execution_mode=real"
+        },
+        {
+          "name": "llm_credentials",
+          "status": "ok",
+          "detail": "primary ARK credentials detected"
+        },
+        {
+          "name": "web_search_credentials",
+          "status": "ok",
+          "detail": "provider=deepseek"
+        },
+        {
+          "name": "skills",
+          "status": "ok",
+          "detail": "7 skill(s) loaded"
+        },
+        {
+          "name": "sqlite",
+          "status": "ok",
+          "detail": "run journal opened"
+        },
+        {
+          "name": "enterprise_store",
+          "status": "ok",
+          "detail": "backend=memory"
+        },
+        {
+          "name": "auth_policy",
+          "status": "ok",
+          "detail": "engine=internal"
+        },
+        {
+          "name": "temporal_cutover",
+          "status": "error",
+          "detail": "backend=langgraph target_percent=0 reason=RUN_ORCHESTRATION_BACKEND must be temporal for Phase 4 cutover."
+        },
+        {
+          "name": "temporal_server",
+          "status": "warn",
+          "detail": "unreachable address=127.0.0.1:7233 backend=langgraph"
+        },
+        {
+          "name": "compliance",
+          "status": "ok",
+          "detail": "redaction_enabled=True api_keys=True emails=True phones=True"
+        }
+      ]
+    }
+  },
+  "live_schema_consistency": {
+    "RunDetail_selected_presence": {
+      "report_dimension_audits": {
+        "live_api": true,
+        "local_generated_schema": true
+      },
+      "evidence_snapshots": {
+        "live_api": true,
+        "local_generated_schema": true
+      },
+      "evidence_consumptions": {
+        "live_api": true,
+        "local_generated_schema": true
+      },
+      "evidence_artifact_dependencies": {
+        "live_api": true,
+        "local_generated_schema": true
+      },
+      "llm_budget_checkpoint": {
+        "live_api": true,
+        "local_generated_schema": true
+      },
+      "answer_boundaries": {
+        "live_api": false,
+        "local_generated_schema": false
+      }
+    },
+    "RunDetail_live_property_count": 57,
+    "RunDetail_local_property_count": 57,
+    "live_missing_local_RunDetail_fields": [],
+    "live_only_RunDetail_fields": [],
+    "manual_revision_route_live": true,
+    "path_sets_equal": true
+  },
+  "latest_real_acceptance": {
+    "case_id": "operations-four-products",
+    "status": "completed_with_blockers",
+    "source_cells": 18,
+    "reviewed_cells": 14,
+    "core_complete_cells": 5,
+    "comparable_operations": 0,
+    "semantic_quality": null,
+    "llm_by_agent": {
+      "analyst": {
+        "ok": 0,
+        "error": 6,
+        "transport_requests": 0
+      },
+      "collector": {
+        "ok": 9,
+        "error": 0,
+        "transport_requests": 9
+      },
+      "comparator": {
+        "ok": 1,
+        "error": 3,
+        "transport_requests": 1
+      },
+      "planner": {
+        "ok": 1,
+        "error": 0,
+        "transport_requests": 1
+      },
+      "qa": {
+        "ok": 6,
+        "error": 0,
+        "transport_requests": 6
+      },
+      "reflector": {
+        "ok": 1,
+        "error": 1,
+        "transport_requests": 1
+      },
+      "writer": {
+        "ok": 6,
+        "error": 0,
+        "transport_requests": 6
+      }
+    },
+    "llm_wrapper_spans": 34,
+    "llm_error_count": 10,
+    "queued_agent_messages": 12
+  },
+  "verification": {
+    "previous_backend": "3623 passed, 1 skipped, 152 warnings in 100.65s (0:01:40)",
+    "fresh_frontend": {
+      "files": 52,
+      "passed": 258,
+      "seconds": 11.02,
+      "scope": "jsdom/mock, not browser/production"
+    },
+    "fresh_rag_scope_views": {
+      "passed": 125,
+      "seconds": 8.27
+    },
+    "fresh_graph_and_writer_contract": {
+      "passed": 30,
+      "seconds": 3.52
+    },
+    "root_market_repro_verified": true,
+    "new_external_model_calls": 0,
+    "new_model_inference_calls": 0,
+    "business_code_changed": false
+  },
+  "modules": [
+    {
+      "module": "pixel_desktop_ui",
+      "status": "usable_development_surface",
+      "unverified": "current browser/e2e and real service production",
+      "gaps": [
+        "manual report revision frontend not connected",
+        "export creates server artifact but download is incomplete",
+        "some crawl progress/pause/sort are placeholders"
+      ]
+    },
+    {
+      "module": "pm_modes_discovery",
+      "status": "partial",
+      "gaps": [
+        "L2/L3 saved in plan but not used in discovery query or prompt",
+        "real 36-combination tests stop after create/plan",
+        "recent live acceptance restricted to 4 SaaS products, feature, standard, ai"
+      ]
+    },
+    {
+      "module": "collector_webfetch",
+      "status": "partial_live",
+      "gaps": [
+        "Coda official help pages fail access/browser/content checks",
+        "same-domain failed captures consume fallback budget",
+        "zero accepted source branch can continue as explicit gap"
+      ]
+    },
+    {
+      "module": "agent_orchestration",
+      "status": "graph_connected_semantics_incomplete",
+      "gaps": [
+        "latest analyst transport requests 0 due delivery reserve",
+        "dimension writer does not fully consume comparison/reflection reasoning",
+        "message consumed is schema/accounting state, not proof of semantic use"
+      ]
+    },
+    {
+      "module": "rag_knowledge",
+      "status": "evidence_foundation_implemented_semantic_entry_incomplete",
+      "gaps": [
+        "collector sparse warm start",
+        "automatic captured-source ingestion index_vectors=false",
+        "agent rag tool has no injected reranker",
+        "E5 evaluation adapter not production provider",
+        "HTTP Qdrant production not verified"
+      ]
+    },
+    {
+      "module": "pricing_answer_guard",
+      "status": "partial_confirmed_accuracy_bug",
+      "gaps": [
+        "requested market overwrites unknown source pricing market through KB/canonical snapshot",
+        "recorded price is not applicable quote or full bill"
+      ]
+    },
+    {
+      "module": "writer_qa_redo",
+      "status": "partial",
+      "gaps": [
+        "source18/reviewed14/core_complete5 of24",
+        "new dimension route forces scoped repairs to full rebuild",
+        "QA35 includes15 propagated findings",
+        "full report semantic accuracy not formally measured"
+      ]
+    },
+    {
+      "module": "enterprise_auth_storage",
+      "status": "skeleton_and_local_features",
+      "gaps": [
+        "legacy run/list/get/stream/trace/userresearch lack workspace authorization",
+        "approval actor identity uses request ids",
+        "current enterprise store memory and Temporal not enabled",
+        "S3/OSS external URI pointers, no direct upload/read implementation"
+      ]
+    },
+    {
+      "module": "history_reuse_evaluation_training",
+      "status": "bounded_clue_reuse_and_small_offline_evaluation",
+      "gaps": [
+        "history reuse is advisory source candidates requiring new capture",
+        "5 reviewed questions/16 sources not generalizable",
+        "37 original questions unlabelled",
+        "RAGAS not_run",
+        "no fine tuning/distillation/agent RL pipeline",
+        "no verified full-report cost-saving or accuracy rate"
+      ]
+    }
+  ],
+  "priority_findings": [
+    {
+      "id": "fact_market_promotion",
+      "priority": "P1",
+      "evidence": "independently reproduced with synthetic input and socket forbidden",
+      "code": {
+        "backend/packages/agents/collectors/kb_bridge.py": 534,
+        "backend/packages/research/evidence/snapshot.py": 150
+      },
+      "repro": {
+        "reproduced_at": "2026-10-13T15:29:24.288434+00:00",
+        "synthetic_fixture": true,
+        "network_access_forbidden": true,
+        "model_inference_calls": 0,
+        "storage_scope": "automatically removed temporary KB/journal; in-memory checkpointer/cache",
+        "requested_market": "US",
+        "source_functions": [
+          {
+            "path": "/Users/a1/Documents/ChatGPT/竞品分析优化/plan_a_pm_modes/backend/tests/unit/test_structured_pricing_pipeline.py",
+            "function": "local_chain"
+          },
+          {
+            "path": "/Users/a1/Documents/ChatGPT/竞品分析优化/plan_a_pm_modes/backend/packages/research/evidence/admission.py",
+            "function": "raw_source_from_capture"
+          },
+          {
+            "path": "/Users/a1/Documents/ChatGPT/竞品分析优化/plan_a_pm_modes/backend/packages/agents/collectors/kb_bridge.py",
+            "function": "CollectorKBBridgeMixin._kb_market"
+          },
+          {
+            "path": "/Users/a1/Documents/ChatGPT/竞品分析优化/plan_a_pm_modes/backend/packages/agents/collectors/kb_bridge.py",
+            "function": "CollectorKBBridgeMixin._persist_captured_sources_to_kb"
+          },
+          {
+            "path": "/Users/a1/Documents/ChatGPT/竞品分析优化/plan_a_pm_modes/backend/packages/orchestrator/evidence_context.py",
+            "function": "EvidenceContextMixin._prepare_evidence_snapshot"
+          },
+          {
+            "path": "/Users/a1/Documents/ChatGPT/竞品分析优化/plan_a_pm_modes/backend/packages/research/evidence/snapshot.py",
+            "function": "_fields"
+          },
+          {
+            "path": "/Users/a1/Documents/ChatGPT/竞品分析优化/plan_a_pm_modes/backend/packages/research/evidence/snapshot.py",
+            "function": "_source_record"
+          },
+          {
+            "path": "/Users/a1/Documents/ChatGPT/竞品分析优化/plan_a_pm_modes/backend/packages/research/evidence/answer_guard.py",
+            "function": "evaluate_answer_boundary"
+          }
+        ],
+        "before_kb": {
+          "raw_market": null,
+          "canonical_market": null,
+          "source_markets": [
+            null
+          ],
+          "fact_markets": [
+            null
+          ],
+          "boundary_status": "insufficient",
+          "missing_fields": [
+            "amount",
+            "currency",
+            "current_price",
+            "market"
+          ]
+        },
+        "after_kb": {
+          "raw_market": null,
+          "canonical_market": "US",
+          "source_markets": [
+            "US"
+          ],
+          "fact_markets": [
+            "US"
+          ],
+          "boundary_status": "answer",
+          "missing_fields": []
+        },
+        "market_guard_bypass_reproduced": true
+      }
+    },
+    {
+      "id": "analyst_budget_starvation",
+      "priority": "P1",
+      "evidence": "latest live run: 6 analyst llm spans, request_attempts=0, reserved_for_delivery",
+      "code": {
+        "backend/packages/orchestrator/llm_execution.py": 79,
+        "backend/packages/llm/execution_budget.py": 69
+      }
+    },
+    {
+      "id": "legacy_run_workspace_auth_missing",
+      "priority": "P1_before_multiuser_deployment",
+      "evidence": "route+service static path verified; HTTP cross-workspace exploit not executed",
+      "code": {
+        "backend/app/routers/runs.py": 80,
+        "backend/packages/orchestrator/service.py": 682
+      }
+    },
+    {
+      "id": "dimension_writer_upstream_consume_incomplete",
+      "priority": "P1_product_quality",
+      "evidence": "current path fact-oriented generation and fixed renderer, not complete analysis/comparison/reflection synthesis",
+      "code": {
+        "backend/packages/agents/writer/dimension_writer.py": [
+          269,
+          517
+        ]
+      }
+    }
+  ],
+  "accuracy_judgment": "No overall accuracy percentage established; tests, snapshot validation, citations, and small-pool recall are not semantic correctness",
+  "next_priorities": [
+    "fix fact market provenance",
+    "reserve budget for all semantic phases and expose fallback status",
+    "connect comparison/reflection artifacts to typed per-operation writing and scoped audited repairs",
+    "connect production semantic retrieval and rerank with index/namespace isolation",
+    "human-reviewed held-out end-to-end evaluation and close key product UI gaps"
+  ],
+  "evaluation_data_status": {
+    "original_questions": 50,
+    "original_reviewed_questions": 0,
+    "original_candidate_questions": 13,
+    "original_unlabelled_questions": 37,
+    "new_reviewed_questions": 5,
+    "new_reviewed_corpus_sources": 16,
+    "unknown_source_dates_in_reviewed_corpus": 15,
+    "small_filtered_pool_sources_per_question": "2-3",
+    "offline_recall_at_5": 1.0,
+    "overall_report_accuracy": null,
+    "ragas_status": "not_run",
+    "fine_tuning_distillation_agent_rl_integrated": false
+  },
+  "active_runtime_interpretation": "Frontend 5173 and backend8000 belong to plan_a_pm_modes; proxy/runtime schemas match. Active real LangGraph/DeepSeek, memory enterprise store, no Temporal cutover. Health error is Temporal cutover policy, not evidence of model unavailability. This does not prove every running function reloaded current source."
+}

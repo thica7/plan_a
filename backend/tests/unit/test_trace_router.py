@@ -75,6 +75,9 @@ class _FakeRunService:
     def __init__(self, detail: RunDetail) -> None:
         self._detail = detail
 
+    def peek_run_summary(self, run_id: str):
+        return self._detail if run_id == self._detail.id else None
+
     def get_run(self, run_id: str) -> RunDetail | None:
         return self._detail if run_id == self._detail.id else None
 

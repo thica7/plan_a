@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
 from packages.knowledge.models import KnowledgeDocument, KnowledgeScope
 from packages.research.evidence.normalization import normalized_fields_from_source
 from packages.research.evidence.snapshot_models import (
+    FACT_MARKET_POLICY_VERSION,
     EvidenceChanges,
     EvidenceConflict,
     EvidenceFact,
@@ -126,7 +128,6 @@ def _safe_value(value: object) -> object:
 def _fields(
     source: RawSource,
     allowed_competitors: set[str],
-    document: KnowledgeDocument | None,
 ) -> list[dict[str, object]]:
     result: list[dict[str, object]] = []
     for row in normalized_fields_from_source(source):
@@ -146,8 +147,6 @@ def _fields(
                 safe["qualifiers"] = _safe_value(row["qualifiers"])
         except ValueError:
             continue
-        if document:
-            safe["market"] = document.market
         confidence = row.get("confidence", source.confidence)
         if (
             not isinstance(confidence, int | float)
@@ -288,6 +287,13 @@ def _source_record(
         else ("historical_report" if source.source_type == "report" else "source")
     )
     market = document.market if document else (_text(metadata.get("market")) or None)
+    if "pricing" in source.dimension.casefold():
+        # Canonical market can be a historical query classification. Only the
+        # admitted pricing rows establish the market of original evidence.
+        row_markets = {
+            _text(row.get("market")) or None for row in normalized if row["kind"] == "pricing"
+        }
+        market = next(iter(row_markets)) if len(row_markets) == 1 else None
     extracted = document.fetched_at if document else source.extracted_at
     canonical_level = document.metadata.get("source_material_level") if document else None
     raw_level = metadata.get("source_material_level")
@@ -434,7 +440,8 @@ def _facts(source: EvidenceSource, normalized: list[dict[str, object]]) -> list[
                 if row.get(key) not in (None, "", [])
             },
         }
-        market = source.market if source.document_id else _text(row.get("market")) or source.market
+        # Directory/source classification is query context, not a fact qualifier.
+        market = _text(row.get("market")) or None
         unit = _text(row.get("unit")) or None
         for field in _VALUE_FIELDS[kind]:
             value = row.get(field)
@@ -487,6 +494,9 @@ def _conflicts(facts: tuple[EvidenceFact, ...]) -> tuple[EvidenceConflict, ...]:
             fact.market,
             fact.qualifiers_json,
         ]
+        if fact.dimension == 'feature' and re.fullmatch(r'(?:semantic_)?capability_[\w]+', str(fact.qualifiers.get('slot', ''))):
+            # Page-local ordinals/hashes do not identify the same assertion.
+            identity.append(fact.source_id)
         groups.setdefault(canonical_json(identity), []).append(fact)
     conflicts = []
     for identity, group in sorted(groups.items()):
@@ -523,6 +533,8 @@ def _contract(snapshot: RunEvidenceSnapshot) -> dict[str, object]:
             "content_hash",
         },
     )
+    if not contract["competitors"]:
+        contract.pop("competitors")
     # The empty additive v1 field retains Task 1's canonical bytes.
     for source in contract["sources"]:
         if not source["chunk_ids"]:
@@ -648,7 +660,7 @@ def _seal_snapshot(
                 continue
         else:
             chunk_ids = ()
-        normalized = _fields(raw, allowed, document)
+        normalized = _fields(raw, allowed)
         source = _source_record(raw, detail, document, normalized, chunk_ids)
         sources.append(source)
         facts.extend(_facts(source, normalized))
@@ -660,12 +672,14 @@ def _seal_snapshot(
     )
     snapshot = RunEvidenceSnapshot(
         id="",
+        fact_market_policy_version=FACT_MARKET_POLICY_VERSION,
         run_id=detail.id,
         workspace_id=detail.workspace_id,
         project_id=detail.project_id,
         version=max((item.version for item in detail.evidence_snapshots), default=0) + 1,
         parent_id=previous.id if previous else None,
         phase=phase,
+        competitors=tuple(sorted(set(detail.plan.competitors), key=_key)),
         sources=source_records,
         facts=fact_records,
         conflicts=_conflicts(fact_records),

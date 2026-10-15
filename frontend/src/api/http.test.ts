@@ -20,3 +20,15 @@ describe('API identity', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+
+it('downloads artifact bytes through the authenticated local API and rejects failures', async () => {
+  const { downloadArtifact } = await import('./client');
+  localStorage.setItem('competiscope.authToken', 'download-token');
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response('正文')).mockResolvedValueOnce(new Response('Forbidden', { status: 403 }));
+  vi.stubGlobal('fetch', fetcher);
+  expect(await (await downloadArtifact('artifact/1')).text()).toBe('正文');
+  expect(fetcher.mock.calls[0][0]).toBe('/api/enterprise/artifacts/artifact%2F1/download');
+  expect(new Headers(fetcher.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer download-token');
+  await expect(downloadArtifact('artifact-2')).rejects.toThrow();
+});

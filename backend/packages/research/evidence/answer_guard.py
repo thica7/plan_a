@@ -386,6 +386,24 @@ def _price_checks(
     return reasons, missing
 
 
+def _recorded_price_checks(fact, source, requirement, fields):
+    """A dated price observation is not an applicable current price or a bill."""
+    reasons, missing = _money_checks(fields)
+    verified = _verified_day(fact, source)
+    if verified is None:
+        reasons.add("unverified_price")
+        missing.add("verified_at")
+    elif verified > requirement.as_of:
+        reasons.add("future_fact_date")
+    elif (requirement.as_of - verified).days > 7:
+        reasons.add("stale_price")
+    missing.update(
+        key for key in ("plan", "seat_type", "billing_interval", "tax_scope", "market")
+        if not _present(fields.get(key) or (fact.market if key == "market" else None))
+    )
+    return reasons, missing
+
+
 def _cost_checks(
     fact: EvidenceFact,
     source: EvidenceSource | None,
@@ -456,7 +474,13 @@ def evaluate_answer_boundary(
                 and "cost_component"
                 in (fact.qualifiers | (value if isinstance(value, dict) else {}))
             )
-            if requirement.intent == "total_cost" and cost_record:
+            if requirement.intent == "recorded_price":
+                extra_reasons, extra_missing = _recorded_price_checks(
+                    fact, source, requirement, fields
+                )
+                if not reasons and not extra_reasons:
+                    prices.append(fact)
+            elif requirement.intent == "total_cost" and cost_record:
                 extra_reasons, extra_missing = _cost_checks(
                     fact, source, requirement, fields, context, clarifications
                 )

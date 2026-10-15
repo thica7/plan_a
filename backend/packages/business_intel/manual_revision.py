@@ -5,7 +5,12 @@ import re
 from packages.business_intel.claim_validator import validate_project_claims
 from packages.business_intel.source_reconciliation import evidence_by_source_token, source_tokens
 from packages.identity import stable_prefixed_id
-from packages.schema.enterprise import ClaimRecord, EvidenceRecord, ReportVersionRecord
+from packages.schema.enterprise import (
+    ClaimRecord,
+    ClaimValidationIssue,
+    EvidenceRecord,
+    ReportVersionRecord,
+)
 
 _CITATION = r"\[\s*(?:source|来源)\s*[:：][^\]]*\]"
 _MARKDOWN_LINK = r"\[[^\]]*\]\([^\s)]+\)"
@@ -136,9 +141,43 @@ def _line_parts(text: str, product_names: list[str]) -> list[str]:
     return parts
 
 
+_NEUTRAL_LABELS = {
+    "executive summary", "summary", "overview", "product comparison", "comparison",
+    "competitive findings", "evidence", "sources", "references", "pricing", "price",
+    "features", "feature", "personas", "persona", "limitations", "confidence",
+    "evidence & limitations", "evidence and limitations", "recommendations", "next steps",
+    "claim", "claims", "revised", "修订", "排版",
+    "product", "products", "operation", "operations", "dimension", "dimensions", "plan",
+    "role", "access", "object", "currency", "seat", "monthly", "annual", "swot",
+    "摘要", "概览", "一句话结论", "核心结论", "结论", "产品分析", "产品对比", "竞品分析",
+    "竞品对比", "对比矩阵", "产品", "操作", "维度", "证据", "来源", "引用", "参考资料",
+    "价格", "定价", "功能", "用户画像", "局限", "限制", "证据与限制", "建议", "下一步",
+    "套餐", "角色", "访问前提", "对象", "货币", "席位", "月付", "年付",
+}
+
+
+def _neutral_label(text: str, product_names: list[str]) -> bool:
+    """Only explicit section/column labels may bypass assertion review."""
+    text = re.sub(r"\[([^\]]*)\]\([^\s)]+\)", r"\1", text)
+    text = _format_equivalent(re.sub(r"^\d+[.)、]\s*", "", text)).casefold()
+    if not text or text in _NEUTRAL_LABELS:
+        return True
+    for product in product_names:
+        product = _format_equivalent(product).casefold()
+        if text == product:
+            return True
+        if product and text.startswith(product):
+            remainder = text[len(product):].strip(" :：—-")
+            if remainder in _NEUTRAL_LABELS:
+                return True
+    return False
+
+
 def validate_manual_revision(
     version: ReportVersionRecord,
     evidence: list[EvidenceRecord],
+    *,
+    verified_claims: dict[str, set[str]] | None = None,
 ) -> tuple[list[ClaimRecord], dict[str, object]]:
     by_token = evidence_by_source_token(evidence)
     claims: list[ClaimRecord] = []
@@ -154,68 +193,188 @@ def validate_manual_revision(
     lines = version.report_md.splitlines()
     body_parts = []
     for line_number, line in enumerate(lines, start=1):
-        text = line.strip()
-        if not text or text.startswith(("#", "<!--")) or re.fullmatch(r"[|:\s-]+", text):
+        text = re.sub(r"^[-*+]\s+", "", line.strip())
+        if not text or text.startswith("<!--") or re.fullmatch(r"[|:\s-]+", text):
             continue
+        force_review = False
+        heading = re.match(r"^#{1,6}(?:\s+|$)", text)
+        if heading:
+            text = re.sub(r"\s+#+\s*$", "", text[heading.end():]).strip()
+            heading_text = re.sub(_CITATION, "", text, flags=re.IGNORECASE)
+            if _neutral_label(heading_text, product_names) and not source_tokens(text):
+                continue
+            force_review = True
         if (
-            text.startswith("|") and line_number < len(lines)
+            text.startswith("|")
+            and line_number < len(lines)
             and re.fullmatch(r"[|:\s-]+", lines[line_number])
         ):
-            continue
+            # Table headers can contain assertions too. Keep unknown cells and
+            # citations, removing only known structural labels before binding.
+            columns = []
+            for cell in text.strip("|").split("|"):
+                label = re.sub(_CITATION, "", cell, flags=re.IGNORECASE).strip()
+                if _neutral_label(label, product_names):
+                    columns.extend(re.findall(_CITATION, cell, flags=re.IGNORECASE))
+                else:
+                    columns.append(cell)
+            if not columns:
+                continue
+            text = "|" + "|".join(columns) + "|"
+            force_review = True
         parts = _line_parts(text, product_names)
-        body_parts.extend((line_number, index, part) for index, part in enumerate(parts))
-    for line_number, part_index, text in body_parts:
+        body_parts.extend((line_number, index, part, force_review)
+                          for index, part in enumerate(parts))
+    for line_number, part_index, text, force_review in body_parts:
         cited = {
-            item.id: item for token in source_tokens(text)
+            item.id: item
+            for token in source_tokens(text)
             if (item := by_token.get(token)) is not None
         }
         claim_text = re.sub(
-            _CITATION, "", text, flags=re.IGNORECASE,
-        ).strip(" |-*")
-        if not _is_fact_candidate(claim_text, product_names):
+            _CITATION,
+            "",
+            text,
+            flags=re.IGNORECASE,
+        ).strip(" |-")
+        if not claim_text or (
+            not force_review and not _is_fact_candidate(claim_text, product_names)
+        ):
             continue
         if not cited:
             unbound.append({"line_number": line_number, "claim_text": claim_text})
             continue
         first = next(iter(cited.values()))
-        claims.append(ClaimRecord(
-            id=stable_prefixed_id(
-                "claim-manual", version.id, line_number, part_index, claim_text, length=16,
-            ),
-            workspace_id=version.workspace_id, project_id=version.project_id, run_id=version.run_id,
-            competitor_id=first.competitor_id,
-            claim_type=first.dimension, claim_text=claim_text,
-            evidence_ids=list(cited),
-            confidence=min(item.reliability_score for item in cited.values()),
-            created_by_agent="manual_revision",
-        ))
+        claims.append(
+            ClaimRecord(
+                id=stable_prefixed_id(
+                    "claim-manual",
+                    version.id,
+                    line_number,
+                    part_index,
+                    claim_text,
+                    length=16,
+                ),
+                workspace_id=version.workspace_id,
+                project_id=version.project_id,
+                run_id=version.run_id,
+                competitor_id=first.competitor_id,
+                claim_type=first.dimension,
+                claim_text=claim_text,
+                evidence_ids=list(cited),
+                confidence=min(item.reliability_score for item in cited.values()),
+                created_by_agent="manual_revision",
+            )
+        )
     validation = validate_project_claims(
-        project_id=version.project_id, claims=claims, evidence=evidence,
+        project_id=version.project_id,
+        claims=claims,
+        evidence=evidence,
     )
-    findings = [{
-        "id": stable_prefixed_id("qa-manual", version.id, result.claim_id, length=16),
-        "severity": "blocker" if (
-            result.status in {"blocked", "unsupported"}
-            or result.text_support_score < 40 or result.high_risk
-        ) else "warn",
-        "detected_by": "claim_validator", "target_agent": "writer",
-        "field_path": "manual_revision.current_body",
-        "problem": f"Current manual claim is {result.status}: {result.claim_id}",
-        "metadata": {"claim_ids": [result.claim_id], "evidence_ids": result.usable_evidence_ids},
-    } for result in validation.results if result.status != "supported"]
-    findings.extend({
-        "id": stable_prefixed_id(
-            "qa-manual-unbound", version.id, item["line_number"], item["claim_text"], length=16,
-        ),
-        "severity": "blocker", "detected_by": "citation", "target_agent": "writer",
-        "field_path": f"report_md.line[{item['line_number']}]",
-        "problem": "Current manual claim has no scoped source citation.",
-        "metadata": item,
-    } for item in unbound)
+    # Lexical overlap is not entailment. Only complete source statements or
+    # unchanged claims from a current, independently audited producer can pass
+    # this manual-edit shortcut. New wording needs semantic/human review.
+    pending = []
+    by_id = {item.id: item for item in evidence}
+    for result, claim in zip(validation.results, claims, strict=True):
+        usable = [by_id[eid] for eid in result.usable_evidence_ids]
+        text = _format_equivalent(claim.claim_text)
+        source_match = any(text == _format_equivalent(item.snippet) for item in usable)
+        audited_match = set(claim.evidence_ids) == (verified_claims or {}).get(text)
+        if audited_match and len(usable) == len(claim.evidence_ids):
+            result.status = "supported"
+            result.validation_status = "supported"
+            result.recommended_action = "none"
+            result.rationale = "Unchanged claim replays the current source-bound semantic audit."
+        elif not source_match:
+            result.status = "blocked"
+            result.validation_status = "unsupported"
+            result.recommended_action = "human_review"
+            result.rationale = (
+                "Changed manual assertion requires semantic or human review; "
+                "lexical overlap is insufficient."
+            )
+            pending.append(claim.id)
+            issue = ClaimValidationIssue(
+                id=stable_prefixed_id("manual-semantic-review", version.id, claim.id, length=16),
+                claim_id=claim.id,
+                severity="blocker",
+                issue_type="weak_text_support",
+                message="人工修订新增或改写了事实，需补证或语义/人工复核；词语重合不能证明条件成立。",
+                evidence_ids=claim.evidence_ids,
+            )
+            validation.issues.append(issue)
+            result.issue_ids.append(issue.id)
+    validation.issue_count = len(validation.issues)
+    validation.blocker_count = sum(item.severity == "blocker" for item in validation.issues)
+    validation.warn_count = sum(item.severity == "warn" for item in validation.issues)
+    validation.weak_count = sum(item.status == "weak" for item in validation.results)
+    validation.unsupported_count = sum(item.status == "unsupported" for item in validation.results)
+    validation.supported_count = sum(item.status == "supported" for item in validation.results)
+    validation.blocked_count = sum(item.status == "blocked" for item in validation.results)
+    validation.validation_status_counts = {
+        key: sum(item.validation_status == key for item in validation.results)
+        for key in validation.validation_status_counts
+    }
+    findings = [
+        {
+            "id": stable_prefixed_id("qa-manual", version.id, result.claim_id, length=16),
+            "severity": "blocker"
+            if (
+                result.status in {"blocked", "unsupported"}
+                or result.text_support_score < 40
+                or result.high_risk
+            )
+            else "warn",
+            "detected_by": "claim_validator",
+            "target_agent": "writer",
+            "field_path": "manual_revision.current_body",
+            "problem": f"Current manual claim is {result.status}: {result.claim_id}",
+            "metadata": {
+                "claim_ids": [result.claim_id],
+                "evidence_ids": result.usable_evidence_ids,
+            },
+        }
+        for result in validation.results
+        if result.status != "supported"
+    ]
+    findings.extend(
+        {
+            "id": stable_prefixed_id(
+                "qa-manual-unbound",
+                version.id,
+                item["line_number"],
+                item["claim_text"],
+                length=16,
+            ),
+            "severity": "blocker",
+            "detected_by": "citation",
+            "target_agent": "writer",
+            "field_path": f"report_md.line[{item['line_number']}]",
+            "problem": "Current manual claim has no scoped source citation.",
+            "metadata": item,
+        }
+        for item in unbound
+    )
     return claims, {
         "run_qa_findings": findings,
         "run_qa_blocker_count": sum(item["severity"] == "blocker" for item in findings),
         "run_qa_warning_count": sum(item["severity"] == "warn" for item in findings),
         "manual_claim_validation": validation.model_dump(mode="json"),
+        "manual_semantic_review": {
+            "status": "pending_review"
+            if (
+                pending or unbound or any(item.status != "supported" for item in validation.results)
+            )
+            else "checked",
+            "pending_claim_ids": pending,
+            "policy": "complete_source_or_current_audited_claim.v1",
+        },
         "unresolved_manual_claims": unbound,
     }
+
+
+def _format_equivalent(text: str) -> str:
+    text = re.sub(r"(\*\*|__|`)(.+?)\1", r"\2", text)
+    text = re.sub(r"(?<!\w)([*_])([^*_]+)\1(?!\w)", r"\2", text)
+    return re.sub(r"\s+", " ", text).strip(" .!?。！？")

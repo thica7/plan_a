@@ -1,0 +1,563 @@
+{
+  "generated_at_utc": "2026-10-08T01:41:16.981982+00:00",
+  "git_head": "40e0f520b7923959c791fb197b741cfdff713200",
+  "uncommitted_workspace": true,
+  "artifact_policy": "Public tasks only; full redacted runs remain in /tmp; no credentials or business databases exported.",
+  "pipeline_attempts": [
+    {
+      "phase": "baseline",
+      "case_id": "notion-workspace",
+      "duration_seconds": 69.5,
+      "code_note": "earlier diagnostic run; see delivery limits",
+      "status": "failed",
+      "current_node": "collect_qa",
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "report_chars": 0,
+      "core_chars": 0,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 4,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {},
+      "native_llm_spans": 10,
+      "search_spans": 33,
+      "successful_search_spans": 11,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 5834,
+          "completion_tokens": 1406,
+          "total_tokens": 7240,
+          "prompt_cache_hit_tokens": 640,
+          "prompt_cache_miss_tokens": 5194
+        },
+        "search": {
+          "prompt_tokens": 119360,
+          "completion_tokens": 9874,
+          "total_tokens": 129234,
+          "prompt_cache_hit_tokens": 5376,
+          "prompt_cache_miss_tokens": 113984
+        }
+      },
+      "provider_total_tokens_last_attempts": 136474,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 21,
+        "repairs": 0,
+        "tokens_charged": 136474,
+        "cost_charged_usd": 0.04932549600000001
+      },
+      "qa_issue_count": 2,
+      "blockers": [
+        {
+          "severity": "blocker",
+          "problem": "No feature source covers Notion."
+        },
+        {
+          "severity": "blocker",
+          "problem": "No pricing source covers Coda."
+        }
+      ]
+    },
+    {
+      "phase": "current",
+      "case_id": "notion-workspace",
+      "duration_seconds": 64.63,
+      "code_note": "earlier diagnostic run; see delivery limits",
+      "status": "failed",
+      "current_node": "collect_qa",
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "report_chars": 0,
+      "core_chars": 0,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 4,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {},
+      "native_llm_spans": 10,
+      "search_spans": 34,
+      "successful_search_spans": 11,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 5834,
+          "completion_tokens": 1166,
+          "total_tokens": 7000,
+          "prompt_cache_hit_tokens": 2560,
+          "prompt_cache_miss_tokens": 3274
+        },
+        "search": {
+          "prompt_tokens": 136949,
+          "completion_tokens": 9275,
+          "total_tokens": 146224,
+          "prompt_cache_hit_tokens": 17408,
+          "prompt_cache_miss_tokens": 119541
+        }
+      },
+      "provider_total_tokens_last_attempts": 153224,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 21,
+        "repairs": 0,
+        "tokens_charged": 153224,
+        "cost_charged_usd": 0.049493508
+      },
+      "qa_issue_count": 2,
+      "blockers": [
+        {
+          "severity": "blocker",
+          "problem": "No feature source covers Notion."
+        },
+        {
+          "severity": "blocker",
+          "problem": "No pricing source covers Coda."
+        }
+      ]
+    },
+    {
+      "phase": "final-code",
+      "case_id": "notion-workspace",
+      "duration_seconds": 93.43,
+      "code_note": "final capture/admission/comparison fixes",
+      "status": "failed",
+      "current_node": "collect_qa",
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "report_chars": 0,
+      "core_chars": 0,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 4,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {},
+      "native_llm_spans": 10,
+      "search_spans": 34,
+      "successful_search_spans": 11,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 5720,
+          "completion_tokens": 1274,
+          "total_tokens": 6994,
+          "prompt_cache_hit_tokens": 2432,
+          "prompt_cache_miss_tokens": 3288
+        },
+        "search": {
+          "prompt_tokens": 117296,
+          "completion_tokens": 10259,
+          "total_tokens": 127555,
+          "prompt_cache_hit_tokens": 7040,
+          "prompt_cache_miss_tokens": 110256
+        }
+      },
+      "provider_total_tokens_last_attempts": 134549,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 21,
+        "repairs": 0,
+        "tokens_charged": 134549,
+        "cost_charged_usd": 0.04795963199999999
+      },
+      "qa_issue_count": 2,
+      "blockers": [
+        {
+          "severity": "blocker",
+          "problem": "No feature source covers Notion."
+        },
+        {
+          "severity": "blocker",
+          "problem": "No pricing source covers Coda."
+        }
+      ]
+    },
+    {
+      "phase": "current",
+      "case_id": "figma-handoff",
+      "duration_seconds": 1.62,
+      "code_note": "earlier diagnostic run; see delivery limits",
+      "status": "failed",
+      "current_node": null,
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "report_chars": 0,
+      "core_chars": 0,
+      "competitors": [],
+      "source_count": 0,
+      "source_types": [],
+      "assessments": {},
+      "native_llm_spans": 0,
+      "search_spans": 0,
+      "successful_search_spans": 0,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 0
+        },
+        "search": {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 0
+        }
+      },
+      "provider_total_tokens_last_attempts": 0,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {},
+      "qa_issue_count": 0,
+      "blockers": []
+    },
+    {
+      "phase": "final",
+      "case_id": "figma-handoff",
+      "duration_seconds": 279.93,
+      "code_note": "earlier diagnostic run; see delivery limits",
+      "status": "failed",
+      "current_node": "collect_qa",
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "report_chars": 0,
+      "core_chars": 0,
+      "competitors": [
+        "Figma",
+        "Adobe XD",
+        "Zeplin"
+      ],
+      "source_count": 0,
+      "source_types": [],
+      "assessments": {},
+      "native_llm_spans": 14,
+      "search_spans": 35,
+      "successful_search_spans": 8,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 5940,
+          "completion_tokens": 1917,
+          "total_tokens": 7857,
+          "prompt_cache_hit_tokens": 768,
+          "prompt_cache_miss_tokens": 5172
+        },
+        "search": {
+          "prompt_tokens": 60869,
+          "completion_tokens": 7173,
+          "total_tokens": 68042,
+          "prompt_cache_hit_tokens": 3968,
+          "prompt_cache_miss_tokens": 56901
+        }
+      },
+      "provider_total_tokens_last_attempts": 75899,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 25,
+        "repairs": 0,
+        "tokens_charged": 129982,
+        "cost_charged_usd": 0.048548016
+      },
+      "qa_issue_count": 2,
+      "blockers": [
+        {
+          "severity": "blocker",
+          "problem": "No evidence sources were collected for feature."
+        },
+        {
+          "severity": "blocker",
+          "problem": "No evidence sources were collected for pricing."
+        }
+      ]
+    },
+    {
+      "phase": "current",
+      "case_id": "iphone-duo-ambiguity",
+      "duration_seconds": 41.66,
+      "code_note": "earlier diagnostic run; see delivery limits",
+      "status": "failed",
+      "current_node": "collect_qa",
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "report_chars": 0,
+      "core_chars": 0,
+      "competitors": [
+        "iphone duo",
+        "Motorola Razr Ultra"
+      ],
+      "source_count": 1,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {},
+      "native_llm_spans": 5,
+      "search_spans": 14,
+      "successful_search_spans": 6,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 3560,
+          "completion_tokens": 677,
+          "total_tokens": 4237,
+          "prompt_cache_hit_tokens": 256,
+          "prompt_cache_miss_tokens": 3304
+        },
+        "search": {
+          "prompt_tokens": 64613,
+          "completion_tokens": 5763,
+          "total_tokens": 70376,
+          "prompt_cache_hit_tokens": 2560,
+          "prompt_cache_miss_tokens": 62053
+        }
+      },
+      "provider_total_tokens_last_attempts": 74613,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 11,
+        "repairs": 0,
+        "tokens_charged": 74613,
+        "cost_charged_usd": 0.027351996
+      },
+      "qa_issue_count": 1,
+      "blockers": [
+        {
+          "severity": "blocker",
+          "problem": "No feature source covers iphone duo."
+        }
+      ]
+    }
+  ],
+  "price_capture_validation": [
+    {
+      "name": "Figma",
+      "source_url": "https://www.figma.com/pricing/",
+      "capture_ok": true,
+      "method": "webfetch_v2:browser",
+      "captured_chars": 8564,
+      "capture_file_written_at": "2026-10-07T16:32:26.759735+00:00",
+      "validation": "offline_replay_of_recent_live_capture",
+      "coverage_pass": true,
+      "rows": [
+        {
+          "plan": "Professional",
+          "amount": 16.0,
+          "amount_period": "monthly",
+          "billing_interval": "unknown",
+          "tax_scope": "unknown",
+          "currency": "USD",
+          "seat_type": "Full"
+        },
+        {
+          "plan": "Professional",
+          "amount": 12.0,
+          "amount_period": "monthly",
+          "billing_interval": "unknown",
+          "tax_scope": "unknown",
+          "currency": "USD",
+          "seat_type": "Dev"
+        },
+        {
+          "plan": "Professional",
+          "amount": 3.0,
+          "amount_period": "monthly",
+          "billing_interval": "unknown",
+          "tax_scope": "unknown",
+          "currency": "USD",
+          "seat_type": "Collab"
+        },
+        {
+          "plan": "Organization",
+          "amount": 55.0,
+          "amount_period": "monthly",
+          "billing_interval": "annual",
+          "tax_scope": "unknown",
+          "currency": "USD",
+          "seat_type": "Full"
+        },
+        {
+          "plan": "Organization",
+          "amount": 25.0,
+          "amount_period": "monthly",
+          "billing_interval": "annual",
+          "tax_scope": "unknown",
+          "currency": "USD",
+          "seat_type": "Dev"
+        },
+        {
+          "plan": "Organization",
+          "amount": 5.0,
+          "amount_period": "monthly",
+          "billing_interval": "annual",
+          "tax_scope": "unknown",
+          "currency": "USD",
+          "seat_type": "Collab"
+        },
+        {
+          "plan": "Enterprise",
+          "amount": 90.0,
+          "amount_period": "monthly",
+          "billing_interval": "annual",
+          "tax_scope": "unknown",
+          "currency": "USD",
+          "seat_type": "Full"
+        },
+        {
+          "plan": "Enterprise",
+          "amount": 35.0,
+          "amount_period": "monthly",
+          "billing_interval": "annual",
+          "tax_scope": "unknown",
+          "currency": "USD",
+          "seat_type": "Dev"
+        },
+        {
+          "plan": "Enterprise",
+          "amount": 5.0,
+          "amount_period": "monthly",
+          "billing_interval": "annual",
+          "tax_scope": "unknown",
+          "currency": "USD",
+          "seat_type": "Collab"
+        }
+      ],
+      "admission": [
+        [
+          "pricing_model_type",
+          "accepted",
+          null
+        ],
+        [
+          "price_rows",
+          "accepted",
+          null
+        ],
+        [
+          "price_points",
+          "accepted",
+          null
+        ],
+        [
+          "billing_cycle",
+          "accepted",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "Notion",
+      "source_url": "https://www.notion.com/pricing",
+      "capture_ok": true,
+      "method": "webfetch_v2:browser",
+      "captured_chars": 5556,
+      "capture_file_written_at": "2026-10-07T16:32:34.382124+00:00",
+      "validation": "offline_replay_of_recent_live_capture",
+      "coverage_pass": true,
+      "rows": [
+        {
+          "plan": "Free",
+          "amount": 0.0,
+          "amount_period": "monthly",
+          "billing_interval": "unknown",
+          "tax_scope": "unknown",
+          "currency": "USD",
+          "amount_basis": "member"
+        },
+        {
+          "plan": "Plus",
+          "amount": 10.0,
+          "amount_period": "monthly",
+          "billing_interval": "unknown",
+          "tax_scope": "unknown",
+          "currency": "USD",
+          "amount_basis": "member"
+        },
+        {
+          "plan": "Business",
+          "amount": 20.0,
+          "amount_period": "monthly",
+          "billing_interval": "unknown",
+          "tax_scope": "unknown",
+          "currency": "USD",
+          "amount_basis": "member"
+        }
+      ],
+      "admission": [
+        [
+          "pricing_model_type",
+          "accepted",
+          null
+        ],
+        [
+          "price_rows",
+          "accepted",
+          null
+        ],
+        [
+          "price_points",
+          "accepted",
+          null
+        ]
+      ]
+    }
+  ],
+  "comparator_cost_benefit_measured": false,
+  "reason": "No real task reached Comparator; no same-input provider-cost comparison.",
+  "code_sha256": {
+    "backend/scripts/eval_live_products.py": "1a7e5d2b86c55c58bf90077cd1134948dfdc764c29e7cd52b43c4fcf80b8f068",
+    "backend/packages/tools/evidence_fetch.py": "78c02e8c681f5414e7ac044ac3ecdadc4a8e5e6ffefb30d94506024fda4d5b22",
+    "backend/packages/research/extraction/pricing_cards.py": "3597b0288a0ee8c9e8d1004aa2bd4ea3f268d1f43a6e65c5c3a85140d02a7000",
+    "backend/packages/research/extraction/pricing.py": "83739520b840e798a7c83656024144879d607cc6dbb8dc84e5b32668d1fd2104",
+    "backend/packages/research/evidence/admission.py": "a4e246e87af482ece2a8792364bcd8cefac72dc8f196e6d358c618d7891d1cb4",
+    "backend/packages/agents/comparator/context.py": "0f7d02e215543a90c3c1bcacec8f50b01cb0c214b39dbc2c9988bf4679691e36",
+    "backend/packages/agents/comparator/prompt_builder.py": "da2d22438194767b0131e36e005660e32c1d58912f054245e9213dd1afbae443",
+    "backend/packages/agents/comparator/logic.py": "ceff333c00ea338e5c473c906449f94dcb202f52d688322fc60dfaae1bc561d7",
+    "backend/packages/agents/prompt_contract.py": "450c62f1acd3fc7e6710f35cf410e4274688d235f852cb7c8b459fb4dffdc9ae",
+    "third_party/webfetch_v2/webfetch_v2/extract.py": "e31e0da2d62ae09ebb8ff5a51251497eb585a6798a67adda5cf891b9e32f09dd",
+    "third_party/webfetch_v2/webfetch_v2/fetcher.py": "3a44def46734189a27e37d800ed5a66aed0a7aed9a1f37195a62c0fd5cc1986d"
+  },
+  "verification": {
+    "backend_pytest_passed": 3183,
+    "backend_pytest_skipped": 1,
+    "backend_pytest_seconds": 67.51,
+    "skipped_gate": "Live Postgres RLS; ENTERPRISE_RLS_SMOKE_DATABASE_URL not configured.",
+    "vendored_security_pytest_passed": 7,
+    "ruff_changed_files_passed": true,
+    "git_diff_check_passed": true,
+    "independent_review_remaining_p1_p2": 0
+  }
+}

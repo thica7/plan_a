@@ -283,15 +283,17 @@ export function useRunDetailController() {
   const verifiedSourceRate = detail ? Math.round(detail.metrics.verified_source_rate * 100) : 0;
   const sourceCoverageRate = detail ? Math.round(detail.metrics.source_coverage_rate * 100) : 0;
 
-  async function handleRedo() {
-    if (!runId) return;
+  async function handleRedo(issueIds?: string[]) {
+    if (!runId) return false;
     setRedoing(true);
     setError(null);
     try {
-      const updated = await redoRun(runId);
+      const updated = await redoRun(runId, issueIds ? { issue_ids: issueIds } : undefined);
       setDetail(updated);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to trigger scoped redo");
+      return false;
     } finally {
       setRedoing(false);
     }

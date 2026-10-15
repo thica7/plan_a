@@ -601,6 +601,12 @@ export function exportReportVersion(versionId: string, format: "markdown" | "htm
   );
 }
 
+export async function downloadArtifact(artifactId: string): Promise<Blob> {
+  const response = await apiFetch(`/api/enterprise/artifacts/${encodeURIComponent(artifactId)}/download`);
+  if (!response.ok) throw new Error(`文件下载失败（HTTP ${response.status}）`);
+  return response.blob();
+}
+
 function openRunStream(runId: string, onEvent: (event: RunEvent) => void) {
   if (apiIdentityHeaders().Authorization) return openAuthorizedRunStream(runId, onEvent);
   const source = new EventSource(`/api/runs/${runId}/stream`);

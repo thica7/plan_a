@@ -89,6 +89,10 @@ async def ingest_document_reference(
         if stored is None:
             raise RuntimeError("Ingested document is missing from its trusted scope")
         return {
+            "indexing_status": stored.indexing_status,
+            "indexing_error": stored.indexing_error,
+            "embedding": embedding_provider.status() if embedding_provider else None,
+            "index_vectors_requested": index_vectors,
             "document_id": stored.id,
             "workspace_id": stored.workspace_id,
             "project_id": stored.project_id,

@@ -98,6 +98,25 @@ class SurveyInterviewAgentMixin:
             )
             return
 
+        if detail.execution_mode == "real":
+            missing = [
+                {"dimension": dimension, "competitor": competitor}
+                for dimension in target_dimensions for competitor in competitors
+                if not self._has_strong_user_research_source(detail, dimension, competitor)
+            ]
+            self._append_agent_message(
+                record, from_agent="survey_interview", to_agent="collect_qa",
+                message_type="survey_interview_skipped", payload_schema="SurveyEvidenceBundle[]",
+                payload={"reason": "external_user_research_required", "bundles": [],
+                         "dimensions": target_dimensions, "competitors": competitors},
+            )
+            await self.emit(
+                detail.id, "node_completed", "survey_interview", None,
+                "External user research is required; automatic simulation skipped.",
+                {"added": 0, "missing": missing},
+            )
+            return
+
         bundles: list[SurveyEvidenceBundle] = []
         added_sources: list[RawSource] = []
         for dimension in target_dimensions:

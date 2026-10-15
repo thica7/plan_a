@@ -182,9 +182,14 @@ async def test_repeated_qa_dispatch_and_journal_reopen_keep_snapshot_identity(tm
     collect = await capture.nodes["collect_qa"](state)
     again = await capture.nodes["collect_qa"](state)
     assert collect["evidence_snapshot_id"] == again["evidence_snapshot_id"]
+    with pytest.raises(EvidenceUseRejectedError, match="accepted"):
+        await capture.nodes["analyst_dispatch"](state)
+    accepted = await capture.nodes["evidence_hitl"](state)
+    assert accepted["evidence_route"] == "accept"
     dispatch = await capture.nodes["analyst_dispatch"](state)
     repeated = await capture.nodes["analyst_dispatch"](state)
-    assert dispatch["evidence_snapshot_id"] == repeated["evidence_snapshot_id"]
+    assert (dispatch["evidence_snapshot_id"] == repeated["evidence_snapshot_id"]
+            == accepted["evidence_snapshot_id"])
     branch_state = {"run_id": record.detail.id, "branch_dimensions": ["pricing"],
                     "branch_competitors": ["Product A"],
                     "evidence_snapshot_id": dispatch["evidence_snapshot_id"]}

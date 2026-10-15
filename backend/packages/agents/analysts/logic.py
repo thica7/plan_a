@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from packages.agents import SubagentContext
 from packages.agents.analysts.cards import build_claim_card_bundle
 from packages.agents.analysts.citation_tools import inspect_sources, validate_source_ids
+from packages.llm.errors import LLMExecutionLimitError
 from packages.memory import KBCacheEntry
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.refs import merge_ordered_refs
@@ -291,7 +292,7 @@ class AnalystAgentMixin:
                     f"Competitor: {competitor}\n"
                     f"Dimension: {dimension}\n"
                     f"Evidence View JSON: {evidence_json}\n"
-                    f"Sources JSON: {json.dumps(dimension_sources, ensure_ascii=False)}\n"
+                    "Sources are the source-paired Evidence View above; resolve its exact references.\n"
                     f"QA feedback for redo: {json.dumps(qa_feedback, ensure_ascii=False)}\n"
                     f"Observations JSON: {json.dumps(observations, ensure_ascii=False)}\n\n"
                     "Return one action. For finish, include the strict structured "
@@ -397,6 +398,7 @@ class AnalystAgentMixin:
     ) -> None:
         detail = record.detail
         await self._ensure_analysis_evidence(record)
+        self._finish_delivery_phase(record, 'collector', f'{competitor}/{dimension}')
         view, use = self._begin_evidence_use(
             record, agent="analyst", competitor=competitor, dimension=dimension
         )
@@ -442,6 +444,16 @@ class AnalystAgentMixin:
             for source in (item.to_raw_source() for item in view.sources)
         ]
         self._validate_evidence_use(record, use)
+        if not dimension_sources:
+            omitted = any(gap.reason == 'context_budget_exceeded' for gap in view.gaps)
+            reason = 'context_budget_exceeded' if omitted else 'no_accepted_evidence'
+            await self.emit(detail.id, "node_completed", "analyst", branch_id,
+                            (f"完整原文观察超出输入容量，跳过 {competitor} / {dimension} 并记录遗漏。"
+                             if omitted else f"没有已接受证据，跳过 {competitor} / {dimension}。"),
+                            {"competitor": competitor, "dimension": dimension, "evidence_gap": not omitted,
+                             "context_omitted": omitted, "module_status": "skipped", "execution_reason": reason})
+            self._finish_delivery_phase(record, 'analyst', branch_id)
+            return
         cache_content_hash = self._kb_cache_content_hash(detail, competitor, dimension)
         if self._kb_cache is not None and cache_content_hash and not qa_feedback:
             cache_entry = self._kb_cache.get(competitor, dimension, cache_content_hash)
@@ -501,6 +513,8 @@ class AnalystAgentMixin:
                     branch_id,
                     f"KB cache reused {competitor} / {dimension} slice.",
                     {
+                        "module_status": "cache",
+                        "execution_reason": "validated_evidence_cache",
                         "cache": {
                             "hit": True,
                             "content_hash": cache_content_hash,
@@ -512,6 +526,7 @@ class AnalystAgentMixin:
                         **task_metadata,
                     },
                 )
+                self._finish_delivery_phase(record, 'analyst', branch_id)
                 return
         react_payload: dict[str, object] = {}
         use_react = self._should_use_analyst_react(
@@ -582,16 +597,23 @@ class AnalystAgentMixin:
                         {
                             "analysis": payload,
                             "fallback_reason": fallback_reason,
+                            "module_status": "fallback" if fallback_reason else "llm",
+                            "fallback": {"used": bool(fallback_reason), "reason": fallback_reason},
                             "context": context.metadata(),
                             "dimension": dimension,
                             "competitor": competitor,
                             **task_metadata,
                         },
                     )
+                    self._finish_delivery_phase(record, 'analyst', branch_id)
                     return
             except EvidenceUseRejectedError:
                 raise
             except Exception as exc:  # noqa: BLE001 - bounded ReAct falls back to one-shot analysis.
+                if isinstance(exc, LLMExecutionLimitError):
+                    # Admission already waited for in-flight settlement. Retrying
+                    # the same local rejection cannot improve eligibility.
+                    react_payload['budget_rejected'] = exc
                 react_payload["react_error"] = str(exc)
         elif self._settings.analyst_react_enabled:
             react_payload["react_skipped"] = "fanout_budget"
@@ -604,6 +626,8 @@ class AnalystAgentMixin:
             qa_feedback=qa_feedback,
         )
         try:
+            if react_payload.get('budget_rejected'):
+                raise react_payload.pop('budget_rejected')
             payload = await self._trace_llm_json(
                     record,
                     agent="analyst",
@@ -627,15 +651,16 @@ class AnalystAgentMixin:
                     context=context,
                     timeout_seconds=branch_timeout,
             )
-        except TimeoutError:
+        except (TimeoutError, LLMExecutionLimitError) as exc:
             payload = self._deterministic_structured_knowledge_payload(
                 competitor=competitor,
                 dimension=dimension,
                 dimension_sources=dimension_sources,
             )
-            react_payload["analysis_timeout"] = (
-                f"one-shot analyst exceeded {branch_timeout:g}s"
-            )
+            if isinstance(exc, LLMExecutionLimitError):
+                react_payload['fallback_reason'] = str(exc)
+            else:
+                react_payload['analysis_timeout'] = f"one-shot analyst exceeded {branch_timeout:g}s"
             react_payload["deterministic_fallback"] = True
         payload, fallback_reason = self._ensure_structured_payload_has_claims(
             competitor=competitor,
@@ -685,12 +710,17 @@ class AnalystAgentMixin:
             {
                 "analysis": payload,
                 "react": react_payload,
+                "module_status": "fallback" if react_payload.get("deterministic_fallback") else "llm",
+                "fallback": {"used": bool(react_payload.get("deterministic_fallback")),
+                             "reason": react_payload.get("fallback_reason") or react_payload.get("analysis_timeout", "")},
                 "context": context.metadata(),
                 "dimension": dimension,
                 "competitor": competitor,
                 **task_metadata,
             },
         )
+
+        self._finish_delivery_phase(record, 'analyst', branch_id)
 
     def _should_use_analyst_react(
         self,
@@ -970,9 +1000,12 @@ class AnalystAgentMixin:
     ) -> list[RawSource]:
         snapshot = current_snapshot(detail)
         if snapshot is not None and snapshot.phase == "analysis":
+            budget = {"quick": 8192, "standard": 16384,
+                      "deep": 24576}.get(detail.plan.research_depth, 8192)
+            if dimension in {'feature', 'pricing'}:
+                budget = min(32768, budget * 2)
             view = select_evidence_view(snapshot, agent="analyst", competitor=competitor,
-                dimension=dimension, max_bytes={"quick": 8192, "standard": 16384,
-                                               "deep": 24576}.get(detail.plan.research_depth, 8192))
+                dimension=dimension, max_bytes=budget)
             return [source.to_raw_source() for source in view.sources]
         return [
             source
@@ -1431,10 +1464,11 @@ class AnalystAgentMixin:
             if isinstance(section, dict):
                 try:
                     knowledge.pricing_model = PricingModel.model_validate(section)
-                    self._enrich_pricing_model_from_sources(
+                    projected_prices = self._enrich_pricing_model_from_sources(
                         detail, competitor, dimension, knowledge.pricing_model
                     )
-                    self._dedupe_pricing_model_tiers(knowledge.pricing_model)
+                    if not projected_prices:
+                        self._dedupe_pricing_model_tiers(knowledge.pricing_model)
                 except Exception:
                     knowledge.pricing_model.tiers = []
                     knowledge.pricing_model.notes = []
@@ -2183,14 +2217,32 @@ class AnalystAgentMixin:
         competitor: str,
         dimension: str,
         pricing_model: PricingModel,
-    ) -> None:
+    ) -> bool:
+        # These rows already passed admission and are restricted to the current
+        # consumption view. Do not enrich them from model labels or snippets.
+        rows = [(source, field)
+                for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
+                for field in normalized_fields_from_source(source)
+                if field.get('kind') == 'pricing' and field.get('dimension') == dimension
+                and field.get('competitor') == competitor and field.get('price')
+                and field.get('source_quote') and field.get('evidence_item_ids')]
+        if rows:
+            pricing_model.tiers = [PricingTier(
+                name=field.get('tier_name') or 'unknown', price=str(field['price']),
+                billing_cycle=field.get('billing_cycle') or 'unknown',
+                limits=[json.dumps(field.get('qualifiers', {}), ensure_ascii=False, sort_keys=True)],
+                claims=[KnowledgeClaim(claim=field['source_quote'],
+                    source_ids=[source.id], confidence=field.get('confidence', 0.0))],
+            ) for source, field in rows]
+            pricing_model.notes = []
+            return True
         evidence_texts = [
             " ".join((source.title, source.snippet)).strip()
             for source in self._sources_for_competitor_dimension(detail, competitor, dimension)
         ]
         evidence_texts = [text for text in evidence_texts if text]
         if not evidence_texts:
-            return
+            return False
         existing_claims = [
             *pricing_model.notes,
             *[claim for tier in pricing_model.tiers for claim in tier.claims],
@@ -2229,6 +2281,7 @@ class AnalystAgentMixin:
             if len(pricing_model.tiers) >= 6:
                 break
         self._dedupe_pricing_model_tiers(pricing_model)
+        return False
 
     def _dedupe_pricing_model_tiers(self, pricing_model: PricingModel) -> None:
         merged: dict[tuple[str, str], PricingTier] = {}

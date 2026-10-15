@@ -390,8 +390,8 @@ async def test_owner_without_workspace_cannot_select_foreign_project(scoped_http
     )
     assert (
         await client.get("/api/knowledge/documents", params={"project_id": "p"})
-    ).status_code == 404
-    assert (await client.get("/api/knowledge/documents")).json() == []
+    ).status_code == 403
+    assert (await client.get("/api/knowledge/documents")).status_code == 403
 
 
 @pytest.mark.asyncio
@@ -504,7 +504,8 @@ async def test_enterprise_kb_sync_rejects_foreign_project_before_work(
         await client.get(path + "/metrics"),
         await client.get(path + "/jobs/" + foreign_job.id),
     ]
-    assert [response.status_code for response in responses] == [404, 404, 404, 404]
+    expected = [403] * 4 if workspace_id is None else [404] * 4
+    assert [response.status_code for response in responses] == expected
     assert calls == []
     assert all("shared pricing" not in response.text for response in responses)
 
@@ -574,8 +575,13 @@ async def test_enterprise_kb_sync_uses_trusted_destination_and_keeps_permissions
     monkeypatch.setattr(enterprise, "_KB_SYNC_JOBS", {})
     path = f"/api/enterprise/projects/{project_id}/evidence/kb-sync"
     response = await client.post(path, json={})
+    if workspace_id is None:
+        assert response.status_code == 403
+        assert (await client.post(path + "/jobs", json={})).status_code == 403
+        assert (await client.get(path + "/metrics")).status_code == 403
+        return
     assert response.status_code == 200
-    assert response.json()["workspace_id"] == (workspace_id or DEFAULT_WORKSPACE_ID)
+    assert response.json()["workspace_id"] == workspace_id
     assert response.json()["loaded_count"] == (2 if workspace_id else 1)
     job = await client.post(path + "/jobs", json={"force_resync": True})
     assert job.status_code == 200

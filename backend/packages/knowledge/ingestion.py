@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import inspect
 import math
 import os
 import re
@@ -15,6 +14,7 @@ from typing import Any
 from .embeddings import EmbeddingProvider
 from .models import DocumentCreate, KnowledgeChunk, KnowledgeDocument
 from .repository import KnowledgeRepository
+from .runtime import call_provider
 
 # Offline estimate only; UTF-8 bytes account for unspaced multilingual text.
 _BYTES_PER_ESTIMATED_TOKEN = 4
@@ -146,7 +146,7 @@ class IngestionPipeline:
         stage = "embedding"
         dimensions: int | None = None
         try:
-            vectors = await _maybe_await(embed_fn([chunk.text for chunk in chunks]))
+            vectors = await call_provider(embed_fn, [chunk.text for chunk in chunks])
             if provider is not None:
                 embedding_model = provider.model_version
             if len(vectors) != len(chunks) or not vectors or not vectors[0]:
@@ -216,6 +216,12 @@ class IngestionPipeline:
                 dimensions=dimensions,
                 index_version=index_version,
             )
+            if (stage == "embedding"
+                    and getattr(provider, "requested_provider", "").startswith("local-")):
+                from .local_models import local_model_strict
+
+                if not local_model_strict():
+                    return
             raise
         await self._repo.set_indexing_state(
             stored.id,
@@ -440,9 +446,3 @@ class IngestionPipeline:
     @staticmethod
     def _estimate_tokens(text: str) -> int:
         return max(1, math.ceil(len(text.encode("utf-8")) / _BYTES_PER_ESTIMATED_TOKEN))
-
-
-async def _maybe_await(value: Any) -> Any:
-    if inspect.isawaitable(value):
-        return await value
-    return value

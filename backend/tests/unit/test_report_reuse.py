@@ -452,7 +452,7 @@ def service(store, journal=None):
 
 
 @pytest.mark.asyncio
-async def test_restart_uses_persisted_projection_read_only_after_start_run_resolves_project(
+async def test_restart_restores_saved_projection_and_keeps_history_advisory_after_new_run(
     tmp_path,
 ):
     store = EnterpriseMemoryStore()
@@ -462,6 +462,20 @@ async def test_restart_uses_persisted_projection_read_only_after_start_run_resol
     restarted_store = EnterpriseMemoryStore()
     restarted = service(restarted_store, RunJournal(tmp_path / "journal.sqlite"))
     try:
+        restored = restarted_store.get_run_projection(detail.id)
+        original = detail.enterprise_projection
+        assert restored.report_version.model_dump() == original.report_version.model_dump()
+        assert restored.claim_records == original.claim_records
+        for actual, saved in zip(restored.evidence_records, original.evidence_records, strict=True):
+            # Store restoration may add lifecycle aliases, while source facts stay unchanged.
+            lifecycle = {"first_seen_run_id", "last_seen_run_id", "metadata"}
+            assert actual.model_dump(exclude=lifecycle) == saved.model_dump(exclude=lifecycle)
+            assert all(actual.metadata[key] == value for key, value in saved.metadata.items())
+        restored_records = (
+            {key: value.model_dump() for key, value in restarted_store.report_versions.items()},
+            {key: value.model_dump() for key, value in restarted_store.evidence_records.items()},
+            {key: value.model_dump() for key, value in restarted_store.claim_records.items()},
+        )
         new = await restarted.create_run(
             RunCreateRequest(
                 topic="AI coding",
@@ -474,8 +488,15 @@ async def test_restart_uses_persisted_projection_read_only_after_start_run_resol
         )
         assert new.project_id is not None
         assert new.plan.report_reuse_context.selected[0].report_id == "r-old"
-        assert restarted_store.report_versions == {}
-        assert restarted_store.evidence_records == {}
+        assert new.report_md == ""
+        assert new.raw_sources == []
+        assert new.enterprise_projection is None
+        assert restarted_store.get_run_projection(new.id) is None
+        assert restored_records == (
+            {key: value.model_dump() for key, value in restarted_store.report_versions.items()},
+            {key: value.model_dump() for key, value in restarted_store.evidence_records.items()},
+            {key: value.model_dump() for key, value in restarted_store.claim_records.items()},
+        )
         assert journal.load_run(detail.id).model_dump() == detail.model_dump()
         before = new.plan.report_reuse_context.model_dump()
 
@@ -997,7 +1018,10 @@ async def test_history_sources_that_redirect_or_repeat_content_do_not_skip_disco
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failed_read", ["get_project", "list_projects", "list_report_versions"])
+@pytest.mark.parametrize(
+    "failed_read",
+    ["get_project", "list_projects", "list_evidence", "list_claims", "list_report_versions"],
+)
 async def test_optional_history_read_failure_preserves_journal_fallback_and_new_run(
     tmp_path, failed_read
 ):
@@ -1037,5 +1061,43 @@ async def test_optional_history_read_failure_preserves_journal_fallback_and_new_
         )
         assert journal.load_run(created.id) is not None
         assert journal.load_run(persisted.id).model_dump() == persisted.model_dump()
+    finally:
+        await runner._graph_checkpointer.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failed_read", ["list_evidence", "list_claims", "list_report_versions"])
+async def test_history_snapshot_failure_preserves_current_projection_and_saved_parent(
+    tmp_path, monkeypatch, failed_read
+):
+    store = EnterpriseMemoryStore()
+    persisted = old_run(store)
+    journal = RunJournal(tmp_path / "versions.sqlite")
+    journal.save_run(persisted, projections=[persisted.enterprise_projection])
+    runner = service(store, journal)
+    try:
+        projection = persisted.enterprise_projection.model_copy(deep=True)
+        projection.report_version = projection.report_version.model_copy(
+            update={
+                "id": "r-revised",
+                "parent_version_id": "r-old",
+                "version_number": 2,
+                "report_md": "Revised report with an unresolved condition.",
+                "quality_metadata": {"run_qa_findings": [{"problem": "pending review"}]},
+            }
+        )
+        store.save_projection(projection)
+        expected = store.get_run_projection(persisted.id).model_copy(deep=True)
+
+        def broken_read(*args, **kwargs):
+            raise RuntimeError("history snapshot fixture failure")
+
+        monkeypatch.setattr(store, failed_read, broken_read)
+        runner.persist_report_versions(persisted.id)
+        saved = journal.load_report_projections(persisted.id)
+        assert [item.report_version.id for item in saved] == ["r-old", "r-revised"]
+        assert saved[0].model_dump() == persisted.enterprise_projection.model_dump()
+        assert saved[1].model_dump() == expected.model_dump()
+        assert journal.load_run(persisted.id).report_md == projection.report_version.report_md
     finally:
         await runner._graph_checkpointer.aclose()

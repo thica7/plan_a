@@ -184,3 +184,24 @@ describe("TraceList decision replay formatting", () => {
     expect(formatSpanMeta(span)).toContain(summary);
   });
 });
+
+describe('stage execution visibility', () => {
+  it('shows skipped and verified cache stages in Chinese', () => {
+    expect(formatModuleExecutionStatus({module_status:'llm'}, 'zh-CN')).toBe('模型生成');
+    expect(formatModuleExecutionStatus({module_status:'fallback', fallback:{used:true, reason:'empty_structured_payload'}}, 'zh-CN')).toContain('规则回退');
+    expect(formatModuleExecutionStatus({module_status:'skipped', execution_reason:'no_accepted_evidence'}, 'zh-CN')).toContain('无证据跳过');
+    expect(formatModuleExecutionStatus({module_status:'cache'}, 'zh-CN')).toContain('已验证缓存复用');
+  });
+  it('shows local budget rejection and zero actual requests', () => {
+    const span = {metadata:{llm_admission_status:'rejected', llm_transport_attempts:0,
+      degradation_reason:'run_llm_budget_reserved_for_delivery'}, kind:'llm', name:'test'} as unknown as TraceSpan;
+    const text = formatSpanMeta(span, 'zh-CN');
+    expect(text).toContain('预算拒绝');
+    expect(text).toContain('实际请求 0');
+    expect(text).toContain('保留');
+  });
+  it('keeps legacy traces readable', () => {
+    expect(formatModuleExecutionStatus({})).toBe('');
+    expect(formatSpanMeta({metadata:{}, kind:'llm', name:'legacy'} as unknown as TraceSpan)).toBe('');
+  });
+});

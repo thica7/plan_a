@@ -26,8 +26,26 @@ def extract_generic_persona(brief: ResearchBrief, page: CapturedPage) -> Extract
     text = _text(page)
     fields: dict[str, object] = {}
     quotes: list[EvidenceQuote] = []
-    for sentence in re.finditer(r"[^。！？.!?;\n]+[。！？.!?;]?", text):
+    for sentence in re.finditer(r"(?:[^。！？.!?\n]|(?<=\d)\.(?=\d))+[。！？.!?]?", text):
         clause = sentence.group()
+        # A direct English subject/relation is evidence; component specs and
+        # accessories mentioning the product are not user suitability claims.
+        relation = re.fullmatch(
+            r"\s*" + re.escape(brief.competitor)
+            + r"\s+(?:is\s+)?(?P<relation>designed for|optimized for|is for)\s+"
+              r"(?P<value>(?:[^。！？.!?\n]|(?<=\d)\.(?=\d))+?)[。！？.!?]?\s*",
+            clause, re.I,
+        )
+        if relation and not quote_quality_problem(clause, dimension="persona"):
+            field = "target_segment" if relation['relation'].casefold() == "is for" else "primary_use_case"
+            if field not in fields:
+                fields[field] = relation['value'].strip()
+                quote = clause.strip()
+                start = sentence.start() + len(clause) - len(clause.lstrip())
+                quotes.append(EvidenceQuote(
+                    text=quote, source_url=page.final_url, field=field,
+                    start_offset=start, end_offset=start + len(quote),
+                ))
         names = [brief.competitor]
         if brief.product_name and brief.product_name.casefold() != brief.competitor.casefold():
             names.append(brief.product_name)
@@ -62,8 +80,8 @@ def extract_generic_persona(brief: ResearchBrief, page: CapturedPage) -> Extract
                 fields[field] = match.group(1).strip()
                 quotes.append(EvidenceQuote(
                     text=supported_segment, source_url=page.final_url, field=field,
-                    start_offset=sentence.start() + start + match.start(),
-                    end_offset=sentence.start() + start + match.end(),
+                    start_offset=sentence.start() + start,
+                    end_offset=sentence.start() + start + len(supported_segment),
                 ))
     return ExtractionResult(
         competitor=brief.competitor, dimension=brief.dimension,

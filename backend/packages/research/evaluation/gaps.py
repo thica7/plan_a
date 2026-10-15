@@ -199,9 +199,9 @@ def _feature_gaps(
 ) -> list[QualityGap]:
     if brief.product_name or brief.product_category:
         supported = any(
-            field.startswith("capability_")
+            field.startswith(("capability_", "semantic_capability_"))
             and isinstance(value, dict)
-            and value.get("status") == "supported"
+            and value.get("status") in {"supported", "documented"}
             for field, value in fields.items()
         )
         if supported:

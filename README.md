@@ -1,231 +1,176 @@
-# Competiscope v2
+# Competiscope v2 · 产品调研与竞品分析工作台
 
-Competiscope v2 is a competitive intelligence workbench for running
-source-grounded competitor research, evaluating evidence quality, and producing
-auditable competitive reports.
+输入一个目标产品，发现同类竞品与替代方案，采集可追溯资料，生成带引用的产品分析报告。适用于软件、硬件及其他产品品类。LLM 负责规划、提取、分析与写作，RAG 复用历史一手资料；用户要求、模型推断和来源事实分别记录。
 
-It combines a FastAPI backend, a React/Vite console, graph-driven agent
-orchestration, RAG/KB ingestion, enterprise governance surfaces, and
-Docker-first deployment scaffolding.
+前端为明亮的田园像素桌面，提供应用窗口、任务栏、任务管理、项目文件、知识库、证据、报告和设置。关闭窗口后，后台调研任务继续执行。
 
-## Core Capabilities
+## 能做什么
 
-- Run competitive intelligence workflows from a topic, competitor set, and
-  analysis dimensions such as pricing, features, security, persona, market,
-  integrations, and reviews.
-- Start from a named target product in any category, discover direct rivals and
-  substitutes, and research the target alongside those products. Product facts
-  and comparison cells retain source references; legacy topic-only runs remain
-  available through the API.
-- Choose a research lens (direct rivals, adjacent substitutes, or market view),
-  a separate quick/standard/deep research budget, and AI or assisted review.
-  A decision brief can steer the report toward a product question, user job,
-  success signal, and evidence-backed opportunities to validate.
-- Orchestrate planner, collector, analyst, comparator, writer, QA, reflector,
-  and scoped redo stages through a graph-based pipeline.
-- Collect evidence from trusted registries, web search, fetched web pages,
-  crawler sources, community signals, manual inputs, and the knowledge base.
-- Reject login shells and unrelated prices, distinguish publication dates from
-  fetch dates, and use a bounded browser fetch when ordinary HTML is insufficient.
-- Build source-grounded reports with evidence packs, structured source tokens,
-  quality gates, release checks, and report versioning.
-- Manage enterprise workspaces, projects, competitors, evidence, claims,
-  reports, audit logs, governance policies, compliance exports, and RBAC.
-- Ingest and retrieve knowledge through crawl sources, document parsers,
-  SimHash deduplication, retrieval presets, Qdrant vector search, and retrieval
-  trace logging.
-- Inspect runs through frontend views for history, crawl, search, knowledge,
-  evidence, reports, traces, revisions, governance, and release review.
+- **产品经理视角调研**：目标用户、使用场景、共同能力、定价、竞争关系、切换成本及待验证的产品机会。具体覆盖范围取决于研究维度与合格证据。
+- **三种研究深度**：极简、适中、详细分别控制竞品数、研究范围、搜索与模型预算、报告长度。
+- **全 AI / 半人工**：半人工模式在计划、证据和最终审核节点等待用户决策，支持定向补证和分阶段重做。
+- **联网取证**：官方站点、搜索、网页抓取、可选浏览器渲染及手工资料；拒绝登录壳、无关报价和不能支撑主张的摘要。
+- **共享证据**：全文和分块入库、版本/哈希校验、工作区与项目范围隔离；各分析阶段读取同一已准入快照。
+- **报告闭环**：按维度分段写作、逐条主张与引用核对、独立价格段、短局部报告、人工改稿、版本记录与 Markdown 下载。
+- **执行可观察**：调用记录、阶段预算、证据消费依赖和回退状态可追踪；任务结束与报告达到交付标准分别判断。
 
-## Architecture Overview
+## 实际 Agent 流水线
 
-```text
-frontend/        React, Vite, TypeScript console
-backend/         FastAPI app, agents, orchestration, RAG, enterprise services
-docs/            Architecture, deployment, contracts, ADRs, and user guides
-docker/          Nginx reverse proxy config
-data/            Seed data and golden sets
-eval/            Evaluation datasets
-third_party/     Vendored runtime helpers, including webfetch_v2
+```mermaid
+flowchart TD
+    P[Planner：明确产品与调研范围] --> H1[计划审核]
+    H1 --> C[Collector：产品 × 维度并行取证]
+    C --> S[Survey：用户研究证据检查]
+    S --> CQ[采集 QA]
+    CQ --> H2[证据审核与快照准入]
+    H2 --> A[Analyst：产品 × 维度并行分析]
+    A --> AQ[分析 QA]
+    AQ --> M[Comparator：同口径比较]
+    M --> R[Reflector：矛盾与缺口]
+    R --> W[Writer：分段写作与主张核对]
+    W --> Q[最终 QA 与人工审核]
+    Q --> O[报告 / 局部报告 / 阻断]
+    Q -. 定向重做 .-> C
+    Q -. 定向重做 .-> A
+    Q -. 定向重做 .-> M
+    Q -. 仅改写 .-> W
 ```
 
-High-level runtime flow:
+| Agent | 实际执行功能 | 资料使用方式 |
+| --- | --- | --- |
+| Planner | 目标产品研究、竞品发现、范围和任务拆解 | 搜索与目标资料；规划条件不充当事实 |
+| Collector | RAG 预检索、联网采集、有界语义提取、按缺口补证 | 唯一常规知识库取证入口；资料需准入 |
+| Survey | 检查真实用户研究资料 | real 模式不会用模拟访谈填充事实 |
+| Analyst | 按产品与维度生成结构化分析、条件和引用 | 限定范围的共享证据视图 |
+| Comparator | 比较同一操作、对象及角色/套餐/访问前提 | 已准入证据及有效 Analyst 产物 |
+| Reflector | 检查矛盾、薄弱结论和待补资料 | 同一快照与上游分析/比较产物 |
+| Writer | 按维度写作、独立价格段、主张核验与修复 | 消费已验证上游产物，缺证保留局部结论 |
+| QA | 采集/分析/最终审核与重做路由 | 核对来源、主张和引用，保留阻断及警告 |
 
-```text
-New run
-  -> planner
-  -> collector branches
-  -> analyst branches
-  -> comparator
-  -> writer
-  -> QA / release gate
-  -> scoped redo or final report
+详细入口、输入输出、Prompt、回退和重做规则见 [Agent 执行说明](docs/agent-execution.md)。
+
+## 研究模式
+
+| 设置 | 选项 | 作用 |
+| --- | --- | --- |
+| 竞争视角 | L1 直接竞品 / L2 相邻替代 / L3 市场视角 | 控制竞品发现范围 |
+| 研究深度 | quick 极简 / standard 适中 / deep 详细 | 控制范围、预算与报告长度；部署上限仍生效 |
+| 协作方式 | AI / assisted 半人工 | 决定是否在三个审核点等待用户 |
+| 执行方式 | demo / real | demo 使用合成资料，real 使用实际配置的资料与服务 |
+
+可填写目标产品官网、品类、市场、受众、场景和决策问题，也可手动指定竞品。报价需保留市场、方案、席位、计费周期、币种、税费和核验时间；缺少条件时不生成确定金额结论。
+
+## 本机启动
+
+要求 Python 3.11+、Node.js 与 pnpm。在仓库根目录安装依赖：
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e './backend[dev]'
+pnpm --dir frontend install --frozen-lockfile
+cp .env.example .env
 ```
 
-## Quick Start
+### 无 Docker 的桌面演示
 
-Docker deployment:
+分别在两个终端执行：
+
+```bash
+# 终端 1：演示 API、内存企业存储、LangGraph
+COMPETISCOPE_LOAD_ENV_FILES=0 DEMO_MODE=true ENTERPRISE_STORE_BACKEND=memory \
+RUN_ORCHESTRATION_BACKEND=langgraph TEMPORAL_TRAFFIC_PERCENT=0 \
+.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+
+# 终端 2：前端
+pnpm --dir frontend dev --host 127.0.0.1 --port 5173 --strictPort
+```
+
+打开 [本地桌面](http://127.0.0.1:5173)。演示 API 不启动 Postgres、Temporal 或 Qdrant，演示报告不用于证明真实调研准确率。各终端用 Ctrl+C 停止。
+
+### 完整开发服务
+
+需要 Docker，配置 `.env` 后执行：
+
+```bash
+bash scripts/dev_start.sh
+bash scripts/dev_status.sh
+bash scripts/dev_stop.sh
+```
+
+Windows 使用 `scripts/dev_start.ps1`、`dev_status.ps1` 和 `dev_stop.ps1`。脚本管理 Postgres、Temporal、Temporal UI、Qdrant、API、worker 和前端，并记录本次进程。发现端口被占用时应核对进程；macOS/Linux 可传 `--backend-port`、`--frontend-port`，Windows 可传 `-BackendPort`、`-FrontendPort`。
+
+默认端口：API `8000`、前端 `5173`、Temporal UI `8233`、Temporal gRPC `7233`、Qdrant HTTP `6333`。
+
+Docker 部署示例：
 
 ```powershell
 Copy-Item .env.example .env
 powershell -ExecutionPolicy Bypass -File scripts\docker_deploy.ps1 -Build
 ```
 
-Then open:
+打开 `http://localhost:8080`，配置细节见 [部署说明](docs/docker_deployment.md)。
 
-```text
-http://localhost:8080
-```
+## 实际模型与搜索配置
 
-See `docs/docker_deployment.md` for deployment details.
+把密钥保存在本机 `.env` 或部署密钥服务中。下面均为占位符；`ARK_*` 是现有 OpenAI 兼容主模型适配器的配置名。
 
-## Local Development
-
-Install backend dependencies into a project `.venv` and frontend dependencies with
-`pnpm install --frozen-lockfile`. Copy `.env.example` to `.env`, then start local
-services:
-
-```bash
-# macOS / Linux
-bash scripts/dev_start.sh
-bash scripts/dev_status.sh
-bash scripts/dev_stop.sh
-```
-
-Windows:
-
-```powershell
-.\scripts\dev_start.ps1
-```
-
-This starts local Postgres, Temporal, Temporal UI, the FastAPI backend, the
-Temporal worker, Qdrant, and the Vite frontend. The local scripts track their
-own process IDs and report port conflicts without stopping unrelated programs.
-Use `--backend-port` and `--frontend-port` on macOS/Linux, or `-BackendPort`
-and `-FrontendPort` on Windows, to change the development ports.
-
-The frontend now opens as a pixel desktop with application windows, a taskbar,
-project files, analysis tasks, knowledge, evidence, reports, and settings.
-Closing a window leaves the backend run active; the task manager can reopen it.
-
-To preview the desktop without Docker, use two terminals from the repository root:
-
-```bash
-# Terminal 1: deterministic demo API and in-memory enterprise store
-COMPETISCOPE_LOAD_ENV_FILES=0 DEMO_MODE=true ENTERPRISE_STORE_BACKEND=memory \
-RUN_ORCHESTRATION_BACKEND=langgraph TEMPORAL_TRAFFIC_PERCENT=0 \
-.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
-
-# Terminal 2: frontend (open http://127.0.0.1:5173)
-pnpm --dir frontend dev --host 127.0.0.1
-```
-
-This preview uses synthetic demo data and does not start Temporal, Postgres, or
-Qdrant. Stop each foreground process with Ctrl+C.
-
-For a real product study, enter the target name in New Run and optionally add
-its official URL, category, audience, use cases, and market. Automatic rival
-discovery requires configured web search; you can also provide rival names
-manually. The target appears separately in the comparison matrix. The browser
-fetch path needs optional Playwright/Chromium dependencies for dynamic pages;
-scanned PDFs need OCR before their text can support claims.
-
-The New Run form separates three choices:
-
-| Choice | Options | Effect |
-| --- | --- | --- |
-| Research lens | L1 direct rivals, L2 adjacent substitutes, L3 market view | Sets the rival discovery perspective. |
-| Research depth | Quick, standard, deep | Caps rivals, research slices, search/fetch attempts, model calls, and report length. Deployment limits may tighten these caps. |
-| Collaboration | AI, assisted | Assisted runs pause for plan, evidence, and final QA review; AI runs proceed without those pauses. |
-
-Demo and real execution remain separate from those choices. With a decision
-brief, the report adds a product opportunities and validation section. User
-inputs shape the analysis but are not treated as verified product facts.
-
-Useful commands:
-
-```powershell
-.\scripts\dev_status.ps1
-.\scripts\dev_stop.ps1
-```
-
-Default local services:
-
-```text
-Backend:      http://localhost:8000
-Frontend:     http://localhost:5173
-Temporal UI:  http://localhost:8233
-Temporal gRPC 127.0.0.1:7233
-```
-
-## Real API Mode
-
-Create `.env` from `.env.example`, then configure the provider keys you need:
-
-```text
+```dotenv
 DEMO_MODE=false
-ARK_API_KEY=your_key
-ARK_MODEL=your_model_or_endpoint_id
-PPLX_API_KEY=your_perplexity_key
-BACKUP_LLM_API_KEY=your_backup_key
-BACKUP_LLM_MODEL=your_backup_model
+ARK_BASE_URL=https://api.deepseek.com
+ARK_API_KEY=replace_with_your_key
+ARK_MODEL=deepseek-flash
+LLM_PROVIDER_NAME=deepseek
+WEB_SEARCH_PROVIDER=deepseek
+DEEPSEEK_SEARCH_MODEL=deepseek-flash
 ```
 
-When real API mode is enabled, the system can use live search, page fetching,
-LLM-backed planning and writing, and evidence-grounded report generation.
+原生搜索可复用官方 DeepSeek 主模型凭据，也可单独设置 `DEEPSEEK_API_KEY`。使用 Perplexity 时改为 `WEB_SEARCH_PROVIDER=perplexity` 并设置 `PPLX_API_KEY`。自动发现竞品需要可用搜索服务；模型返回网址仍需实际抓取和核验。动态页面可选安装 `js-render` 依赖与 Chromium，扫描 PDF 需先 OCR。
 
-## RAG / Knowledge Base
+用 `RUN_LLM_MAX_TOKENS`、调用次数和费用预算限制单次运行；工作区月度额度独立生效。预算不足会明确阻断或回退，不能保证所有阶段都完成模型调用。部署前还需配置 API 授权与持久化存储，默认演示配置不适合直接对外开放。
 
-The project includes a knowledge ingestion and retrieval layer for grounding
-reports in reusable evidence.
+## RAG 与知识复用
 
-本次 RAG 第一阶段的交付范围、启动方式、资料隔离说明、测试结果和剩余问题见
-[中文交付文档](docs/optimization/2026-10-03-rag-stage-one-delivery.md)；
-本地持久化验证不代表 HTTP Qdrant 部署或语义检索质量已验收。
-
-第二阶段共享证据快照、Agent 依赖、更正与缓存的当前交付状态见
-[第二阶段交付说明](docs/optimization/2026-10-04-rag-stage-two-delivery.md)。
-
-Supported capabilities include:
-
-- crawl source ingestion
-- document parsing
-- chunking and SimHash deduplication
-- Qdrant-backed vector retrieval
-- retrieval presets
-- retrieval trace recording
-- KB-backed evidence reuse during runs
-- chunk-level sparse retrieval with Chinese tokenization
-- durable indexing status and reindex endpoints for failed vector writes
-- provider and index diagnostics on knowledge search responses
-
-Hash embeddings and the hash reranker are deterministic offline defaults. For
-semantic production retrieval, configure a model provider and evaluate it on
-your corpus. Inspect `GET /api/knowledge/providers`; changing an embedding
-model requires reindexing into the new collection. See
-`docs/docker_deployment.md` for shared backend/worker configuration and
-`docs/optimization/2026-09-28-implementation-report.md` for verification.
-
-For the Docker KB path, Qdrant is included in `docker-compose.yml`, and the
-backend uses:
+RAG 用于复用可追溯的一手资料、统一各 Agent 的证据，并限制资料作用域与版本。旧报告可用于查找线索，不能代替原始资料直接证明新主张。
 
 ```text
-QDRANT_URL=http://qdrant:6333
-KB_DB_PATH=/app/runs/knowledge_docker.db
+抓取 / 导入 → 清洗、去重与分块 → SQLite 原文及 FTS5 + Qdrant 向量索引
+问题 / 研究维度 → 事实查询规划 → 稀疏与稠密召回 → RRF → 可选精排
+→ 原文、版本、范围、时效与来源角色校验 → Collector 准入 → 共享证据快照
+→ Analyst / Comparator / Reflector / Writer / QA
 ```
 
-## Evidence And Quality
+- 稀疏检索使用 SQLite FTS5/BM25；Qdrant 提供向量检索。混合召回在共享检索服务中融合。
+- 默认 hash embedding/reranker 用于确定性开发测试，不具备真实多语语义能力。
+- 已接入本机 `intfloat/multilingual-e5-small` 与可选 `BAAI/bge-reranker-v2-m3`。配置、固定 revision 和本地路径参考 [本机模型配置示例](docs/optimization/2026-10-14-local-rag-profile.env.example)，复制后需修改为自己的权重路径。
+- 用 `GET /api/knowledge/providers` 检查实际 provider、模型和降级状态；更换 embedding 后需重建对应模型版本的索引。严格验收应设置 `KB_LOCAL_MODEL_STRICT=1`，避免加载失败退回 hash 而误报语义检索可用。
+- 本机持久化可设置 `KB_QDRANT_LOCAL_PATH`；多人/多进程部署使用 Qdrant HTTP 服务，并让 API 与 worker 使用一致配置。本机持久化模式的验证不能替代 HTTP 集群验收。
+- 检索受工作区、项目、来源角色及资料时效限制。正文与审核消费准入快照，修改或退休来源会使相关下游依赖失效。
 
-Competiscope emphasizes auditable report generation:
+本机语义模型还需安装 `sentence-transformers` 等可选依赖：
 
-- collected sources carry provenance and fetch metadata
-- evidence is checked before it supports claims
-- reports use structured source references
-- QA and release gates surface blockers and warnings
-- redo can be scoped to the failing stage instead of rerunning everything
-- traces and audit logs are available for debugging run behavior
+```bash
+.venv/bin/python -m pip install -e './backend[bge-m3]'
+```
 
-## Useful Commands
+离线比较使用固定资料、本机权重和网络拦截：
+
+```bash
+# 不加载模型：列出固定输入及哈希
+PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.py \
+  --local-profile /absolute/path/to/local-rag.env --output /tmp/retrieval-result.json
+
+# 已准备本机权重后，执行比较
+PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.py \
+  --local-profile /absolute/path/to/local-rag.env --output /tmp/retrieval-result.json --run
+```
+
+## 验证与交付边界
+
+测试、历史真实流程、当前阻断与检索结果分别记录在 [正式验收记录](docs/optimization/2026-10-14-formal-acceptance.md)。小规模、已曝光样本的召回改善不能证明开放问题上的回答准确率；精排是否有收益也需单独比较。
+
+最新 [检索接线交付](docs/optimization/2026-10-15-agent-retrieval-delivery.md)：在原 6 道答案题上，生产查询规划路径的 sparse top-3 为 **5/6**，raw 为 **0/6**；hybrid 和加 BGE 均为 **6/6**。本机评测外部模型/网络调用为 0；这组已曝光小集不作为 RAG 整体合格证明。
+
+当前四产品真实报告仍有证据覆盖与语义条件归属的验收缺口，最新重跑被工作区月度 token 额度阻止。不能把任务 `completed` 或单元测试通过解释为完整报告已达交付标准。HTTP Qdrant、Temporal、Redis 多 worker 及实机 Postgres RLS 仍需部署验收。
 
 ```bash
 make test-backend
@@ -235,7 +180,7 @@ make secret-scan
 make m0-check
 ```
 
-Enterprise and workflow smoke checks:
+企业与工作流 smoke 需要相应基础设施：
 
 ```bash
 docker compose up -d postgres temporal temporal-ui
@@ -243,3 +188,14 @@ make smoke-enterprise-postgres
 make smoke-temporal-thin-shell
 make smoke-temporal-server
 ```
+
+## 目录
+
+| 路径 | 内容 |
+| --- | --- |
+| `backend/` | FastAPI、Agent、编排、取证、RAG 与企业服务 |
+| `frontend/` | React / Vite / TypeScript 像素桌面 |
+| `docs/` | 架构、部署、Agent 执行与分阶段验收 |
+| `eval/` | 评测资料、查询、标签和清单 |
+| `data/` | 种子资料；运行生成的 `data/artifacts/` 不入库 |
+| `third_party/` | 随仓依赖，包括网页抓取模块 |

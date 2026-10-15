@@ -34,6 +34,9 @@ class FetchPageResult:
     status_code: int | None = None
     error: str | None = None
     content_type: str = ""
+    document_headings: tuple[tuple[int, str], ...] = ()
+    pricing_controls: tuple[dict, ...] = ()
+    pricing_offer_json: tuple[str, ...] = ()
 
     @property
     def snippet(self) -> str:
@@ -126,7 +129,45 @@ async def fetch_page(
         content_hash=_hash_text(text or body),
         status_code=response.status_code,
         content_type=content_type,
+        document_headings=_document_headings(body),
+        pricing_controls=_pricing_controls(body),
+        pricing_offer_json=_pricing_offer_json(body),
     )
+
+
+def _pricing_controls(body: str) -> tuple[dict, ...]:
+    try:
+        tree = document_fromstring(body)
+    except (ParserError, ValueError):
+        return ()
+    for node in tree.xpath('//script|//template|//noscript'):
+        node.drop_tree()
+    controls = []
+    for node in tree.xpath('//input[@name="billingInterval"][@checked]|//input[@name="billing"][@checked]|//input[@id="unit-count"]')[:16]:
+        if any(parent.get('hidden') is not None or parent.get('aria-hidden') == 'true'
+               or re.search(r'display\s*:\s*none|visibility\s*:\s*hidden', parent.get('style', ''), re.I)
+               for parent in [node, *node.iterancestors()]):
+            continue
+        interval = ({'year': 'annual', 'month': 'monthly'}.get(node.get('value'))
+                    if node.get('name') == 'billingInterval' else
+                    {'ANNUAL': 'annual', 'MONTHLY': 'monthly'}.get(node.get('id')))
+        if interval and node.get('disabled') is None:
+            controls.append({'name': node.get('name'), 'value': node.get('value'),
+                             'checked': True, 'interval': interval,
+                             'html': tostring(node, encoding='unicode', with_tail=False)})
+        elif node.get('id') == 'unit-count' and re.fullmatch(r'[1-9]\d{0,6}', node.get('value', '')):
+            controls.append({'name': 'unit-count', 'count': int(node.get('value')),
+                             'html': tostring(node, encoding='unicode', with_tail=False)})
+    return tuple(controls)
+
+
+def _pricing_offer_json(body: str) -> tuple[str, ...]:
+    try:
+        tree = document_fromstring(body)
+    except (ParserError, ValueError):
+        return ()
+    return tuple(node.text for node in tree.xpath('//script[@type="application/ld+json"]')[:16]
+                 if node.text and len(node.text) <= 20000)
 
 
 def _extract_pdf_text(payload: bytes) -> str:
@@ -146,9 +187,28 @@ def _extract_title(body: str) -> str:
     return _collapse_space(html.unescape(match.group(1)))
 
 
+def _document_headings(body: str) -> tuple[tuple[int, str], ...]:
+    try:
+        tree = document_fromstring(body.encode('utf-8'), parser=HTMLParser(remove_comments=True))
+    except (ParserError, ValueError):
+        return ()
+    for node in tree.xpath('//nav | //footer | //script | //style'):
+        node.drop_tree()
+    return tuple((int(node.tag[1]), _collapse_space(node.text_content()))
+                 for node in tree.xpath('//h1 | //h2 | //h3 | //h4 | //h5 | //h6')
+                 if node.text_content().strip()
+                 and _heading_block_visible(node))
+
+
+def _heading_block_visible(node) -> bool:
+    return not any(parent.get('hidden') is not None or parent.get('aria-hidden') == 'true'
+                   or re.search(r'display\s*:\s*none|visibility\s*:\s*hidden', parent.get('style', ''), re.I)
+                   for parent in [node, *node.iterancestors()])
+
+
 def _html_to_text(body: str) -> str:
     try:
-        parser = HTMLParser(encoding="utf-8", huge_tree=True)
+        parser = HTMLParser(encoding="utf-8", huge_tree=True, remove_comments=True)
         tree = document_fromstring(body.encode("utf-8"), parser=parser)
     except (ParserError, ValueError):
         tree = None
@@ -164,11 +224,43 @@ def _html_to_text(body: str) -> str:
         config=_HTML_TEXT_CONFIG,
     )
     if text and text.strip():
-        return text.strip()
+        return _restore_headings(tree, text.strip()) if tree is not None else text.strip()
     cleaned = re.sub(r"(?is)<(script|style|noscript|svg).*?</\1>", " ", body)
     cleaned = re.sub(r"(?is)<[^>]+>", " ", cleaned)
     cleaned = html.unescape(cleaned)
     return _collapse_space(cleaned)
+
+
+def _restore_headings(tree, text: str) -> str:
+    """Restore omitted headings only at unique captured original block anchors."""
+    nodes = [node for node in tree.xpath('//h1 | //h2 | //h3 | //h4 | //h5 | //h6 | //p | //li | //blockquote | //table')
+             if _heading_block_visible(node)]
+    source_text = _collapse_space(tree.text_content())
+    insertions = {}
+    for index, node in enumerate(nodes):
+        if not re.fullmatch(r'h[1-6]', node.tag):
+            continue
+        heading = _collapse_space(node.text_content())
+        if not heading or re.search(r'(?m)^\s*' + re.escape(heading) + r'\s*$', text):
+            continue
+        for block in nodes[index + 1:index + 13]:
+            if re.fullmatch(r'h[1-6]', block.tag):
+                break
+            anchor = _collapse_space(block.text_content())
+            if len(anchor) < 16:
+                continue
+            matches = list(re.finditer(r'\s+'.join(map(re.escape, anchor.split())), text))
+            if not matches:
+                continue
+            if len(matches) == 1 and source_text.count(anchor) == 1:
+                position = matches[0].start()
+                insertions.setdefault(position, []).append(heading)
+            # A repeated first content block does not locate this section.
+            break
+    for position in sorted(insertions, reverse=True):
+        prefix = '\n' if position and text[position - 1] != '\n' else ''
+        text = text[:position] + prefix + '\n'.join(insertions[position]) + '\n' + text[position:]
+    return text
 
 
 def _collapse_space(text: str) -> str:

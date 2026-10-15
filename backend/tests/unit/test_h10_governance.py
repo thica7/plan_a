@@ -344,7 +344,10 @@ def test_tenant_governance_readiness_reports_runtime_and_rls_scope() -> None:
 
 def test_h10_enterprise_routes_are_callable() -> None:
     store, context = _projected_store()
+    from app.deps import get_run_journal
+    from packages.memory import RunJournal
     app = create_app()
+    app.dependency_overrides[get_run_journal] = RunJournal.in_memory
     app.dependency_overrides[get_enterprise_store] = lambda: store
     app.dependency_overrides[get_artifact_storage] = lambda: LocalArtifactStorage(
         Path("backend/.test-artifacts/h10-route")

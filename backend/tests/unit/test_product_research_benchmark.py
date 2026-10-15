@@ -142,6 +142,57 @@ async def test_sparse_uses_original_query_and_sql_filters_shared_corpus(
 
 
 @pytest.mark.asyncio
+async def test_broad_product_scope_keeps_market_date_role_and_workspace_filters(tmp_path):
+    sources = [
+        _source("good"),
+        _source("other-product", product="Phone B"),
+        _source("wrong-market", market="US"),
+        _source("report", role="historical_report"),
+        _source("future", published="2025-12-01"),
+    ]
+    # Distinct content avoids ingestion deduplication while keeping both products relevant.
+    for source in sources[1:]:
+        source["text"] += " " + source["id"]
+        source["content_hash"] = hashlib.sha256(source["text"].encode()).hexdigest()
+    paths = _files(tmp_path, sources)
+    report = await run_product_benchmark(*paths, product_scope="broad", top_k=1)
+    row = report["queries"][0]
+    assert row["eligible_source_count"] == 2
+    assert row["top_k"] == 1
+    assert row["top_k_covers_all_eligible"] is False
+    assert row["retrieval_filters"] == {
+        "competitors": [], "market": "CN", "source_roles": ["source"],
+        "as_of": "2025-06-01", "workspace_id": "product-eval-offline",
+        "project_id": "fixed-corpus", "include_workspace_library": False,
+    }
+    assert {hit["source_id"] for hit in row["hits"]} <= {"good", "other-product"}
+    assert report["product_scope"] == "broad"
+    assert report["outcomes"]["answer"]["query_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_default_product_scope_reports_small_candidate_pool(tmp_path):
+    report = await run_product_benchmark(*_files(tmp_path, [_source("good")]), top_k=3)
+    assert report["product_scope"] == "product"
+    assert report["queries"][0]["top_k_covers_all_eligible"] is True
+    assert report["queries"][0]["retrieval_filters"]["competitors"] == ["Phone A"]
+
+
+@pytest.mark.asyncio
+async def test_candidate_recall_precedes_final_top_k_without_expanding_final_answer(tmp_path):
+    sources = [_source("good"), _source("closer")]
+    sources[1]["text"] = "Battery capacity"
+    sources[1]["content_hash"] = hashlib.sha256(sources[1]["text"].encode()).hexdigest()
+    report = await run_product_benchmark(*_files(tmp_path, sources), top_k=1, candidate_top_k=2)
+    row = report["queries"][0]
+    assert len(row["hits"]) == 1
+    assert row["candidate_source_ids"] == ["closer", "good"]
+    assert row["candidate_recall"] == 1
+    assert row["metrics"]["recall_at_k"] == 0
+    assert report["modes"]["sparse"]["candidate_recall"] == 1
+
+
+@pytest.mark.asyncio
 async def test_formal_rejects_zero_reviewed_gold(tmp_path: Path):
     paths = _files(tmp_path, [_source("good")], labels=False)
     with pytest.raises(DatasetValidationError, match="no reviewed labels"):

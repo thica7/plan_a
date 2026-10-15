@@ -1,0 +1,203 @@
+{
+  "status": "EXECUTED_ON_FROZEN_SOURCE_WITH_DELIVERY_BLOCKERS",
+  "completed_at": "2026-10-14T12:13:48.733984+00:00",
+  "source_tree_sha256": "2b23c06aa06b3f5f05f6f67a6b8b856f6d13bbe4f261ab35e82cc997d130ee11",
+  "source_unchanged": true,
+  "known_real_provider_transport_attempts_total": 51,
+  "overall_report_semantic_delivery_pass": false,
+  "limitations": [
+    "Exposed human-reviewed six-answer sample cannot establish general answer accuracy. BGE showed no top1/top3 gain over E5 hybrid here.",
+    "Refusal/clarification answer behavior and RAGAS not_run; no independent generated-answer judge.",
+    "Original CLI summaries preserved; posthoc corrections are separate evidence annotations, not overwritten results.",
+    "Both live CLI processes exited1 during post-save Qdrant cleanup despite saved pipeline artifacts.",
+    "Only operations run observed actual E5 indexing, with cold warm-start zero hits; hardware had no indexed source facts.",
+    "HTTP Qdrant, Temporal, Redis multiworker and physical Postgres RLS not exercised.",
+    "Provider bill unknown; configured cost estimates and budget charges are not real invoice totals."
+  ],
+  "recommended_next_work": [
+    "Repair source-local alternative conditions and distinguish permission configuration from actual document editing.",
+    "Prevent context projection from hiding valid product matrix/producer facts; prioritize complete reviewed claims within unchanged budget.",
+    "Repair non-SaaS identity/field extraction and remove irrelevant software persona synthesis from hardware evidence.",
+    "Fix evaluator cleanup by using normalized cached Qdrant identity and correct project-scoped KB summary; add no-paid regression."
+  ],
+  "cases": {
+    "operations-four-products": {
+      "pipeline_status": "completed_with_blockers",
+      "duration_seconds": 251.62,
+      "report_chars": 8709,
+      "mechanical_pass": false,
+      "semantic_delivery_pass": false,
+      "explicit_transport_attempts": 38,
+      "sources": {
+        "count": 11,
+        "by_product": {
+          "Coda": 1,
+          "Notion": 3,
+          "Nuclino": 4,
+          "Confluence": 3
+        },
+        "by_type": {
+          "webpage_verified": 11
+        }
+      },
+      "substantive_review": {
+        "status": "not_deliverable",
+        "auditor": "implementing_agent_read_of_saved_original_run_report_sources_bindings_and_audits; root independent review pending",
+        "published_operation_cells": 9,
+        "requested_operation_cells": 24,
+        "reviewed_claim_count": 9,
+        "unreviewed_claim_count": 5,
+        "observed_strengths": [
+          "All four Analysts and Comparator/Reflector reached real DeepSeek transport with eventual structured module outputs.",
+          "No procurement winner asserted; unknown and unreviewed claims withheld.",
+          "Eleven admitted full-source KB index receipts report ready with the same real E5 model identity as query provider."
+        ],
+        "blocking_findings": [
+          {
+            "id": "live-ops-condition-001",
+            "claim_id": "claim-6cde225f3b6bfae2e9cc",
+            "product": "Confluence",
+            "problem": "Permission management prerequisites and Free restriction limitation were attached to content-edit capability. Report says editing needs General access restriction and is unavailable on Free; saved source describes configuring who may edit, not lack of editing on Free.",
+            "source_id": "raw-source-940ce7ba9cc5de38d91a",
+            "source_url": "https://support.atlassian.com/confluence-cloud/docs/add-or-remove-page-restrictions/"
+          },
+          {
+            "id": "live-ops-condition-002",
+            "claim_ids": [
+              "claim-3294e9bebd5937004db2",
+              "claim-0bb7a6f934f37d48b8ab"
+            ],
+            "product": "Notion",
+            "problem": "Only people invited and Anyone on web with link are alternative General access modes, both present in bound conditions. Published Can view/comment statements turn Only people invited into a universal prerequisite. Explicit source binding did not preserve condition Boolean scope.",
+            "source_id": "raw-source-2f2c5b91f52e1ee7f09a",
+            "source_url": "https://www.notion.com/help/sharing-and-permissions"
+          },
+          {
+            "id": "live-ops-coverage-003",
+            "problem": "Coda has one admitted source but five unreviewed claims and no published observations; Nuclino has four admitted sources but no reviewed claims. 15 of 24 requested operation cells remain unfilled."
+          },
+          {
+            "id": "live-ops-consumption-004",
+            "problem": "Final matrix contains four feature cells, while latest Reflector states zero/missing cells after projection omitted three products due context_budget_exceeded. Reflection is not consistent with final matrix; downstream views still omit useful producer context."
+          },
+          {
+            "id": "live-ops-report-005",
+            "problem": "Executive summary repeats lengthy escaped internal comparison diagnostics; lacks required delivery sections. Cannot satisfy requested concise Chinese analysis."
+          }
+        ]
+      }
+    },
+    "steam-deck-hardware-multidimension": {
+      "pipeline_status": "failed",
+      "duration_seconds": 58.25,
+      "report_chars": 0,
+      "mechanical_pass": false,
+      "semantic_delivery_pass": false,
+      "explicit_transport_attempts": 13,
+      "sources": {
+        "count": 4,
+        "by_product": {
+          "Steam Deck OLED": 2,
+          "Steam Deck LCD": 2
+        },
+        "by_type": {
+          "survey_simulated": 2,
+          "interview_record": 2
+        }
+      },
+      "substantive_review": {
+        "status": "failed_no_report",
+        "auditor": "implementing_agent_read_of_empty_report_and_saved_sources_trace_qa",
+        "report_read_result": "Saved report Markdown is empty except newline; matrix and audited claims absent. No hardware performance or battery claims can be accepted.",
+        "observations": [
+          "Eight successful native searches returned six candidates each; 21 fetch spans exist, so this was not zero external collection activity.",
+          "Feature/persona clean extraction/admission yielded no official product facts; collect_join normalized zero sources before survey enrichment.",
+          "Only four synthetic persona sources remain: survey_simulated plus interview_record explicitly marked Synthetic in text. Content uses developer/enterprise software purchasing templates, not observed gaming hardware users.",
+          "Collect QA correctly blocks zero feature sources and synthetic-only persona evidence. No Analyst/Comparator/Reflector/Writer transport occurred.",
+          "No invented all-games battery guarantee, mainland tax-inclusive price, measured FPS or hardware winner was published because no report was produced."
+        ]
+      }
+    }
+  },
+  "retrieval": {
+    "sparse": {
+      "answer_query_count": 6,
+      "recall_at_1": 0.0,
+      "recall_at_3": 0.0,
+      "outcomes": {
+        "answer": {
+          "query_count": 6,
+          "retrieval_empty": 6,
+          "retrieval_noise_count": 0
+        },
+        "clarify": {
+          "query_count": 1,
+          "retrieval_empty": 1,
+          "retrieval_noise_count": 0
+        },
+        "insufficient": {
+          "query_count": 1,
+          "retrieval_empty": 1,
+          "retrieval_noise_count": 0
+        }
+      },
+      "ragas": {
+        "status": "not_run",
+        "reason": "no model response or reviewed reference for answer scoring"
+      }
+    },
+    "hybrid": {
+      "answer_query_count": 6,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "outcomes": {
+        "answer": {
+          "query_count": 6,
+          "retrieval_empty": 0,
+          "retrieval_noise_count": 0
+        },
+        "clarify": {
+          "query_count": 1,
+          "retrieval_empty": 0,
+          "retrieval_noise_count": 3
+        },
+        "insufficient": {
+          "query_count": 1,
+          "retrieval_empty": 0,
+          "retrieval_noise_count": 2
+        }
+      },
+      "ragas": {
+        "status": "not_run",
+        "reason": "no model response or reviewed reference for answer scoring"
+      }
+    },
+    "hybrid_rerank": {
+      "answer_query_count": 6,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "outcomes": {
+        "answer": {
+          "query_count": 6,
+          "retrieval_empty": 0,
+          "retrieval_noise_count": 0
+        },
+        "clarify": {
+          "query_count": 1,
+          "retrieval_empty": 0,
+          "retrieval_noise_count": 3
+        },
+        "insufficient": {
+          "query_count": 1,
+          "retrieval_empty": 0,
+          "retrieval_noise_count": 2
+        }
+      },
+      "ragas": {
+        "status": "not_run",
+        "reason": "no model response or reviewed reference for answer scoring"
+      }
+    }
+  },
+  "record_note": "Initial 2026-10-14 acceptance; failed quality baseline, preserved before 2026-10-15 fixes. Not final acceptance."
+}

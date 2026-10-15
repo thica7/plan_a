@@ -187,12 +187,10 @@ def get_embedding_provider_from_env() -> EmbeddingProvider | None:
 
     batch_size = _env_int("KB_EMBEDDING_BATCH_SIZE", 32)
     timeout = _env_float("KB_EMBEDDING_TIMEOUT_SECONDS", 30.0)
-    if provider == "bge-m3":
-        return BgeM3Provider(
-            model_name=os.getenv("KB_EMBEDDING_MODEL", "BAAI/bge-m3"),
-            batch_size=batch_size,
-            timeout_seconds=timeout,
-        )
+    if provider in {"local-e5", "local", "local-sentence-transformer", "bge-m3"}:
+        from .local_models import get_local_provider_from_env
+
+        return get_local_provider_from_env("embedding")
     if provider == "http":
         url = os.getenv("KB_EMBEDDING_HTTP_URL")
         if not url:

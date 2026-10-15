@@ -512,8 +512,87 @@ def normalize_competitor_key(value: str) -> str:
     return re.sub(r"[\W_]+", "", value.casefold(), flags=re.UNICODE)
 
 
+_GENERAL_PRODUCT_IDENTITIES = (
+    CompetitorIdentity(
+        canonical_name='Nuclino', homepage_url='https://www.nuclino.com',
+        trusted_domains=('nuclino.com',), identity_terms=('nuclino',),
+        search_qualifier='Nuclino workspace knowledge documentation',
+        sources_by_dimension={
+            'feature': (
+                source_candidate('Nuclino roles and permissions', 'https://help.nuclino.com/fed9f070-roles-and-permissions', 'feature'),
+                source_candidate('Nuclino create an item', 'https://help.nuclino.com/01dd45c4-create-an-item', 'feature'),
+                source_candidate('Nuclino workspace access settings', 'https://help.nuclino.com/2cd918e0-change-the-workspace-access-setting', 'feature'),
+                source_candidate('Nuclino comments', 'https://help.nuclino.com/a6f815d8-comment-on-content', 'feature'),
+                source_candidate('Nuclino getting started', 'https://help.nuclino.com/d81c3c05-getting-started', 'feature'),
+                source_candidate('Nuclino sharing', 'https://help.nuclino.com/0f8a5a5b-share-an-item', 'feature'),
+            ),
+            'pricing': (source_candidate('Nuclino pricing', 'https://www.nuclino.com/pricing', 'pricing'),),
+        },
+    ),
+    CompetitorIdentity(
+        canonical_name="Notion", homepage_url="https://www.notion.com",
+        trusted_domains=("notion.com", "notion.so"), identity_terms=("notion",),
+        confusion_terms=("notion calendar",),
+        search_qualifier="Notion workspace documentation",
+        sources_by_dimension={
+            "feature": (
+                source_candidate("Collaborate with people in Notion", "https://www.notion.com/help/collaborate-with-people", "feature"),
+                source_candidate("Comments and mentions in Notion", "https://www.notion.com/help/comments-mentions-and-reminders", "feature"),
+                source_candidate("Sharing and permissions in Notion", "https://www.notion.com/help/sharing-and-permissions", "feature"),
+            ),
+            "pricing": (source_candidate("Notion official pricing", "https://www.notion.com/pricing", "pricing"),),
+        },
+    ),
+    CompetitorIdentity(
+        canonical_name="Figma", homepage_url="https://www.figma.com",
+        trusted_domains=("figma.com",), identity_terms=("figma",),
+        search_qualifier="Figma design developer handoff",
+        sources_by_dimension={
+            "feature": (
+                source_candidate("Guide to Dev Mode in Figma", "https://help.figma.com/hc/en-us/articles/15023124644247-Guide-to-Dev-Mode-in-Figma", "feature"),
+                source_candidate("Figma Dev Mode documentation", "https://help.figma.com/hc/en-us/sections/15023066873239-Dev-Mode", "feature"),
+            ),
+            "pricing": (source_candidate("Figma official pricing", "https://www.figma.com/pricing/", "pricing"),),
+        },
+    ),
+    CompetitorIdentity(
+        canonical_name="Coda", homepage_url="https://coda.io",
+        trusted_domains=("coda.io",), identity_terms=("coda",),
+        search_qualifier="Coda document tables workspace",
+        sources_by_dimension={
+            "feature": (
+                source_candidate("Coda / Superhuman Docs roles and permissions", "https://help.superhuman.com/hc/en-us/articles/46210078082701-Roles-in-Superhuman-Docs-Doc-Makers-Admins-and-Editors", "feature", source_kind="public_document"),
+                source_candidate("Coda / Superhuman Docs folder permissions", "https://help.superhuman.com/hc/en-us/articles/47804378033677-Share-folders-and-the-docs-within", "feature", source_kind="public_document"),
+                source_candidate("Coda / Superhuman Docs sharing permission controls", "https://help.superhuman.com/hc/en-us/articles/46210170717965-Control-sharing-of-docs-and-Packs", "feature", source_kind="public_document"),
+                source_candidate("Coda / Superhuman Docs comments", "https://help.superhuman.com/hc/en-us/articles/46210367411469-Comment-on-docs", "feature", source_kind="public_document"),
+                source_candidate("Coda / Superhuman Docs sharing", "https://help.superhuman.com/hc/en-us/articles/46210173956109-Share-your-doc", "feature", source_kind="public_document"),
+                source_candidate("Superhuman Docs collaborative docs", "https://superhuman.com/docs/use-cases/collaborative-docs", "feature"),
+                source_candidate("Coda tables overview", "https://help.coda.io/hc/articles/39555768266893", "feature"),
+                source_candidate("Coda product updates", "https://coda.io/product/whats-new", "feature"),
+            ),
+            "pricing": (source_candidate("Coda / Superhuman Docs official pricing", "https://superhuman.com/plans/docs", "pricing"),),
+        },
+    ),
+    CompetitorIdentity(
+        canonical_name="Confluence", homepage_url="https://www.atlassian.com/software/confluence",
+        trusted_domains=("atlassian.com",), identity_terms=("confluence",),
+        search_qualifier="Atlassian Confluence Cloud knowledge collaboration",
+        sources_by_dimension={
+            "feature": (
+                source_candidate("Confluence edit and publish", "https://support.atlassian.com/confluence-cloud/docs/create-edit-and-publish-a-page/", "feature"),
+                source_candidate("Confluence content permissions", "https://support.atlassian.com/confluence-cloud/docs/add-or-remove-page-restrictions/", "feature"),
+                source_candidate("Confluence default roles and permissions", "https://support.atlassian.com/confluence-cloud/docs/faq-role-based-access-in-confluence/", "feature"),
+                source_candidate("Confluence official features", "https://www.atlassian.com/software/confluence/features", "feature"),
+                source_candidate("Confluence Cloud plans", "https://support.atlassian.com/confluence-cloud/docs/learn-about-confluence-cloud-plans/", "feature"),
+            ),
+            "pricing": (source_candidate("Confluence official pricing", "https://www.atlassian.com/software/confluence/pricing", "pricing"),),
+        },
+    ),
+)
+
+
 _IDENTITY_BY_KEY: dict[str, CompetitorIdentity] = {}
-for _identity in _IDENTITIES:
+for _identity in (*_IDENTITIES, *_GENERAL_PRODUCT_IDENTITIES):
     for _value in (_identity.canonical_name, *_identity.aliases):
         _IDENTITY_BY_KEY.setdefault(normalize_competitor_key(_value), _identity)
 
@@ -525,6 +604,9 @@ def resolve_competitor_identity(competitor: str) -> CompetitorIdentity | None:
     if identity := _IDENTITY_BY_KEY.get(key):
         return identity
     for alias_key, identity in _IDENTITY_BY_KEY.items():
+        # Product siblings (e.g. Notion Calendar) need their own identity evidence.
+        if identity in _GENERAL_PRODUCT_IDENTITIES:
+            continue
         if len(alias_key) >= 4 and key.startswith(alias_key):
             return identity
         if len(key) >= 6 and alias_key.startswith(key):
@@ -576,7 +658,28 @@ def is_trusted_url_for_competitor(competitor: str, url: str) -> bool:
     if identity is None:
         return False
     host = _host(url)
+    if identity.canonical_name == "Coda" and host in {"superhuman.com", "help.superhuman.com"}:
+        # The shared brand also owns Mail/Go. Trust only curated Docs URLs.
+        path = urlparse(url).path.rstrip("/")
+        return any(_host(source.url) == host and urlparse(source.url).path.rstrip("/") == path
+                   for sources in identity.sources_by_dimension.values() for source in sources)
     return any(host == domain or host.endswith(f".{domain}") for domain in identity.trusted_domains)
+
+
+def product_title_matches(competitor: str, title: str, url: str) -> bool:
+    if competitor.casefold() in title.casefold():
+        return True
+    identity = resolve_competitor_identity(competitor)
+    if identity and is_trusted_url_for_competitor(competitor, url):
+        parsed = urlparse(url)
+        if any((parsed.hostname, parsed.path.rstrip('/')) ==
+               (urlparse(source.url).hostname, urlparse(source.url).path.rstrip('/'))
+               for sources in identity.sources_by_dimension.values() for source in sources):
+            return not any(term in title.casefold() for term in identity.confusion_terms)
+    if not identity or identity.canonical_name != "Coda" or not is_trusted_url_for_competitor(competitor, url):
+        return False
+    return ("superhuman docs" in title.casefold() or
+            (_host(url) == "help.superhuman.com" and title.casefold().endswith("superhuman help center")))
 
 
 def _host(url: str) -> str:

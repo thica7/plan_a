@@ -146,7 +146,9 @@ def test_product_web_and_kb_reuse_scoped_query(
     kb_query = service._kb_retrieval_query(detail, COMPETITOR, dimension)
     expected = build_search_queries(service._research_brief(detail, COMPETITOR, dimension))[0]
 
-    assert kb_query == web_query == expected
+    assert web_query == expected
+    assert COMPETITOR in kb_query
+    assert "产品优化方向" in kb_query
     assert "Nintendo Switch 2" not in kb_query
     assert all(term not in kb_query.casefold() for term in (
         "ai agent", "context window", "token", "github", "developer", "api",
@@ -159,9 +161,9 @@ def test_product_without_category_still_scopes_web_and_kb(
 ) -> None:
     detail.plan.target_product.category = ""
 
-    assert service._kb_retrieval_query(detail, COMPETITOR, "feature") == (
-        f"{COMPETITOR} official specifications features"
-    )
+    kb_query = service._kb_retrieval_query(detail, COMPETITOR, "feature")
+    assert COMPETITOR in kb_query and "Nintendo Switch 2" not in kb_query
+    assert "产品优化方向" in kb_query
 
 
 def test_legacy_web_and_kb_keep_skill_description_and_topic(
@@ -174,7 +176,39 @@ def test_legacy_web_and_kb_keep_skill_description_and_topic(
 
     assert "AI agent context window" in web_query
     assert TOPIC in web_query and "official source" in web_query
-    assert "AI agent context window token limits GitHub developer API" in kb_query
+    assert TOPIC in kb_query and COMPETITOR in kb_query
+    assert "AI agent context window token limits GitHub developer API" not in kb_query
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dimension,text", [
+    ("feature", "The handheld has a battery and an OLED display for gaming."),
+    ("pricing", "Plans cost 10 USD per member monthly."),
+    ("persona", "Handheld gaming players use the device when traveling and commuting."),
+])
+async def test_target_product_name_does_not_block_real_competitor_kb_recall(
+    service, detail, monkeypatch, tmp_path, dimension, text
+):
+    from packages.tools.ingest_document import ingest_document_tool
+
+    monkeypatch.setenv("KB_DB_PATH", str(tmp_path / "target-scope.db"))
+    monkeypatch.setenv("KB_RETRIEVAL_MODE", "sparse")
+    monkeypatch.setenv("KB_RERANKER_PROVIDER", "none")
+    detail.workspace_id, detail.project_id = "ws", "project"
+    document_id = await ingest_document_tool.ainvoke({
+        "url": f"https://steam.example/{dimension}", "title": f"{COMPETITOR} {dimension} guide",
+        "text": text, "competitor": COMPETITOR, "dimension": dimension,
+        "market": "CN", "source_type": "official_docs", "index_vectors": False,
+        "workspace_id": detail.workspace_id, "project_id": detail.project_id,
+    })
+    sources = await service._collect_competitor_from_kb(RunRecord(detail=detail), detail,
+        dimension, COMPETITOR, SubagentContext(detail.id, "collector", f"{dimension}::{COMPETITOR}"),
+        target_source_count=1)
+    assert len(sources) == 1 and sources[0].metadata["kb_document_id"] == document_id
+    assert sources[0].metadata["kb_retrieval_original_query"] == TOPIC
+    plan = sources[0].metadata["kb_retrieval"]["query_plan"]
+    assert all("Nintendo" not in query and "Switch" not in query for query in plan["queries"])
+    assert all("AI agent" not in query for query in plan["queries"])
 
 
 @pytest.mark.asyncio

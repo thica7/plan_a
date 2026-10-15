@@ -1,0 +1,76 @@
+{
+  "fact": {
+    "id": "evidence-fact-record-0a089e44433524f6512ecf1bd8d550fa3881d4a90cfd05b0bc371e417547737e",
+    "semantic_id": "evidence-fact-b2ae6d7e5c8051bfae8089df1a869241b93f78458a0ad306b5453b79fb0ebb94",
+    "evidence_item_ids": [
+      "evidence-item-95e395cdf2e5ec02d412"
+    ],
+    "source_id": "raw-source-9ecbe6ccb3c5e8d835d6",
+    "competitor": "Coda",
+    "dimension": "feature",
+    "field": "evidence_terms",
+    "value_json": "[\"Share with people outside your workspace\\nIf you're on a Team/Business or Enterprise plan, you can invite external users to your folders. You must have Can manage access to invite anyone, including external users.\\nYou can grant external users edit, comment, or view access, but not manage access. Depending on the level, they can edit, comment on, or view all docs in the folder. External users cannot create new docs, move docs into or out of the folder, delete docs, or invite others.\\nIf you later revoke an external user's access, they immediately lose access to the folder and all docs inside it, and those docs disappear from their Recent and Starred lists.\\nManage externally shared folders\",\"If you're on a Team/Business or Enterprise plan, you can invite external users to your folders. You must have Can manage access to invite anyone, including external users.\",\"You can grant external users edit, comment, or view access, but not manage access. Depending on the level, they can edit, comment on, or view all docs in the folder. External users cannot create new docs, move docs into or out of the folder, delete docs, or invite others.\",\"On the Enterprise plan, org admins and content admins can view and manage externally shared folders from the Folder management page in admin settings. Learn more in this article. You can also choose to restrict external sharing of folders entirely.\"]",
+    "unit": null,
+    "market": null,
+    "qualifiers_json": "{\"operations\":[{\"access_scope\":null,\"effect\":\"allowed\",\"missing_fields\":[\"role\",\"plan\",\"access_scope\"],\"object_quote\":\"access\",\"object_type\":\"access_control\",\"operation\":\"manage_access\",\"operation_quote\":\"not manage access\",\"plan\":null,\"prerequisites\":[{\"kind\":\"permission\",\"quote\":\"If you're on a Team/Business or Enterprise plan, you can invite external users to your folders. You must have Can manage access to invite anyone, including external users.\"},{\"kind\":\"permission\",\"quote\":\"You can grant external users edit, comment, or view access, but not manage access. Depending on the level, they can edit, comment on, or view all docs in the folder. External users cannot create new docs, move docs into or out of the folder, delete docs, or invite others.\"},{\"kind\":\"plan\",\"quote\":\"On the Enterprise plan, org admins and content admins can view and manage externally shared folders from the Folder management page in admin settings. Learn more in this article. You can also choose to restrict external sharing of folders entirely.\"}],\"role\":null},{\"access_scope\":\"document\",\"effect\":\"allowed\",\"missing_fields\":[\"role\",\"plan\"],\"object_quote\":\"docs\",\"object_type\":\"document\",\"operation\":\"read\",\"operation_quote\":\"Depending on the level, they can edit, comment on, or view all docs in the folder\",\"plan\":null,\"prerequisites\":[{\"kind\":\"permission\",\"quote\":\"If you're on a Team/Business or Enterprise plan, you can invite external users to your folders. You must have Can manage access to invite anyone, including external users.\"},{\"kind\":\"plan\",\"quote\":\"On the Enterprise plan, org admins and content admins can view and manage externally shared folders from the Folder management page in admin settings. Learn more in this article. You can also choose to restrict external sharing of folders entirely.\"}],\"role\":null},{\"access_scope\":\"document\",\"effect\":\"allowed\",\"missing_fields\":[\"role\",\"plan\"],\"object_quote\":\"docs\",\"object_type\":\"document\",\"operation\":\"comment\",\"operation_quote\":\"Depending on the level, they can edit, comment on, or view all docs in the folder\",\"plan\":null,\"prerequisites\":[{\"kind\":\"permission\",\"quote\":\"If you're on a Team/Business or Enterprise plan, you can invite external users to your folders. You must have Can manage access to invite anyone, including external users.\"},{\"kind\":\"plan\",\"quote\":\"On the Enterprise plan, org admins and content admins can view and manage externally shared folders from the Folder management page in admin settings. Learn more in this article. You can also choose to restrict external sharing of folders entirely.\"}],\"role\":null},{\"access_scope\":\"document\",\"effect\":\"allowed\",\"missing_fields\":[\"role\",\"plan\"],\"object_quote\":\"docs\",\"object_type\":\"document\",\"operation\":\"edit\",\"operation_quote\":\"Depending on the level, they can edit, comment on, or view all docs in the folder\",\"plan\":null,\"prerequisites\":[{\"kind\":\"permission\",\"quote\":\"If you're on a Team/Business or Enterprise plan, you can invite external users to your folders. You must have Can manage access to invite anyone, including external users.\"},{\"kind\":\"plan\",\"quote\":\"On the Enterprise plan, org admins and content admins can view and manage externally shared folders from the Folder management page in admin settings. Learn more in this article. You can also choose to restrict external sharing of folders entirely.\"}],\"role\":null},{\"access_scope\":\"document\",\"effect\":\"denied\",\"missing_fields\":[\"role\",\"plan\"],\"object_quote\":\"docs\",\"object_type\":\"document\",\"operation\":\"create\",\"operation_quote\":\"External users cannot create new docs, move docs into or out of the folder, delete docs, or invite others\",\"plan\":null,\"prerequisites\":[{\"kind\":\"permission\",\"quote\":\"If you're on a Team/Business or Enterprise plan, you can invite external users to your folders. You must have Can manage access to invite anyone, including external users.\"},{\"kind\":\"plan\",\"quote\":\"On the Enterprise plan, org admins and content admins can view and manage externally shared folders from the Folder management page in admin settings. Learn more in this article. You can also choose to restrict external sharing of folders entirely.\"}],\"role\":null}],\"slot\":\"semantic_capability_e63ec489b57ad907\"}",
+    "quote": "You can grant external users edit, comment, or view access, but not manage access. Depending on the level, they can edit, comment on, or view all docs in the folder. External users cannot create new docs, move docs into or out of the folder, delete docs, or invite others.",
+    "status": "supported",
+    "confidence": 0.8
+  },
+  "audited_claim": {
+    "claim": {
+      "id": "claim-4207e655a1bc6d3316ea",
+      "text": "在 Coda 中，外部用户不能被授予管理访问权限（manage access），但可被授予编辑、评论或查看访问权限；前提是处于 Team/Business 或 Enterprise 套餐，且邀请者拥有 Can manage access 权限。",
+      "kind": "fact",
+      "competitor": "Coda",
+      "dimension": "feature",
+      "fact_ids": [
+        "evidence-fact-record-0a089e44433524f6512ecf1bd8d550fa3881d4a90cfd05b0bc371e417547737e"
+      ],
+      "source_ids": [
+        "raw-source-9ecbe6ccb3c5e8d835d6"
+      ],
+      "operation_binding": {
+        "observation_id": "operation-e423ac4998431b50983ac9bf",
+        "fact_id": "evidence-fact-record-0a089e44433524f6512ecf1bd8d550fa3881d4a90cfd05b0bc371e417547737e",
+        "source_id": "raw-source-9ecbe6ccb3c5e8d835d6",
+        "competitor": "Coda",
+        "dimension": "feature",
+        "operation": "manage_access",
+        "object_type": "access_control",
+        "object_quote": "access",
+        "role": null,
+        "plan": null,
+        "access_scope": null,
+        "effect": "allowed",
+        "prerequisites": [
+          {
+            "kind": "permission",
+            "quote": "If you're on a Team/Business or Enterprise plan, you can invite external users to your folders. You must have Can manage access to invite anyone, including external users."
+          },
+          {
+            "kind": "permission",
+            "quote": "You can grant external users edit, comment, or view access, but not manage access. Depending on the level, they can edit, comment on, or view all docs in the folder. External users cannot create new docs, move docs into or out of the folder, delete docs, or invite others."
+          },
+          {
+            "kind": "plan",
+            "quote": "On the Enterprise plan, org admins and content admins can view and manage externally shared folders from the Folder management page in admin settings. Learn more in this article. You can also choose to restrict external sharing of folders entirely."
+          }
+        ],
+        "condition_evidence": [
+          "Share with people outside your workspace\nIf you're on a Team/Business or Enterprise plan, you can invite external users to your folders. You must have Can manage access to invite anyone, including external users.\nYou can grant external users edit, comment, or view access, but not manage access. Depending on the level, they can edit, comment on, or view all docs in the folder. External users cannot create new docs, move docs into or out of the folder, delete docs, or invite others.\nIf you later revoke an external user's access, they immediately lose access to the folder and all docs inside it, and those docs disappear from their Recent and Starred lists.\nManage externally shared folders",
+          "If you're on a Team/Business or Enterprise plan, you can invite external users to your folders. You must have Can manage access to invite anyone, including external users.",
+          "On the Enterprise plan, org admins and content admins can view and manage externally shared folders from the Folder management page in admin settings. Learn more in this article. You can also choose to restrict external sharing of folders entirely."
+        ],
+        "operation_quote": "not manage access"
+      }
+    },
+    "status": "supported",
+    "review": {
+      "claim_id": "claim-4207e655a1bc6d3316ea",
+      "verdict": "supported",
+      "reason": "The cited text (t4, t5, t6) supports: on Team/Business or Enterprise plan, you must have Can manage access to invite external users; you can grant external users edit, comment, or view access, but not manage access. The claim accurately reflects these prerequisites and the denial of manage access."
+    },
+    "rule_reasons": []
+  }
+}

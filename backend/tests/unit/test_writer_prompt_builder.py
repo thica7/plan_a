@@ -44,7 +44,7 @@ def test_first_draft_prompt_keeps_report_brief_contract() -> None:
 
     assert "decision-grade markdown first draft" in prompt.system
     assert "Grounded Evidence Contract" in prompt.user
-    assert "Writer Report Brief JSON" in prompt.user
+    assert "Report Evidence Context JSON" in prompt.user
     assert "Writer Evidence Pack JSON" not in prompt.user
     assert "Prefer procurement framing." in prompt.user
 
@@ -79,7 +79,7 @@ def test_segment_prompt_keeps_contract_and_retry_guidance() -> None:
     assert "retry_count=1" in prompt.user
     assert "Allowed H2 headings for this segment: Decision Summary" in prompt.user
     assert "Previous segment violated its heading contract" in prompt.user
-    assert "Segment Evidence Pack JSON" in prompt.user
+    assert "Segment Context JSON" in prompt.user
     assert "Do not write headings outside this segment's contract" in prompt.user
 
 
@@ -96,5 +96,5 @@ def test_section_repair_prompt_is_scoped_to_requested_sections() -> None:
 
     assert "repairing one section" in prompt.system
     assert "Repair only these sections: decision_summary" in prompt.user
-    assert "Writer Repair Context JSON" in prompt.user
+    assert "Report Evidence Context JSON" in prompt.user
     assert "do not rewrite unrelated sections" in prompt.user

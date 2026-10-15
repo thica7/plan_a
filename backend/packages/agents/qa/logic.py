@@ -248,18 +248,38 @@ class QualityAgentMixin(FinalEvidenceAuditMixin):
         )
 
     def _phase_has_blockers(self, record: RunRecord, phase: Literal["collect", "analyst"]) -> bool:
-        return bool(self._blocking_phase_issues(record.detail, phase))
+        return bool(self._phase_retry_blockers(record, phase))
+
+    def _phase_retry_blockers(self, record, phase):
+        blockers = self._blocking_phase_issues(record.detail, phase)
+        pending = record.pending_graph_redo
+        if record.active_graph_kind != "scoped_redo" or pending is None or pending.redo_scope.kind not in {"collector", "analyst"}:
+            return blockers
+        scope = pending.redo_scope
+        competitors = scope.target_competitors or ([scope.target_competitor] if scope.target_competitor else [])
+        # Resolve dimension-level issues to the accepted redo scope before both
+        # cleanup and graph dispatch. An empty competitor must not mean all here.
+        return [issue.model_copy(update={
+                    "target_competitor": competitor,
+                    "target_subagent": issue.target_subagent or scope.target_subagent,
+                })
+                for issue in blockers
+                if (not issue.target_subagent or not scope.target_subagent or issue.target_subagent == scope.target_subagent)
+                and (not issue.target_competitor or not competitors or issue.target_competitor in competitors)
+                for competitor in ([issue.target_competitor] if issue.target_competitor else competitors or [None])]
 
     def _route_phase_qa(
         self, state: dict[str, object], phase: Literal["collect", "analyst"]
     ) -> str:
         record = self._runs[str(state["run_id"])]
         detail = record.detail
-        blockers = self._blocking_phase_issues(detail, phase)
+        blockers = self._phase_retry_blockers(record, phase)
         if phase == "collect":
             detail.collect_qa_findings = list(detail.qa_findings)
         if not blockers:
-            detail.qa_findings = []
+            detail.qa_findings = [issue for issue in detail.qa_findings
+                                  if phase == "analyst" and issue.target_agent == "collector"
+                                  and issue.severity == "blocker"]
             detail.updated_at = datetime.utcnow()
             self._persist_run(detail.id)
             return "pass"
@@ -267,6 +287,13 @@ class QualityAgentMixin(FinalEvidenceAuditMixin):
         attempt_key = "collect_qa_attempts" if phase == "collect" else "analyst_qa_attempts"
         attempts = int(state.get(attempt_key, 0) or 0)
         if attempts >= detail.max_iterations:
+            if phase == "collect" and self._can_continue_partial_report(detail, blockers):
+                for issue in blockers:
+                    issue.metadata["partial_report_gap"] = True
+                detail.collect_qa_findings = list(detail.qa_findings)
+                detail.updated_at = datetime.utcnow()
+                self._persist_run(detail.id)
+                return "pass"
             detail.status = "failed"
             detail.current_node = f"{phase}_qa"
             detail.updated_at = datetime.utcnow()
@@ -275,6 +302,12 @@ class QualityAgentMixin(FinalEvidenceAuditMixin):
 
         dimensions = self._issue_dimensions(detail, blockers)
         target_competitors = self._issue_target_competitors(detail, blockers)
+        if phase == "collect" and getattr(record, "collector_redo_snapshot_id", None):
+            # Retry the reviewed collection scope within the existing allowance;
+            # canonical acceptance, not an unsuccessful attempt, retires evidence.
+            detail.updated_at = datetime.utcnow()
+            self._persist_run(detail.id)
+            return "retry"
         if phase == "collect":
             if target_competitors:
                 detail.raw_sources = [
@@ -303,6 +336,18 @@ class QualityAgentMixin(FinalEvidenceAuditMixin):
         detail.updated_at = datetime.utcnow()
         self._persist_run(detail.id)
         return "retry"
+
+    def _can_continue_partial_report(self, detail, blockers):
+        return bool(blockers) and all(
+            issue.metadata.get("issue_kind") == "missing_evidence"
+            and issue.detected_by == "coverage" and issue.target_agent == "collector"
+            for issue in blockers
+        ) and any(
+            source.source_type == "webpage_verified"
+            and source.confidence >= .35 and source.snippet.strip()
+            and source.metadata.get("normalized_fields")
+            for source in detail.raw_sources
+        )
 
     def _blocking_phase_issues(
         self,
@@ -342,7 +387,19 @@ class QualityAgentMixin(FinalEvidenceAuditMixin):
                 else None,
             }
         )
-        projected, evidence_issues, uses = await self._final_qa_evidence(record)
+        await self._ensure_analysis_evidence(record)
+        # Report citations are audited separately against their original sources.
+        # Research coverage must include frozen uncited sources too: a small
+        # Writer view is not proof that the Collector failed to obtain them.
+        coverage_views = []
+        coverage_uses = []
+        for source in self._current_evidence_snapshot(record).sources:
+            view, use = self._begin_evidence_use(record, agent="collect_qa", source_ids=[source.id])
+            coverage_views.append(view)
+            coverage_uses.append(use)
+        coverage_projected, _ = self._project_evidence_detail(record, coverage_views)
+        projected, evidence_issues, citation_uses = await self._final_qa_evidence(record)
+        uses = [*coverage_uses, *citation_uses]
         detail.current_node = "qa"
         self._consume_queued_agent_messages(
             record,
@@ -351,7 +408,17 @@ class QualityAgentMixin(FinalEvidenceAuditMixin):
             message_types={"report_ready"},
         )
         await self.emit(detail.id, "node_started", "qa", None, "Running deterministic QA.")
-        issues = [*self._build_qa_issues(projected), *evidence_issues]
+        # Structural analyst/matrix checks need all accepted upstream inputs;
+        # the citation audit above still uses only the report's original sources.
+        issues = [*evidence_issues, *[issue for issue in self._build_qa_issues(projected)
+                  if issue.metadata.get("issue_kind") != "missing_evidence"
+                  and not (issue.target_agent == "analyst" and issue.detected_by in {"schema", "text_quality"})
+                  and not (issue.target_agent == "comparator" and issue.detected_by == "consistency")]]
+        issues.extend(self._build_analyst_qa_issues(coverage_projected, self._missing_dimensions(coverage_projected)))
+        issues.extend(self._build_claim_text_quality_issues(coverage_projected))
+        issues.extend(self._build_matrix_consistency_issues(coverage_projected))
+        issues.extend(self._build_collect_qa_issues(coverage_projected))
+        issues = self._dedupe_qa_issues(issues)
         for use in uses:
             self._validate_evidence_use(record, use)
         if report_baseline != self._evidence_artifact_hash(
@@ -617,6 +684,7 @@ class QualityAgentMixin(FinalEvidenceAuditMixin):
                     target_subagent=dimension,
                     field_path=f"raw_sources[{dimension}]",
                     problem=f"No evidence sources were collected for {dimension}.",
+                    metadata={"issue_kind": "missing_evidence"},
                     redo_scope=scope,
                     self_found=False,
                 )
@@ -1381,6 +1449,7 @@ class QualityAgentMixin(FinalEvidenceAuditMixin):
                         target_competitor=competitor,
                         field_path=f"raw_sources[{dimension}][{competitor}]",
                         problem=f"No {dimension} source covers {competitor}.",
+                        metadata={"issue_kind": "missing_evidence"},
                         redo_scope=RedoScope(
                             kind="collector",
                             target_subagent=dimension,
@@ -2377,14 +2446,19 @@ class QualityAgentMixin(FinalEvidenceAuditMixin):
         issue.redo_scope = assign_redo_scope(issue)
         return issue
 
+    def _output_cleanup_source_ids(self, detail: RunDetail, competitor: str) -> set[str]:
+        from packages.research.evidence.snapshot import current_snapshot
+
+        snapshot = current_snapshot(detail)
+        sources = snapshot.sources if snapshot is not None and snapshot.phase == "analysis" else detail.raw_sources
+        return {source.id for source in sources
+                if source.id not in detail.evidence_retired_source_ids
+                and self._source_matches_competitor(source, competitor)}
+
     def _clear_dimension_outputs(self, detail: RunDetail, dimension: str) -> None:
         for kb in detail.competitor_kbs.values():
             kb.slices.pop(dimension, None)
-            valid_source_ids = {
-                source.id
-                for source in detail.raw_sources
-                if self._source_matches_competitor(source, kb.competitor)
-            }
+            valid_source_ids = self._output_cleanup_source_ids(detail, kb.competitor)
             kb.sources = [source_id for source_id in kb.sources if source_id in valid_source_ids]
         for competitor in detail.plan.competitors:
             self._clear_structured_knowledge_slice(detail, competitor, dimension)
@@ -2406,11 +2480,7 @@ class QualityAgentMixin(FinalEvidenceAuditMixin):
         kb = detail.competitor_kbs.get(competitor)
         if kb is not None:
             kb.slices.pop(dimension, None)
-            valid_source_ids = {
-                source.id
-                for source in detail.raw_sources
-                if self._source_matches_competitor(source, competitor)
-            }
+            valid_source_ids = self._output_cleanup_source_ids(detail, competitor)
             kb.sources = [source_id for source_id in kb.sources if source_id in valid_source_ids]
         self._clear_structured_knowledge_slice(detail, competitor, dimension)
         if detail.comparison_matrix is not None:
@@ -2428,11 +2498,7 @@ class QualityAgentMixin(FinalEvidenceAuditMixin):
         knowledge = detail.competitor_knowledge.get(competitor)
         if knowledge is None:
             return
-        valid_source_ids = {
-            source.id
-            for source in detail.raw_sources
-            if self._source_matches_competitor(source, competitor)
-        }
+        valid_source_ids = self._output_cleanup_source_ids(detail, competitor)
         dimension_key = dimension.casefold()
         if "pricing" in dimension_key:
             knowledge.pricing_model.tiers = []

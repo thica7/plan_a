@@ -11,10 +11,65 @@ from packages.research.evidence.snapshot import seal_snapshot
 NOW = datetime(2026, 10, 3, tzinfo=UTC)
 
 
+def distributed_detail(*, dimensions=("feature",), observations=8):
+    detail = make_detail()
+    detail.plan.competitors = ["Coda", "Confluence", "Notion"]
+    detail.plan.dimensions = list(dimensions)
+    prototype = detail.raw_sources[0]
+    detail.raw_sources = []
+    for product in detail.plan.competitors:
+        for dimension in dimensions:
+            source = prototype.model_copy(deep=True)
+            source.id = f"source-{product}-{dimension}"
+            source.competitor = product
+            source.covered_competitors = [product]
+            source.dimension = dimension
+            source.title = f"{product} official {dimension}"
+            source.url = f"https://{product.lower()}.example/{dimension}"
+            source.metadata["normalized_fields"] = []
+            source.metadata.pop("market", None)  # Prototype pricing classification is not feature evidence.
+            source.metadata["source_material_level"] = "full_source"
+            for number in range(observations if product == "Coda" else 2):
+                quote = f"{product} observation {number}: People can comment on shared pages. Requires membership in the workspace."
+                common = dict(kind=dimension, competitor=product, dimension=dimension, confidence=.9, evidence_item_ids=[f"item-{product}-{dimension}-{number}"], qualifiers={"plan": "paid"})
+                if dimension == "feature":
+                    row = dict(common, slot=f"capability_{number}", support_level="documented", evidence_terms=[quote], evidence_quote=quote)
+                else:
+                    row = dict(common, tier_name=f"Plan {number}", price="10 USD", billing_cycle="monthly", source_quote=quote, unit="USD", market="US")
+                source.metadata["normalized_fields"].append(row)
+            detail.raw_sources.append(source)
+    return detail
+
+
 class FixedTime(datetime):
     @classmethod
     def now(cls, tz=None):
         return NOW if tz else NOW.replace(tzinfo=None)
+
+
+def test_evidence_projection_finishes_before_a_stage_deadline():
+    import os
+    import subprocess
+    import sys
+    program = '''
+from test_stage_evidence_views import distributed_detail
+from packages.research.evidence.snapshot import seal_snapshot
+from packages.research.evidence.views import select_evidence_view
+detail = distributed_detail(observations=16)
+for source in detail.raw_sources:
+    source.metadata['normalized_fields'] = [dict(source.metadata['normalized_fields'][0],
+        slot='capability_' + str(number), evidence_item_ids=['item-' + str(number)],
+        evidence_quote='People can comment on shared pages. ' + ('Workspace editors synchronize content while invited members review draft changes. ' * 8) + str(number),
+        evidence_terms=['People can comment on shared pages. ' + ('Workspace editors synchronize content while invited members review draft changes. ' * 8) + str(number)])
+        for number in range(16)]
+snapshot = seal_snapshot(detail, phase='analysis', canonical_documents={})
+view = select_evidence_view(snapshot, agent='reflector', max_bytes=98304)
+assert {fact.competitor for fact in view.facts} == set(detail.plan.competitors)
+assert len(view.to_prompt_json().encode()) <= 98304
+'''
+    subprocess.run([sys.executable, '-c', program], check=True, timeout=20,
+                   env={**os.environ, 'PYTHONPATH': 'backend:backend/tests/unit'},
+                   capture_output=True, text=True)
 
 
 def view_api(monkeypatch):
@@ -22,6 +77,78 @@ def view_api(monkeypatch):
 
     monkeypatch.setattr(views, "datetime", FixedTime)
     return views.select_evidence_view
+
+
+def test_global_budget_represents_each_product_before_more_observations(monkeypatch):
+    select = view_api(monkeypatch)
+    snapshot = seal_snapshot(distributed_detail(), phase="analysis", canonical_documents={})
+    view = select(snapshot, agent="writer", max_bytes=8192)
+    assert {fact.competitor for fact in view.facts} == {"Coda", "Confluence", "Notion"}
+    assert view.estimated_bytes <= 8192
+
+
+def test_global_budget_distributes_by_product_and_dimension(monkeypatch):
+    select = view_api(monkeypatch)
+    snapshot = seal_snapshot(distributed_detail(dimensions=("feature", "pricing")), phase="analysis", canonical_documents={})
+    # Six complete branch observations need the standard-depth budget.
+    view = select(snapshot, agent="comparator", max_bytes=16384)
+    assert {(fact.competitor, fact.dimension) for fact in view.facts} == {
+        (product, dimension) for product in ("Coda", "Confluence", "Notion") for dimension in ("feature", "pricing")
+    }
+
+
+@pytest.mark.parametrize("product, budget, products", [
+    ("Notion", 4120, ["Coda", "Notion"]),
+    ("Confluence", 5850, ["Coda", "Confluence", "Notion"]),
+])
+def test_source_header_cost_does_not_starve_other_products(monkeypatch, product, budget, products):
+    detail = distributed_detail(observations=2)
+    detail.plan.competitors = products
+    original = next(s for s in detail.raw_sources if s.competitor == product)
+    first = original.model_copy(deep=True)
+    first.id = f"{product.lower()}-short-quote"
+    first.title = f"{product} official documentation " + "long page title " * 40
+    first.metadata["normalized_fields"] = first.metadata["normalized_fields"][:1]
+    second = original.model_copy(deep=True)
+    second.id = f"{product.lower()}-alternative"
+    second.title = f"{product} help"
+    second.url = f"https://{product.lower()}.example/alternate"
+    second.metadata["normalized_fields"] = second.metadata["normalized_fields"][1:]
+    row = second.metadata["normalized_fields"][0]
+    row["evidence_quote"] += " The editor supports collaborative discussion inside the document."
+    row["evidence_terms"] = [row["evidence_quote"]]
+    detail.raw_sources = [s for s in detail.raw_sources if s.competitor in products and s.competitor != product] + [first, second]
+    snapshot = seal_snapshot(detail, phase="analysis", canonical_documents={})
+    view = view_api(monkeypatch)(snapshot, agent="writer", max_bytes=budget)
+    assert {fact.competitor for fact in view.facts} == set(products)
+    assert view.estimated_bytes <= budget
+
+
+def test_selected_observation_keeps_its_terms_and_conditions_together(monkeypatch):
+    select = view_api(monkeypatch)
+    snapshot = seal_snapshot(distributed_detail(), phase="analysis", canonical_documents={})
+    view = select(snapshot, agent="writer", max_bytes=8192)
+    for item_id in {item for fact in view.facts for item in fact.evidence_item_ids}:
+        available = {fact.id for fact in snapshot.facts if item_id in fact.evidence_item_ids}
+        selected = {fact.id for fact in view.facts if item_id in fact.evidence_item_ids}
+        assert selected == available
+    omitted = {(fact.competitor, fact.dimension) for fact in snapshot.facts if fact.id not in view.fact_ids}
+    assert omitted <= {(gap.competitor, gap.dimension) for gap in view.gaps if gap.reason == "context_budget_exceeded"}
+
+
+def test_repeated_quote_is_stored_once_in_self_contained_prompt(monkeypatch):
+    select = view_api(monkeypatch)
+    snapshot = seal_snapshot(distributed_detail(observations=1), phase="analysis", canonical_documents={})
+    view = select(snapshot, agent="analyst", competitor="Coda", max_bytes=8192)
+    payload = json.loads(view.to_prompt_json())
+    quoted = payload.get("quoted_evidence", {})
+    for fact in payload["facts"]:
+        original = next(item for item in view.facts if item.id == fact["id"])
+        assert (fact.get("quote") or quoted.get(fact.get("quote_ref"))) == original.quote
+        if "quote_ref" in fact:
+            assert quoted[fact["quote_ref"]] == original.quote
+    quote = view.facts[0].quote
+    assert view.to_prompt_json().count(quote) == 1
 
 
 def test_view_exact_scope_typed_values_and_fresh_projection(monkeypatch) -> None:
@@ -240,6 +367,73 @@ def test_conflict_positions_and_quotes_are_selected_as_a_complete_group(monkeypa
     for conflict in view.conflicts:
         assert set(conflict.fact_ids) <= set(view.fact_ids)
         assert set(conflict.source_ids) <= set(view.source_ids)
+
+
+def test_page_local_capability_ordinals_do_not_create_cross_page_conflicts():
+    detail = distributed_detail(observations=1)
+    other = detail.raw_sources[0].model_copy(deep=True)
+    other.id = 'coda-another-page'
+    other.metadata['normalized_fields'][0]['evidence_terms'] = ['You can organize documents in a page tree.']
+    other.metadata['normalized_fields'][0]['evidence_quote'] = 'You can organize documents in a page tree.'
+    detail.raw_sources.append(other)
+    assert not seal_snapshot(detail, phase='analysis', canonical_documents={}).conflicts
+
+
+def test_shared_capability_precedes_shorter_unrelated_feature(monkeypatch):
+    select = view_api(monkeypatch)
+    detail = distributed_detail(observations=1)
+    for source in detail.raw_sources:
+        row = source.metadata['normalized_fields'][0]
+        row.update(evidence_terms=[f'{source.competitor} users can comment on shared documents and resolve discussion threads.'],
+                   evidence_quote=f'{source.competitor} users can comment on shared documents and resolve discussion threads.')
+    source = detail.raw_sources[0]
+    noise = dict(source.metadata['normalized_fields'][0], slot='capability_9',
+                 evidence_item_ids=['item-unrelated'], evidence_quote='You can set the table row height.',
+                 evidence_terms=['You can set the table row height.'])
+    source.metadata['normalized_fields'].append(noise)
+    snapshot = seal_snapshot(detail, phase='analysis', canonical_documents={})
+    view = select(snapshot, agent='writer', competitor='Coda', dimension='feature', max_bytes=4000)
+    assert any(f.field == 'evidence_terms' and 'resolve discussion' in f.quote for f in view.facts)
+
+
+def test_confidence_priority_does_not_starve_first_product_coverage(monkeypatch):
+    select = view_api(monkeypatch)
+    detail = distributed_detail(observations=1)
+    detail.plan.competitors = ['Coda', 'Notion']
+    detail.raw_sources = [source for source in detail.raw_sources if source.competitor in detail.plan.competitors]
+    expensive = detail.raw_sources[0].model_copy(deep=True)
+    expensive.id = 'coda-expensive'
+    expensive.title = 'Coda official documentation ' + 'long page title ' * 40
+    expensive.metadata['normalized_fields'][0]['confidence'] = .99
+    detail.raw_sources.append(expensive)
+    snapshot = seal_snapshot(detail, phase='analysis', canonical_documents={})
+    # Include the omission diagnostics for the still-unselected observations.
+    view = select(snapshot, agent='writer', max_bytes=4100)
+    assert {fact.competitor for fact in view.facts} == {'Coda', 'Notion'}
+
+
+def test_requested_fact_keeps_the_whole_observation_and_conditions(monkeypatch):
+    select = view_api(monkeypatch)
+    snapshot = seal_snapshot(distributed_detail(observations=1), phase='analysis', canonical_documents={})
+    status = next(fact for fact in snapshot.facts if fact.competitor == 'Coda' and fact.field == 'support_level')
+    view = select(snapshot, agent='comparator', fact_ids=[status.id], max_bytes=8192)
+    assert {fact.competitor for fact in view.facts} == {'Coda'}
+    assert any(fact.field == 'evidence_terms' and 'Requires membership' in str(fact.value) for fact in view.facts)
+    replay = select(snapshot, agent='comparator', fact_ids=[status.id], max_bytes=8192)
+    assert replay.dependency_hash == view.dependency_hash
+
+
+def test_requested_fact_filter_does_not_conceal_price_conflict(monkeypatch):
+    select = view_api(monkeypatch)
+    detail = make_detail()
+    other = make_detail(price='4299 CNY').raw_sources[0]
+    other.id = 'conflicting-price'
+    detail.raw_sources.append(other)
+    snapshot = seal_snapshot(detail, phase='analysis', canonical_documents={})
+    selected = next(fact for fact in snapshot.facts if fact.field == 'price' and fact.source_id != other.id)
+    view = select(snapshot, agent='comparator', fact_ids=[selected.id], max_bytes=8192)
+    assert any(gap.reason == 'conflict_context_incomplete' for gap in view.gaps)
+    assert next(fact for fact in view.facts if fact.id == selected.id).status == 'unknown'
 
 
 def test_tiny_budget_and_unknown_agent_are_explicit_errors(monkeypatch) -> None:

@@ -5,6 +5,8 @@ import type { CrawlJob } from '../../api/crawl';
 import { displayLabel } from '../../i18n/display';
 
 export interface CrawlSource {
+  workspace_id?: string | null;
+  project_id?: string | null;
   id: string;
   type: 'sitemap' | 'rss' | 'web_search' | 'manual' | string;
   config: Record<string, unknown>;
@@ -14,6 +16,8 @@ export interface CrawlSource {
 interface JobQueueTableProps {
   jobs: CrawlJob[];
   sources: CrawlSource[];
+  canRetryJob?: (job: CrawlJob) => boolean;
+  canRetrySource?: (source: CrawlSource) => boolean;
   onRetryJob: (jobId: string) => Promise<void>;
   onRetrySource: (sourceId: string) => Promise<void>;
 }
@@ -28,6 +32,7 @@ interface QueueRow {
   progress: number;
   kind: 'job' | 'source';
   createdAt: string;
+  readOnly: boolean;
 }
 
 function sourceLabel(source: CrawlSource, t: (key: string) => string) {
@@ -45,12 +50,13 @@ function sourceProgress(source: CrawlSource) {
   return Math.round(((Number(stats.done || 0) + Number(stats.failed || 0)) / total) * 100);
 }
 
-export function JobQueueTable({ jobs, sources, onRetryJob, onRetrySource }: JobQueueTableProps) {
+export function JobQueueTable({ jobs, sources, onRetryJob, onRetrySource, canRetryJob, canRetrySource }: JobQueueTableProps) {
   const { t, locale } = useTranslation();
   const [order, setOrder] = useState<string[]>([]);
 
   const rows = useMemo<QueueRow[]>(() => {
     const jobRows = jobs.map((job) => ({
+      readOnly: canRetryJob ? !canRetryJob(job) : false,
       id: `job:${job.id}`,
       originalId: job.id,
       label: job.url,
@@ -62,6 +68,7 @@ export function JobQueueTable({ jobs, sources, onRetryJob, onRetrySource }: JobQ
       createdAt: job.created_at,
     }));
     const sourceRows = sources.map((source) => ({
+      readOnly: canRetrySource ? !canRetrySource(source) : false,
       id: `source:${source.id}`,
       originalId: source.id,
       label: sourceLabel(source, t),
@@ -79,7 +86,7 @@ export function JobQueueTable({ jobs, sources, onRetryJob, onRetrySource }: JobQ
       if (aIndex >= 0 || bIndex >= 0) return (aIndex < 0 ? 9999 : aIndex) - (bIndex < 0 ? 9999 : bIndex);
       return a.priority - b.priority || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [jobs, sources, order, t, locale]);
+  }, [jobs, sources, order, t, locale, canRetryJob, canRetrySource]);
 
   const move = (id: string, delta: number) => {
     const current = order.length > 0 ? order : rows.map((row) => row.id);
@@ -139,7 +146,8 @@ export function JobQueueTable({ jobs, sources, onRetryJob, onRetrySource }: JobQ
                       type="button"
                       className="btn btn-outline btn-xs gap-1"
                       onClick={() => row.kind === 'source' ? onRetrySource(row.originalId) : onRetryJob(row.originalId)}
-                      disabled={row.kind === 'job' && !['failed', 'completed', 'success'].includes(row.status)}
+                      title={row.readOnly ? '当前条目只读或尚未提供单任务重试，请从所属来源重新采集。' : undefined}
+                      disabled={row.readOnly || (row.kind === 'job' && !['failed', 'completed', 'success'].includes(row.status))}
                     >
                       <RotateCw className="h-3 w-3" />
                       {t('common.retry')}

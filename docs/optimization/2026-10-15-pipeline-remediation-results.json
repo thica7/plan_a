@@ -1,0 +1,196 @@
+{
+  "source_tree_sha256": "bedff52e4c1cff678c1ab19e794efc68eb5f23730f43cc2866467ac91f7e4b9c",
+  "source_files": 882,
+  "source_before_after_equal": true,
+  "implementation_status": "local engineering changes verified; business report acceptance still partial",
+  "backend": {
+    "passed": 4019,
+    "skipped": 1,
+    "warnings": 202,
+    "seconds": 151.36
+  },
+  "frontend": {
+    "passed": 279,
+    "test_files": 55,
+    "build": "pass",
+    "exact_source_unchanged_since_verified_v6": true
+  },
+  "openapi": {
+    "json_equal": true,
+    "types_equal": true
+  },
+  "reviews": {
+    "collector_redo_spec": "PASS after repaired authority finding",
+    "collector_redo_quality": "PASS",
+    "effect_delta_spec": "PASS after repaired mixed-action finding",
+    "effect_delta_quality": "PASS"
+  },
+  "latest_api_run": {
+    "run_id": "run-f884e48518d2ff52bf8d55c79e5b2fc5",
+    "project_id": "project-acceptance-06277f4f2e3541d5",
+    "report_url": "http://127.0.0.1:5173/runs/run-f884e48518d2ff52bf8d55c79e5b2fc5?view=report",
+    "status": "completed",
+    "duration_seconds": 146.68,
+    "mechanical_pass": true,
+    "report_chars": 4937,
+    "core_chars": 3770,
+    "source_count": 11,
+    "citations_valid": true,
+    "qa_issue_count": 37,
+    "llm_transport_attempts": 29,
+    "unknown_transport_spans": 10,
+    "configured_cost_estimate": {
+      "provider_bill_usd": null,
+      "usage_complete": false,
+      "trace_estimate_range_usd": [
+        0.018685482,
+        0.0507453
+      ],
+      "rates_usd_per_million": {
+        "input": 0.3,
+        "cache": 0.006,
+        "output": 1.2
+      },
+      "scope": "configured trace token estimates; cache extremes; not a billing bound; search tool fees unknown"
+    }
+  },
+  "operation_coverage": {
+    "cells_with_supported_claims": 12,
+    "total_requested_cells": 24,
+    "products": [
+      {
+        "product": "Notion",
+        "supported_claims": 1,
+        "supported_operations": [
+          "create"
+        ],
+        "operation_cell_count": 1,
+        "audit_status_counts": {
+          "supported": 1
+        }
+      },
+      {
+        "product": "Confluence",
+        "supported_claims": 5,
+        "supported_operations": [
+          "comment",
+          "create",
+          "edit",
+          "read",
+          "share"
+        ],
+        "operation_cell_count": 5,
+        "audit_status_counts": {
+          "supported": 5
+        }
+      },
+      {
+        "product": "Coda",
+        "supported_claims": 3,
+        "supported_operations": [
+          "create",
+          "edit",
+          "share"
+        ],
+        "operation_cell_count": 3,
+        "audit_status_counts": {
+          "supported": 3,
+          "unreviewed": 1
+        }
+      },
+      {
+        "product": "Nuclino",
+        "supported_claims": 3,
+        "supported_operations": [
+          "create",
+          "manage_access",
+          "share"
+        ],
+        "operation_cell_count": 3,
+        "audit_status_counts": {
+          "supported": 3,
+          "unreviewed": 3
+        }
+      }
+    ],
+    "all_supported_claims_pass_current_deterministic_rules": true,
+    "not_human_fact_accuracy": true
+  },
+  "execution": {
+    "four_analysts_writers_and_reviewers_actually_called": true,
+    "charged_tokens": 126101,
+    "configured_token_cap": 200000,
+    "charged_calls": 29,
+    "configured_call_cap": 60,
+    "collector_redo_exercised_in_latest_live_run": false,
+    "strict_noop_verified_offline": true,
+    "saved_coda_case_verified_offline": true,
+    "old_app_writer_reuse_probe": "rejected under current verification"
+  },
+  "project_rag": {
+    "documents": 11,
+    "indexing_status_counts": {
+      "ready": 11
+    },
+    "all_hits_in_scope": true,
+    "external_model_calls": 0,
+    "queries": [
+      {
+        "query": "谁可以阅读、评论和编辑页面，公开分享有什么前提？",
+        "candidates": {
+          "dense": 12,
+          "sparse": 0,
+          "reranked": 8
+        },
+        "degraded": false
+      },
+      {
+        "query": "Who can read, comment and edit pages, and what are the public sharing conditions?",
+        "candidates": {
+          "dense": 12,
+          "sparse": 0,
+          "reranked": 8
+        },
+        "degraded": false
+      }
+    ]
+  },
+  "other_product_evidence": {
+    "case": "Steam Deck OLED vs LCD / standard feature+persona",
+    "last_live_source_sha256": "3557c1e23e4f9b1ca97f1f2fefad288e7b3f98ed503a8fc2b47a1d521d9157d1",
+    "status": "completed_with_blockers",
+    "report_chars": 21105,
+    "core_chars": 11578,
+    "source_count": 2,
+    "source_pipeline_and_legacy_writer_unchanged_by_final_effect_delta": true,
+    "readback": "deterministic saved-output reassembly matches character counts, section indexes and audit text; original full byte/hash identity not certified",
+    "business_delivery": "failed; missing LCD/user evidence, repeated gap prose, uncited category narrative"
+  },
+  "retrieval_evaluation": {
+    "corpus_sources": 22,
+    "questions": 8,
+    "answer_questions": 6,
+    "sparse_top1_and_top3": 0.0,
+    "hybrid_top1_and_top3": 1.0,
+    "hybrid_rerank_top1_and_top3": 1.0,
+    "network_attempts": 0,
+    "external_model_calls": 0,
+    "exposed_not_blind": true,
+    "answer_behavior_and_ragas": "not_run",
+    "scope": "retrieval/model/corpus unchanged in final report-polarity guard increment"
+  },
+  "remaining_quality_findings": [
+    "Only 12/24 operation cells contain reviewed observations; some already collected Notion content is not projected into the report",
+    "Coda member-type taxonomy is still phrased as an operation prerequisite; semantic condition attribution needs independent checks",
+    "Repeated multi-operation statements in product prose reduce usefulness",
+    "Legacy hardware report is too long for the small evidence base and includes uncited background",
+    "Both project RAG query probes had zero sparse candidates; multilingual lexical retrieval and fusion gains are unproven",
+    "UI long task prompt and expanded evidence precede report content; reading path needs simplification"
+  ],
+  "deployment_limits": [
+    "Qdrant local/SQLite/LangGraph only; HTTP Qdrant/Temporal/Redis multiworker not accepted",
+    "One real Postgres RLS test skipped without database",
+    "Health aggregate Temporal cutover error remains",
+    "Standalone unreferenced Memory projects do not survive restart; journal restoration scope is report projections only"
+  ]
+}

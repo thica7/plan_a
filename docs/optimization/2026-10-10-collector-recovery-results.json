@@ -1,0 +1,271 @@
+{
+  "date": "2026-10-10",
+  "official_feature_capture": {
+    "pages": [
+      {
+        "competitor": "Notion",
+        "url": "https://www.notion.com/help/collaborate-with-people",
+        "capture_status": "ok",
+        "text_chars": 2249,
+        "baseline_field_count": 1,
+        "current_field_count": 2,
+        "accepted_field_count": 2,
+        "rejected_reasons": []
+      },
+      {
+        "competitor": "Notion",
+        "url": "https://www.notion.com/help/comments-mentions-and-reminders",
+        "capture_status": "ok",
+        "text_chars": 8371,
+        "baseline_field_count": 0,
+        "current_field_count": 4,
+        "accepted_field_count": 3,
+        "rejected_reasons": [
+          "quote_missing_dimension_signal"
+        ]
+      },
+      {
+        "competitor": "Figma",
+        "url": "https://help.figma.com/hc/en-us/articles/15023124644247-Guide-to-Dev-Mode-in-Figma",
+        "capture_status": "ok",
+        "text_chars": 11463,
+        "baseline_field_count": 1,
+        "current_field_count": 6,
+        "accepted_field_count": 6,
+        "rejected_reasons": []
+      },
+      {
+        "competitor": "Figma",
+        "url": "https://help.figma.com/hc/en-us/sections/15023066873239-Dev-Mode",
+        "capture_status": "failed",
+        "text_chars": 46,
+        "baseline_field_count": 0,
+        "current_field_count": 0,
+        "accepted_field_count": 0,
+        "rejected_reasons": []
+      },
+      {
+        "competitor": "Coda",
+        "url": "https://coda.io/product/whats-new",
+        "capture_status": "ok",
+        "text_chars": 33645,
+        "baseline_field_count": 2,
+        "current_field_count": 6,
+        "accepted_field_count": 6,
+        "rejected_reasons": []
+      },
+      {
+        "competitor": "Coda",
+        "url": "https://help.coda.io/hc/articles/39555768266893",
+        "capture_status": "failed",
+        "text_chars": 0,
+        "baseline_field_count": 0,
+        "current_field_count": 0,
+        "accepted_field_count": 0,
+        "rejected_reasons": []
+      },
+      {
+        "competitor": "Confluence",
+        "url": "https://www.atlassian.com/software/confluence/features",
+        "capture_status": "ok",
+        "text_chars": 8021,
+        "baseline_field_count": 6,
+        "current_field_count": 6,
+        "accepted_field_count": 6,
+        "rejected_reasons": []
+      },
+      {
+        "competitor": "Confluence",
+        "url": "https://support.atlassian.com/confluence-cloud/docs/learn-about-confluence-cloud-plans/",
+        "capture_status": "ok",
+        "text_chars": 7686,
+        "baseline_field_count": 3,
+        "current_field_count": 4,
+        "accepted_field_count": 3,
+        "rejected_reasons": [
+          "quote_missing_dimension_signal"
+        ]
+      }
+    ],
+    "coverage": [
+      {
+        "competitor": "Notion",
+        "coverage_passed": true,
+        "usable_sources": 2,
+        "accepted_field_count": 5
+      },
+      {
+        "competitor": "Figma",
+        "coverage_passed": false,
+        "usable_sources": 1,
+        "accepted_field_count": 6
+      },
+      {
+        "competitor": "Coda",
+        "coverage_passed": false,
+        "usable_sources": 1,
+        "accepted_field_count": 6
+      },
+      {
+        "competitor": "Confluence",
+        "coverage_passed": true,
+        "usable_sources": 2,
+        "accepted_field_count": 9
+      }
+    ]
+  },
+  "live_attempts": [
+    {
+      "case_id": "notion-workspace",
+      "timed_out": false,
+      "error_type": null,
+      "duration_seconds": 64.6,
+      "failure_messages": [],
+      "status": "failed",
+      "current_node": "collect_qa",
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "report_chars": 0,
+      "core_chars": 0,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 5,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {},
+      "native_llm_spans": 6,
+      "search_spans": 28,
+      "successful_search_spans": 10,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 3650,
+          "completion_tokens": 1247,
+          "total_tokens": 4897,
+          "prompt_cache_hit_tokens": 256,
+          "prompt_cache_miss_tokens": 3394
+        },
+        "search": {
+          "prompt_tokens": 89992,
+          "completion_tokens": 8518,
+          "total_tokens": 98510,
+          "prompt_cache_hit_tokens": 4864,
+          "prompt_cache_miss_tokens": 85128
+        }
+      },
+      "provider_total_tokens_last_attempts": 103407,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 16,
+        "repairs": 0,
+        "tokens_charged": 103407,
+        "cost_charged_usd": 0.038305320000000004
+      },
+      "qa_issue_count": 2,
+      "qa_problems": [
+        "No pricing source covers Confluence.",
+        "No pricing source covers Coda."
+      ],
+      "budget_exhausted_search_spans": 18,
+      "budget_exhausted_search_provider_requests": 0,
+      "react_skipped_count": 3,
+      "stage_of_code": "before_last_localization_and_acronym_fix"
+    },
+    {
+      "case_id": "notion-workspace",
+      "timed_out": false,
+      "error_type": null,
+      "duration_seconds": 69.92,
+      "failure_messages": [],
+      "status": "failed",
+      "current_node": "collect_qa",
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "semantic_quality": null,
+      "has_product_analysis_signal": false,
+      "citations_valid": false,
+      "unknown_citation_count": 0,
+      "report_chars": 0,
+      "core_chars": 0,
+      "competitors": [
+        "Notion",
+        "Confluence",
+        "Coda"
+      ],
+      "source_count": 5,
+      "source_types": [
+        "webpage_verified"
+      ],
+      "assessments": {},
+      "native_llm_spans": 6,
+      "search_spans": 28,
+      "successful_search_spans": 10,
+      "provider_usage_by_kind": {
+        "llm": {
+          "prompt_tokens": 3650,
+          "completion_tokens": 968,
+          "total_tokens": 4618,
+          "prompt_cache_hit_tokens": 1024,
+          "prompt_cache_miss_tokens": 2626
+        },
+        "search": {
+          "prompt_tokens": 108047,
+          "completion_tokens": 9126,
+          "total_tokens": 117173,
+          "prompt_cache_hit_tokens": 22400,
+          "prompt_cache_miss_tokens": 85647
+        }
+      },
+      "provider_total_tokens_last_attempts": 121791,
+      "provider_usage_scope": "last_attempt_per_span; search usage may be unavailable",
+      "budget_checkpoint": {
+        "calls": 16,
+        "repairs": 0,
+        "tokens_charged": 121791,
+        "cost_charged_usd": 0.038735243999999995
+      },
+      "qa_issue_count": 2,
+      "qa_problems": [
+        "No pricing source covers Confluence.",
+        "No pricing source covers Coda."
+      ],
+      "budget_exhausted_search_spans": 18,
+      "budget_exhausted_search_provider_requests": 0,
+      "react_skipped_count": 3,
+      "stage_of_code": "final_code"
+    }
+  ],
+  "verification": {
+    "backend_passed": 3231,
+    "backend_skipped": 1,
+    "warnings": 152,
+    "duration_seconds": 67.35,
+    "targeted_passed": 102,
+    "review_open_p1_p2": 0,
+    "sandbox_first_attempt": "3230 passed, 1 failed because ps was blocked, 1 skipped"
+  },
+  "code_sha256": {
+    "backend/packages/research/extraction/feature.py": "164034d628ca3976d6ff2d7179b9ecd41a0fa1e4cf8805c397e03183c28e819b",
+    "backend/packages/research/extraction/quality.py": "a5e14f071ba3898abb69ea2317d769f05f87f555dce08cf15b7cd5c276775102",
+    "backend/packages/research/evidence/admission.py": "f704e971da378de7acbdb277d244a214a9f3a2bdf7833b2dc4fd74407e17112e",
+    "backend/packages/business_intel/entity_resolver.py": "d73c3e9c7029bd968f05dc6a18db1d860846a543d0cdae18135c2c66d1c6e1bd",
+    "backend/packages/agents/collectors/logic.py": "09b205c8a851117bdaeab7f9532513a1cce934f46ae7b41cdc83d29b0613219d",
+    "backend/packages/orchestrator/search_execution.py": "6619535a53835f82c80ea8d0a689672b220fea3a22077ec214b7094eee8da279",
+    "backend/packages/tools/fetch_page.py": "3f6400620e070b97e332c7ef94f59553d2df0bc8b67ecf455fd9a54945a6e0e8",
+    "backend/packages/agents/prompt_contract.py": "f92fa3530ab5a72c73787dd138c8bce7c6da47e364eba9c84adb0219af5a68b6"
+  },
+  "limitations": [
+    "Complete report still failed at collect_qa due to missing Confluence/Coda pricing sources.",
+    "Extraction counts are not a recall benchmark or semantic quality certification.",
+    "Budget-exhausted optional search attempts still present, with zero provider requests.",
+    "Registered official documents limit new subject inheritance; arbitrary products require further semantic extraction work.",
+    "No controlled real report quality or cost comparison reached Comparator/Writer."
+  ]
+}

@@ -1,6 +1,6 @@
 import { FileText, Gauge, ShieldCheck, Target } from "lucide-react";
 import type { ReactNode } from "react";
-import type { RunDetail as RunDetailRecord } from "../../api/types";
+import type { ReportVersionRecord, RunDetail as RunDetailRecord } from "../../api/types";
 import { StatusPill } from "../../components/ui";
 import type { ReportSourceBundle } from "../report/sourceBundle";
 import { useTranslation } from '../../stores/i18n';
@@ -10,10 +10,12 @@ export function ReportStatusStrip({
   detail,
   reportSources,
   wordCount,
+  version,
 }: {
   detail: RunDetailRecord;
   reportSources: ReportSourceBundle;
   wordCount: number;
+  version?: ReportVersionRecord | null;
 }) {
   const { t } = useTranslation();
   const qualityScore = Math.round(
@@ -23,7 +25,8 @@ export function ReportStatusStrip({
       3,
   );
   const blockerCount = Math.max(detail.qa_findings.filter((finding) => finding.severity === "blocker").length, detail.report_artifact?.quality.blockers.length ?? 0);
-  const blocked = blockerCount > 0 || detail.status === 'completed_with_blockers';
+  const gate = version?.quality_metadata?.release_gate as { allowed?: boolean } | undefined;
+  const blocked = blockerCount > 0 || (version ? gate?.allowed === false : detail.status === 'completed_with_blockers');
 
   return (
     <section className="report-status-summary" aria-label={t('reportStatus.label')}>
@@ -34,9 +37,9 @@ export function ReportStatusStrip({
       <ReportStatusMetric
         icon={<Gauge size={16} aria-hidden />}
         label={t('reportStatus.quality')}
-        value={`${qualityScore || 0}/100`}
-        detail={blockerCount ? `${blockerCount} ${t('report.layers.qaBlockers')}` : t('reportStatus.readyForReview')}
-        tone={blockerCount ? "warn" : "good"}
+        value={version ? t(gate?.allowed === true ? 'reportStudio.gateAllowed' : gate?.allowed === false ? 'reportStudio.gateBlocked' : 'reportStudio.gateUnknown') : `${qualityScore || 0}/100`}
+        detail={blockerCount ? `${blockerCount} ${t('report.layers.qaBlockers')}` : version ? t('reportStudio.currentQuality') : t('reportStatus.readyForReview')}
+        tone={version ? gate?.allowed === true ? "good" : "warn" : blockerCount ? "warn" : "good"}
       />
       <ReportStatusMetric
         icon={<ShieldCheck size={16} aria-hidden />}
@@ -48,7 +51,7 @@ export function ReportStatusStrip({
         icon={<Target size={16} aria-hidden />}
         label={t('reportStatus.claims')}
         value={String(detail.enterprise_projection?.report_version.claim_ids.length ?? t('common.unavailable'))}
-        detail={`${formatRate(detail.metrics.claim_citation_rate)} ${t('reportStatus.cited')}`}
+        detail={version ? t('reportStudio.currentQuality') : `${formatRate(detail.metrics.claim_citation_rate)} ${t('reportStatus.cited')}`}
       />
       <ReportStatusMetric
         icon={<FileText size={16} aria-hidden />}

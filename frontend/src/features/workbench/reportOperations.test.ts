@@ -1,0 +1,20 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { downloadArtifact, exportReportVersion } from '../../api/client';
+import { exportReportArtifact } from './reportOperations';
+vi.mock('../../api/client', () => ({ exportReportVersion: vi.fn(), downloadArtifact: vi.fn() }));
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+it('saves actual bytes for the workbench export and rejects a failed download', async () => {
+  const artifact = { id: 'a', filename: '中文报告.html' };
+  vi.mocked(exportReportVersion).mockResolvedValue({ artifact } as any);
+  vi.mocked(downloadArtifact).mockResolvedValueOnce(new Blob(['正文'])).mockRejectedValueOnce(new Error('文件下载失败'));
+  const createObjectURL = vi.fn(() => 'blob:workbench'); const revokeObjectURL = vi.fn();
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL }));
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  expect(await exportReportArtifact('v2', 'html')).toEqual(artifact);
+  expect(exportReportVersion).toHaveBeenCalledWith('v2', 'html');
+  expect(downloadArtifact).toHaveBeenCalledWith('a');
+  expect(click.mock.instances[0]).toHaveProperty('download', '中文报告.html');
+  expect(revokeObjectURL).toHaveBeenCalledWith('blob:workbench');
+  await expect(exportReportArtifact('v2', 'html')).rejects.toThrow('文件下载失败');
+  expect(click).toHaveBeenCalledTimes(1);
+});

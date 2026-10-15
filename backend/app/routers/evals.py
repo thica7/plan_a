@@ -2,7 +2,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.deps import get_app_settings, get_run_service
+from app.deps import (
+    get_app_settings,
+    get_enterprise_user_context,
+    get_run_service,
+    require_run_access,
+)
+from packages.auth import EnterpriseUserContext, can_access_workspace
 from packages.config import Settings
 from packages.evals import build_enterprise_evalops_report, build_evalops_release_contract
 from packages.orchestrator.service import RunService
@@ -15,6 +21,7 @@ from packages.schema.evals import (
 
 router = APIRouter()
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
+EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 
@@ -22,6 +29,7 @@ SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 async def get_enterprise_evalops_report(
     service: RunServiceDep,
     settings: SettingsDep,
+    user: EnterpriseUserDep,
     project_id: str | None = None,
     baseline_run_id: str | None = None,
     limit: int = Query(default=30, ge=1, le=200),
@@ -30,6 +38,7 @@ async def get_enterprise_evalops_report(
     return _enterprise_evalops_report(
         service=service,
         settings=settings,
+        user=user,
         project_id=project_id,
         baseline_run_id=baseline_run_id,
         limit=limit,
@@ -44,6 +53,7 @@ async def get_enterprise_evalops_report(
 async def get_enterprise_evalops_release_contract(
     service: RunServiceDep,
     settings: SettingsDep,
+    user: EnterpriseUserDep,
     project_id: str | None = None,
     baseline_run_id: str | None = None,
     limit: int = Query(default=30, ge=1, le=200),
@@ -53,6 +63,7 @@ async def get_enterprise_evalops_release_contract(
     report = _enterprise_evalops_report(
         service=service,
         settings=settings,
+        user=user,
         project_id=project_id,
         baseline_run_id=baseline_run_id,
         limit=limit,
@@ -68,6 +79,7 @@ def _enterprise_evalops_report(
     *,
     service: RunService,
     settings: Settings,
+    user: EnterpriseUserContext,
     project_id: str | None,
     baseline_run_id: str | None,
     limit: int,
@@ -75,12 +87,14 @@ def _enterprise_evalops_report(
 ) -> EvalOpsReport:
     runs = [
         detail
-        for summary in service.list_runs()
+        for summary in service.list_runs(workspace_id=user.workspace_id)
+        if can_access_workspace(user, summary.workspace_id, "report:read")
         if (detail := service.get_run(summary.id)) is not None
         and (project_id is None or detail.project_id == project_id)
     ]
     baseline = None
     if baseline_run_id:
+        require_run_access(service, baseline_run_id, user)
         baseline = service.get_run(baseline_run_id)
         if baseline is None:
             raise HTTPException(status_code=404, detail="Baseline run not found")

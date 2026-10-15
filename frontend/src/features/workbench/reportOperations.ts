@@ -5,6 +5,7 @@ import {
   rejectReportWorkflow,
   startReportApprovalWorkflow,
 } from "../../api/client";
+import { saveArtifactDownload } from "../../api/artifactDownload";
 import type { ArtifactRecord } from "../../api/types";
 
 export type ReportAction = "start_review" | "approve" | "reject" | "publish";
@@ -40,7 +41,8 @@ export async function performReportAction(reportVersionId: string, action: Repor
   await publishReportVersion(reportVersionId);
 }
 
-export async function exportReportArtifact(reportVersionId: string, format: ReportExportFormat): Promise<ArtifactRecord> {
+export async function exportReportArtifact(reportVersionId: string, format: ReportExportFormat, isCurrent = () => true): Promise<ArtifactRecord> {
   const result = await exportReportVersion(reportVersionId, format);
+  await saveArtifactDownload(result.artifact, isCurrent);
   return result.artifact;
 }

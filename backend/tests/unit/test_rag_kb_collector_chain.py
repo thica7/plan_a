@@ -101,6 +101,11 @@ async def test_collector_reuses_verified_source_written_to_sparse_kb(
         assert source.metadata["kb_collector_candidate_origin"] == "web_fetch"
         assert source.metadata["kb_collector_fetch_method"] == "browser_fetch"
         assert source.metadata["kb_collector_confidence"] == 0.93
+        assert json.loads(record.detail.trace_spans[-1].full_input)["intent_policy"] == "structured"
+        plan = source.metadata["kb_retrieval"]["query_plan"]
+        assert plan["queries"]
+        assert all("official source" not in query for query in plan["queries"])
+        assert plan["origin"] == "explicit"
     finally:
         _remove_sqlite_files(db_path)
 
@@ -239,3 +244,69 @@ async def test_collector_traces_rejected_kb_hits(
 def _remove_sqlite_files(db_path: Path) -> None:
     for path in (db_path, db_path.with_suffix(".db-shm"), db_path.with_suffix(".db-wal")):
         path.unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_collector_auto_plan_keeps_numeric_conditions_in_their_own_clause(monkeypatch):
+    from packages.knowledge.models import RetrievalRequest
+    from packages.knowledge.query_intent import resolve_retrieval_plan
+
+    service = RunService(SkillRegistry.from_default_path(), Settings(demo_mode=True))
+    now = datetime.now(UTC)
+    topic = "Acme V7 的充电器45W是什么规格？电池50Wh是否影响续航？"
+    detail = RunDetail(id="numeric-collector", workspace_id="ws", project_id="project", topic=topic,
+        status="running", execution_mode="real",
+        created_at=now, updated_at=now, plan=AnalysisPlan(topic=topic, competitors=["Acme V7"], dimensions=["feature"]))
+    plans = []
+
+    class InspectTool:
+        async def ainvoke(self, request):
+            plans.append(resolve_retrieval_plan(RetrievalRequest(**request)))
+            return []
+
+    monkeypatch.setattr(rag_retrieve, "rag_retrieve_tool", InspectTool())
+    await service._collect_competitor_from_kb(RunRecord(detail=detail), detail, "feature", "Acme V7",
+        SubagentContext(run_id=detail.id, agent="collector", subagent="feature::Acme V7"), target_source_count=1)
+    plan = plans[0]
+    assert plan.origin == "auto"
+    charger = next(query for query in plan.queries if "charger" in query)
+    assert "45w" in charger and "50wh" not in charger
+    assert "50" not in charger and "7" not in charger
+
+
+@pytest.mark.asyncio
+async def test_real_collector_scopes_multi_product_topic_to_product_and_dimension(tmp_path, monkeypatch):
+    monkeypatch.setenv("KB_DB_PATH", str(tmp_path / "branches.db"))
+    monkeypatch.setenv("KB_RETRIEVAL_MODE", "sparse")
+    monkeypatch.setenv("KB_RERANKER_PROVIDER", "none")
+    topic = "比较 Notion、Confluence、Coda 和 Nuclino 的创建、编辑、分享及各套餐权限"
+    products = ["Notion", "Confluence", "Coda", "Nuclino"]
+    now = datetime.now(UTC)
+    detail = RunDetail(id="four-products", workspace_id="ws", project_id="project", topic=topic,
+        status="running", execution_mode="real", created_at=now, updated_at=now,
+        plan=AnalysisPlan(topic=topic, competitors=products, dimensions=["feature", "pricing"]))
+    service = RunService(SkillRegistry.from_default_path(), Settings(demo_mode=True))
+    documents = {}
+    for dimension, text in (("feature", "Notion supports creating, editing and sharing pages."),
+                            ("pricing", "Notion plans cost 10 USD per member monthly.")):
+        documents[dimension] = await ingest_document_tool.ainvoke({
+            "url": f"https://notion.example/{dimension}", "title": f"Notion {dimension} guide",
+            "text": text, "competitor": "Notion", "dimension": dimension,
+            "source_type": "official_docs", "index_vectors": False,
+            "workspace_id": "ws", "project_id": "project",
+        })
+    plans = []
+    for dimension in ("feature", "pricing"):
+        record = RunRecord(detail=detail)
+        sources = await service._collect_competitor_from_kb(record, detail, dimension, "Notion",
+            SubagentContext(run_id=detail.id, agent="collector", subagent=f"{dimension}::Notion"),
+            target_source_count=1)
+        assert len(sources) == 1
+        assert sources[0].metadata["kb_document_id"] == documents[dimension]
+        assert sources[0].metadata["kb_retrieval_original_query"] == topic
+        plan = sources[0].metadata["kb_retrieval"]["query_plan"]
+        assert all(other not in " ".join(plan["queries"]) for other in products[1:])
+        plans.append(plan["queries"])
+    assert plans[0] != plans[1]
+    assert any("editing" in query for query in plans[0])
+    assert all("editing" not in query for query in plans[1])
