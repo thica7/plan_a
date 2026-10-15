@@ -58,3 +58,7 @@
 - HTTP Qdrant、Temporal、Redis 多 worker 和实机 Postgres RLS 仍需独立部署验收。本轮使用本机持久化 Qdrant，不代表生产集群已通过。
 
 下一步优先扩充未曝光、按产品与复杂条件分层的人审集；分别评测候选覆盖、最终排名、回答主张与引用。额度允许后，再用最终代码重跑四产品报告，检查操作覆盖、角色/套餐/访问前提和已采证据进入正文的比例。
+
+## GitHub 交付
+
+代码、测试及中文文档已推送至 `codex/pastoral-desktop`，代码提交为 [fe92bda](https://github.com/thica7/plan_a/commit/fe92bda465b5e577e0c159e402d05ab691213679)，远端 SHA 已核对一致。实际密钥、私有运行目录、人工改稿和模型权重未纳入提交；随仓保留的调研报告为脱敏验收样例。GitHub 交付状态与业务报告是否达到交付标准分别记录。

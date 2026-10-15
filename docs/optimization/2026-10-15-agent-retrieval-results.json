@@ -1,6 +1,6 @@
 {
   "date": "2026-10-15",
-  "status": "engineering_verified_github_delivery_pending",
+  "status": "delivered",
   "source_tree_sha256": "31cbcc518dc419d38fe5e3d75051042191de1af45c272bb3b11dc2ec628f4e5b",
   "source_files": 883,
   "source_manifest_scope": "non-ignored backend/frontend/eval code/config/data; no env/secrets/runtime files",
@@ -164,7 +164,8 @@
       "only_changed_manifest_path": "backend/tests/unit/test_fetch_html_comments.py"
     },
     "staged_files": 270,
-    "provider_key_pattern_scan": "passed after staging all 270 files"
+    "provider_key_pattern_scan": "passed after staging all 270 files",
+    "diff_check": "passed for staged delivery"
   },
   "intermediate_verification": [
     {
@@ -228,7 +229,7 @@
     "临时日志路径为本机证明，不是随Git分发的原始附件"
   ],
   "github_delivery": {
-    "status": "pending",
+    "status": "verified",
     "branch": "codex/pastoral-desktop",
     "excluded": [
       "local secret configuration",
@@ -236,7 +237,11 @@
       "data/artifacts/",
       "model weights"
     ],
-    "included_examples": "redacted acceptance samples under docs/optimization"
+    "included_examples": "redacted acceptance samples under docs/optimization",
+    "code_commit": "fe92bda465b5e577e0c159e402d05ab691213679",
+    "remote_commit_at_code_delivery": "fe92bda465b5e577e0c159e402d05ab691213679",
+    "remote_verified": true,
+    "url": "https://github.com/thica7/plan_a/commit/fe92bda465b5e577e0c159e402d05ab691213679"
   },
   "delivery_source_tree_sha256": "ae6bc108111faa7b9f9d66d924085bc47c09453278d91664d3a872273dd9a62b"
 }
