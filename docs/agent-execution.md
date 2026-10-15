@@ -85,6 +85,8 @@ planner → planner_hitl
 
 常规检索入口是 Collector 调用 [`rag_retrieve_tool`](../backend/packages/tools/rag_retrieve.py)，共享检索在 [`RetrievalService`](../backend/packages/knowledge/retrieval.py) 中执行。检索响应附带查询规划、候选、模型与范围诊断；Collector 将合格原文转换为来源，再走证据准入。
 
+已确认的泛化限制：有界语义提取仍依赖静态产品身份与官方来源登记，新样本 Miro、Airtable、Trello、Zoom 会在该前置检查跳过。固定人工短节选的下游测试不能替代此入口。最新 [真实模型诊断](optimization/2026-10-16-condition-model-delivery.md) 只有 Analyst／Comparator／Reflector 共 4 次真实调用，Writer 模型与逐条主张审核均未调用，QA 未放行；各 Agent 的职责说明不等于新产品已端到端通过。
+
 后续 Agent 通过 [`evidence_context.py`](../backend/packages/orchestrator/evidence_context.py) 与 [`views.py`](../backend/packages/research/evidence/views.py) 选取当前快照的视图。视图按产品、维度、来源和上下文容量裁剪，记录所用事实、来源及省略原因。这样，检索改善会进入实际分析和报告消费链。
 
 - **规划层**：查询保留原始输入，区分事实检索与输出语言/引用要求；`raw` 用于保留比较基线。

@@ -1,0 +1,123 @@
+{
+  "date": "2026-10-16",
+  "base_github_commit": "d47c9a9c96f917db47c53e43c6195f1fc004beee",
+  "scope": "candidate_diagnostic_fixed_official_excerpts",
+  "status": "report_delivery_blocked",
+  "source_tree_sha256": "b1e0830f545a0667987cb85d88e6f21bdf3a3bb4aaee62962e32014dcbd61385",
+  "source_files": 901,
+  "source_hash_unchanged_after_tests_and_live": true,
+  "input_sha256": "791d13eaae9c32936ca9416eff2573f3fb52f9e3d54400c669692261e839332a",
+  "candidate_questions": 8,
+  "reviewed_questions": 0,
+  "blind_holdout": false,
+  "selected_live_case_ids": [
+    "condition-v1-001",
+    "condition-v1-002",
+    "condition-v1-004",
+    "condition-v1-005"
+  ],
+  "unexecuted_or_not_scored_case_ids": [
+    "condition-v1-003",
+    "condition-v1-006",
+    "condition-v1-007",
+    "condition-v1-008"
+  ],
+  "independent_answer_accuracy": null,
+  "configured_model": "deepseek-flash",
+  "actual_model_ids": [
+    "deepseek-flash"
+  ],
+  "llm_transport_attempts": 4,
+  "transport_by_agent": {
+    "collector": 0,
+    "analyst": 2,
+    "comparator": 1,
+    "reflector": 1,
+    "writer": 0,
+    "qa": 0
+  },
+  "provider_usage": {
+    "prompt_tokens": 7824,
+    "completion_tokens": 1502,
+    "total_tokens": 9326,
+    "prompt_cache_hit_tokens": 256,
+    "prompt_cache_miss_tokens": 7568
+  },
+  "search_spans": 0,
+  "limits": {
+    "calls": 24,
+    "tokens": 80000,
+    "max_output_tokens": 2048,
+    "retries": 0
+  },
+  "provider_bill_usd": null,
+  "report_chars": 0,
+  "reviewed_claim_count": 0,
+  "qa_issue_count": 14,
+  "qa_blocker_count": 10,
+  "writer_producer_verified": false,
+  "error_type": "RuntimeError",
+  "error_reason": "Writer failed before report generation: Schema-contract report failed quality preflight after hardening: compact_report_contract, missing_core_sections",
+  "semantic_condition_acceptance": "unaccepted_pending_human",
+  "semantic_citation_acceptance": "unaccepted_writer_and_claim_review_not_executed",
+  "delivery_acceptance": "unaccepted_blocked",
+  "collector_preflight": "unknown_product_identity; semantic extraction skipped; no allowlist patched",
+  "evidence_input": {
+    "source_type": "manual_note",
+    "input_material_level": "unknown",
+    "snapshot_material_level": "kb_document",
+    "full_source": false,
+    "collector_verified": false,
+    "quote_mapping": "exact excerpt only; no answers/roles/support status/operation labels injected",
+    "fixture_materialized_at_separate_from_original_verification": true
+  },
+  "suspected_condition_issue": "Comparator scenario rephrases two published interfaces as one published base; needs human semantic review, not a computed error rate",
+  "verification": {
+    "backend_passed": 4246,
+    "backend_skipped": 1,
+    "backend_failed": 0,
+    "backend_warnings": 202,
+    "skip_reason": "live PostgreSQL RLS connection not configured",
+    "spec_unit_passed": 20,
+    "spec_isolation_checks": 3,
+    "quality_unit_passed": 20,
+    "quality_record_review": "PASS_RECORD_ACCURACY_ONLY",
+    "old_eval_files_unchanged": 40,
+    "production_code_unchanged_from_base_commit": true
+  },
+  "artifacts": {
+    "manifest.json": {
+      "path": "data/artifacts/condition-binding-2026-10-16/live/manifest.json",
+      "sha256": "c28169ea5c74a15372831a471ded269b78cbbb7a6eccf91de2af283f5ea65dfe"
+    },
+    "summary.json": {
+      "path": "data/artifacts/condition-binding-2026-10-16/live/summary.json",
+      "sha256": "f237e7ba2b71824b5a07900ebbe5d336f95583fc3705b162609aa8020951c857"
+    },
+    "run.json": {
+      "path": "data/artifacts/condition-binding-2026-10-16/live/run.json",
+      "sha256": "da2117dea0331b2a78ea41c25694f25d201c87dbd4765f2abe30cc4865f98d35"
+    },
+    "trace.json": {
+      "path": "data/artifacts/condition-binding-2026-10-16/live/trace.json",
+      "sha256": "cef16f424e510d9ff60556c41649f09efbf2784d99b951103c54aab69044e387"
+    },
+    "snapshot.json": {
+      "path": "data/artifacts/condition-binding-2026-10-16/live/snapshot.json",
+      "sha256": "4238c6de4883af9fd7ac89b4fc206592424cb22a241f2236acfeb08495d6decf"
+    },
+    "events.json": {
+      "path": "data/artifacts/condition-binding-2026-10-16/live/events.json",
+      "sha256": "675630ac50c30fe2175a6fc08f70a0d0eb68e1df2c32ebc547103de0bc5405f0"
+    },
+    "report.md": {
+      "path": "data/artifacts/condition-binding-2026-10-16/live/report.md",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    "partial-draft.md": {
+      "path": "data/artifacts/condition-binding-2026-10-16/live/partial-draft.md",
+      "sha256": "600ce528c61b5c46a63a84c5d66d3a5f31c8ac22696098d876d6ee094aaf03ac"
+    }
+  },
+  "export_redaction_note": "Airtable article numeric IDs may be replaced by phone redaction in exported JSON; original canonical SQLite and frozen eval JSONL retain exact source identity. Do not equate exported text with original capture bytes."
+}
