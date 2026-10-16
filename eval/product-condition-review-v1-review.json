@@ -1,0 +1,38 @@
+{
+  "dataset": "product-condition-review-v1",
+  "status": "human_reviewed",
+  "reviewed_by": "project_user",
+  "review_recorded_at": "2026-10-16T01:50:40Z",
+  "timestamp_semantics": "Recorded on receipt of approval; original client send timestamp was not provided.",
+  "human_reply": "确认",
+  "review_source": "request_user_input_async:call_ee2d4d54f20a4110acfa24ed1ca49beb",
+  "approved_case_ids": [
+    "condition-v1-001",
+    "condition-v1-002",
+    "condition-v1-003",
+    "condition-v1-004",
+    "condition-v1-005",
+    "condition-v1-006",
+    "condition-v1-007",
+    "condition-v1-008"
+  ],
+  "review_scope": "User confirmed all eight displayed answer boundaries and official evidence links. Case 004 remains conservatively scoped to published interfaces and original base permissions. No report output or model semantic/citation acceptance was approved.",
+  "candidate_archive": "eval/archive/product-condition-review-v1-candidate/cases.jsonl",
+  "candidate_sha256": "791d13eaae9c32936ca9416eff2573f3fb52f9e3d54400c669692261e839332a",
+  "reviewed_dataset": "eval/product-condition-review-v1.jsonl",
+  "reviewed_dataset_sha256": "7ebbf481a35c2b7216c1f81000661ed2980795fc4e3e5006be589d1154debd4d",
+  "changed_fields": [
+    "review_status",
+    "reviewed_by",
+    "reviewed_at"
+  ],
+  "reference_questions_sources_unchanged": true,
+  "blind_holdout": false,
+  "third_party_review": false,
+  "reviewed_after_candidate_diagnostic": true,
+  "new_model_calls": 0,
+  "previous_live_result_reclassified": false,
+  "report_delivery_acceptance": "unaccepted_blocked",
+  "semantic_condition_acceptance": "unaccepted",
+  "semantic_citation_acceptance": "unaccepted"
+}

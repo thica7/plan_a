@@ -12,6 +12,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "backend/scripts/eval_evidence_binding.py"
 CASES = ROOT / "eval/product-condition-review-v1.jsonl"
+CANDIDATES = ROOT / "eval/archive/product-condition-review-v1-candidate/cases.jsonl"
 
 
 def runner():
@@ -38,7 +39,34 @@ def test_default_lists_without_loading_settings_or_calling_model(monkeypatch, ca
 
 def test_formal_rejects_all_candidate_rows_even_with_product_selection():
     with pytest.raises(ValueError, match="human review"):
-        runner().load_cases(CASES, mode="formal")
+        runner().load_cases(CANDIDATES, mode="formal")
+
+
+def test_human_reviewed_input_passes_formal_preview_without_model(monkeypatch, capsys):
+    module = runner()
+    monkeypatch.setattr(module, "get_settings", lambda: pytest.fail("settings loaded"))
+    monkeypatch.setattr(module, "run_diagnostic", lambda *a, **k: pytest.fail("model called"))
+    asyncio.run(module.main(["--mode", "formal"]))
+    result = json.loads(capsys.readouterr().out)
+    assert result["mode"] == "list_only" and result["review_mode"] == "formal"
+    assert result["llm_transport_attempts"] == 0
+
+
+def test_review_promotion_preserves_reference_content_and_model_payload():
+    module = runner()
+    record = json.loads((ROOT / "eval/product-condition-review-v1-review.json").read_text())
+    assert hashlib.sha256(CANDIDATES.read_bytes()).hexdigest() == record["candidate_sha256"]
+    assert hashlib.sha256(CASES.read_bytes()).hexdigest() == record["reviewed_dataset_sha256"]
+    previous = module.load_cases(CANDIDATES)
+    reviewed = module.load_cases(CASES, mode="formal")
+    review_fields = {"review_status", "reviewed_by", "reviewed_at"}
+    for before, after in zip(previous, reviewed, strict=True):
+        assert {k: v for k, v in before.items() if k not in review_fields} == {
+            k: v for k, v in after.items() if k not in review_fields
+        }
+        assert after["reviewed_by"] == "project_user"
+        assert after["reviewed_at"] == record["review_recorded_at"]
+        assert module.allowed_payload(before) == module.allowed_payload(after)
 
 
 def test_formal_requires_every_row_reviewer_and_time(tmp_path):
