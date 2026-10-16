@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
+from packages.business_intel.official_registry import registered_document, registered_product
+
 
 @dataclass(frozen=True)
 class TrustedSourceCandidate:
@@ -26,6 +28,7 @@ class CompetitorIdentity:
     sources_by_dimension: dict[str, tuple[TrustedSourceCandidate, ...]] = field(
         default_factory=dict
     )
+    exact_documents_only: bool = False
 
 
 def _dimension_key(dimension: str) -> str:
@@ -603,6 +606,17 @@ def resolve_competitor_identity(competitor: str) -> CompetitorIdentity | None:
         return None
     if identity := _IDENTITY_BY_KEY.get(key):
         return identity
+    # Deployment-controlled registrations are exact identities, never prefix aliases.
+    if product := registered_product(competitor):
+        dimensions = {}
+        for document in product.documents:
+            dimensions.setdefault(document.dimension, []).append(source_candidate(
+                document.title, document.url, document.dimension,
+                rationale=document.review_basis, source_kind="public_document"))
+        return CompetitorIdentity(canonical_name=product.product,
+            homepage_url="", aliases=product.aliases,
+            identity_terms=(product.product, *product.aliases), exact_documents_only=True,
+            sources_by_dimension={key: tuple(value) for key, value in dimensions.items()})
     for alias_key, identity in _IDENTITY_BY_KEY.items():
         # Product siblings (e.g. Notion Calendar) need their own identity evidence.
         if identity in _GENERAL_PRODUCT_IDENTITIES:
@@ -612,6 +626,19 @@ def resolve_competitor_identity(competitor: str) -> CompetitorIdentity | None:
         if len(key) >= 6 and alias_key.startswith(key):
             return identity
     return None
+
+
+def resolve_identity_mention(token: str, *, context: str = "") -> CompetitorIdentity | None:
+    identity = resolve_competitor_identity(token)
+    # A newly registered proper noun must not turn ordinary verbs ("zoom in")
+    # into foreign-product evidence. Run-local names are checked separately.
+    if identity and identity.exact_documents_only and not token[:1].isupper():
+        return None
+    if identity and identity.exact_documents_only and token.casefold() == "zoom":
+        uses = list(re.finditer(r"\bzoom\b", context, re.I))
+        if uses and all(re.match(r"\s+(?:in|out)\b", context[m.end():], re.I) for m in uses):
+            return None
+    return identity
 
 
 def trusted_source_candidates(
@@ -626,7 +653,7 @@ def trusted_source_candidates(
         *identity.sources_by_dimension.get(dimension_key, ()),
         *identity.sources_by_dimension.get("feature", ()),
     ]
-    if dimension_key != "persona":
+    if dimension_key != "persona" and identity.homepage_url:
         candidates.append(
             source_candidate(
                 f"{identity.canonical_name} official homepage",
@@ -657,6 +684,8 @@ def is_trusted_url_for_competitor(competitor: str, url: str) -> bool:
     identity = resolve_competitor_identity(competitor)
     if identity is None:
         return False
+    if identity.exact_documents_only:
+        return registered_document(competitor, url) is not None
     host = _host(url)
     if identity.canonical_name == "Coda" and host in {"superhuman.com", "help.superhuman.com"}:
         # The shared brand also owns Mail/Go. Trust only curated Docs URLs.
@@ -667,9 +696,13 @@ def is_trusted_url_for_competitor(competitor: str, url: str) -> bool:
 
 
 def product_title_matches(competitor: str, title: str, url: str) -> bool:
+    identity = resolve_competitor_identity(competitor)
+    if identity and identity.exact_documents_only:
+        return bool(registered_document(competitor, url) and any(
+            re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", title, re.I)
+            for name in (identity.canonical_name, *identity.aliases)))
     if competitor.casefold() in title.casefold():
         return True
-    identity = resolve_competitor_identity(competitor)
     if identity and is_trusted_url_for_competitor(competitor, url):
         parsed = urlparse(url)
         if any((parsed.hostname, parsed.path.rstrip('/')) ==

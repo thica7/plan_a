@@ -316,7 +316,7 @@ def member_classification(text):
 
 @lru_cache(maxsize=4096)
 def _observations_json(fact, products):
-    from packages.business_intel.entity_resolver import resolve_competitor_identity
+    from packages.business_intel.entity_resolver import resolve_competitor_identity, resolve_identity_mention
     if fact.dimension != 'feature' or fact.field != 'evidence_terms' or fact.status != 'supported':
         return '[]'
     terms = [fact.quote, *(term for term in fact.value if isinstance(term, str))] if isinstance(fact.value, list) else [fact.quote]
@@ -326,7 +326,7 @@ def _observations_json(fact, products):
             if product.casefold() != fact.competitor.casefold() and re.search(r'(?<!\w)' + re.escape(product) + r'(?!\w)' if product.isascii() else re.escape(product), term, re.I):
                 return '[]'
         for word in re.findall(r'\b[A-Za-z][A-Za-z0-9]*\b', term):
-            identity = resolve_competitor_identity(word)
+            identity = resolve_identity_mention(word, context=term)
             if identity and identity.canonical_name.casefold() != (target.canonical_name if target else fact.competitor).casefold():
                 return '[]'
     conditions = tuple(dict.fromkeys(term for term in terms if term != fact.quote))

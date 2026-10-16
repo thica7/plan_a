@@ -29,4 +29,13 @@ def _rebind_page_to_candidate(page: CapturedPage, candidate: SourceCandidate) ->
     payload.pop("id", None)
     payload["candidate_id"] = candidate.id
     payload["requested_url"] = candidate.url
-    return CapturedPage.model_validate(payload)
+    rebound = CapturedPage.model_validate(payload)
+    from packages.research.capture.official import verify_registered_capture
+    receipt = verify_registered_capture(candidate.competitor, rebound)
+    rebound.metadata.pop("official_source_verification", None)
+    if receipt is not None:
+        rebound.metadata["official_source_verification"] = receipt
+        if receipt["status"] != "verified":
+            rebound.status = "rejected"
+            rebound.failure_reason = receipt["reason"]
+    return rebound

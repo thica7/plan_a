@@ -204,17 +204,17 @@ def test_quote_data_and_identity_tampering_is_rejected(target, field, value):
         module.validate_mapping(mapped)
 
 
-def test_unknown_product_preflight_is_skipped_and_never_a_collector_llm():
+def test_reviewed_identity_does_not_promote_fixed_excerpt_to_a_capture():
     module = runner()
     for row in cases():
         payload = module.allowed_payload(row)
         mapped = module.map_excerpt(payload, payload["sources"][0])
         preflight = module.collector_preflight(mapped)
-        assert preflight["identity_resolved"] is False
+        assert preflight["identity_resolved"] is True
         assert preflight["semantic_page_allowed"] is False
         assert preflight["collector_status"] == "skipped"
         assert preflight["collector_llm_transport_attempts"] == 0
-        assert preflight["blocker"] == "unknown_product_identity"
+        assert preflight["blocker"] == "collector_not_executed"
 
 
 def test_live_runner_reuses_native_trace_binding_writer_review_and_qa():

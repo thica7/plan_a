@@ -556,6 +556,12 @@ class CollectorKBBridgeMixin:
                 )
                 continue
             page = pages[0]
+            from packages.research.capture.official import verify_registered_capture
+            receipt = verify_registered_capture(source.competitor, page)
+            if receipt is not None and (receipt["status"] != "verified"
+                    or source.metadata.get("official_source_verification") != receipt):
+                diagnostics.append({"source_id": source.id, "error": "official_capture_binding_invalid"})
+                continue
             captured_at = _source_datetime(page.captured_at)
             try:
                 reference = await ingest_document_reference(

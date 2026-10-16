@@ -1,0 +1,143 @@
+{
+  "schema": "official_writer_delivery.v1",
+  "delivery_acceptance": "unaccepted_blocked",
+  "model_name": "deepseek-flash",
+  "reviewed_reference_cases": 8,
+  "blind_holdout": false,
+  "human_report_review": "not_performed",
+  "semantic_review_kind": "Codex agent inspection against user-approved reference boundaries",
+  "model_calls_total": 16,
+  "provider_tokens_total": 57082,
+  "provider_bill_usd": null,
+  "runs": [
+    {
+      "id": "live",
+      "run_id": "run-73ef450fa1a2446ea2ee695f3a9b7cd7",
+      "calls": 7,
+      "provider_tokens": 27439,
+      "report_chars": 2450,
+      "qa_blockers": 5,
+      "writer_producer_verified_actual": false,
+      "raw_summary_producer_metric_bug": false,
+      "sources": 2,
+      "source_input_mode": "live_official_documents",
+      "production_code_sha256": "c66f5d952e357a5fd6f49d1452cfd78c63be3c72c435bee1b00686b94d7615f3",
+      "runner_sha256": "8c46c71e433d1b56125f85caf07a1cf497fbfbd7dc86d6129e0965a46f18e699",
+      "files_sha256": {
+        "summary.json": "89b35eb3f2f3efce0bf70119082b7a3426476165e19c4532bfd9cf9b7267a51d",
+        "trace.json": "f75270b1543bb9d30639594dc349f928a02e83309fedbc2c0216d3fb212fcb29",
+        "events.json": "a0d0cd96c26a8fb886614bff3c1962efc1fabf01f1b53aa51d9a38c805fbcc77",
+        "report.md": "bfa0374140daa4c4bfdb46f287de06bf0ef50815569de5accce3aa5959d6ae3c",
+        "canonical.sqlite": "915e161df47b9fe604a38ee6f5abc335afa6b85563a9573b425be19debb618cb",
+        "snapshot.json": "f612f993e6d28fc9aa5af2fb694473fcb8e8bf622f3b8872b8c7dcc54e79a2a8",
+        "inputs.json": "fa781aef697ab80977dfdfc97a4583b7b2efc588595ec7dde20686cfa898ddaa",
+        "canonical.sqlite-wal": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "canonical.sqlite-shm": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+        "manifest.json": "70ff5a5279eda0f93e20235bd0da0d032e6beb92052ca39cfd7b496a711b2903",
+        "run.json": "9710a8da4f4319f8e79e741a5fd65cbb297ea0c31fe48656e0b7724301e6d430"
+      }
+    },
+    {
+      "id": "live_guarded",
+      "run_id": "run-8b4edab595a24b24a66deb05eed6820a",
+      "calls": 2,
+      "provider_tokens": 2396,
+      "report_chars": 0,
+      "qa_blockers": 3,
+      "writer_producer_verified_actual": false,
+      "raw_summary_producer_metric_bug": true,
+      "sources": 0,
+      "source_input_mode": "live_official_documents",
+      "production_code_sha256": "c66f5d952e357a5fd6f49d1452cfd78c63be3c72c435bee1b00686b94d7615f3",
+      "runner_sha256": "f8fd528e36a98d5bc062ef14f44b3b8c6810217db53f1ebf06f5b31d3d7fe5c6",
+      "files_sha256": {
+        "summary.json": "c76e822ed5deef80561a478cbff25e6bee1cf0e272433e6e530260a8aaa8c57c",
+        "trace.json": "e8402f6270407a37edbcb8a2379002dff214f3acddca076737d66eb6d6f787d1",
+        "events.json": "661a2ad7bee0237bfc0e86f454880dfbb9209c16079d51722ba7a0ccb4b03e23",
+        "report.md": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "snapshot.json": "2a91360556c82e14e496cb074b2bd44bf8ce8bd9dc9295318725e80fc88a520d",
+        "inputs.json": "fa781aef697ab80977dfdfc97a4583b7b2efc588595ec7dde20686cfa898ddaa",
+        "manifest.json": "360f264cbad0abbd6fae37081799e223fbb80d9ad00c7b8cc7552e8c752a7297",
+        "run.json": "dcc1e777d4f0c8836c5d04651a0db9799d00f7cef937e592485f7ef08590939b"
+      }
+    },
+    {
+      "id": "live_verified",
+      "run_id": "run-46b39d46506e45cf94aa76642e6de744",
+      "calls": 7,
+      "provider_tokens": 27247,
+      "report_chars": 2356,
+      "qa_blockers": 2,
+      "writer_producer_verified_actual": true,
+      "raw_summary_producer_metric_bug": false,
+      "sources": 2,
+      "source_input_mode": "live_official_documents",
+      "production_code_sha256": "c66f5d952e357a5fd6f49d1452cfd78c63be3c72c435bee1b00686b94d7615f3",
+      "runner_sha256": "26e4a92440ed7af2210ae59162f9515d7a19631c6574436f01f012738320518a",
+      "files_sha256": {
+        "summary.json": "7b07ecdb294360f3f44fb1ac64c24afad38561d0886ee917ad8005ff25f5c802",
+        "trace.json": "5598643bc05e139e3c3acc3f7e9e0dc5460ebe154d3c72088daa0bd988a24a07",
+        "events.json": "52f7fc7f471fe02ad46842fb6f4c6afb0920dbce57102f12ac70deb0e3e6bdbe",
+        "report.md": "3b58f6d1cf799917a2285d00db95c433d649d995cb06dbc3678d1f2bcd74ee34",
+        "canonical.sqlite": "3a4ae2b1dce00987cf3435b85d56f502299611f1a445fa18261cda94808868b5",
+        "snapshot.json": "e2032b8b2b20c4cc3afa723933106232a788ff238f55a239469a130a489dae10",
+        "inputs.json": "fa781aef697ab80977dfdfc97a4583b7b2efc588595ec7dde20686cfa898ddaa",
+        "manifest.json": "a70803b367f737af3c2fea5ab4cc86a289d85feb386aafbf56fc8acdcd87a1fd",
+        "run.json": "0d8104fa93b076ea483f3193c68f608780530ea00c72498b74a0fc2215391da4"
+      }
+    }
+  ],
+  "latest_run": "live_verified",
+  "latest_source_products": [
+    "Miro"
+  ],
+  "blocked_source_products": [
+    "Airtable"
+  ],
+  "uncovered_cases": [
+    "condition-v1-003",
+    "condition-v1-006",
+    "condition-v1-007",
+    "condition-v1-008"
+  ],
+  "not_answered_due_to_source_block": [
+    "condition-v1-004",
+    "condition-v1-005"
+  ],
+  "semantic_issues": [
+    "Visitor edit/comment plan prerequisites omitted",
+    "Guest login and directly-invited-board answer missing",
+    "members recipient text misbound as actor; plan/access unknown"
+  ],
+  "scope_exclusions": [
+    "automatic discovery/search",
+    "full graph phase QA/HITL and terminal release",
+    "production semantic RAG",
+    "HTTP Qdrant/Temporal/Redis/RLS",
+    "post-read canonical receipt validation",
+    "authority proof for every intermediate redirect"
+  ],
+  "raw_artifact_location": "data/artifacts/official-writer-2026-10-16 (gitignored)",
+  "redaction_note": "Exported JSON is redacted; canonical SQLite retains original URL/body. Some Airtable numeric article IDs are masked by existing phone redaction.",
+  "backend_tests": {
+    "passed": 4293,
+    "skipped": 1,
+    "warnings": 202,
+    "skip_reason": "live Postgres RLS connection test"
+  },
+  "targeted_tests": 67,
+  "code_review": "registry_and_runner_no_open_P1_P2; report_semantic_issues_remain_open",
+  "credential_scan": "pass_no_actual_secret_hits",
+  "registry_sha256": "79bc9a688d71142978d4d8e2863c3bd401d5e02e3f58dd41d97964318d5db6ba",
+  "input_sha256": "7ebbf481a35c2b7216c1f81000661ed2980795fc4e3e5006be589d1154debd4d",
+  "latest_final_qa_issues": 7,
+  "independent_review": {
+    "proof_scope": "full capture/canonical/quote identities, native Writer dependency and tamper rejection, call usage, no gold input, code boundaries",
+    "semantic_acceptance": "unaccepted",
+    "report_human_acceptance": "not_performed",
+    "reports_sha256": {
+      "plan_a_v19_official_quality.json": "1edff602ed6965eda12227f0b1fedc49af27c611b48c614703387be7188a5ad6",
+      "plan_a_v19_final_live_quality.json": "6d74c3aabe0de71486f9a1a2105130eb795ac9be9f160f3f84d44e7e7a8bad1c"
+    }
+  }
+}

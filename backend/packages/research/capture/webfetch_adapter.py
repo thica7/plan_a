@@ -7,6 +7,8 @@ from typing import Any
 from packages.research.capture.policy import capture_failure_reason, capture_rejection_reason
 from packages.research.models import CapturedPage, SourceCandidate
 from packages.tools.evidence_fetch import EvidenceFetchResult
+from packages.business_intel.official_registry import registered_product
+from packages.research.capture.official import verify_registered_capture
 
 FetchCallable = Callable[[str], Awaitable[Any]]
 
@@ -21,7 +23,8 @@ async def fetch_candidate_page(
     ok = bool(getattr(result, "ok", False))
     text = str(getattr(result, "text", "") or "")
     markdown = str(getattr(result, "markdown", "") or text)
-    title = str(getattr(result, "title", "") or candidate.title)
+    dynamic_product = registered_product(candidate.competitor) is not None
+    title = str(getattr(result, "title", "") or ("" if dynamic_product else candidate.title))
     rejection_reason = capture_rejection_reason(
         ok=ok,
         title=title,
@@ -31,7 +34,7 @@ async def fetch_candidate_page(
     quality_score = float(getattr(result, "quality_score", 1.0 if ok else 0.0) or 0.0)
     if rejection_reason:
         quality_score = min(quality_score, 0.2)
-    return CapturedPage(
+    page = CapturedPage(
         candidate_id=candidate.id,
         requested_url=candidate.url,
         final_url=str(getattr(result, "url", "") or candidate.url),
@@ -60,6 +63,14 @@ async def fetch_candidate_page(
         ),
         metadata=dict(getattr(result, "capture_metadata", {}) or {}),
     )
+    page.metadata.pop("official_source_verification", None)
+    if dynamic_product:
+        receipt = verify_registered_capture(candidate.competitor, page)
+        page.metadata["official_source_verification"] = receipt
+        if receipt["status"] != "verified":
+            page.status = "rejected"
+            page.failure_reason = receipt["reason"]
+    return page
 
 
 def failed_capture(candidate: SourceCandidate, reason: str) -> CapturedPage:

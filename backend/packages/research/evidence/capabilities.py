@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 
-from packages.business_intel.entity_resolver import resolve_competitor_identity
+from packages.business_intel.entity_resolver import resolve_competitor_identity, resolve_identity_mention
 
 _PATTERNS = {
     "shared_editing": r"(?:multiple people|team(?:mates| members)?|users|people).{0,65}(?:edit|collaborat).{0,65}(?:same|simultaneous|real.time)|edit the same page at the same time|real.time (?:co.edit|edit|collaborat)|多人.{0,20}(?:编辑|协作)|实时.{0,10}(?:编辑|协作)|同时.{0,10}编辑|共同编辑|协同编辑",
@@ -56,7 +56,7 @@ def _capability_keys(fact, products) -> tuple[str, ...]:
                for product in products):
             return ()
         for word in re.findall(r"\b[A-Za-z][A-Za-z0-9]*\b", term):
-            identity = resolve_competitor_identity(word)
+            identity = resolve_identity_mention(word, context=term)
             if identity and identity.canonical_name.casefold() != target_name.casefold():
                 return ()
     # A restriction on another action (e.g. commenters cannot edit) does not

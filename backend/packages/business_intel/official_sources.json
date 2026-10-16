@@ -1,0 +1,90 @@
+[
+  {
+    "product": "Miro",
+    "aliases": [],
+    "documents": [
+      {
+        "title": "Collaboration with Visitors",
+        "url": "https://help.miro.com/hc/en-us/articles/360012524559-Collaboration-with-Visitors",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-16T01:50:40Z",
+        "review_basis": "Project user confirmed the official source links and eight boundaries in request_user_input_async:call_ee2d4d54f20a4110acfa24ed1ca49beb; authority is exact-document only."
+      },
+      {
+        "title": "Collaboration with Guests",
+        "url": "https://help.miro.com/hc/en-us/articles/360021415119-Collaboration-with-Guests",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-16T01:50:40Z",
+        "review_basis": "Project user confirmed the official source links and eight boundaries in request_user_input_async:call_ee2d4d54f20a4110acfa24ed1ca49beb; authority is exact-document only."
+      },
+      {
+        "title": "Visitors, guests and members",
+        "url": "https://help.miro.com/hc/en-us/articles/7045408248594-Visitors-guests-and-members",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-16T01:50:40Z",
+        "review_basis": "Project user confirmed the official source links and eight boundaries in request_user_input_async:call_ee2d4d54f20a4110acfa24ed1ca49beb; authority is exact-document only."
+      }
+    ]
+  },
+  {
+    "product": "Trello",
+    "aliases": [],
+    "documents": [
+      {
+        "title": "Add an observer to a board",
+        "url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-16T01:50:40Z",
+        "review_basis": "Project user confirmed the official source links and eight boundaries in request_user_input_async:call_ee2d4d54f20a4110acfa24ed1ca49beb; authority is exact-document only."
+      }
+    ]
+  },
+  {
+    "product": "Airtable",
+    "aliases": [],
+    "documents": [
+      {
+        "title": "Managing and sharing Airtable interfaces",
+        "url": "https://support.airtable.com/articles/4255096925-managing-and-sharing-airtable-interfaces",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-16T01:50:40Z",
+        "review_basis": "Project user confirmed the official source links and eight boundaries in request_user_input_async:call_ee2d4d54f20a4110acfa24ed1ca49beb; authority is exact-document only."
+      },
+      {
+        "title": "Airtable permissions overview",
+        "url": "https://support.airtable.com/articles/3994336578-airtable-permissions-overview",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-16T01:50:40Z",
+        "review_basis": "Project user confirmed the official source links and eight boundaries in request_user_input_async:call_ee2d4d54f20a4110acfa24ed1ca49beb; authority is exact-document only."
+      }
+    ]
+  },
+  {
+    "product": "Zoom",
+    "aliases": [],
+    "documents": [
+      {
+        "title": "Managing meeting breakout rooms",
+        "url": "https://support.zoom.com/hc/pb/article?id=zm_kb&sysparm_article=KB0062540",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-16T01:50:40Z",
+        "review_basis": "Project user confirmed the official source links and eight boundaries in request_user_input_async:call_ee2d4d54f20a4110acfa24ed1ca49beb; authority is exact-document only."
+      },
+      {
+        "title": "Enabling or disabling computer recording",
+        "url": "https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0063640",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-16T01:50:40Z",
+        "review_basis": "Project user confirmed the official source links and eight boundaries in request_user_input_async:call_ee2d4d54f20a4110acfa24ed1ca49beb; authority is exact-document only."
+      }
+    ]
+  }
+]

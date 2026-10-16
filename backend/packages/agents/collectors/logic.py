@@ -1477,7 +1477,8 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         url: str,
         snippet: str,
     ) -> float:
-        homepage_host = self._host(detail.plan.homepage_hints.get(competitor, ""))
+        from packages.business_intel.official_registry import registered_product
+        homepage_host = "" if registered_product(competitor) else self._host(detail.plan.homepage_hints.get(competitor, ""))
         source_host = self._host(url)
         official_host = bool(
             homepage_host

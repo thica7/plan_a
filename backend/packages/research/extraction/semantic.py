@@ -6,7 +6,7 @@ import re
 from urllib.parse import urlparse
 
 from packages.business_intel.entity_resolver import (
-    confusion_terms_for_competitor, is_trusted_url_for_competitor, resolve_competitor_identity, product_title_matches,
+    confusion_terms_for_competitor, is_trusted_url_for_competitor, resolve_competitor_identity, product_title_matches, resolve_identity_mention,
 )
 from packages.research.extraction.quality import quote_quality_problem
 from packages.research.models import CapturedPage, EvidenceQuote, ExtractionResult, ResearchBrief
@@ -155,6 +155,10 @@ def semantic_page_allowed(brief: ResearchBrief, page: CapturedPage) -> bool:
     identity = resolve_competitor_identity(brief.competitor)
     if identity is None or page.status != "ok" or page.quality_score < .5:
         return False
+    if identity.exact_documents_only:
+        from packages.research.capture.official import verify_registered_capture
+        # Recompute from capture fields; a metadata receipt cannot grant authority.
+        return verify_registered_capture(brief.competitor, page)["status"] == "verified"
     if not is_trusted_url_for_competitor(brief.competitor, page.final_url):
         return False
     title = page.title.casefold()
@@ -264,7 +268,7 @@ def semantic_extraction(brief: ResearchBrief, page: CapturedPage, payload: objec
             continue
         foreign_subject = False
         for word in re.findall(r"\b[A-Za-z][A-Za-z0-9]*\b", context):
-            other = resolve_competitor_identity(word)
+            other = resolve_identity_mention(word, context=context)
             if other and other.canonical_name.casefold() != brief.competitor.casefold():
                 foreign_subject = True
         if foreign_subject or any(term in context.casefold() for term in confusion_terms_for_competitor(brief.competitor)):

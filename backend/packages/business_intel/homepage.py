@@ -38,6 +38,9 @@ def verify_homepage(competitor: str, hint: str | None = None) -> HomepageVerific
         )
 
     identity = resolve_competitor_identity(name)
+    if identity is not None and identity.exact_documents_only:
+        return HomepageVerification(competitor=name, homepage_url=None, verified=False,
+                                    reason="reviewed_documents_only_no_verified_homepage")
     if hint and _is_homepage_url(hint):
         if identity is not None and is_trusted_url_for_competitor(name, hint):
             return HomepageVerification(

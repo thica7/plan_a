@@ -85,7 +85,7 @@ planner → planner_hitl
 
 常规检索入口是 Collector 调用 [`rag_retrieve_tool`](../backend/packages/tools/rag_retrieve.py)，共享检索在 [`RetrievalService`](../backend/packages/knowledge/retrieval.py) 中执行。检索响应附带查询规划、候选、模型与范围诊断；Collector 将合格原文转换为来源，再走证据准入。
 
-已确认的泛化限制：有界语义提取仍依赖静态产品身份与官方来源登记，新样本 Miro、Airtable、Trello、Zoom 会在该前置检查跳过。固定人工短节选的下游测试不能替代此入口。最新 [真实模型诊断](optimization/2026-10-16-condition-model-delivery.md) 只有 Analyst／Comparator／Reflector 共 4 次真实调用，Writer 模型与逐条主张审核均未调用，QA 未放行；各 Agent 的职责说明不等于新产品已端到端通过。
+新产品现可通过[部署者审核的精确官方文档登记](optimization/2026-10-16-official-source-registry.md)进入生产身份解析、实际抓取核验和有界语义提取。授权不扩散为主页或整域名，缓存重绑定及完整正文入库前会重新核对回执。Writer 正式执行入口为 `WriterEvidenceAlignmentMixin._real_writer_step`，包含证据投影和产物提交；直接调用 `_write_report_draft` 不能代替这一步。真实模型的完整前提归属与正文引用质量仍按[本轮交付记录](optimization/2026-10-16-official-writer-delivery.md)独立判断；各 Agent 的职责说明不等于新产品已端到端通过。此前固定短节选诊断仍保留[历史结果](optimization/2026-10-16-condition-model-delivery.md)。
 
 后续 Agent 通过 [`evidence_context.py`](../backend/packages/orchestrator/evidence_context.py) 与 [`views.py`](../backend/packages/research/evidence/views.py) 选取当前快照的视图。视图按产品、维度、来源和上下文容量裁剪，记录所用事实、来源及省略原因。这样，检索改善会进入实际分析和报告消费链。
 

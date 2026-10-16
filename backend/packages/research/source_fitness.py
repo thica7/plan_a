@@ -130,6 +130,10 @@ def _classify_pricing(
 
 
 def _official_url(brief: ResearchBrief, candidate: SourceCandidate, page: CapturedPage) -> bool:
+    from packages.business_intel.official_registry import registered_product
+    if registered_product(brief.competitor):
+        from packages.research.capture.official import verify_registered_capture
+        return verify_registered_capture(brief.competitor, page)["status"] == "verified"
     url = page.final_url or candidate.url
     return _official_candidate(brief, candidate) or _host_matches_homepage(
         url,
@@ -139,6 +143,10 @@ def _official_url(brief: ResearchBrief, candidate: SourceCandidate, page: Captur
 
 def _official_candidate(brief: ResearchBrief, candidate: SourceCandidate) -> bool:
     from packages.business_intel.entity_resolver import is_trusted_url_for_competitor
+    from packages.business_intel.official_registry import registered_product
+
+    if registered_product(brief.competitor):
+        return is_trusted_url_for_competitor(brief.competitor, candidate.url)
 
     if candidate.origin in {"trusted_registry", "homepage_derived", "manual"}:
         return True
