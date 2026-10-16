@@ -263,6 +263,11 @@ def _auth_policy_check(settings: Settings) -> HealthCheck:
 
 
 def _temporal_cutover_check(settings: Settings) -> HealthCheck:
+    if settings.run_orchestration_backend == "langgraph" and settings.temporal_traffic_percent == 0:
+        return HealthCheck(
+            name="temporal_cutover", status="ok",
+            detail="backend=langgraph; Temporal is not required",
+        )
     cutover = temporal_cutover_status(settings)
     return HealthCheck(
         name="temporal_cutover",

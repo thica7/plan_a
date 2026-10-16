@@ -101,14 +101,23 @@ Windows 使用 `scripts/dev_start.ps1`、`dev_status.ps1` 和 `dev_stop.ps1`。�
 
 默认端口：API `8000`、前端 `5173`、Temporal UI `8233`、Temporal gRPC `7233`、Qdrant HTTP `6333`。
 
-Docker 部署示例：
+在负责部署的电脑上，使用 Python 3.11+ 和 Docker Compose v2：
 
-```powershell
-Copy-Item .env.example .env
-powershell -ExecutionPolicy Bypass -File scripts\docker_deploy.ps1 -Build
+```bash
+# 预览不执行 Docker，也不读取实际 .env
+python scripts/docker_deploy.py --mode light --redis --dry-run
+# 配好该电脑的 .env 后执行：轻量持久化演示
+python scripts/docker_deploy.py --mode light --redis --build
+# 需要 Temporal 时，使用独立项目并错开端口
+python scripts/docker_deploy.py --mode persistent --project plan-a-persistent --redis --build
 ```
 
-打开 `http://localhost:8080`，配置细节见 [部署说明](docs/docker_deployment.md)。
+默认入口为 `http://127.0.0.1:8080`；内网访问需显式 `--lan` 且配置 API 鉴权。
+可选 Redis 已接入公共网页缓存和共享限流；缓存保留原采集时间，失败按 miss 处理，限流服务不可用返回 503。
+LangGraph 运行支持持久检查点显式恢复，SSE 支持事件游标续传。恢复接口、数据卷、备份及隔离故障验收见
+[部署说明](docs/docker_deployment.md)和[本轮交付记录](docs/optimization/2026-10-16-demo-deployment-delivery.md)。
+本轮本机未运行 Docker；真实容器、Redis Lua/TTL、Postgres、Qdrant HTTP 与 Temporal 的跨机验收仍待执行。
+部署改造的离线完整回归为 **4477 通过、1 跳过**，前端接口生成与生产构建通过；这不代表真实调研报告的内容验收通过。
 
 ## 实际模型与搜索配置
 

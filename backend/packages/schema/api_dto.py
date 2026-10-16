@@ -269,6 +269,7 @@ class ReportApprovalSignalResponse(BaseModel):
 
 class RunDetail(RunSummary):
     plan: AnalysisPlan
+    runtime_orchestration_backend: Literal["langgraph", "temporal"] | None = None
     max_iterations: int = Field(default=2, ge=1)
     auto_redo_warn_enabled: bool = False
     hitl_enabled: bool = False

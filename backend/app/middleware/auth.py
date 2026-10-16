@@ -9,7 +9,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "false").lower() == "true"
-EXCLUDED_PATH_PREFIXES = ("/api/health", "/docs", "/openapi.json", "/redoc")
+EXCLUDED_PATH_PREFIXES = (
+    "/api/health", "/api/livez", "/api/readyz", "/docs", "/openapi.json", "/redoc",
+)
 AUTH_COOKIE_NAME = os.getenv("AUTH_COOKIE_NAME", "competiscope_api_token")
 
 

@@ -187,7 +187,9 @@ class RuntimeCommandService:
             )
 
         try:
-            detail = await self._run_service.create_run(request)
+            detail = await self._run_service.create_run(
+                request, runtime_orchestration_backend="langgraph",
+            )
         except WorkspaceQuotaExceededError as exc:
             raise RuntimeCommandError(
                 429,
@@ -829,6 +831,7 @@ class RuntimeCommandService:
         detail = await self._run_service.ensure_run_visible(
             visible_request,
             skip_active_duplicate_check=True,
+            runtime_orchestration_backend="temporal",
         )
         if detail.id != result.run_id:
             raise RuntimeError(

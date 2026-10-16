@@ -9,7 +9,7 @@ def test_docker_compose_declares_temporal_server_ui_and_worker() -> None:
     assert "temporalio/ui:2.34.0" in compose
     assert "temporal-worker:" in compose
     assert "TEMPORAL_ADDRESS: temporal:7233" in compose
-    assert 'TEMPORAL_TRAFFIC_PERCENT: "100"' in compose
+    assert "TEMPORAL_TRAFFIC_PERCENT: ${DEMO_TEMPORAL_TRAFFIC_PERCENT:-100}" in compose
     assert 'command: ["python", "-m", "packages.workflows.worker"]' in compose
     assert '"${TEMPORAL_BIND:-127.0.0.1:7233}:7233"' in compose
     assert '"${TEMPORAL_UI_BIND:-127.0.0.1:8233}:8080"' in compose

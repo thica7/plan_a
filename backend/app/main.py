@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.middleware.auth import AuthMiddleware
+from app.middleware.redis_rate_limit import RedisRateLimitMiddleware
 from app.routers import (
     enterprise,
     evals,
@@ -11,6 +12,7 @@ from app.routers import (
     hitl,
     kb,
     metrics,
+    readiness,
     revisions,
     runs,
     runtime,
@@ -33,6 +35,15 @@ def create_app() -> FastAPI:
     async def startup_event():
         validate_env_vars()
 
+    async def shutdown_event():
+        from packages.infrastructure.redis_config import get_redis_runtime
+
+        if get_redis_runtime.cache_info().currsize:
+            await get_redis_runtime().aclose()
+            get_redis_runtime.cache_clear()
+
+    app.router.add_event_handler("shutdown", shutdown_event)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_CORS_ORIGINS,
@@ -40,11 +51,13 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RedisRateLimitMiddleware)
     app.add_middleware(AuthMiddleware)
     app.include_router(runs.router, prefix="/api", tags=["runs"])
     app.include_router(stream.router, prefix="/api", tags=["stream"])
     app.include_router(hitl.router, prefix="/api", tags=["hitl"])
     app.include_router(health.router, prefix="/api", tags=["health"])
+    app.include_router(readiness.router, prefix="/api", tags=["health"])
     app.include_router(metrics.router, prefix="/api", tags=["metrics"])
     app.include_router(skills.router, prefix="/api", tags=["skills"])
     app.include_router(runtime.router, prefix="/api", tags=["runtime"])

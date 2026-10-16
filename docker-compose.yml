@@ -1,6 +1,9 @@
+name: ${COMPOSE_PROJECT_NAME:-plan-a-demo}
+
+# Fixed release tags; cross-machine container compatibility still needs acceptance.
 services:
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.13.4
     restart: unless-stopped
     ports:
       - "${QDRANT_BIND:-127.0.0.1:6333}:6333"
@@ -21,7 +24,7 @@ services:
       start_period: 5s
 
   postgres:
-    image: pgvector/pgvector:pg17
+    image: pgvector/pgvector:0.8.0-pg17
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-competiscope}
@@ -85,8 +88,11 @@ services:
       KB_DB_PATH: /app/runs/knowledge_docker.db
       ENTERPRISE_STORE_BACKEND: postgres
       ENTERPRISE_DATABASE_URL: postgresql://${POSTGRES_USER:-competiscope}:${POSTGRES_PASSWORD:-competiscope}@postgres:5432/${POSTGRES_DB:-competiscope}?connect_timeout=5
-      RUN_ORCHESTRATION_BACKEND: temporal
-      TEMPORAL_TRAFFIC_PERCENT: "100"
+      RUN_ORCHESTRATION_BACKEND: ${DEMO_ORCHESTRATION_BACKEND:-temporal}
+      TEMPORAL_TRAFFIC_PERCENT: ${DEMO_TEMPORAL_TRAFFIC_PERCENT:-100}
+      REDIS_URL: redis://redis:6379/0
+      REDIS_CACHE_ENABLED: ${DEMO_REDIS_ENABLED:-false}
+      REDIS_RATE_LIMIT_ENABLED: ${DEMO_REDIS_ENABLED:-false}
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: default
       TEMPORAL_TASK_QUEUE: competitive-intel
@@ -101,7 +107,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2).read()\"",
+          "python -c \"import json,urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8000/api/readyz', timeout=2); assert r.status == 200 and json.load(r)['status'] in ('ok','warn')\"",
         ]
       interval: 15s
       timeout: 5s
@@ -111,8 +117,6 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      temporal:
-        condition: service_started
 
   temporal-worker:
     restart: unless-stopped
@@ -153,16 +157,28 @@ services:
       - backend
 
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.27.4-alpine
     restart: unless-stopped
     volumes:
       - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "${APP_BIND:-8080}:80"
+      - "${APP_BIND:-127.0.0.1:8080}:80"
     depends_on:
       - backend
       - frontend
-      - temporal-ui
+
+  redis:
+    image: redis:7.4.2-alpine
+    profiles: ["redis"]
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
 
 volumes:
   qdrant_data:

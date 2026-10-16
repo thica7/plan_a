@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from typing import Any
 
 from packages.tools.advanced_fetch import AdvancedFetchResult, advanced_fetch_page
@@ -28,6 +29,8 @@ class EvidenceFetchResult:
     source_published_at: str | None = None
     source_updated_at: str | None = None
     source_material_level: str = "unknown"
+    captured_at: datetime | None = None
+    cache_hit: bool = False
 
     @property
     def snippet(self) -> str:
@@ -44,6 +47,37 @@ async def fetch_evidence_page(
     require_price_content: bool = False,
     public_document_browser_retry: bool = False,
 ) -> EvidenceFetchResult:
+    from packages.infrastructure.redis_config import get_redis_runtime, redis_options
+
+    options = dict(
+        allow_advanced=allow_advanced,
+        timeout_seconds=timeout_seconds,
+        min_text_chars=min_text_chars,
+        advanced_quality_threshold=advanced_quality_threshold,
+        require_price_content=require_price_content,
+        public_document_browser_retry=public_document_browser_retry,
+    )
+    config = redis_options()
+    if config.cache_enabled:
+        from packages.infrastructure.source_cache import cached_fetch
+
+        return await cached_fetch(
+            url, lambda: _fetch_evidence_page(url, **options), options=options,
+            runtime=get_redis_runtime(), ttl_seconds=config.cache_ttl_seconds,
+        )
+    return await _fetch_evidence_page(url, **options)
+
+
+async def _fetch_evidence_page(
+    url: str,
+    *,
+    allow_advanced: bool = True,
+    timeout_seconds: float = 12.0,
+    min_text_chars: int = 120,
+    advanced_quality_threshold: float = .55,
+    require_price_content: bool = False,
+    public_document_browser_retry: bool = False,
+) -> EvidenceFetchResult:
     """Fetch evidence through the fast HTTP path, then webfetch_v2 when quality is weak."""
 
     basic = await fetch_page(url, timeout_seconds=timeout_seconds)
@@ -53,7 +87,9 @@ async def fetch_evidence_page(
             fetch_method="basic_httpx_policy_blocked",
             failure_reason="policy_blocked",
         )
-    retry_public_document = public_document_browser_retry and allow_advanced and basic.status_code == 403
+    retry_public_document = (
+        public_document_browser_retry and allow_advanced and basic.status_code == 403
+    )
     if basic.status_code in {401, 403} and not retry_public_document:
         return _from_basic_fetch(
             basic,
@@ -295,7 +331,9 @@ def _from_advanced_fetch(result: AdvancedFetchResult) -> EvidenceFetchResult:
             "document_headings": (result.raw.get('extraction') or {}).get('headings', []),
             "pricing_controls": list(_pricing_controls(
                 ''.join((result.raw.get('extraction') or {}).get('pricing_control_html', [])))),
-            "pricing_offer_json": (result.raw.get('extraction') or {}).get('pricing_offer_json', []),
+            "pricing_offer_json": (
+                (result.raw.get('extraction') or {}).get('pricing_offer_json', [])
+            ),
             "webfetch_artifacts": artifacts if isinstance(artifacts, dict) else {},
             "webfetch_network": network_summary,
             "webfetch_diagnostics": diagnostics if isinstance(diagnostics, dict) else {},

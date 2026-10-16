@@ -1,123 +1,140 @@
-# Docker Deployment
+# 本机与内网演示部署
 
-This project can run as a single Docker Compose stack:
+本轮按用户要求不在开发电脑上执行 Docker。以下容器命令供另一台部署电脑使用；代码单测、假 Redis 与假模型测试不能代替这些实机验收。
 
-```text
-nginx -> frontend
-      -> backend -> postgres
-                 -> temporal
-temporal-worker -> temporal/backend activities
+## 1. 部署电脑准备
+
+- 安装 Docker Desktop，或 Docker Engine + Compose v2；启动 Engine，确认支持 `docker compose up --wait`。
+- 安装 Python 3.11+，拉取当前代码。宿主不必安装后端和前端依赖，镜像会构建它们；首次构建需访问镜像仓库和依赖源。
+- 从 `.env.example` 创建该电脑自己的 `.env`。先用 `DEMO_MODE=true` 验证部署；真实模型凭据只保存在本机，不复制进交付文档、截图或 Git。
+- 修改默认 Postgres 密码。内网访问配置 `AUTH_ENABLED=true` 与有效 token 主体，给予所需角色和工作区。模型 API key 不能当登录 token。
+
+```bash
+# 这些检查只在部署电脑运行
+python --version
+docker version
+docker compose version
+# Mac/Linux：cp .env.example .env
+# PowerShell：Copy-Item .env.example .env
 ```
 
-## Requirements
+当前只支持单 API / 单运行 Worker，不能通过增加容器副本扩展 SQLite 写入。尚未提供公网 TLS、跨进程任务 lease 和多主部署验收。
 
-- Docker Desktop or Docker Engine with Compose v2.
-- A root `.env` file. Copy `.env.example` and fill real provider keys only when
-  running real API mode.
+## 2. 启动模式与端口
 
-## First Deploy
-
-```powershell
-Copy-Item .env.example .env
-notepad .env
-powershell -ExecutionPolicy Bypass -File scripts\docker_deploy.ps1
-```
-
-The app is served from:
-
-```text
-http://localhost:8080
-```
-
-Temporal UI is exposed locally at:
-
-```text
-http://127.0.0.1:8233
-```
-
-## Real API Mode
-
-Set these values in `.env`:
-
-```text
-DEMO_MODE=false
-ARK_API_KEY=...
-ARK_MODEL=...
-PPLX_API_KEY=...
-BACKUP_LLM_API_KEY=...
-BACKUP_LLM_MODEL=...
-```
-
-Do not commit `.env`. It is ignored by Git and Docker build context.
-
-## Useful Commands
-
-```powershell
-# Build and start everything
-powershell -ExecutionPolicy Bypass -File scripts\docker_deploy.ps1
-
-# Rebuild images
-powershell -ExecutionPolicy Bypass -File scripts\docker_deploy.ps1 -Build
-
-# Follow logs
-docker compose logs -f --tail=100
-
-# Stop containers but keep volumes
-docker compose down
-
-# Stop and remove persistent volumes
-docker compose down -v
-```
-
-## Deployment Notes
-
-- `backend/Dockerfile` installs the backend, vendored `third_party/webfetch_v2`,
-  and Playwright Chromium for browser fetch fallback.
-- `docker-compose.yml` uses named volumes for Postgres, run data, and artifact
-  data so deployment state is not committed to Git.
-- Postgres schema migration is owned by `EnterprisePostgresStore` on backend
-  startup.
-- Nginx proxies `/api/*` to the backend and the rest of the site to the
-  frontend container.
-
-## 端口与知识库配置
-
-宿主端口由根目录 `.env` 配置，容器内部端口保持固定：
-
-| 配置 | 默认值 | 用途 |
+| 模式 | 编排配置 | 启动组件 |
 | --- | --- | --- |
-| `APP_BIND` | `8080` | 应用与 API 入口 |
+| `light` | LangGraph / Temporal 流量 0 | Nginx、前端、API、Postgres、Qdrant |
+| `persistent` | Temporal / 流量 100 | 上述组件 + Temporal、Worker、Temporal UI |
+| 追加 `--redis` | API / Worker 一致开启缓存与限流 | 额外启动内部 Redis |
+
+Python 入口兼容 Mac、Linux、Windows；下列命令在仓库根目录执行。`--dry-run` 只输出计划，不读取真实 `.env`、不调用 Docker。其他命令由部署者明确执行。
+
+```bash
+python scripts/docker_deploy.py --mode light --redis --dry-run
+python scripts/docker_deploy.py --mode light --redis --build
+python scripts/docker_deploy.py --mode light --redis --check
+```
+
+需要 Temporal 时可使用独立项目；先在进程环境或 `.env` 错开下表各端口：
+
+```bash
+python scripts/docker_deploy.py --mode persistent --project plan-a-persistent --redis --build
+```
+
+缺省项目为 `plan-a-demo`。同项目从持久模式切到轻量模式前，需先保存并处理进行中的任务，明确停止该项目原 Temporal/Worker/UI；脚本不会自动停止它们。脚本拒绝归属其他目录的同名项目。保留的 `start.sh` / `docker_deploy.ps1` 默认进入 persistent；需要选择模式时使用上述 Python 入口。
+
+| `.env` 或进程配置 | 默认值 | 用途 |
+| --- | --- | --- |
+| `APP_BIND` | `127.0.0.1:8080` | 应用与 API |
 | `QDRANT_BIND` | `127.0.0.1:6333` | Qdrant HTTP |
 | `POSTGRES_BIND` | `127.0.0.1:55432` | Postgres |
 | `TEMPORAL_BIND` | `127.0.0.1:7233` | Temporal gRPC |
 | `TEMPORAL_UI_BIND` | `127.0.0.1:8233` | Temporal UI |
 
-例如 `APP_BIND=127.0.0.1:9080`、`QDRANT_BIND=127.0.0.1:9333`。
-`scripts/start.sh`、`scripts/start.ps1`、`scripts/docker_deploy.ps1` 和
-`make demo` 从 `docker compose config --format json` 读取实际地址，等待健康检查完成。
-脚本需要 Python 3.11+ 和支持 `up --wait` 的 Compose v2；项目 `.venv` 优先使用，
-可通过 `PYTHON_EXECUTABLE` 指定解释器。Mac/Linux 使用 `bash scripts/start.sh --build`。
-仅查看配置地址可使用 `python scripts/docker_deploy.py --urls-only`。
+进程环境优先于 `.env`；示例 `APP_BIND=127.0.0.1:9080`、`QDRANT_BIND=127.0.0.1:9333`。内网应用访问需追加 `--lan`，启动前检查解析后的 API 鉴权；其他依赖端口仍限定 loopback，Redis 不发布宿主端口。局域网 HTTP 仅用于可信内网演示；需要跨不可信网络时先补 TLS。不要公开 `docker compose config` 输出，它可能包含实际凭据。
 
-backend 与 temporal-worker 共享 Compose 环境配置：
+`/api/livez` 只确认 API 进程响应；`/api/readyz` 验证 journal、企业存储、按配置所需的 Qdrant、Temporal 与 Redis，不调用模型。必需依赖失败返回 HTTP 503，只有可选缓存失效返回 200 / warn。就绪不等于 Worker 已完成任务，也不等于报告内容合格。Nginx 为 SSE 禁用缓冲并透传 `Last-Event-ID`。
 
-- `QDRANT_URL=http://qdrant:6333`。
-- `KB_DB_PATH=/app/runs/knowledge_docker.db`，两者挂载同一 `run-data` volume。
-- 两者均等待 Qdrant `/readyz` 健康检查通过后启动。
-- `KB_EMBEDDING_PROVIDER`、`KB_RERANKER_PROVIDER`、模型与 HTTP provider 配置均继承同一份
-  `.env`，Compose 不覆盖这些选择。`hash` 适用于确定性离线测试，生产语义检索需按检索评测选择 provider。
-- `KB_VECTOR_COLLECTION` 默认 `knowledge_chunks`，`KB_INDEX_VERSION` 默认 `v1`。
-  切换 embedding 模型时使用新的 collection/version 并重新建索引，避免混写不同模型向量。
+Compose 依赖镜像使用明确版本标签；应用构建基镜像仍有 Python 3.11 / Node 20 等浮动 tag，Python 依赖也尚未全部锁定。当前未锁定镜像 digest，仍需在部署电脑确认架构、拉取及兼容性。禁止用容器启动成功替代应用验收。
 
-升级已有数据后，旧 KB 文档会显示为 `pending`，不会被误认作已有可用向量。
-逐份调用 `POST /api/knowledge/documents/{document_id}/reindex` 补建新模型向量；
-`GET /api/knowledge/providers` 可检查实际 provider、降级原因和新 collection。
-项目级 evidence 使用独立的 Postgres 向量表，切换模型后可调用
-`POST /api/enterprise/evidence/reindex?workspace_id=<workspace-id>` 进行限定工作区重建。
-重建完成前，该检索只返回匹配当前模型和维度的记录。
+## 3. 数据持久化与任务恢复
 
-根目录 `.env` 的 `QDRANT_URL` 和 `KB_DB_PATH` 为本地开发值；Compose 明确覆盖为上述容器内地址。
-更换宿主 Qdrant 端口后，本地开发的 `QDRANT_URL` 也应同步修改；容器内地址保持不变。
+| 存储 | 内容 |
+| --- | --- |
+| `run-data` | run journal、图 checkpoint、KB SQLite、事件、追踪与偏好等 |
+| `artifact-data` | 报告、来源与导出产物 |
+| `postgres-data` | 企业数据、向量及持久模式 Temporal 数据库 |
+| `qdrant_data` | 知识库向量索引 |
+| Redis | 可丢弃缓存和短时限流计数；不作任务真值或备份来源 |
+
+普通停止保留 volume；清理时不要使用 `down -v`。迁移不支持直接复制运行中 SQLite 文件。Postgres schema 由现有企业存储初始化；升级前先备份并在隔离项目恢复检查。
+
+LangGraph 任务中断后，持有 `report:write` 权限的主体可调用 `POST /api/runs/{run_id}/recover`。接口校验已持久执行归属、运行/失败状态、原 checkpoint、当前真实模型策略和重复执行。人工等待保持等待，已完成、未知归属及限定重做不使用普通恢复；重启不会自动重放真实付费调用。SSE 客户端用最后收到的事件 ID 作为 `Last-Event-ID` 补读。
+
+Temporal Activity 的中断重试使用同一 run/thread 图检查点。已经提交的阶段可跳过，未提交的中断节点可能重新调用模型；当前不保证外部副作用 exactly-once。普通业务失败仍记录失败，不自动重试为成功。
+
+## 4. 备份、隔离恢复与重启演练
+
+脚本默认仅输出计划。备份需要 `--execute --allow-stop`：核验容器/卷归属，暂停该项目原本运行的写入服务，导出 PostgreSQL 各数据库和三组文件卷，校验清单后在 finally 中启动原先暂停的服务。备份期间也需停止项目外部直连数据库的写入。备份目录含业务资料，应本地私密保存；Git 已忽略 `backups/`。
+
+```bash
+python scripts/demo_data.py backup --project plan-a-demo --directory backups/demo-01
+python scripts/demo_data.py backup --project plan-a-demo --directory backups/demo-01 --execute --allow-stop
+python scripts/demo_data.py restore --project plan-a-demo --target-project plan-a-drill-01 --directory backups/demo-01
+python scripts/demo_data.py restore --project plan-a-demo --target-project plan-a-drill-01 --directory backups/demo-01 --execute
+```
+
+恢复只允许全新 `plan-a-drill-*` 项目，校验 SHA256、文件名单和 tar 路径，拒绝覆盖已有目标卷。临时 Postgres 不发布服务端口；恢复后应用保持停止。先为演练错开所有宿主端口，再启动演练项目，例如在独立终端设置：
+
+```text
+APP_BIND=127.0.0.1:9080
+QDRANT_BIND=127.0.0.1:9333
+POSTGRES_BIND=127.0.0.1:65432
+TEMPORAL_BIND=127.0.0.1:8234
+TEMPORAL_UI_BIND=127.0.0.1:9233
+```
+
+Mac/Linux 用 `export NAME=value`，PowerShell 用 `$env:NAME='value'`，或准备演练专用 checkout 的 `.env`；配置后运行：
+
+```bash
+python scripts/docker_deploy.py --mode light --project plan-a-drill-01 --redis --build
+# 在演练项目里创建一个 demo 任务，替换 DEMO_RUN_ID
+python scripts/demo_data.py fault --project plan-a-drill-01 --run-id DEMO_RUN_ID
+python scripts/demo_data.py fault --project plan-a-drill-01 --run-id DEMO_RUN_ID --execute
+```
+
+故障脚本只接受隔离项目与已存在 demo 任务，存在活跃 real 任务则拒绝。验证重启前后持久标记、任务与事件前缀哈希，等待/终态不得因重启变成完成。它是进程重启持久性检查，不证明 SIGKILL、停电、模型调用续跑或完整 Temporal 工作流完成。另需在演练中实际运行任务、在阶段间中断并核对恢复与预算。
+
+## 5. Redis 验收与故障边界
+
+缓存默认关闭。`--redis` 同时开启 API/Worker 的缓存和共享限流；组件可独立用 `REDIS_CACHE_ENABLED` / `REDIS_RATE_LIMIT_ENABLED` 配置，Compose 的统一开关 `DEMO_REDIS_ENABLED` 优先。应用使用惰性客户端、短超时与无自动重试。
+
+- 缓存仅用于完整公共 HTTPS 正文，保留原采集时间和哈希；价格、URL 查询串、凭据、失败和摘要绕过缓存。
+- 失效/损坏/断连按 miss；缓存不跳过来源核验、证据准入及 RAG 范围约束。
+- 写入入口按可信鉴权主体限流，未鉴权使用服务器看到的 peer；反向代理后的匿名请求可能共享一个额度，内网应开启鉴权。达到阈值返回 429 / Retry-After；启用限流但 Redis 不可用返回 503。现有 token/费用预算继续执行。
+- Redis 没有 AOF/RDB，重启会重置缓存和短时计数，不用于计费或持久配额。固定窗口限流在边界两侧允许短时突发；跨容器只针对同一 Redis 主节点保证原子计数。
+
+部署电脑上先预览，再显式执行真实 Redis 检查：
+
+```bash
+docker compose -p plan-a-drill-01 exec -T backend python -m packages.infrastructure.redis_acceptance
+docker compose -p plan-a-drill-01 exec -T backend python -m packages.infrastructure.redis_acceptance --execute
+```
+
+它只写随机命名空间两个有 TTL 的键，检查往返、1 秒过期、20 个并发 Lua 请求中允许 10 / 拒绝 10，不生成报告。若恰跨整点固定窗口，重新执行确认。
+
+在隔离项目停止 Redis 后检查 `/api/readyz` 为 503，以及带有效授权的创建请求为 503；重新启动 Redis 后应恢复。测试缓存单独故障降级时，在演练 `.env` 设置 `DEMO_REDIS_ENABLED` 以外的单独配置会被 Compose 统一开关覆盖，需用明确的临时 Compose override 将两项设为 cache=true / limit=false，再重建演练 API/Worker，验证 readyz=200/warn、实际抓取仍可继续。不要对现用项目进行故障演练，也不要用真实付费任务验证限流。
+
+回传脱敏的服务状态、上述 JSON、恢复/备份校验结果和失败日志摘要；不要回传 `.env`、token、完整 config 或原始数据库。Redis 实机 Lua/TTL、限流断连、Postgres/Qdrant/Temporal 容器验收在回传前均为待验收。
+
+## 6. 知识库部署配置
+
+API 与 Worker 使用同一 Compose 配置和 volume：`QDRANT_URL=http://qdrant:6333`、`KB_DB_PATH=/app/runs/knowledge_docker.db`。本地 `.env` 的宿主路径与 URL 被容器内配置覆盖。默认 vector collection 为 `knowledge_chunks`，index version 为 `v1`。
+
+`KB_EMBEDDING_PROVIDER`、`KB_RERANKER_PROVIDER` 与模型配置继承 `.env`；`hash` 仅用于确定性离线测试。切换真实 embedding 模型时使用新 collection/version 并重建，不能混写向量。当前 backend 镜像未安装本地 BGE/精排 extras、未打包模型权重；需另行构建含 `bge-m3` / `reranker` extras 和模型目录挂载的镜像，或使用已配置的 HTTP provider，再验收实际语义检索。
+
+旧 KB 文档保持 `pending`，按文档调用 `POST /api/knowledge/documents/{document_id}/reindex`，用 `GET /api/knowledge/providers` 核对 provider 与降级原因。项目 evidence 的 Postgres 向量表另用 `POST /api/enterprise/evidence/reindex?workspace_id=<workspace-id>` 重建。索引可用不代表报告前提归属与引用绑定已合格。
 
 ## 本地开发启停（Windows / Mac / Linux）
 

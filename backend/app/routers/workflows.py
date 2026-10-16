@@ -90,7 +90,9 @@ async def _ensure_workflow_run_visible(
     run_service: RunService,
 ) -> None:
     visible_request = request.model_copy(update={"idempotency_key": result.idempotency_key})
-    detail = await run_service.ensure_run_visible(visible_request)
+    detail = await run_service.ensure_run_visible(
+        visible_request, runtime_orchestration_backend="temporal",
+    )
     if detail.id != result.run_id:
         raise RuntimeError(
             f"Temporal returned run_id={result.run_id}, but local visibility "

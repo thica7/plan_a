@@ -25,7 +25,7 @@ COPY backend/db ./db
 COPY backend/packages ./packages
 
 RUN python -m pip install --upgrade pip \
-    && python -m pip install ".[trace]" \
+    && python -m pip install ".[trace,redis]" \
     && python -m pip install "./third_party/webfetch_v2[extraction,browser]"
 
 RUN sed -i \

@@ -299,6 +299,7 @@ class RunRecord:
     search_locks: dict[str, asyncio.Lock] = field(default_factory=dict)
     semantic_extraction_cache: dict[tuple[str, str, str], object] = field(default_factory=dict)
     resume_task: asyncio.Task[None] | None = None
+    pipeline_task: asyncio.Task[Any] | None = None
 
 
 class RunService(
@@ -359,6 +360,7 @@ class RunService(
         request: RunCreateRequest,
         *,
         skip_active_duplicate_check: bool = False,
+        runtime_orchestration_backend: Literal["langgraph", "temporal"] = "langgraph",
     ) -> RunDetail:
         self._ensure_workspace_quota_allows_run(request.workspace_id)
         execution_mode = self._resolve_execution_mode(request.execution_mode)
@@ -404,6 +406,12 @@ class RunService(
             async with self._lock:
                 existing = self._load_run_record(run_id)
             if existing is not None:
+                if existing.detail.runtime_orchestration_backend not in {
+                    None, runtime_orchestration_backend,
+                }:
+                    raise ValueError(
+                        "Existing run owner conflicts with the requested internal route"
+                    )
                 return existing.detail
         auto_redo_warn_enabled = (
             self._settings.auto_redo_warn_enabled
@@ -437,6 +445,10 @@ class RunService(
             async with self._lock:
                 duplicate = self._find_active_duplicate_run(duplicate_fingerprint, now)
         if duplicate is not None:
+            if duplicate.detail.runtime_orchestration_backend not in {
+                None, runtime_orchestration_backend,
+            }:
+                raise ValueError("Existing run owner conflicts with the requested internal route")
             return duplicate.detail
 
         homepage_verifications = verify_homepages(competitors)
@@ -529,6 +541,7 @@ class RunService(
             topic=request.topic,
             status="queued",
             execution_mode=execution_mode,
+            runtime_orchestration_backend=runtime_orchestration_backend,
             output_language=request.output_language,
             created_at=now,
             updated_at=now,
@@ -601,10 +614,12 @@ class RunService(
         request: RunCreateRequest,
         *,
         skip_active_duplicate_check: bool = False,
+        runtime_orchestration_backend: Literal["langgraph", "temporal"] = "langgraph",
     ) -> RunDetail:
         detail = await self.create_run(
             request,
             skip_active_duplicate_check=skip_active_duplicate_check,
+            runtime_orchestration_backend=runtime_orchestration_backend,
         )
         self._persist_run(detail.id)
         return detail
@@ -1547,42 +1562,125 @@ class RunService(
                 {"error": str(exc), "redo_scope": scope.model_dump(mode="json")},
             )
 
-    async def stream_events(self, run_id: str):
+    async def stream_events(self, run_id: str, *, after_event_id: int = 0):
+        if after_event_id < 0:
+            raise ValueError("Event cursor must be nonnegative")
+        last_event_id = after_event_id
         if self._journal is not None:
-            yielded_ids: set[int] = set()
             while True:
                 record = self._load_run_record(run_id)
                 events = record.events if record is not None else self._journal.load_events(run_id)
                 for event in events:
-                    if event.id in yielded_ids:
+                    if event.id <= last_event_id:
                         continue
-                    yielded_ids.add(event.id)
+                    last_event_id = event.id
                     yield event
                 await asyncio.sleep(0.5)
 
         record = self._runs[run_id]
+        # Replay the live list so events appended while yielding history are
+        # included. No await separates its end from subscriber registration.
         for event in record.events:
-            yield event
-
+            if event.id > last_event_id:
+                last_event_id = event.id
+                yield event
         queue: asyncio.Queue[RunEvent] = asyncio.Queue()
         record.subscribers.append(queue)
         try:
             while True:
-                yield await queue.get()
+                event = await queue.get()
+                if event.id > last_event_id:
+                    last_event_id = event.id
+                    yield event
         finally:
             record.subscribers.remove(queue)
 
-    async def run_pipeline(self, run_id: str) -> RunDetail | None:
-        record = self._runs.get(run_id)
+    @staticmethod
+    def _pipeline_is_live(record: RunRecord) -> bool:
+        return bool(
+            record.graph_execution_depth
+            or (record.pipeline_task is not None and not record.pipeline_task.done())
+            or (record.resume_task is not None and not record.resume_task.done())
+        )
+
+    async def _pipeline_checkpoint(self, record: RunRecord):
+        kind = "demo" if record.detail.execution_mode == "demo" else "real"
+        if (
+            record.pending_graph_redo is not None
+            or record.detail.interrupt_graph_kind == "scoped_redo"
+        ):
+            raise ValueError("Scoped redo requires its existing review/recovery workflow")
+        graph = await (self._get_demo_graph() if kind == "demo" else self._get_real_graph())
+        thread_id = (
+            compute_graph_thread_id(record.detail.id, "demo")
+            if kind == "demo" else record.detail.id
+        )
+        snapshot = await graph.aget_state({"configurable": {"thread_id": thread_id}})
+        if snapshot.values and snapshot.values.get("run_id") != record.detail.id:
+            raise ValueError("Checkpoint does not belong to this run")
+        return snapshot
+
+    async def recover_run(self, run_id: str) -> RunDetail | None:
+        """Explicitly continue one stopped local run; never approve an interrupt."""
+        record = self._load_run_record(run_id)
         if record is None:
             return None
-        if record.detail.status in {"completed", "completed_with_blockers"}:
+        if record.detail.runtime_orchestration_backend != "langgraph":
+            raise ValueError(
+                "Recovery requires persisted langgraph owner; Temporal or unknown owner refused"
+            )
+        self._resolve_execution_mode(record.detail.execution_mode)
+        if self._pipeline_is_live(record):
+            raise ValueError("Run is already executing")
+        if record.detail.status == "interrupted" or record.pending_interrupts:
+            raise ValueError("HITL checkpoint requires a decision through the review endpoint")
+        if record.detail.status not in {"running", "failed"}:
+            raise ValueError("Only a stopped running or failed run can be recovered")
+        snapshot = await self._pipeline_checkpoint(record)
+        if not snapshot.values:
+            raise ValueError("Persisted graph checkpoint required for recovery")
+        if any(task.interrupts for task in snapshot.tasks):
+            raise ValueError("HITL checkpoint requires a decision through the review endpoint")
+        if record.detail.status == "failed" and not snapshot.next:
+            raise ValueError("Failed graph has no pending checkpoint work to recover")
+        # Reading SQLite yields; another request may have claimed the run.
+        if self._pipeline_is_live(record):
+            raise ValueError("Run is already executing")
+        record.pipeline_task = asyncio.create_task(self.run_pipeline(run_id))
+        return record.detail
+
+    async def run_pipeline(self, run_id: str) -> RunDetail | None:
+        record = self._runs.get(run_id) or self._load_run_record(run_id)
+        if record is None:
+            return None
+        if record.detail.status in {"completed", "completed_with_blockers", "interrupted"}:
             return record.detail
+        task = asyncio.current_task()
+        if self._pipeline_is_live(record) and record.pipeline_task is not task:
+            return record.detail
+        record.pipeline_task = task
         try:
+            self._resolve_execution_mode(record.detail.execution_mode)
+            snapshot = await self._pipeline_checkpoint(record)
+            if any(pending.interrupts for pending in snapshot.tasks):
+                record.detail.status = "interrupted"
+                record.detail.current_node = next(
+                    pending.name for pending in snapshot.tasks if pending.interrupts
+                )
+                self._hydrate_pending_interrupt_from_detail(record)
+                self._persist_run(run_id)
+                return record.detail
+            recovering = bool(snapshot.values)
+            if not recovering and record.detail.status != "queued":
+                raise ValueError("Persisted graph checkpoint required for recovery")
+            if recovering and record.detail.status == "failed" and not snapshot.next:
+                return record.detail
+            record.detail.status = "running"
+            self._persist_run(run_id)
             if record.detail.execution_mode == "real":
-                await self._run_real_pipeline(run_id)
+                await self._run_real_pipeline(run_id, resume_from_checkpoint=recovering)
             else:
-                await self._run_demo_graph_pipeline(run_id)
+                await self._run_demo_graph_pipeline(run_id, resume_from_checkpoint=recovering)
         except Exception as exc:  # noqa: BLE001 - convert background task failures into run state.
             record.detail.status = "failed"
             record.detail.current_node = None
@@ -1595,9 +1693,14 @@ class RunService(
                 f"Run failed: {exc}",
                 {"error": str(exc)},
             )
+        finally:
+            if record.pipeline_task is task:
+                record.pipeline_task = None
         return record.detail
 
-    async def _run_demo_graph_pipeline(self, run_id: str) -> None:
+    async def _run_demo_graph_pipeline(
+        self, run_id: str, *, resume_from_checkpoint: bool = False,
+    ) -> None:
         record = self._runs.get(run_id)
         if record is None:
             return
@@ -1606,7 +1709,7 @@ class RunService(
             record,
             kind="demo",
             thread_id=compute_graph_thread_id(run_id, "demo"),
-            graph_input={
+            graph_input=None if resume_from_checkpoint else {
                 "run_id": run_id,
                 "dimensions": list(record.detail.plan.dimensions),
                 "current_node": "planner",
@@ -1620,7 +1723,9 @@ class RunService(
             return
         await self._finalize_demo_pipeline(record)
 
-    async def _run_real_pipeline(self, run_id: str) -> None:
+    async def _run_real_pipeline(
+        self, run_id: str, *, resume_from_checkpoint: bool = False,
+    ) -> None:
         record = self._runs.get(run_id)
         if record is None:
             return
@@ -1629,7 +1734,7 @@ class RunService(
             record,
             kind="real",
             thread_id=run_id,
-            graph_input={
+            graph_input=None if resume_from_checkpoint else {
                 "run_id": run_id,
                 "dimensions": list(record.detail.plan.dimensions),
                 "current_node": "planner",
@@ -4050,7 +4155,7 @@ class RunService(
             self._runs[detail.id] = record
             self._hydrate_pending_interrupt_from_detail(record)
             return record
-        if record.graph_execution_depth:
+        if self._pipeline_is_live(record):
             record.events = events
             return record
         record.detail = detail
@@ -4548,6 +4653,7 @@ class RunService(
         result = await fetch_evidence_page(url, **fetch_options)
         if advanced_reserved and not getattr(result, "advanced_fetch_attempted", False):
             usage.advanced_fetch_attempts -= 1
+        captured_at = getattr(result, "captured_at", None)
         metadata: dict[str, str | int | float | bool | None] = {
             "url": result.url,
             "ok": result.ok,
@@ -4559,6 +4665,8 @@ class RunService(
             "text_length": getattr(result, "text_length", None),
             "failure_reason": getattr(result, "failure_reason", None),
             "price_content_found": getattr(result, "capture_metadata", {}).get("price_content_found"),
+            "cache_hit": getattr(result, "cache_hit", False),
+            "capture_observed_at": captured_at.isoformat() if captured_at is not None else None,
         }
         span_id = self._append_trace_span(
             record,

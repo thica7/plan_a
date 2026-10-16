@@ -63,13 +63,23 @@ async def test_target_product_reaches_run_plan_and_temporal_activity() -> None:
     assert direct.plan.target_product == request.target_product
     assert direct.plan.scenario_id.startswith("product_")
     assert "homepage_verified" not in direct.plan.qa_rule_ids
+    assert direct.runtime_orchestration_backend == "langgraph"
 
     workflow_input = competitive_intel_input_from_run_request(
         request.model_copy(update={"idempotency_key": "product-temporal-contract"})
     )
     assert asdict(workflow_input)["target_product"]["name"] == request.target_product.name
-    activity = CompetitiveIntelActivities(service)
+    # Separate entrypoint fixtures: an active local task cannot be reassigned
+    # to a Temporal worker merely by choosing another idempotency key.
+    temporal_service = RunService(
+        skill_registry=SkillRegistry.from_default_path(),
+        settings=Settings(demo_mode=True, enterprise_store_backend="memory"),
+        enterprise_store=EnterpriseMemoryStore(),
+        graph_checkpointer=GraphCheckpointer.in_memory(),
+    )
+    activity = CompetitiveIntelActivities(temporal_service)
     created = await activity.create_run(workflow_input)
-    restored = service.get_run(created.run_id)
+    restored = temporal_service.get_run(created.run_id)
     assert restored is not None
     assert restored.plan.target_product == request.target_product
+    assert restored.runtime_orchestration_backend == "temporal"

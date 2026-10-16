@@ -1,0 +1,70 @@
+{
+  "date": "2026-10-16",
+  "baseline": "831bc1423116ee325f9df20624fab035016111c4",
+  "scope": "local and LAN demo deployment foundation; offline-only on this development machine",
+  "backend": {
+    "command": "PYTHONPATH=backend:backend/tests/unit ../plan_a/.venv/bin/python -m pytest backend/tests -q",
+    "exit_code": 0,
+    "passed": 4477,
+    "skipped": 1,
+    "warnings": 212,
+    "duration_seconds": 159.08,
+    "log_sha256": "17b1bc00758308ad5d686468544d41758ba7a51681c2a438f946ed8541f52076"
+  },
+  "frontend": {
+    "openapi_export_matches": true,
+    "generated_types": true,
+    "command": "pnpm --dir frontend build",
+    "exit_code": 0
+  },
+  "targeted_tests": {
+    "redis_runtime_fake_client": 59,
+    "runtime_recovery_regression": 532,
+    "independent_deployment_followup": 55,
+    "independent_recovery_boundaries": 12,
+    "note": "overlapping counts; do not sum with full backend suite"
+  },
+  "review": {
+    "deployment": "no open P1/P2 in reviewed scope",
+    "recovery": "no open P1/P2 in reviewed scope",
+    "reports_archived_locally": true
+  },
+  "lint": {
+    "new_modules_and_listed_modified_files": "pass",
+    "legacy_service_changed_ranges": "pass",
+    "legacy_service_existing_findings": 11,
+    "note": "legacy large service file not globally reformatted"
+  },
+  "dry_run": {
+    "valid_json": [
+      "deployment",
+      "backup",
+      "restore",
+      "fault",
+      "redis_acceptance"
+    ],
+    "docker_commands_executed": 0,
+    "backup_directory_created": false
+  },
+  "secret_scan": {
+    "literal_current_credentials": "pass",
+    "provider_patterns": "pass",
+    "tracked_secret_configs": 0,
+    "note": "current working tree, built frontend and local acceptance artifacts; not a full Git history audit"
+  },
+  "external_paid_model_calls": 0,
+  "real_redis_server_calls": 0,
+  "docker_executed_on_this_machine": false,
+  "not_accepted": [
+    "real Redis Lua/TTL/concurrency/outage",
+    "Docker image pull/build/architecture and Compose readiness",
+    "Postgres and Qdrant HTTP container backup/restore",
+    "Temporal workflow and worker crash recovery",
+    "Windows or other deployment OS real execution",
+    "external model exactly-once",
+    "multi API / multi worker SQLite deployment",
+    "report semantic accuracy and full source coverage"
+  ],
+  "handoff": "docs/docker_deployment.md",
+  "local_artifacts": "data/artifacts/demo-deployment-2026-10-16/"
+}

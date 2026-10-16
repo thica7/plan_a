@@ -24,13 +24,15 @@ def test_runtime_command_layer_owns_create_run_orchestration_boundary() -> None:
     assert "decide_temporal_cutover" not in runs_text
     assert "start_competitive_intel" not in runs_text
     assert "self._workflow_service.start_competitive_intel(request)" in command_text
-    assert "detail = await self._run_service.create_run(request)" in command_text
+    direct_call = "detail = await self._run_service.create_run("
+    assert direct_call in command_text
+    assert 'runtime_orchestration_backend="langgraph"' in command_text
 
     cutover_index = command_text.index("cutover = decide_temporal_cutover(self._settings, request)")
     temporal_start_index = command_text.index(
         "self._workflow_service.start_competitive_intel(request)"
     )
-    direct_create_index = command_text.index("detail = await self._run_service.create_run(request)")
+    direct_create_index = command_text.index(direct_call)
 
     assert cutover_index < temporal_start_index < direct_create_index
 

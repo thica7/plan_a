@@ -88,6 +88,24 @@ async def list_runs(service: RunServiceDep, user: EnterpriseUserDep) -> list[Run
             if can_access_workspace(user, item.workspace_id, "report:read")]
 
 
+@router.post(
+    "/runs/{run_id}/recover", response_model=RunDetail, status_code=status.HTTP_202_ACCEPTED,
+)
+async def recover_run(
+    run_id: str,
+    service: RunServiceDep,
+    user: EnterpriseUserDep,
+) -> RunDetail:
+    require_run_access(service, run_id, user, "report:write")
+    try:
+        detail = await service.recover_run(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return detail
+
+
 @router.get("/runs/{run_id}", response_model=RunDetail)
 async def get_run(
     run_id: str,

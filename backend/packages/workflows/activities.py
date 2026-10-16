@@ -86,7 +86,8 @@ class CompetitiveIntelActivities:
                 auto_redo_warn_enabled=request.auto_redo_warn_enabled,
                 hitl_enabled=request.hitl_enabled,
                 output_language=request.output_language,
-            )
+            ),
+            runtime_orchestration_backend="temporal",
         )
         return _run_state(detail)
 
@@ -180,7 +181,8 @@ class ScheduledScanActivities:
                 competitor_layer=target.competitor_layer,
                 scenario_id=target.scenario_id,
                 execution_mode=request.execution_mode,
-            )
+            ),
+            runtime_orchestration_backend="temporal",
         )
         if detail.status not in {"completed", "completed_with_blockers", "interrupted", "failed"}:
             detail = await self._service.run_pipeline(detail.id)
@@ -320,7 +322,8 @@ class MonitorActivities:
                     competitor_layer=layer,
                     scenario_id=project.scenario_id,
                     execution_mode=request.execution_mode,
-                )
+                ),
+                runtime_orchestration_backend="temporal",
             )
             if detail.status not in {
                 "completed",

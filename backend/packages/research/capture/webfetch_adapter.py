@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import Any
 
+from packages.business_intel.official_registry import registered_product
+from packages.research.capture.official import verify_registered_capture
 from packages.research.capture.policy import capture_failure_reason, capture_rejection_reason
 from packages.research.models import CapturedPage, SourceCandidate
 from packages.tools.evidence_fetch import EvidenceFetchResult
-from packages.business_intel.official_registry import registered_product
-from packages.research.capture.official import verify_registered_capture
 
 FetchCallable = Callable[[str], Awaitable[Any]]
 
@@ -54,6 +55,11 @@ async def fetch_candidate_page(
         failure_reason=rejection_reason or None if ok else capture_failure_reason(result),
         source_published_at=getattr(result, "source_published_at", None),
         source_updated_at=getattr(result, "source_updated_at", None),
+        captured_at=(
+            result.captured_at
+            if isinstance(result, EvidenceFetchResult) and result.captured_at
+            else datetime.now(UTC)
+        ),
         source_material_level=(
             "full_source" if isinstance(result, EvidenceFetchResult)
             and result.source_material_level == "full_source" and ok and not rejection_reason
@@ -64,6 +70,8 @@ async def fetch_candidate_page(
         metadata=dict(getattr(result, "capture_metadata", {}) or {}),
     )
     page.metadata.pop("official_source_verification", None)
+    if isinstance(result, EvidenceFetchResult) and result.cache_hit:
+        page.metadata["source_cache_hit"] = True
     if dynamic_product:
         receipt = verify_registered_capture(candidate.competitor, page)
         page.metadata["official_source_verification"] = receipt
