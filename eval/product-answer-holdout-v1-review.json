@@ -1,0 +1,35 @@
+{
+  "dataset": "product-answer-holdout-v1",
+  "status": "human_reviewed",
+  "reviewed_by": "project_user",
+  "review_recorded_at": "2026-10-16T04:43:15Z",
+  "timestamp_semantics": "Recorded on receipt of user approval via parent task; original client send timestamp was not provided.",
+  "human_reply": "1–6 均认可，按这些边界审核",
+  "review_source": "request_user_input_async:call_f4b725730c524d64b6ae1f19243b51e6",
+  "approved_case_ids": [
+    "answer-holdout-v1-001",
+    "answer-holdout-v1-002",
+    "answer-holdout-v1-003",
+    "answer-holdout-v1-004",
+    "answer-holdout-v1-005",
+    "answer-holdout-v1-006"
+  ],
+  "review_scope": "Project user approved the six displayed reference-answer boundaries, questions and official sources. This is reference-boundary review only; generated report prose, model answer completeness, semantic citation quality and report delivery are not accepted by this approval.",
+  "candidate_archive": "eval/product-answer-holdout-v1-candidate.jsonl",
+  "candidate_sha256": "2ef6385e29d87f75a6617305a71caf35e47a38a546cd5053cbb75bae783a7b9e",
+  "candidate_manifest_archive": "eval/product-answer-holdout-v1-candidate-manifest.json",
+  "candidate_manifest_sha256": "39f48216bcbcdea5fb5789556be540fa074054e937c72922247c80057153d01a",
+  "reviewed_dataset": "eval/product-answer-holdout-v1.jsonl",
+  "reviewed_dataset_sha256": "1925b319a40380486fede510fe704c6507c12029ec36689c440b0987723e6ea9",
+  "changed_fields": [
+    "review_status",
+    "reviewed_at",
+    "reviewed_by"
+  ],
+  "reference_questions_sources_unchanged": true,
+  "blind_holdout": false,
+  "third_party_review": false,
+  "new_model_calls": 0,
+  "report_delivery_acceptance": "unaccepted",
+  "generated_report_semantic_acceptance": "pending_human"
+}

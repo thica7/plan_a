@@ -101,6 +101,31 @@ def document_condition_context(body, page, start, end):
         ancestors.append((position, level))
     if not ancestors:
         return None
+    from packages.research.evidence.operations import (
+        alternative_condition_blocks, acting_role_match, condition_operations,
+        condition_role, document_role_heading, role_key, permission_selector_context,
+    )
+    quote = body[start:end]
+    root_heading = next((heading for _, heading_level, heading in headings
+                         if heading_level == 1 and document_role_heading(heading)), None)
+    source_role = document_role_heading(root_heading) if root_heading else None
+    selector = permission_selector_context(quote, source_role)
+    quote_actor = acting_role_match(quote)
+    quote_role = selector.get('recipient_role') or (quote_actor.group() if quote_actor else (
+        source_role if re.search(r'\bAnyone with\b[^.;\n]*\blink\b', quote, re.I) else None))
+    quote_actions = condition_operations(quote) | selector.get('operations', set())
+    alternative_lines = {line.strip() for block in alternative_condition_blocks(body)
+                         for line in block.splitlines()}
+    # The same explicit actor/action restriction can precede an FAQ in another
+    # section. A source title supplies scope only for its public-link reference;
+    # it never makes the invited guest the actor of an inviter's action.
+    def same_role_requirement(line):
+        if (line.strip() in alternative_lines or not quote_role
+                or role_key(condition_role(line)) != role_key(quote_role)):
+            return False
+        actions = condition_operations(line)
+        access_rule = re.search(r'\b(?:must|require[ds]?|only)\b[^.;\n]*\baccess\s+(?:(?:the|a|shared)\s+)*(?:boards?|pages?|documents?|docs?|items?|content)\b', line, re.I)
+        return bool(actions & quote_actions or access_rule and quote_actions & {'read', 'comment', 'edit'})
     lower, level = next((item for item in ancestors if item[1] >= 2), ancestors[0])
     upper = next((position for position, other_level, _ in headings if position > start and other_level <= level), len(body))
     if level == 1 and lower == headings[0][0]:
@@ -140,10 +165,12 @@ def document_condition_context(body, page, start, end):
                                        or local_start <= offset < local_end
                                        or lower <= offset < (intro_end if broad_section else upper)
                                        or any(begin <= offset < finish
-                                              for begin, finish in access_introductions)):
+                                              for begin, finish in access_introductions)
+                                       or same_role_requirement(line)):
             conditions.append(line.strip())
         offset += len(line)
-    from packages.research.evidence.operations import alternative_condition_blocks
+    if root_heading and quote_role and role_key(source_role) == role_key(quote_role):
+        conditions.append(root_heading)
     for begin, finish in access_introductions:
         conditions.extend(alternative_condition_blocks(body[begin:finish]))
     return (lower, upper), list(dict.fromkeys(conditions))
@@ -231,7 +258,10 @@ def _table_context(body, start, end):
     return [header, *notes]
 
 
-def semantic_extraction(brief: ResearchBrief, page: CapturedPage, payload: object) -> ExtractionResult:
+def semantic_extraction(
+    brief: ResearchBrief, page: CapturedPage, payload: object, *,
+    extractor_name: str = "bounded_semantic_capabilities",
+) -> ExtractionResult:
     body = page.text or page.markdown or page.snippet
     facts = payload.get("facts", []) if isinstance(payload, dict) else []
     fields, quotes = {}, []
@@ -288,25 +318,42 @@ def semantic_extraction(brief: ResearchBrief, page: CapturedPage, payload: objec
     return ExtractionResult(
         competitor=brief.competitor, dimension=brief.dimension, source_candidate_id=page.candidate_id,
         captured_page_id=page.id, fields=fields, quotes=quotes, confidence=min(.8, page.quality_score),
-        extractor_name="bounded_semantic_capabilities", status="extracted" if fields else "partial",
+        extractor_name=extractor_name, status="extracted" if fields else "partial",
         missing_fields=[] if fields else ["product_capabilities"],
         metadata={"product_name": brief.product_name, "category": brief.product_category},
     )
 
 
+def _standalone_access_requirement(quote):
+    """A complete source sentence naming its actor, not a request premise."""
+    from packages.research.evidence.operations import acting_role_match
+    if ('?' in quote or '？' in quote or re.search(r'[.!。！]\s+\S', quote)
+            or not acting_role_match(quote)):
+        return False
+    login = re.search(r'\b(?:must|(?:is|are) required to|needs? to)\b[^.;\n]*\b(?:sign(?:ed|ing)?|log(?:ged|ging)?)\s+in(?:to)?\b', quote, re.I)
+    invited = re.search(r'\bonly\b[^.;\n]*\baccess\b[^.;\n]*\bdirectly invited\b', quote, re.I)
+    return bool(login or invited)
+
+
 def extract_operation_rules(brief: ResearchBrief, page: CapturedPage) -> ExtractionResult:
     """Select explicit permission rules without spending a model page call."""
-    from packages.research.evidence.operations import required_operations, _ROLE, OPERATIONS
+    from packages.research.evidence.operations import required_operations, _ROLE, OPERATIONS, acting_role_match
     required = required_operations(brief.topic, brief.product_use_cases)
     body = semantic_body_window(brief, page)
     candidates = []
-    for line in body.splitlines():
-        actor = _ROLE.search(line)
+    source_lines = body.splitlines()
+    # A captured line may join two independent sentences. Keep the original
+    # line, and also allow its complete source sentences to become atomic facts.
+    atomic_lines = [sentence.strip() for line in source_lines
+                    if len(sentences := re.split(r'(?<=[.!?。！？])\s+', line)) > 1
+                    for sentence in sentences]
+    for line in [*source_lines, *atomic_lines]:
+        actor = acting_role_match(line)
         modal = re.search(r'\b(?:can|cannot|may|must)\b', line, re.I)
         actor_rule = actor and modal and actor.start() < modal.start()
         role_cells = [cell.strip() for cell in line.strip().strip('|').split('|')]
         role_definition = line.startswith('|') and len(role_cells) == 2 and _ROLE.fullmatch(role_cells[0])
-        if (_ROLE_LINE.match(line) or re.match(r'^\W*Only .+\bcan\b', line, re.I)
+        if (_standalone_access_requirement(line) or _ROLE_LINE.match(line) or re.match(r'^\W*Only .+\bcan\b', line, re.I)
                 or actor_rule or role_definition or re.search(r'\byou can\b', line, re.I) or re.search(r'\b(?:requires?|needs?)\b', line, re.I) and any(
                     re.search(pattern, line, re.I) for _, pattern in OPERATIONS.values())
                 or line.startswith('|') and re.search(r'✅|✖|❌', line)):
@@ -321,14 +368,18 @@ def extract_operation_rules(brief: ResearchBrief, page: CapturedPage) -> Extract
     for line in candidates:
         parsed = semantic_extraction(brief, page, {'facts': [{'quote': line}]})
         observations[line] = [row for value in parsed.fields.values() for row in value['operations']]
-    candidates = [line for line in candidates if observations[line]]
+    candidates = [line for line in candidates if observations[line] or _standalone_access_requirement(line)]
     selected, covered = [], set()
     while candidates and len(selected) < MAX_FACTS:
-        scored = [((len({r['operation'] for r in observations[line] if not r['missing_fields'] and r['effect']=='allowed'} & (set(required) - covered)),
-                    len({r['operation'] for r in observations[line]} & (set(required) - covered))), line)
+        scored = [((_standalone_access_requirement(line),
+                    len({r['operation'] for r in observations[line] if not r['missing_fields'] and r['effect']=='allowed'} & (set(required) - covered)),
+                    len({r['operation'] for r in observations[line]} & (set(required) - covered)), -len(line)), line)
                   for line in candidates]
         _, line = max(scored, key=lambda pair: pair[0])
         candidates.remove(line)
         selected.append({'quote': line})
         covered.update(r['operation'] for r in observations[line])
-    return semantic_extraction(brief, page, {'facts': selected if required else []})
+    return semantic_extraction(
+        brief, page, {'facts': selected if required else []},
+        extractor_name="source_operation_rules",
+    )

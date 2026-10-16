@@ -310,6 +310,7 @@ def audit_answer_boundaries(service, record, snapshot, *, producer_verified, ali
                 competitor=use.competitor,
                 dimension=use.dimension,
                 source_ids=use.requested_source_ids,
+                fact_ids=use.requested_fact_ids,
                 max_bytes=use.view_max_bytes or use.max_bytes,
             )
             # Match the actual generation view before reusing any selected fact.

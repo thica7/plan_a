@@ -85,6 +85,8 @@ async def test_stage_runner_commits_writer_producer_and_always_runs_qa(monkeypat
             return step
     record = SimpleNamespace(detail=SimpleNamespace(raw_sources=[object()], plan=SimpleNamespace(competitors=['Miro'])))
     await module.execute_stages(Service(), record, [])
+    assert '_real_phase_qa_step' in seen
+    assert seen.index('_real_phase_qa_step') < seen.index('_real_writer_step')
     assert '_real_writer_step' in seen
     assert seen[-1] == '_real_qa_step'
 

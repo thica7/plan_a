@@ -356,6 +356,11 @@ class EvidenceContextMixin:
             payload["answer_requirements"] = [
                 item.model_dump(mode="json") for item in detail.plan.answer_requirements
             ]
+        brief = detail.plan.decision_brief
+        if brief and brief.decision_question.strip():
+            payload['writer_question_scope'] = {
+                'topic': detail.topic, 'question': brief.decision_question,
+            }
         return self._evidence_artifact_hash(payload)
 
     @staticmethod
@@ -407,6 +412,7 @@ class EvidenceContextMixin:
                 competitor=use.competitor,
                 dimension=use.dimension,
                 source_ids=use.requested_source_ids,
+                fact_ids=use.requested_fact_ids,
                 max_bytes=use.view_max_bytes or use.max_bytes,
             )
             if (
@@ -743,6 +749,9 @@ class EvidenceContextMixin:
         if agent in {'analyst', 'writer'} and dimension in {'feature', 'pricing'}:
             budget = min(32768, budget * 2)
         requested_fact_ids = None
+        if agent == 'writer' and competitor and dimension:
+            from packages.agents.writer.answer_coverage import question_fact_ids
+            requested_fact_ids = question_fact_ids(record.detail, snapshot, competitor, dimension)
         analysis_allowance = budget if agent in {'comparator', 'reflector'} else 0
         if agent in {"comparator", "reflector"}:
             # A comparison aggregates independently bounded analyst branches.

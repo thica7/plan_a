@@ -16352,6 +16352,36 @@
         ],
         "title": "ClaimCardBundle"
       },
+      "ClaimCheck": {
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "title": "Check Id"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "unsupported",
+              "uncertain"
+            ],
+            "title": "Verdict"
+          },
+          "claim_span": {
+            "type": "string",
+            "maxLength": 600,
+            "title": "Claim Span"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "check_id",
+          "verdict",
+          "claim_span"
+        ],
+        "title": "ClaimCheck"
+      },
       "ClaimRecord": {
         "properties": {
           "id": {
@@ -16466,6 +16496,14 @@
             "maxLength": 800,
             "minLength": 1,
             "title": "Reason"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimCheck"
+            },
+            "type": "array",
+            "title": "Checks",
+            "default": []
           }
         },
         "additionalProperties": false,
@@ -26091,6 +26129,56 @@
         ],
         "title": "RejectedItem"
       },
+      "ReportAnswerCoverage": {
+        "properties": {
+          "question_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Question Id"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "answered",
+              "partial",
+              "unanswered",
+              "unverified"
+            ],
+            "title": "Status"
+          },
+          "claim_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Claim Ids",
+            "default": []
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question_id",
+          "question",
+          "status",
+          "reason"
+        ],
+        "title": "ReportAnswerCoverage"
+      },
       "ReportApprovalSignalRequest": {
         "properties": {
           "approver_id": {
@@ -26502,6 +26590,14 @@
             "type": "array",
             "title": "Review Context Bytes",
             "default": []
+          },
+          "answer_coverage": {
+            "items": {
+              "$ref": "#/components/schemas/ReportAnswerCoverage"
+            },
+            "type": "array",
+            "title": "Answer Coverage",
+            "default": []
           }
         },
         "additionalProperties": false,
@@ -26713,6 +26809,25 @@
             },
             "type": "array",
             "title": "Condition Groups",
+            "default": []
+          },
+          "recipient_quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipient Quote"
+          },
+          "excluded_roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded Roles",
             "default": []
           }
         },

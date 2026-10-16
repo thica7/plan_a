@@ -6,7 +6,10 @@ import re
 
 def dimension_report_profile(plan, *, topic, partial_evidence=False):
     from packages.research.evidence.operations import required_operations
-    return partial_evidence or (plan.research_depth == 'quick' and len(plan.dimensions) > 1) or (
+    brief = getattr(plan, 'decision_brief', None)
+    explicit_questions = bool(brief and brief.decision_question.strip())
+    return partial_evidence or ('feature' in plan.dimensions and explicit_questions) or (
+        plan.research_depth == 'quick' and len(plan.dimensions) > 1) or (
         'feature' in plan.dimensions and bool(required_operations(
             topic, plan.target_product.use_cases if plan.target_product else ())))
 

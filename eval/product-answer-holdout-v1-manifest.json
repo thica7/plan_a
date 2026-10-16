@@ -1,0 +1,155 @@
+{
+  "dataset": "product-answer-holdout-v1",
+  "frozen_at": "2026-10-16T04:43:15Z",
+  "status": "human_reviewed",
+  "human_reviewed": true,
+  "blind_holdout": false,
+  "independence": "Product names had zero matches in tracked eval/docs/backend/tests at baseline 99302fa before sample creation. Development exposure prevents future blind claims.",
+  "official_authority_review": "codex_operator exact-document authority review; project_user reference boundaries approved separately in the review record",
+  "sources": [
+    {
+      "id": "official-basecamp-clients",
+      "title": "What Clients can see and do - Basecamp 5 Help",
+      "url": "https://5.basecamp-help.com/article/1082-what-clients-can-see-and-do",
+      "excerpt": "they only see what you've made visible to them. Everything starts private. You control what gets shared, item by item.",
+      "verified_at": "2026-10-16T04:32:56.832646Z",
+      "source_role": "source",
+      "capture_status": "ok",
+      "source_material_level": "full_source",
+      "content_sha256": "edbedd76298a221be5c9fef0be3ef0ac8583661ec5e6de3e092c05bf32029596",
+      "capture_artifact": "data/artifacts/answer-condition-2026-10-16/holdout/basecamp-clients-capture.json"
+    },
+    {
+      "id": "official-basecamp-inviting",
+      "title": "Inviting People - Basecamp 5 Help",
+      "url": "https://5.basecamp-help.com/article/1060-inviting-people",
+      "excerpt": "People can only see projects they've been added to.",
+      "verified_at": "2026-10-16T04:33:03.999328Z",
+      "source_role": "source",
+      "capture_status": "ok",
+      "source_material_level": "full_source",
+      "content_sha256": "ab696fdb1a99dfd7140887aa9797dcce2d6859138d59372a65122a94c8e26ac6",
+      "capture_artifact": "data/artifacts/answer-condition-2026-10-16/holdout/basecamp-inviting-capture.json"
+    },
+    {
+      "id": "official-basecamp-permissions",
+      "title": "Permissions - Basecamp 5 Help",
+      "url": "https://5.basecamp-help.com/article/1171-permissions",
+      "excerpt": "In accounts created before September 14, 2022, Outside Collaborators have the same permissions as users who work at your company.",
+      "verified_at": "2026-10-16T04:33:00.275578Z",
+      "source_role": "source",
+      "capture_status": "ok",
+      "source_material_level": "full_source",
+      "content_sha256": "c9ef16ad19b5358115c0e29445ea74910a0a2578be797b70d8926d053ec9fbc5",
+      "capture_artifact": "data/artifacts/answer-condition-2026-10-16/holdout/basecamp-permissions-capture.json"
+    },
+    {
+      "id": "official-gitbook-chat-plans",
+      "title": "GitBook pricing & plans | GitBook",
+      "url": "https://www.gitbook.com/pricing",
+      "excerpt": "AI Assistant Chat: not included in Free and Essential plans; Ultimate plan: 20 credit/relevant question; included in the Enterprise plan.",
+      "verified_at": "2026-10-16T04:35:13.514014Z",
+      "source_role": "source",
+      "capture_status": "ok",
+      "source_material_level": "full_source",
+      "content_sha256": "14a781069a1e334aeb4495916c9c32cf8dc3e5e72e9970e199b28f6357e0846f",
+      "capture_artifact": "data/artifacts/answer-condition-2026-10-16/holdout/gitbook-pricing-capture.json"
+    },
+    {
+      "id": "official-gitbook-auth",
+      "title": "The complete guide to creating and publishing documentation in GitBook [updated for 2026] | Guides | GitBook Documentation",
+      "url": "https://gitbook.com/docs/guides/editing-and-publishing-documentation/complete-guide-to-publishing-docs-gitbook",
+      "excerpt": "visitors to your docs will be prompted to log in using their established credentials. Only people authorized in your backend will be able to access",
+      "verified_at": "2026-10-16T04:35:10.597848Z",
+      "source_role": "source",
+      "capture_status": "ok",
+      "source_material_level": "full_source",
+      "content_sha256": "236ea09c8d9064800fd5d9105b23975d683602cd993cdda9cdc802432b358363",
+      "capture_artifact": "data/artifacts/answer-condition-2026-10-16/holdout/gitbook-publishing-canonical-capture.json"
+    },
+    {
+      "id": "official-gitbook-price-control",
+      "title": "Merge rules | GitBook Documentation",
+      "url": "https://gitbook.com/docs/collaborate/merge-rules",
+      "excerpt": "All rules in a configuration must pass for a merge to be allowed",
+      "verified_at": "2026-10-16T04:35:07.958762Z",
+      "source_role": "source",
+      "capture_status": "ok",
+      "source_material_level": "full_source",
+      "content_sha256": "a8db1f81d53546e017f01f073f246c1bbe9767aaa31b5666510fb11294a90f00",
+      "capture_artifact": "data/artifacts/answer-condition-2026-10-16/holdout/gitbook-merge-rules-canonical-capture.json"
+    }
+  ],
+  "raw_capture_directory": "data/artifacts/answer-condition-2026-10-16/holdout",
+  "attempt_logs": [
+    "capture-attempts.json",
+    "gitbook-robots-redirect.json",
+    "gitbook-retry-attempts.json",
+    "canonical-attempts.json"
+  ],
+  "web_browse_failures": [
+    {
+      "url": "https://gitbook.com/docs/account-management/member-management/guests",
+      "status": "web_internal_error; no content"
+    },
+    {
+      "url": "https://gitbook.com/docs/collaboration/merge-rules",
+      "status": "web_timeout; later migrated canonical URL succeeded"
+    },
+    {
+      "url": "https://gitbook.com/docs/publishing-documentation/publish-a-docs-site/authenticated-access",
+      "status": "web_inaccessible"
+    },
+    {
+      "url": "https://gitbook.com/docs/llms.txt",
+      "status": "web_timeout"
+    }
+  ],
+  "groups": [
+    {
+      "id": "basecamp",
+      "case_ids": [
+        "answer-holdout-v1-001",
+        "answer-holdout-v1-002",
+        "answer-holdout-v1-003"
+      ],
+      "preview_file": "data/artifacts/answer-condition-2026-10-16/holdout/basecamp-human-reviewed-preview.json",
+      "input_sha256": "1925b319a40380486fede510fe704c6507c12029ec36689c440b0987723e6ea9",
+      "registry_sha256": "0b4da106478510ea008356db516eb7e699bb88e00866747720f92b64b3b2af16",
+      "manifest_sha256": "6ab52466b72816d3c4900b10c76501af3687fd72c557f7f994a768e63976ce3f",
+      "runner_sha256": "dfb460796e63c4be17952d83d8941e349c620db607a30d8b7fb5b74720b9972e",
+      "official_runner_sha256": "280c04d58fdbd6a0c2424ff320175a4ab1758c1d6836fe071862b17c2f5ad60e",
+      "production_code_sha256": "25b0851893e5997286fdec31d09e904a49fb940937a8fca58a344c4e9de48da6"
+    },
+    {
+      "id": "gitbook",
+      "case_ids": [
+        "answer-holdout-v1-004",
+        "answer-holdout-v1-005",
+        "answer-holdout-v1-006"
+      ],
+      "preview_file": "data/artifacts/answer-condition-2026-10-16/holdout/gitbook-human-reviewed-preview.json",
+      "input_sha256": "1925b319a40380486fede510fe704c6507c12029ec36689c440b0987723e6ea9",
+      "registry_sha256": "0b4da106478510ea008356db516eb7e699bb88e00866747720f92b64b3b2af16",
+      "manifest_sha256": "380b1ca8fc9c92c30538d6d3e16ce36185614579b0b366a37337265559395d80",
+      "runner_sha256": "dfb460796e63c4be17952d83d8941e349c620db607a30d8b7fb5b74720b9972e",
+      "official_runner_sha256": "280c04d58fdbd6a0c2424ff320175a4ab1758c1d6836fe071862b17c2f5ad60e",
+      "production_code_sha256": "25b0851893e5997286fdec31d09e904a49fb940937a8fca58a344c4e9de48da6"
+    }
+  ],
+  "files_sha256": {
+    "eval/product-answer-holdout-v1.jsonl": "1925b319a40380486fede510fe704c6507c12029ec36689c440b0987723e6ea9",
+    "eval/product-answer-holdout-v1-runtime.json": "9a84662610ebc9f092b2c7eddb804e63f1b7e81635575a2ba98d5484109b6c2a",
+    "backend/packages/business_intel/official_sources.json": "0b4da106478510ea008356db516eb7e699bb88e00866747720f92b64b3b2af16",
+    "eval/product-answer-holdout-v1-candidate.jsonl": "2ef6385e29d87f75a6617305a71caf35e47a38a546cd5053cbb75bae783a7b9e",
+    "eval/product-answer-holdout-v1-review.json": "dc4d6640e906e17235a242eab8468fd85860b63aa828bce8604ec86dd4b1fdd1",
+    "docs/optimization/2026-10-16-answer-human-review.md": "160ca217fb09ea72c552e6bb9780a69b6b450b8d1ced052f32a1463761196104"
+  },
+  "reviewed_by": "project_user",
+  "review_recorded_at": "2026-10-16T04:43:15Z",
+  "review_record": "eval/product-answer-holdout-v1-review.json",
+  "candidate_archive": "eval/product-answer-holdout-v1-candidate.jsonl",
+  "candidate_sha256": "2ef6385e29d87f75a6617305a71caf35e47a38a546cd5053cbb75bae783a7b9e",
+  "reference_questions_sources_unchanged": true,
+  "generated_report_acceptance": "unaccepted"
+}

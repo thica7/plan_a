@@ -32,7 +32,8 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
             reasons.add("claim_generation_scope_mismatch")
         if not reasons:
             view = select_evidence_view(snapshot, agent="writer", competitor=use.competitor, dimension=use.dimension,
-                source_ids=use.requested_source_ids, max_bytes=use.view_max_bytes or use.max_bytes)
+                source_ids=use.requested_source_ids, fact_ids=use.requested_fact_ids,
+                max_bytes=use.view_max_bytes or use.max_bytes)
             boundaries = [b for b in record.detail.report_answer_boundaries
                           if b.requirement.competitor == audit.competitor and b.requirement.dimension == audit.dimension
                           and set(b.view_fact_ids) == set(use.fact_ids) and set(b.view_source_ids) == set(use.source_ids)]
@@ -46,6 +47,17 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                     reasons.add("published_claim_missing_or_changed")
             if any(size > use.max_bytes for size in audit.review_context_bytes):
                 reasons.add("claim_review_context_exceeded")
+            from packages.agents.writer.answer_coverage import research_questions
+            questions = research_questions(record.detail, audit.competitor, audit.dimension)
+            expected = {item['question_id']: item['question'] for item in questions}
+            actual = {item.question_id: item.question for item in audit.answer_coverage}
+            if actual != expected or len(actual) != len(audit.answer_coverage):
+                reasons.add('answer_coverage_scope_changed')
+            published_ids = {item.claim.id for item in published}
+            if (any(item.status != 'answered' or not item.claim_ids
+                    or not set(item.claim_ids) <= published_ids for item in audit.answer_coverage)
+                    or questions and not audit.answer_coverage):
+                reasons.add('answer_coverage_incomplete')
         for reason in sorted(reasons):
             problem = f"主张引用审核失败：{reason}。请重新生成该产品和维度的报告内容。"
             issues.append(QCIssue(id=f"qa-claim-{service._evidence_artifact_hash([snapshot.id, index, reason])[:20]}",

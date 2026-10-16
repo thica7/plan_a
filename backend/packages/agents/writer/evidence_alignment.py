@@ -222,6 +222,7 @@ class WriterEvidenceAlignmentMixin:
                     view = select_evidence_view(
                         snapshot, agent="writer", competitor=competitor,
                         dimension=dimension, source_ids=use.requested_source_ids,
+                        fact_ids=use.requested_fact_ids,
                         max_bytes=selection_budget,
                     )
                 except ValueError:

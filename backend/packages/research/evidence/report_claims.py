@@ -8,6 +8,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer
 
+from packages.research.evidence.operation_claim_checks import (
+    required_operation_checks as required_operation_checks,
+    operation_condition_reasons, operation_review_reasons,
+)
+from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
+
 
 class ReportConditionGroup(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -33,12 +39,18 @@ class ReportOperationBinding(BaseModel):
     condition_evidence: tuple[str, ...]
     operation_quote: str
     condition_groups: tuple[ReportConditionGroup, ...] = ()
+    recipient_quote: str | None = None
+    excluded_roles: tuple[str, ...] = ()
 
     @model_serializer(mode="wrap")
     def serialize_legacy_binding(self, handler):
         values = handler(self)
         if not self.condition_groups:
             values.pop('condition_groups', None)
+        if self.recipient_quote is None:
+            values.pop('recipient_quote', None)
+        if not self.excluded_roles:
+            values.pop('excluded_roles', None)
         return values
 
 
@@ -68,11 +80,26 @@ class ReportClaim(BaseModel):
         return value.strip()
 
 
+class ClaimCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    check_id: str
+    verdict: Literal['supported', 'unsupported', 'uncertain']
+    claim_span: str = Field(max_length=600)
+
+
 class ClaimReview(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     claim_id: str
     verdict: Literal["supported", "unsupported", "uncertain"]
     reason: str = Field(min_length=1, max_length=800)
+    checks: tuple[ClaimCheck, ...] = ()
+
+    @model_serializer(mode='wrap')
+    def serialize_legacy_review(self, handler):
+        values = handler(self)
+        if not self.checks:
+            values.pop('checks', None)
+        return values
 
 
 class AuditedReportClaim(BaseModel):
@@ -91,6 +118,14 @@ class ReportDimensionAudit(BaseModel):
     claims: tuple[AuditedReportClaim, ...] = ()
     gaps: tuple[str, ...] = ()
     review_context_bytes: tuple[int, ...] = ()
+    answer_coverage: tuple[ReportAnswerCoverage, ...] = ()
+
+    @model_serializer(mode='wrap')
+    def serialize_legacy_audit(self, handler):
+        values = handler(self)
+        if not self.answer_coverage:
+            values.pop('answer_coverage', None)
+        return values
 
 
 _RECOMMENDATION = re.compile(
@@ -168,7 +203,7 @@ def _claim_operation_effects(text, bound):
     parts = re.split(r'[。；;.!?]|\bbut\b|\bhowever\b|但是|但|然而|并且|'
                      r'\band\s+(?=(?:cannot|can|may|must)\b)|[,，]\s*(?=(?:cannot|can|may)\b)', text, flags=re.I)
     effects = set()
-    object_pattern = r'\b(pages?|documents?|docs?|items?|comments?|threads?|workspaces?|content|collections?|rows?|cells?)\b|页面|文档|条目|评论|回复|工作区|内容'
+    object_pattern = r'\b(pages?|documents?|docs?|boards?|items?|comments?|threads?|workspaces?|content|collections?|rows?|cells?)\b|页面|文档|看板|条目|评论|回复|工作区|内容'
     for part in parts:
         if re.match(r'^\s*(?:前提|条件|requires?\b|provided\b|subject to\b)', part, re.I):
             continue
@@ -204,6 +239,7 @@ def _claim_operation_effects(text, bound):
                 if obj:
                     value = obj.group().casefold()
                     actual = ('document' if re.fullmatch(r'pages?|documents?|docs?|页面|文档|content|内容', value) else
+                              'board' if re.fullmatch(r'boards?|看板', value) else
                               'comment' if re.fullmatch(r'comments?|threads?|评论|回复', value) else
                               'item' if re.fullmatch(r'items?|条目', value) else value.rstrip('s'))
                     expected = bound.get('object_type')
@@ -248,6 +284,7 @@ def claim_rule_reasons(claim, view, boundaries):
                 reasons.append('operation_effect_mismatch')
             if bound.get('condition_groups') and _alternative_condition_promoted(claim.text, bound['condition_groups']):
                 reasons.append('operation_alternative_condition_promoted')
+            reasons.extend(operation_condition_reasons(claim, bound))
     if claim.dimension == 'feature':
         content = [f for f in known if f.field == 'evidence_terms']
         observations = {(f.source_id, f.competitor, f.dimension, f.evidence_item_ids, f.quote) for f in known}
@@ -323,6 +360,8 @@ def audit_report_claims(claims, reviews, view, boundaries):
     for claim in claims:
         rules = list(claim_rule_reasons(claim, view, boundaries))
         review = by_id.get(claim.id)
+        if review is not None:
+            rules.extend(operation_review_reasons(claim, review))
         if claim_counts[claim.id] != 1:
             rules.append("duplicate_claim_id")
         if counts[claim.id] != 1:

@@ -193,7 +193,7 @@ def _admission_rejection_reasons(
             or quote != expected_quote
         ):
             reasons.append("capability_evidence_not_bound_to_body")
-    if extraction.extractor_name == "bounded_semantic_capabilities" and page is not None:
+    if extraction.extractor_name in {"bounded_semantic_capabilities", "source_operation_rules"} and page is not None:
         verified = semantic_extraction(
             ResearchBrief(run_id="admission", topic=brief.topic, product_use_cases=brief.product_use_cases, competitor=extraction.competitor,
                           dimension=extraction.dimension,
@@ -712,6 +712,7 @@ def has_concrete_source_signal(dimension: str, normalized_text: str) -> bool:
             "model", "api", "feature", "coding", "reasoning",
             "具备", "支持", "提供", "可更换", "包含", "supports", "provides", "offers",
             "edit", "export", "download", "assign", "create", "share", "inspect", "comment",
+            "invite", "inviting", "invitation", "邀请",
             "编辑", "导出", "下载", "分配", "创建", "共享", "评论",
         )
     )
@@ -976,6 +977,7 @@ def dimension_terms_present(dimension: str, normalized_text: str) -> bool:
         terms = (
             "feature",
             "edit", "export", "download", "assign", "create", "share", "inspect", "comment",
+            "invite", "inviting", "invitation", "邀请",
             "编辑", "导出", "下载", "分配", "创建", "共享", "评论",
             "capability",
             "model",

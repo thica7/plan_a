@@ -109,6 +109,7 @@ _DIMENSION_SIGNALS: dict[str, tuple[str, ...]] = {
         "offers",
         "can ",
         "edit", "export", "download", "assign", "create", "share", "inspect", "comment", "permissions", "access",
+        "sign in", "log in", "signed in", "logged in",
         "编辑", "导出", "下载", "分配", "创建", "共享", "评论",
         "model",
         "api",

@@ -6,6 +6,7 @@ from pydantic import TypeAdapter, HttpUrl
 import pytest
 from test_report_claim_audit import price_view
 from test_stage_evidence_views import FixedTime, distributed_detail
+from claim_review_fixture import supported_review
 
 from packages.config import Settings
 from packages.memory import KBCache, RunJournal
@@ -70,7 +71,7 @@ async def test_real_quick_report_writes_dimensions_and_audits_every_published_cl
                 return "not JSON"
             if mode == "missing_review":
                 return json.dumps({"reviews": []})
-            return json.dumps({"reviews": [{"claim_id": c["id"], "verdict": "supported", "reason": "The quoted source directly supports this observation."} for c in payload["claims"]]})
+            return json.dumps({"reviews": [supported_review(c) for c in payload["claims"]]})
         facts = payload["evidence_view"]["facts"]
         if mode == "bad_draft":
             return "not JSON"
@@ -205,7 +206,7 @@ async def test_dimension_writer_actual_transport_keeps_usage_and_rejects_stale_o
             detail.raw_sources[0].content_hash = "changed-during-transport"
             seal_snapshot(detail, phase="analysis", canonical_documents={})
         if "claims" in payload:
-            return json.dumps({"reviews": [{"claim_id": c["id"], "verdict": "supported", "reason": "Quoted content supports this observation."} for c in payload["claims"]]})
+            return json.dumps({"reviews": [supported_review(c) for c in payload["claims"]]})
         fact = next(f for f in payload["evidence_view"]["facts"] if f["field"] == "evidence_terms")
         return json.dumps({"claims": [{"text": "支持对共享页面进行评论，需成为工作区成员。", "kind": "fact", "competitor": payload["segment_competitor"], "dimension": payload["dimension"], "fact_ids": [fact["id"]], "source_ids": [fact["source_id"]], "operation_binding": fact.get("operation_observations", [None])[0]}]})
     monkeypatch.setattr(service._llm, "complete_text", complete_text)
@@ -251,8 +252,7 @@ async def test_budget_exhaustion_keeps_previously_reviewed_segments_unreviewed_p
         if kwargs['subagent'] != 'Notion/feature':
             raise LLMExecutionLimitError('run_llm_token_budget_exceeded')
         if kwargs['name'] == 'dimension_claim_review':
-            return json.dumps({'reviews': [{'claim_id': c['id'], 'verdict': 'supported',
-                'reason': 'The quote supports the observation.'} for c in payload['claims']]})
+            return json.dumps({'reviews': [supported_review(c) for c in payload['claims']]})
         fact = next(f for f in payload['evidence_view']['facts'] if f['field'] == 'evidence_terms')
         return json.dumps({'claims': [{'text': '支持对共享页面进行评论，需成为工作区成员。', 'kind': 'fact',
             'competitor': 'Notion', 'dimension': 'feature', 'fact_ids': [fact['id']], 'source_ids': [fact['source_id']], 'operation_binding': fact.get('operation_observations', [None])[0]}]})

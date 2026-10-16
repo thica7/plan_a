@@ -30,7 +30,7 @@ planner → planner_hitl
 - **入口**：[`collectors/logic.py`](../backend/packages/agents/collectors/logic.py)；知识库取证见 [`kb_bridge.py`](../backend/packages/agents/collectors/kb_bridge.py) 的 `_collect_competitor_from_kb`。
 - **输入**：当前产品、维度、目标操作、研究条件、已采资料与真实缺口。
 - **执行**：先通过 `rag_retrieve_tool` 检索可复用来源，再按预算进行搜索和网页抓取；清洗正文，做确定性与有界模型语义提取，按产品、维度、操作和条件组织事实；缺口驱动定向补证。
-- **输出**：`RawSource`、原文和元数据、分块索引状态、结构化事实、覆盖与缺口、采集跟踪记录。
+- **输出**：`RawSource`、原文和元数据、分块索引状态、结构化事实、覆盖与缺口、采集跟踪记录。规则提取使用 `source_operation_rules`，模型语义提取使用 `bounded_semantic_capabilities`，同页两路结果分别准入，避免 ID 去重吞掉补充事实。两路均重放原文、位置和值的绑定。
 - **边界**：命中不代表准入。资料须通过来源角色、工作区/项目、版本/哈希、时效与正文校验；搜索摘要、旧报告和失败页面不能冒充当前一手证据。不同产品、型号、席位和计费周期不能拼成一个事实。
 
 ### Survey：用户研究检查
@@ -70,7 +70,7 @@ planner → planner_hitl
 - **入口**：[`writer/runner.py`](../backend/packages/agents/writer/runner.py)；分维度写作见 [`dimension_writer.py`](../backend/packages/agents/writer/dimension_writer.py)。
 - **输入**：有效 Analyst、Comparator、Reflector 产物及准入证据包。
 - **执行**：按维度分段写作；价格单独成段；将事实、比较、推断和待验证机会分别表达；逐条核对主张与引用，必要时做有限修复。证据不足时生成简短局部报告，保留阻断与补证清单。
-- **输出**：报告、分段结果、主张审核记录、引用、版本与依赖。
+- **输出**：报告、分段结果、主张审核记录、引用、版本与依赖。功能问题在三种深度都进入分维度入口：保留产品和子问作用域，联合问逐产品审核，代词继承最近具名范围，末尾请求限制随原问保留。先按每问最多三条、合计最多八条从准入快照选择完整观察；该词法选择不是语义全召回。超容量不截断问题，记录未核实。
 - **边界**：不得自由查询新资料替换原引用。历史错误绑定继续拒绝；局部报告不等于完整覆盖，生成成功不等于事实准确率已通过独立人审。
 
 ### QA：审核与重做决策
@@ -78,7 +78,7 @@ planner → planner_hitl
 - **入口**：[`qa/logic.py`](../backend/packages/agents/qa/logic.py)，引用对齐见 [`evidence_alignment.py`](../backend/packages/agents/qa/evidence_alignment.py)。
 - **输入**：阶段资料、当前证据快照、结构化分析、矩阵、报告与已有审核记录。
 - **执行**：采集 QA 检查来源、覆盖和时效；分析 QA 检查结构化产物；最终 QA 检查虚构引用、矩阵/正文一致性、主张与条件、来源质量以及发布阻断。
-- **输出**：阻断/警告、审核结论、人工审核请求与 `redo_scope`。
+- **输出**：阻断/警告、审核结论、人工审核请求与 `redo_scope`。操作主张检查逐项记录角色、对象、操作、效果及前提对应的原文和主张片段；问题覆盖只可引用已支持主张。缺项或问题范围变化保留 Writer 阻断，重放使用原消费记录的 `requested_fact_ids`，不借用其他资料。
 - **边界**：确定性检查只能验证其覆盖的规则；规则通过不等于自然语言语义绝对正确。工作流终态、报告生成、业务可交付分别判断。
 
 ## 3. RAG 怎样接入所有 Agent
@@ -149,3 +149,9 @@ Collector 对校验通过的上下文保留完整片段，避免原先的 1000 �
 排查时同时核对：研究计划及分支数、每阶段真实调用/回退、已准入快照、证据消费、上游依赖、产品×维度/操作覆盖、最终正文主张与引用。单看报告字数、任务状态或调用次数不足以判断完成度。
 
 运行与检索评测命令见 [README](../README.md)。十二组比较、前提贯通回放与剩余稀疏/语义绑定问题见 [双路检索与上下文补全](optimization/2026-10-16-dual-query-context.md)。上一轮样本边界见 [离线复测](optimization/2026-10-15-offline-rag-followup.md)；历史验收、月度配额阻断及部署项见 [正式验收记录](optimization/2026-10-14-formal-acceptance.md)。
+
+## 7. 本轮答案覆盖与条件归属验证
+
+实现与真实模型结果见[交付记录](optimization/2026-10-16-answer-condition-delivery.md)。`answer_coverage` 是待答问题的审核结果，用户条件不能成为证据；`permission_option` 的限制只适用于其列出的操作选项，`role_scoped` 不可直接提升为另一个角色的共同前提。缺证、写作遗漏、上下文超限分别保留，不能用一次 `supported` 或引用 ID 正确冒充报告验收。
+
+本轮固定官方 URL 的 Collector→下游模型诊断没有执行 Planner 发现、完整 Graph 调度或生产稠密 RAG；不宣称整个主流水线已通过。

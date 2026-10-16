@@ -86,5 +86,65 @@
         "review_basis": "Project user confirmed the official source links and eight boundaries in request_user_input_async:call_ee2d4d54f20a4110acfa24ed1ca49beb; authority is exact-document only."
       }
     ]
+  },
+  {
+    "product": "Basecamp",
+    "aliases": [],
+    "documents": [
+      {
+        "title": "What Clients can see and do - Basecamp 5 Help",
+        "url": "https://5.basecamp-help.com/article/1082-what-clients-can-see-and-do",
+        "dimension": "feature",
+        "reviewed_by": "codex_operator",
+        "reviewed_at": "2026-10-16T04:37:27.919981Z",
+        "review_basis": "Exact official documentation identity inspected via primary web browse and successful policy-respecting production fetch_evidence_page/capture_candidate capture; project user authorized official data collection. This is authority review only; candidate answers remain pending human review."
+      },
+      {
+        "title": "Inviting People - Basecamp 5 Help",
+        "url": "https://5.basecamp-help.com/article/1060-inviting-people",
+        "dimension": "feature",
+        "reviewed_by": "codex_operator",
+        "reviewed_at": "2026-10-16T04:37:27.919981Z",
+        "review_basis": "Exact official documentation identity inspected via primary web browse and successful policy-respecting production fetch_evidence_page/capture_candidate capture; project user authorized official data collection. This is authority review only; candidate answers remain pending human review."
+      },
+      {
+        "title": "Permissions - Basecamp 5 Help",
+        "url": "https://5.basecamp-help.com/article/1171-permissions",
+        "dimension": "feature",
+        "reviewed_by": "codex_operator",
+        "reviewed_at": "2026-10-16T04:37:27.919981Z",
+        "review_basis": "Exact official documentation identity inspected via primary web browse and successful policy-respecting production fetch_evidence_page/capture_candidate capture; project user authorized official data collection. This is authority review only; candidate answers remain pending human review."
+      }
+    ]
+  },
+  {
+    "product": "GitBook",
+    "aliases": [],
+    "documents": [
+      {
+        "title": "GitBook pricing & plans | GitBook",
+        "url": "https://www.gitbook.com/pricing",
+        "dimension": "feature",
+        "reviewed_by": "codex_operator",
+        "reviewed_at": "2026-10-16T04:37:27.919981Z",
+        "review_basis": "Exact official documentation identity inspected via primary web browse and successful policy-respecting production fetch_evidence_page/capture_candidate capture; project user authorized official data collection. This is authority review only; candidate answers remain pending human review."
+      },
+      {
+        "title": "The complete guide to creating and publishing documentation in GitBook [updated for 2026] | Guides | GitBook Documentation",
+        "url": "https://gitbook.com/docs/guides/editing-and-publishing-documentation/complete-guide-to-publishing-docs-gitbook",
+        "dimension": "feature",
+        "reviewed_by": "codex_operator",
+        "reviewed_at": "2026-10-16T04:37:27.919981Z",
+        "review_basis": "Exact official documentation identity inspected via primary web browse and successful policy-respecting production fetch_evidence_page/capture_candidate capture; project user authorized official data collection. This is authority review only; candidate answers remain pending human review."
+      },
+      {
+        "title": "Merge rules | GitBook Documentation",
+        "url": "https://gitbook.com/docs/collaborate/merge-rules",
+        "dimension": "feature",
+        "reviewed_by": "codex_operator",
+        "reviewed_at": "2026-10-16T04:37:27.919981Z",
+        "review_basis": "Exact official documentation identity inspected via primary web browse and successful policy-respecting production fetch_evidence_page/capture_candidate capture; project user authorized official data collection. This is authority review only; candidate answers remain pending human review."
+      }
+    ]
   }
 ]

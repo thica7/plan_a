@@ -9,6 +9,7 @@ import json
 import socket
 
 import pytest
+from claim_review_fixture import supported_review
 from test_agent_evidence_alignment import InputReplay
 
 from packages.agents import SubagentContext
@@ -120,8 +121,8 @@ async def test_two_product_rag_to_real_hardening_and_qa(tmp_path, monkeypatch, c
                 claim["source_ids"] = [source_by_product[products[1]]]
             return json.dumps({"claims": [claim]})
         assert kwargs["name"] == "dimension_claim_review"
-        return json.dumps({"reviews": [{"claim_id": claim["id"], "verdict": "supported",
-                            "reason": "Replay review; binding guards must still validate."}
+        return json.dumps({"reviews": [supported_review(claim,
+                            "Replay review; binding guards must still validate.")
                            for claim in payload["claims"]]})
 
     monkeypatch.setattr(service, "_trace_llm_json", replay_json)

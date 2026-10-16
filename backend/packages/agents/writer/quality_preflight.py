@@ -108,7 +108,10 @@ def run_writer_quality_preflight(
         ["executive_summary", "competitive_findings"]
         if detail.plan.research_depth == "quick" or dimension_writing_enabled(detail) else [*REQUIRED_CORE_KEYS]
     )
-    if decision_brief_fields(detail.plan.decision_brief):
+    from packages.agents.writer.dimension_writer import partial_report_mode
+    from packages.research.evidence.snapshot import current_snapshot
+    if (decision_brief_fields(detail.plan.decision_brief)
+            and not partial_report_mode(detail, current_snapshot(detail))):
         required_core_keys.append("product_opportunities")
     missing_core_sections = [
         key

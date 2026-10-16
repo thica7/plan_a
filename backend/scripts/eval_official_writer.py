@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import os
 from contextlib import contextmanager
 from pathlib import Path
@@ -23,6 +22,11 @@ from packages.skills.registry import SkillRegistry
 from scripts.eval_evidence_binding import ROOT, SCORED, digest, isolated_environment, live_settings, load_cases
 from scripts.eval_live_products import redacted_json, summarize_acceptance, write_redacted_json
 from scripts.export_agent_eval import _redact
+
+
+def runtime_questions(payloads):
+    """Keep the declared product scope even when a question uses only pronouns."""
+    return "\n".join(f"{case['product']}: {case['question']}" for case in payloads)
 
 
 @contextmanager
@@ -88,6 +92,7 @@ async def execute_stages(service, record, payloads):
         if not record.detail.raw_sources:
             raise ValueError("no_accepted_sources: downstream model stages not attempted")
         await service._prepare_evidence_snapshot(record, phase="collect")
+        await service._real_phase_qa_step(record, 'collect')
         await service._prepare_evidence_snapshot(record, phase="analysis")
         products = record.detail.plan.competitors
         await service._real_analyst_dispatch_step(record, ["feature"], products)
@@ -124,7 +129,7 @@ async def run_live(payloads, manifest, output, *, timeout=600, capture_only=Fals
                     enterprise_store=EnterpriseMemoryStore())
                 products = list(dict.fromkeys(case["product"] for case in payloads))
                 # Questions select scope; they are never input to evidence fields.
-                questions = "\n".join(case["question"] for case in payloads)
+                questions = runtime_questions(payloads)
                 detail = await service.create_run(RunCreateRequest(workspace_id="official-source-acceptance",
                     project_id=uuid4().hex, topic=" / ".join(products) + " 的角色、编辑及访问权限研究",
                     dimensions=["feature"], competitors=products, execution_mode="real",
@@ -170,12 +175,22 @@ async def run_live(payloads, manifest, output, *, timeout=600, capture_only=Fals
         summary["semantic_indexing"] = "disabled; diagnostic-only sparse canonical storage"
         if detail:
             snapshot = current_snapshot(detail)
+            from packages.agents.writer.dimension_writer import partial_report_mode
             summary["downstream_observations"] = {
                 "snapshot_facts": len(snapshot.facts) if snapshot else 0,
                 "raw_source_count": len(detail.raw_sources),
                 "qa_blocker_count": sum(i.severity == "blocker" for i in detail.qa_findings),
                 "reviewed_claim_count": sum(c.status == "supported" for a in detail.report_dimension_audits for c in a.claims),
                 "writer_producer_verified": writer_producer_verified(service, record, snapshot),
+                "partial_report_generated": bool(detail.report_md and partial_report_mode(detail, snapshot)),
+                "report_characters": len(detail.report_md.strip()),
+                "answer_coverage": [
+                    {'product': audit.competitor, 'question_id': answer.question_id,
+                     'status': answer.status, 'claim_ids': list(answer.claim_ids)}
+                    for audit in detail.report_dimension_audits for answer in audit.answer_coverage
+                ],
+                "review_check_count": sum(len(claim.review.checks) for audit in detail.report_dimension_audits
+                                          for claim in audit.claims if claim.review),
                 "llm_transport_by_agent": {a: sum(s.metadata.get("llm_transport_attempts", 0) or 0
                     for s in detail.trace_spans if s.kind == "llm" and s.agent == a)
                     for a in "collector analyst comparator reflector writer qa".split()},

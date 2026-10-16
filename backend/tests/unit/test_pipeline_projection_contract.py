@@ -162,8 +162,8 @@ async def test_four_product_first_review_uses_shared_complete_input_with_hard_bu
             assert context in decoded['facts'][0]['value']
             assert decoded['facts'][0]['qualifiers']['captured_conditions'] == [context]*6
             unshared.append(len(encoded(decoded).encode()))
-            return json.dumps({'reviews': [{'claim_id': c['id'], 'verdict': 'supported',
-                'reason': 'The original edit operation and every parent access condition are preserved.'} for c in payload['claims']]})
+            from claim_review_fixture import supported_review
+            return json.dumps({'reviews': [supported_review(c) for c in decoded['claims']]})
         original = decoded['evidence_view']['facts'][0]
         names = {'read': '阅读', 'comment': '评论', 'edit': '编辑', 'share': '分享'}
         return json.dumps({'claims': [dict(text=f"所有套餐的成员获得父级页面访问后可{names[binding['operation']]}文档；父级页面仅限受邀工作区成员访问。",
@@ -173,15 +173,16 @@ async def test_four_product_first_review_uses_shared_complete_input_with_hard_bu
     monkeypatch.setattr(service._llm, 'complete_text', complete_text)
     monkeypatch.setattr(service._llm, 'consume_last_usage', lambda: LLMUsage(prompt_tokens=1000, completion_tokens=200, total_tokens=1200))
     report = await service._writer_dimension_report(record, 20)
-    assert len(sent) == 8
+    assert len(sent) == 12
     reviews = [(system, payload) for system, payload in sent if 'claims' in payload]
-    assert len(reviews) == 4 and all(size > 20000 for size in unshared), unshared
+    # Complete condition checks are split to fit the review output allowance.
+    assert len(reviews) == 8 and all(size > 14000 for size in unshared), unshared
     assert all(len(encoded(payload).encode()) < original_size * .6
                for (_, payload), original_size in zip(reviews, unshared))
     assert all(any(c.status == 'supported' for c in audit.claims) for audit in record.detail.report_dimension_audits)
     budget = service._run_llm_budget(record)
-    assert budget.max_tokens == 200000 and budget.max_calls <= 60 and budget.calls == 8
-    assert budget.tokens_used == 9600
+    assert budget.max_tokens == 200000 and budget.max_calls <= 60 and budget.calls == 12
+    assert budget.tokens_used == 14400
     assert all(budget.delivery_reserves[f'{agent}:{product}/feature'] > 0
                for product in record.detail.plan.competitors for agent in ('collector', 'analyst', 'writer', 'qa'))
     assert budget.delivery_reserves['comparator:run'] > 0 and budget.delivery_reserves['reflector:run'] > 0

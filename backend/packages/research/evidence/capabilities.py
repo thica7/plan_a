@@ -72,7 +72,8 @@ def _capability_keys(fact, products) -> tuple[str, ...]:
 def capability_conditioned(fact) -> bool:
     return bool(any(_CONDITION.search(term) or _NEGATION.search(term) for term in _evidence_terms(fact))
                 or {key for key in fact.qualifiers if key not in {"slot", "operations"}}
-                or any(row.get('role') or row.get('plan') or row.get('prerequisites')
+                or any((row.get('role') or '').casefold() not in {'', 'you', 'users', 'people'}
+                       or row.get('plan') or row.get('prerequisites')
                        for row in fact.qualifiers.get('operations', []) if isinstance(row, dict)))
 
 

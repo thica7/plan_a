@@ -12,20 +12,24 @@ from packages.research.evidence.snapshot_models import EvidenceFact, canonical_j
 from packages.research.models import QualityGap
 
 OPERATIONS = {
-    'read': ('阅读', r'\b(?:views?|reads?|access)\s+(?:(?:the|a|all|any|workspace)\s+)*(?:pages?|documents?|docs?|items?|content)\b|(?:查看|阅读)(?:(?:该|此|这个|所有|全部|共享的|已分享的|现有的|的|在|中|内|里|文件夹|数据库|工作区)\s*){0,12}(?:页面|文档|条目|内容)'),
+    'read': ('阅读', r'\b(?:views?|reads?|access)\s+(?:(?:to|the|a|all|any|workspace|shared|directly invited)\s+)*(?:pages?|documents?|docs?|boards?|items?|content)\b|(?:查看|阅读)(?:(?:该|此|这个|所有|全部|共享的|直接受邀的|已分享的|现有的|的|在|中|内|里|文件夹|数据库|工作区)\s*){0,12}(?:页面|文档|看板|条目|内容)'),
     'comment': ('评论', r'\bcomment(?:s|ing)?\b(?![- ]only)|评论|批注'),
     'edit': ('编辑', r'\bedit(?:s|ing)?\b|编辑|修改内容'),
-    'create': ('创建', r'\bcreat(?:es?|ing)\s+(?:(?:a|new|the|any)\s+)*(?:(?:up to \d+|an unlimited number of)\s+)?(?:pages?|documents?|docs?|items?(?!\s+templates?)|content)\b|创建(?:(?:新的?|该|此|这个|所有|全部|的|在|中|内|里|文件夹|数据库|工作区)\s*){0,12}(?:页面|文档|条目|内容)(?!模板)'),
+    'create': ('创建', r'\bcreat(?:es?|ing)\s+(?:(?:a|new|the|any)\s+)*(?:(?:up to \d+|an unlimited number of)\s+)?(?:pages?|documents?|docs?|items?(?!\s+templates?)|content)\b|(?:创建|新建)(?:(?:新的?|该|此|这个|所有|全部|的|在|中|内|里|文件夹|数据库|工作区)\s*){0,12}(?:页面|文档|条目|内容)(?!模板)'),
     'share': ('分享', r'\bshar(?:e|ing)\b|分享|共享链接'),
-    'manage_access': ('权限管理', r'\b(?:manage|change|modify|set|assign|grant|revoke|adjust|create)\s+(?:(?:the|a|an|user(?:[’\']s)?|specific|different|general|new|view|and|edit|page|document|workspace|default|content|access)\s+)*(?:permissions?|roles?|access|restrictions?)\b|(?:管理|修改|更改|变更|设置|分配|授予|撤销)(?:[^。；\n]{0,16})(?:访问权限|访问级别|访问设置|权限)'),
+    'manage_access': ('权限管理', r'\b(?:manage|change|modify|set|assign|grant|revoke|adjust|create)\s+(?:(?:the|a|an|user(?:[’\']s)?|specific|different|general|new|view|and|or|edit|comment|page|document|workspace|default|content|access)\s+)*(?:permissions?|roles?|access|restrictions?)\b|(?:管理|修改|更改|变更|设置|分配|授予|撤销)(?:[^。；\n]{0,16})(?:访问权限|访问级别|访问设置|权限)'),
 }
 ROLE_LABELS = r'Can comment|Can edit(?: content)?|Can view|Can create|Can manage(?: access)?|Full access|Comment-only|Read-only'
-_ROLE = re.compile(r'\b(' + ROLE_LABELS + r'|Doc Makers?(?: \(Workspace admin\)s?)?|comment-only|read-only|(?:team |workspace )?(?:owners?|admins?|administrators?|members?|guests?)|editors?|viewers?|collaborators?|managers?)\b|仅评论|仅查看|编辑者|管理员|访客', re.I)
-_PLAN = re.compile(r'\b(?:all plans|any plan|(?:paid|free|enterprise|business|professional|pro|standard|premium) plans?)\b|所有套餐|免费版|付费套餐|企业版', re.I)
+_ROLE = re.compile(r'\b(' + ROLE_LABELS + r'|Doc Makers?(?: \(Workspace admin\)s?)?|comment-only|read-only|(?:team |workspace )?(?:owners?|admins?|administrators?|members?|guests?)|visitors?|editors?|viewers?|collaborators?|managers?)\b|仅评论|仅查看|编辑者|管理员|访客', re.I)
+_ACTOR = re.compile(r'(?:' + _ROLE.pattern + r')|\b(?:people|users?|you)\b', re.I)
+_PLAN = re.compile(r'\b(?:all plans|any plan|(?:paid|free|education|starter|enterprise|business|professional|pro|standard|premium) plans?)\b|所有套餐|免费版|付费套餐|企业版', re.I)
 _DENIED = re.compile(r"\bcannot\b|\bcan[’']t\b|\bcan not\b(?!\s+only\b)|\bwon[’']t be able to\b|\bwill not be able to\b|\bnot (?:start|begin|be) sharing\b|\bnot (?:allowed|available|supported|permitted|edit|share)\b|\bnot\s+(?:manage|change|modify|set|assign|grant|revoke|adjust)\s+(?:(?:the|a|an|general|user|document|page|workspace)\s+)*(?:access|permissions?|roles?|restrictions?)\b|\bunable to\b|不能|无法|不支持|不得", re.I)
-_PREREQUISITE = re.compile(r'\bonly\b|\brequires?\b|\bneeds?\b|\bmust\b|\bunless\b|\bexcept\b|\bwithout\b|\b(?:after|before)\b|限制|需要|仅限|前提|除非', re.I)
-_MODAL = r"cannot|can[’']t|can not|won[’']t be able to|will not be able to|will not(?=\s+be sharing)|can|may|must"
-_ACCESS_CONTROL = re.compile(r'\b(?:restricts?|limits?|controls?|determines?)\s+(?:who|whether)\b[^.;\n]*|\b(?:restricts?|limits?)\s+access\b|\b(?:add|remove)\s+(?:a\s+)?restrictions?\b', re.I)
+_PREREQUISITE = re.compile(r'\bonly\b|\brequir(?:es?|ed)\b|\bneeds?\b|\bmust\b|\bunless\b|\bexcept\b|\bwithout\b|\b(?:after|before)\b|限制|需要|仅限|前提|除非', re.I)
+_MODAL = r"cannot|can[’']t|can not|won[’']t be able to|will not be able to|will be able to|will not(?=\s+be sharing)|can|may|must"
+_SELECTOR_VERB = r'(?:\b(?:select(?:ed|s|ing)?|choos(?:e|es|ing)|chose|chosen|set(?:s|ting)?|allow(?:ed|s|ing)?|enabl(?:e|ed|es|ing)|grant(?:ed|s|ing)?)|选择|选中|设为|设置为)'
+_PERMISSION_SELECTION = re.compile(_SELECTOR_VERB + r'\s*["“\']?(?:' + ROLE_LABELS + r')["”\']?(?:\s*(?:,|，|、|or|and|或|和)\s*["“\']?(?:' + ROLE_LABELS + r')["”\']?)*', re.I)
+_ACCESS_CONTROL = re.compile(r'\b(?:restricts?|limits?|controls?|determines?)\s+(?:who|whether)\b[^.;\n]*|\b(?:restricts?|limits?)\s+access\b|\b(?:add|remove)\s+(?:a\s+)?restrictions?\b|'
+    + _PERMISSION_SELECTION.pattern, re.I)
 _CHOICE_INTRO = re.compile(r'\b(?:choose|select)\b[^:\n]*(?:share|access|permissions?|modes?|options?)[^:\n]*:\s*$|\b(?:access|permissions?)\b[^:\n]*\b(?:states|modes|options)\b[^:\n]*:\s*$', re.I)
 
 
@@ -74,7 +78,7 @@ def _condition_groups(terms):
 
 
 def _plan_from_text(text):
-    names = r'Team/Business|Enterprise|Business|Professional|Standard|Premium|Team|Free|Pro'
+    names = r'Team/Business|Enterprise|Business|Professional|Standard|Premium|Education|Starter|Paid|Team|Free|Pro'
     match = re.search(r'\b((?:' + names + r')(?:(?:,?\s+(?:and|or)\s+|,\s*)(?:' + names + r'))*)\s+(?:plans?|only)\b', text, re.I)
     if match and re.search(r'\band\b|\bor\b|,|Team/Business', match[1], re.I):
         return match[1]
@@ -151,7 +155,7 @@ def _availability_plan(role, conditions, operation=None, object_type=None):
             if re.match(r'^\W*Available (?:on|to)\s*$', line, re.I) and index + 1 < len(lines):
                 line += '\n' + lines[index + 1]
             direct = re.match(r'^\W*(?:Available (?:on|to)|Availability:|适用于)', line, re.I)
-            enumerated = re.search(r'\b(?:are|is) available on\b', line, re.I)
+            enumerated = re.search(r'\b(?:are|is) (?:only )?available (?:on|for|to)\b', line, re.I)
             if not (direct or enumerated):
                 continue
             roles = [m.group().casefold() for m in _ROLE.finditer(line)]
@@ -183,6 +187,9 @@ def operation_repair_rounds(topic, use_cases, dimension, *, enabled, depth_round
 
 
 def operation_matches_text(operation, text):
+    if operation == 'manage_access' and _PERMISSION_SELECTION.search(text):
+        return True
+    text = _PERMISSION_SELECTION.sub('', text)
     action = re.sub(r"[\"'“‘](?:" + ROLE_LABELS + r")[\"'”’]", '', text, flags=re.I)
     action = re.sub(r'^\s*(?:[-*]\s*)?(?:' + ROLE_LABELS + r')\s*:', '', action, flags=re.I)
     action = re.split(r'\bwithout\b|\b(?:only\s+)?(?:after|before|unless|when|if)\b|\brequires?\b|无需|不必|仅当|前提是|除非', action, maxsplit=1, flags=re.I)[0]
@@ -223,7 +230,129 @@ def operation_matches_text(operation, text):
     return bool(re.search(OPERATIONS[operation][1], action, re.I))
 
 
-def _operation_prerequisites(clause, conditions, operation, role, groups):
+def role_key(value):
+    """Compare an explicitly named role, without inventing a role hierarchy."""
+    if not value:
+        return None
+    named = _ROLE.search(value)
+    return re.sub(r'\s+', ' ', (named.group() if named else value).casefold()).rstrip('s')
+
+
+def acting_role_match(clause):
+    """A role inside an invitation, recipient or exclusion is not the subject."""
+    predicate = re.search(rf'\b(?:{_MODAL}|needs?|requires?|(?:is|are) required|(?:has|have) access)\b', clause, re.I)
+    if predicate is None:
+        return None
+    for match in _ACTOR.finditer(clause[:predicate.start()]):
+        if match.group().casefold().startswith('can '):
+            continue
+        prefix = clause[:match.start()]
+        if (re.search(r'\b(?:to|for|inviting|invite|except|excluding|without)\s+(?:(?:the|a|an|non[- ]|team|workspace)\s*)*$', prefix, re.I)
+                or re.search(r"\b(?:aren[’']t|isn[’']t|not)\s+$|\bnon[- ](?:team[- ]|workspace[- ])?$", prefix, re.I)):
+            continue
+        # A comma-delimited condition followed by "you can" does not make
+        # its named recipient the actor of the later main clause.
+        if re.search(r'[,，][^,，]*\byou\s*$', clause[match.end():predicate.start()], re.I):
+            continue
+        return match
+    return None
+
+
+def _recipient_context(action_text):
+    match = re.search(r'\b(?:grant|give|assign|revoke)\b[^.;\n]*?\b(?:to|from)\s+([^,.;\n]+)', action_text, re.I)
+    if not match:
+        return {}
+    recipient = match[1].strip()
+    if not re.search(r'\b(?:users?|people|persons?|members?|guests?|visitors?|editors?|viewers?|admins?|owners?)\b', recipient, re.I):
+        return {}
+    excluded = [role.group() for role in _ROLE.finditer(recipient)
+                if re.search(r"(?:\bnon[- ](?:team[- ]|workspace[- ])?|\b(?:aren[’']t|isn[’']t|not)\s+)$", recipient[:role.start()], re.I)]
+    return {'recipient_quote': recipient, **({'excluded_roles': excluded} if excluded else {})}
+
+
+def condition_operations(text):
+    """Mentioned actions in a restriction, including nominal editing/commenting."""
+    actor = acting_role_match(text)
+    predicate = re.search(rf'\b(?:{_MODAL}|needs?|requires?|(?:is|are) required|(?:has|have) access)\b', text, re.I)
+    selection = _PERMISSION_SELECTION.search(text)
+    if actor and predicate and not (selection and selection.start() <= predicate.start()):
+        # "Visitors with edit access must sign in to use apps" restricts apps.
+        # The edit word in the subject's access level is not the governed verb.
+        text = text[predicate.end():]
+    actions = {key for key in OPERATIONS if operation_matches_text(key, text)}
+    if re.search(r'\bcommenting\b', text, re.I):
+        actions.add('comment')
+    return actions
+
+
+def condition_role(text):
+    match = acting_role_match(text)
+    availability = re.search(r'\bavailable (?:for|to)\s+(' + _ROLE.pattern + r')', text, re.I)
+    return availability[1] if availability else match.group() if match else None
+
+
+def document_role_heading(text):
+    match = re.fullmatch(r'\s*(?:Collaboration|Collaborating) with\s+(' + _ROLE.pattern + r')\s*', text, re.I)
+    return match[1] if match else None
+
+
+def permission_selector_context(text, document_role=None):
+    selections = list(_PERMISSION_SELECTION.finditer(text))
+    if not selections:
+        return {}
+    options = {match.group().casefold() for selection in selections for match in _ROLE.finditer(selection.group())}
+    actions = {operation for label, operation in (
+        ('can edit', 'edit'), ('can comment', 'comment'), ('can view', 'read'),
+        ('can create', 'create'), ('can manage access', 'manage_access')) if label in options}
+    # A preceding caption may name the receiver. A later access requirement
+    # about another role cannot supply the setting's missing recipient.
+    caption = re.split(r'[.;\n]', text[:selections[0].start()])[-1]
+    receiver = re.search(r'\b(?:access|permissions?)\s+for\s+(' + _ROLE.pattern + r')', caption, re.I)
+    target = re.search(r'\bAnyone with (?:the |a )?(?:(?:board|page) )?link\b', text, re.I)
+    return {'operations': actions, 'recipient_role': receiver[1] if receiver else document_role if target else None,
+            'recipient_quote': receiver[1] if receiver else target.group() if target else None}
+
+
+def _operation_condition_spans(line, operation):
+    sentences = re.split(r'(?<=[.!?。！？])\s+', line)
+    if operation in {'read', 'comment', 'edit'} and len(sentences) > 1:
+        relevant = [sentence for sentence in sentences if operation_matches_text(operation, sentence)]
+        if relevant:
+            # Keep the original relevant sentences. An invitation UI rule in
+            # the same captured line is not itself a reader's prerequisite.
+            return relevant
+    return [line]
+
+
+def _required_before_action(term, before, operation, role):
+    target_clause = re.split(r'[.;\n]|\b(?:but|however|while|only if|if|unless|without)\b', before[1], maxsplit=1, flags=re.I)[0] if before else ''
+    if (not before or not operation_matches_text(operation, before[1])
+            or _DENIED.search(target_clause)):
+        return False
+    prefix = term[:before.start()]
+    if (not re.search(r'\b(?:must|needs?|requires?)\b', prefix, re.I)
+            or re.search(r"\b(?:must|needs?|requires?)\s+(?:not|never)\b|\b(?:do(?:es)? not|don[’']t|doesn[’']t)\s+(?:need|require)\b", prefix, re.I)):
+        return False
+    target = acting_role_match(before[1])
+    if target:
+        return role_key(target.group()) == role_key(role)
+    # "give guests access before they can comment" names the receiver before
+    # the pronoun. A giver's unqualified "they" supplies no target identity.
+    if (not re.match(r'\s*they\b', before[1], re.I)
+            or not re.search(r'\bmust\s+(?:grant|give)\b[^.;\n]*\baccess\b', prefix, re.I)):
+        return False
+    recipient = _recipient_context(prefix).get('recipient_quote')
+    if recipient is None:
+        match = re.search(r'\b(?:give|grant)\s+(.+?)\s+access\b', prefix, re.I)
+        recipient = match[1] if match else ''
+    receivers = {role_key(match.group()) for match in _ROLE.finditer(recipient)}
+    if any(re.search(r"\bnon[- ]$|\b(?:not|aren[’']t|isn[’']t)\s+$", recipient[:match.start()], re.I)
+           for match in _ROLE.finditer(recipient)):
+        return False
+    return len(receivers) == 1 and role_key(role) in receivers
+
+
+def _operation_prerequisites(clause, conditions, operation, role, groups, selector=None):
     alternatives = {line.strip() for group in groups for option in group['options'] for line in option.splitlines()}
     # A legacy capture can omit the selector while retaining the contrasting
     # invited-only/public-link option definitions. A generic Eligibility line
@@ -236,7 +365,9 @@ def _operation_prerequisites(clause, conditions, operation, role, groups):
                 isolated[line.strip()] = match[1].split()[0].casefold()
     if 'only' in isolated.values() and any(kind in {'anyone','everyone'} for kind in isolated.values()):
         alternatives.update(isolated)
-    terms = dict.fromkeys(line.strip() for item in [*([clause] if _PREREQUISITE.search(clause) else []), *conditions] for line in item.splitlines())
+    terms = dict.fromkeys(span.strip() for item in [*([clause] if _PREREQUISITE.search(clause) else []), *conditions]
+                         for line in item.splitlines()
+                         for span in ([line] if line.strip() in alternatives else _operation_condition_spans(line, operation)))
     prerequisites = []
     for term in terms:
         if term in alternatives or _CHOICE_INTRO.search(term):
@@ -262,15 +393,19 @@ def _operation_prerequisites(clause, conditions, operation, role, groups):
             continue
         # An adjacent operation/role rule cannot become this action's universal
         # prerequisite. Operation-free access/parent requirements still apply.
-        actions = {key for key in OPERATIONS if operation_matches_text(key, term)}
+        actions = condition_operations(term) if _PLAN.search(term) else {key for key in OPERATIONS if operation_matches_text(key, term)}
         access_requirement = _PREREQUISITE.search(term) and re.search(
             r'\b(?:must|need(?:s)?|require(?:s)?)\s+(?:(?:to|have|be|given|granted|the)\s+)*access\b|'
             r'\bonly\b[^.;\n]*\b(?:can|may)\s+access\b|parent|ancestor|父级|上级', term, re.I)
         named = re.match(r'^\s*(?:[-*]\s*)?(' + ROLE_LABELS + r')\s*:', term, re.I)
-        necessity = re.search(r'\bmust\b|\brequires?\b|\bneeds?\s+(?:to|access|permissions?|the|a|an)\b|限制|需要|仅限|前提|除非', term, re.I)
+        necessity = re.search(r'\bmust\b|\brequir(?:es?|ed)\b|\bneeds?\s+(?:to|access|permissions?|the|a|an)\b|限制|需要|仅限|前提|除非', term, re.I)
         eligibility = re.search(r'\bonly\b[^.;\n]*\b(?:can|may|allowed|permitted)\b', term, re.I)
         conditional = (re.match(r'^\W*(?:only\s+)?(?:if|when|unless|except|after|before|without)\b', term, re.I)
             or operation in actions and re.search(r'\b(?:if|when|unless|except|after|before|without)\b', term, re.I))
+        if named and not (_PLAN.search(term) or necessity or eligibility or conditional or access_requirement):
+            # A role definition enumerates its capabilities. Other capabilities
+            # in that definition are context, not prerequisites for this one.
+            continue
         # A description of who can configure a role is not a prerequisite for
         # the nested view/comment action. Keep the original as review context.
         if re.search(r'\bcan\s+(?:decide|choose|determine)\s+(?:which|who|whether)\b', term, re.I):
@@ -278,22 +413,45 @@ def _operation_prerequisites(clause, conditions, operation, role, groups):
         if not (named or _PLAN.search(term) or _DENIED.search(term) or necessity
                 or eligibility or conditional or access_requirement):
             continue
-        actor = _ROLE.search(term)
+        actor = _ROLE.search(condition_role(term) or '')
+        option_actions = condition_operations(term) & (selector or {}).get('operations', set())
+        option_requirement = (operation == 'manage_access' and option_actions and _PLAN.search(term)
+                              and (selector or {}).get('recipient_role')
+                              and role_key(condition_role(term)) == role_key(selector['recipient_role']))
+        before_requirement = _required_before_action(term, before, operation, role)
+        access_requirement = access_requirement or before_requirement
+        generic_eligibility = (role_key(role) in {'you', 'user', 'people'} and eligibility
+                               and (operation in actions or access_requirement))
+        role_scoped = (role_key(role) in {'you', 'user', 'people'} and actor
+                       and role_key(actor.group()) != role_key(role) and not generic_eligibility
+                       and operation in actions and conditional)
+        # Role-specific access rules qualify the accessing role, never the
+        # inviter merely because both statements mention a guest.
+        if (actor and role_key(actor.group()) != role_key(role)
+                and not (before_requirement or generic_eligibility or role_scoped or option_requirement)):
+            continue
+        if (_PLAN.search(term) and actor and not actions
+                and not (necessity or eligibility or conditional or access_requirement)
+                and not re.search(r'\bavailable\b|availability:', term, re.I)):
+            # Using a paid-plan tool is a different capability from reading a
+            # board. A plan mention alone does not establish read eligibility.
+            continue
         capability = re.search(r'\bcan\b|\bmay\b', term, re.I)
-        grant_before_action = (before and operation_matches_text(operation, before[1])
-            and re.search(r'\bmust\s+(?:grant|give)\b[^.;\n]*\baccess\b', term, re.I))
-        access_requirement = access_requirement or grant_before_action
         if (role is not None and actor and capability and actor.start() < capability.start()
                 and actor.group().casefold().rstrip('s') != (role or '').casefold().rstrip('s')
                 and not (role or '').casefold().startswith(actor.group().casefold())
                 and term.rstrip('.') != clause.rstrip('.')
-                and not access_requirement):
+                and not (access_requirement or generic_eligibility or role_scoped or option_requirement)):
             continue
-        if actions and operation not in actions and not access_requirement:
+        if actions and operation not in actions and not (access_requirement or option_requirement):
             continue
         if named and (not role or named[1].casefold() != role.casefold()):
             continue
-        if re.search(r'parent|ancestor|父级|上级', term, re.I):
+        if option_requirement:
+            kind = 'permission_option'
+        elif role_scoped:
+            kind = 'role_scoped'
+        elif re.search(r'parent|ancestor|父级|上级', term, re.I):
             kind = 'parent_access'
         elif re.search(r'shared with|invited|分享给|受邀', term, re.I):
             kind = 'shared_access'
@@ -303,7 +461,8 @@ def _operation_prerequisites(clause, conditions, operation, role, groups):
             kind = 'plan'
         else:
             kind = 'other'
-        prerequisites.append({'kind': kind, 'quote': term})
+        prerequisites.append({'kind': kind, 'quote': term,
+                              **({'operations': ','.join(sorted(option_actions))} if option_requirement else {})})
     return prerequisites
 
 
@@ -339,6 +498,7 @@ def _observations_json(fact, products):
         return canonical_json(rows) if stored is None or stored == _structured_rows(rows) else '[]'
     rows = []
     heading_role = None
+    document_role = next((document_role_heading(term) for term in terms if document_role_heading(term)), None)
     for term in terms:
         if fact.quote in term and term != fact.quote:
             prefix = term[:term.index(fact.quote)].rstrip().splitlines()
@@ -358,15 +518,18 @@ def _observations_json(fact, products):
             or re.match(r'\s+(?:role|access)\b', clause[match.end():], re.I)), None)
         modal = re.search(rf"\b(?:{_MODAL})\b", action_clause, re.I)
         control = _ACCESS_CONTROL.search(action_clause)
-        if control and modal and control.start() < modal.start():
+        if control and modal and control.start() <= modal.start():
             modal = None  # "restrict who can edit" has a nested modal.
         if label:
             modal = None
-        if explicit_role and modal and explicit_role.start() > modal.start():
-            # A recipient named after the action is not its acting role.
-            explicit_role = None
+        if not label:
+            explicit_role = acting_role_match(clause)
         continuation = bool(re.match(rf"\s*(?:they|it|people with this level(?: of access)?|{_MODAL})\b", clause, re.I))
+        if previous_role and re.match(r'\s*people with this level(?: of access)?\b', clause, re.I):
+            explicit_role = None
         role = label[1] if label else explicit_role.group() if explicit_role else previous_role if continuation else None
+        if role is None and document_role and re.match(r'\s*Anyone with\b[^.;\n]*\blink\b', clause, re.I):
+            role = document_role
         if explicit_role and modal and explicit_role.start() < modal.start():
             role = _PLAN.sub('', clause[explicit_role.start():modal.start()]).strip()
             role = re.sub(r'\s+on\s*$', '', role, flags=re.I).strip()
@@ -375,18 +538,21 @@ def _observations_json(fact, products):
         if not plan and label and not _ROLE.search(fact.quote[label.end():]):
             plan = _plan_from_text(fact.quote)
         action_text = action_clause[modal.end():] if modal else action_clause
+        selector = permission_selector_context(action_clause, document_role)
         scope = ('document' if re.search(r'\b(?:pages?|documents?|docs?)\b|页面|文档', action_text, re.I)
+                 else 'board' if re.search(r'\bboards?\b|看板', action_text, re.I)
                  else 'item' if re.search(r'\bitems?\b', action_text, re.I)
                  else 'workspace' if re.search(r'\bworkspaces?\b|工作区', action_text, re.I)
                  else previous_scope if same_role and re.search(r'\bcontent\b|内容', action_text, re.I)
                  else 'content' if re.search(r'\bcontent\b|内容', action_text, re.I)
                  else previous_scope if same_role else None)
-        target_match = re.search(r'\b(database propert(?:y|ies)|(?:person|created by) propert(?:y|ies)|pages?|documents?|docs?|items?|collections?|rows?|cells?|workspaces?|content)\b|页面|文档|数据库属性|工作区|内容', action_text, re.I)
-        if target_match is None:
+        target_match = re.search(r'\b(database propert(?:y|ies)|(?:person|created by) propert(?:y|ies)|pages?|documents?|docs?|boards?|items?|collections?|rows?|cells?|workspaces?|content)\b|页面|文档|看板|数据库属性|工作区|内容', action_text, re.I)
+        if target_match is None and not operation_matches_text('manage_access', action_text):
             target_match = re.search(r'\b(comments?|threads?)\b|评论', action_text, re.I)
         object_quote = target_match.group() if target_match else None
         object_type = ('page' if object_quote and re.fullmatch(r'pages?|页面', object_quote, re.I)
                        else 'document' if object_quote and re.fullmatch(r'documents?|docs?|文档', object_quote, re.I)
+                       else 'board' if object_quote and re.fullmatch(r'boards?|看板', object_quote, re.I)
                        else 'database_property' if object_quote and re.search(r'propert|属性', object_quote, re.I)
                        else 'table_row' if object_quote and re.fullmatch(r'rows?', object_quote, re.I)
                        else 'table_cell' if object_quote and re.fullmatch(r'cells?', object_quote, re.I)
@@ -407,12 +573,14 @@ def _observations_json(fact, products):
             if operation != 'comment' and object_type in {'comment', 'comment_thread'}:
                 continue
             operation_plan = plan or _availability_plan(role, conditions, operation, object_type)
-            prerequisites = _operation_prerequisites(clause.strip(), conditions, operation, role, groups)
+            prerequisites = _operation_prerequisites(clause.strip(), conditions, operation, role, groups, selector)
             control_object = re.search(r'\b(?:permissions?|access|restrictions?)\b', action_text, re.I) or _ACCESS_CONTROL.search(action_text) if operation == 'manage_access' else None
             rows.append({'operation': operation, 'effect': 'denied' if _DENIED.search(clause) else 'allowed',
                 'role': role, 'plan': operation_plan, 'access_scope': scope,
                 'object_type': 'access_control' if control_object else object_type,
                 'object_quote': control_object.group() if control_object else object_quote,
+                **(_recipient_context(action_clause) if operation == 'manage_access' else {}),
+                **({'recipient_quote': selector['recipient_quote']} if operation == 'manage_access' and selector.get('recipient_quote') else {}),
                 'prerequisites': prerequisites, 'condition_evidence': condition_evidence,
                 **({'condition_groups': groups} if groups else {}),
                 'quote': fact.quote, 'operation_quote': clause.strip(),
@@ -440,6 +608,9 @@ def operation_binding(observation):
     bound = {key: observation[key] for key in keys}
     if observation.get('condition_groups'):
         bound['condition_groups'] = observation['condition_groups']
+    for key in ('recipient_quote', 'excluded_roles'):
+        if observation.get(key):
+            bound[key] = observation[key]
     bound['dimension'] = 'feature'
     return {'observation_id': 'operation-' + hashlib.sha256(canonical_json(bound).encode()).hexdigest()[:24], **bound}
 

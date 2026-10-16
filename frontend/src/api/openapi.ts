@@ -3235,6 +3235,18 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** ClaimCheck */
+        ClaimCheck: {
+            /** Check Id */
+            check_id: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "supported" | "unsupported" | "uncertain";
+            /** Claim Span */
+            claim_span: string;
+        };
         /** ClaimRecord */
         ClaimRecord: {
             /** Id */
@@ -3283,6 +3295,11 @@ export interface components {
             verdict: "supported" | "unsupported" | "uncertain";
             /** Reason */
             reason: string;
+            /**
+             * Checks
+             * @default []
+             */
+            checks: components["schemas"]["ClaimCheck"][];
         };
         /** ClaimValidationIssue */
         ClaimValidationIssue: {
@@ -7353,6 +7370,25 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** ReportAnswerCoverage */
+        ReportAnswerCoverage: {
+            /** Question Id */
+            question_id: string;
+            /** Question */
+            question: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "answered" | "partial" | "unanswered" | "unverified";
+            /**
+             * Claim Ids
+             * @default []
+             */
+            claim_ids: string[];
+            /** Reason */
+            reason: string;
+        };
         /** ReportApprovalSignalRequest */
         ReportApprovalSignalRequest: {
             /** Approver Id */
@@ -7549,6 +7585,11 @@ export interface components {
              * @default []
              */
             review_context_bytes: number[];
+            /**
+             * Answer Coverage
+             * @default []
+             */
+            answer_coverage: components["schemas"]["ReportAnswerCoverage"][];
         };
         /** ReportLayer */
         ReportLayer: {
@@ -7625,6 +7666,13 @@ export interface components {
              * @default []
              */
             condition_groups: components["schemas"]["ReportConditionGroup"][];
+            /** Recipient Quote */
+            recipient_quote?: string | null;
+            /**
+             * Excluded Roles
+             * @default []
+             */
+            excluded_roles: string[];
         };
         /** ReportQualityAccount */
         ReportQualityAccount: {

@@ -231,7 +231,7 @@ def test_source_negation_keeps_curly_apostrophes_and_role_labels_out_of_actions(
     assert operation_matches_text('read','文件夹权限允许查看该文件夹内的所有文档。')
 
 
-def test_writer_assigns_positive_actions_before_comment_role_denials():
+def test_writer_keeps_distinct_role_denials_alongside_positive_actions():
     from test_capability_alignment import fact
     from packages.agents.writer.dimension_writer import compact_dimension_context
     comments=fact('Notion','Can comment: People can comment on a page; they cannot edit or share content.',slot='denials')
@@ -239,7 +239,7 @@ def test_writer_assigns_positive_actions_before_comment_role_denials():
     payload,_=compact_dimension_context({'segment_competitor':'Notion','dimension':'feature'},
         SimpleNamespace(facts=[comments,full]),{comments.id,full.id},requested_operations=('comment','edit','share'))
     selected={r['id']:r['operation_targets'] for r in payload['evidence_view']['facts']}
-    assert selected=={full.id:['edit','share'],comments.id:['comment']}
+    assert selected=={full.id:['edit','share'],comments.id:['comment','edit','share']}
 
 
 def test_writer_review_respects_server_assigned_operation_targets():
@@ -324,7 +324,7 @@ def test_share_intent_or_recipient_does_not_establish_recipient_permission():
     intent="The email domain of the guest you’re trying to share the page with is not an allowed email domain for your workspace."
     assert not operation_observations(fact('Notion',intent,slot='share-failure'))
     rows=operation_observations(fact('Notion','You can share a page with guests.',slot='share-recipient'))
-    assert rows[0]['role'] is None
+    assert rows[0]['role'] == 'You'
 
 
 def test_short_comment_reading_phrase_cannot_close_posting_gap():

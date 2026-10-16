@@ -108,7 +108,6 @@ from packages.research.evidence.text import source_business_snippet
 from packages.schema.api_dto import RunDetail
 from packages.schema.decision_brief import (
     decision_brief_fields,
-    decision_brief_prompt_context,
     safe_decision_brief_text,
 )
 from packages.schema.models import (
@@ -2211,6 +2210,7 @@ class WriterAgentMixin(WriterEvidenceAlignmentMixin, DimensionWriterMixin):
             self._current_evidence_snapshot(self._evidence_live_record(record)),
             agent="writer", competitor=evidence_use.competitor,
             dimension=evidence_use.dimension, source_ids=evidence_use.requested_source_ids,
+            fact_ids=evidence_use.requested_fact_ids,
             max_bytes=evidence_use.view_max_bytes or evidence_use.max_bytes,
         )
         grounded_detail, _ = self._project_evidence_detail(record, [view])

@@ -7,6 +7,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
+from claim_review_fixture import supported_review
 
 from packages.agents.writer.repair import WriterRepairPlan
 from packages.config import Settings
@@ -214,8 +215,8 @@ async def test_real_rag_entry_admission_snapshot_and_downstream_consumers_share_
             return json.dumps({"claims": [claim]})
         if kwargs["name"] == "dimension_claim_review":
             payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
-            return json.dumps({"reviews": [{"claim_id": claim["id"], "verdict": "supported",
-                "reason": "Offline replay quote matches every condition."} for claim in payload["claims"]]})
+            return json.dumps({"reviews": [supported_review(claim,
+                "Offline replay quote matches every condition.") for claim in payload["claims"]]})
         return f"## Findings\n{quote} [source:{source_id}]"
 
     monkeypatch.setattr(service, "_trace_llm_json", replay_json)

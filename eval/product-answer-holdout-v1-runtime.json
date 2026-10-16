@@ -1,0 +1,74 @@
+[
+  {
+    "id": "answer-holdout-v1-001",
+    "product": "Basecamp",
+    "question": "我们在 Basecamp 5 里把客户小陈加入了项目 A，并已登录。项目每周用于交付复盘，内部消息 X 仍未设为客户可见。小陈现在是否能看到 X？",
+    "sources": [
+      {
+        "id": "official-basecamp-clients",
+        "title": "What Clients can see and do - Basecamp 5 Help",
+        "url": "https://5.basecamp-help.com/article/1082-what-clients-can-see-and-do"
+      }
+    ]
+  },
+  {
+    "id": "answer-holdout-v1-002",
+    "product": "Basecamp",
+    "question": "一位 Basecamp 5 Client 已加入项目 A，未加入同一账号的项目 B。A、B 都用于同一个客户的季度交付。仅凭他在 A 中的邀请，他也会看到 B 吗？",
+    "sources": [
+      {
+        "id": "official-basecamp-inviting",
+        "title": "Inviting People - Basecamp 5 Help",
+        "url": "https://5.basecamp-help.com/article/1060-inviting-people"
+      }
+    ]
+  },
+  {
+    "id": "answer-holdout-v1-003",
+    "product": "Basecamp",
+    "question": "Basecamp 5 账号里一位长期合作的外部伙伴被标为 Outside Collaborator。他是否一定不能担任 Admin？我们尚未说明账号创建时间。",
+    "sources": [
+      {
+        "id": "official-basecamp-permissions",
+        "title": "Permissions - Basecamp 5 Help",
+        "url": "https://5.basecamp-help.com/article/1171-permissions"
+      }
+    ]
+  },
+  {
+    "id": "answer-holdout-v1-004",
+    "product": "GitBook",
+    "question": "我们的 GitBook 站点当前是 Essential 套餐，每周发布更新说明。因为它已经能公开发布文档，现在就能使用 AI Assistant Chat 侧栏吗？",
+    "sources": [
+      {
+        "id": "official-gitbook-chat-plans",
+        "title": "GitBook pricing & plans | GitBook",
+        "url": "https://www.gitbook.com/pricing"
+      }
+    ]
+  },
+  {
+    "id": "answer-holdout-v1-005",
+    "product": "GitBook",
+    "question": "GitBook 文档站点已经配置 Authenticated access 和授权后端。合作方小林有现成登录凭证，但该后端没有授权他访问；站点用于培训材料。他只要拿到链接并登录，就一定能看吗？",
+    "sources": [
+      {
+        "id": "official-gitbook-auth",
+        "title": "The complete guide to creating and publishing documentation in GitBook [updated for 2026] | Guides | GitBook Documentation",
+        "url": "https://gitbook.com/docs/guides/editing-and-publishing-documentation/complete-guide-to-publishing-docs-gitbook"
+      }
+    ]
+  },
+  {
+    "id": "answer-holdout-v1-006",
+    "product": "GitBook",
+    "question": "我们在为 GitBook 做采购预算。仅依据所给合并规则说明，截至 2026 年 10 月 16 日，Enterprise 套餐在中国的含税人民币月费准确是多少？",
+    "sources": [
+      {
+        "id": "official-gitbook-price-control",
+        "title": "Merge rules | GitBook Documentation",
+        "url": "https://gitbook.com/docs/collaborate/merge-rules"
+      }
+    ]
+  }
+]

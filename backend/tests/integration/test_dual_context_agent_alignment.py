@@ -5,6 +5,7 @@ import json
 import socket
 
 import pytest
+from claim_review_fixture import supported_review
 from test_agent_evidence_alignment import InputReplay
 
 from packages.agents import SubagentContext
@@ -99,9 +100,15 @@ async def test_parent_prerequisite_survives_collector_admission_snapshot_and_wri
             if fact.get("operation_observations"):
                 claim["observation_id"] = fact["operation_observations"][0]["observation_id"]
             return json.dumps({"claims": [claim]})
+        if kwargs["name"] == "dimension_answer_coverage":
+            # Transport fixture only; semantic quality is tested with real models separately.
+            return json.dumps({"answers": [dict(question_id=q["question_id"], status="answered",
+                claim_ids=[c["id"] for c in payload["claims"]],
+                reason="Replay retains offline editing and its owner prerequisite.")
+                for q in payload["questions"]]})
         assert kwargs["name"] == "dimension_claim_review"
-        return json.dumps({"reviews": [{"claim_id": claim["id"], "verdict": "supported",
-                            "reason": "Fixed replay checks preserved owner prerequisite."}
+        return json.dumps({"reviews": [supported_review(claim,
+                            "Fixed replay checks preserved owner prerequisite.")
                            for claim in payload["claims"]]})
 
     monkeypatch.setattr(service, "_trace_llm_json", replay_json)

@@ -3,6 +3,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from claim_review_fixture import supported_review
 
 from test_capability_alignment import fact
 from test_operation_condition_scope import CHOICE, COMMENT, VIEW
@@ -88,7 +89,7 @@ def test_background_filter_keeps_real_eligibility_access_plan_and_sequence_requi
 def test_unknown_main_actor_keeps_explicit_member_eligibility(quote, requirement, operation):
     original = fact('Notion', quote, slot='unknown-actor').model_copy(update={'value_json': canonical_json([quote, requirement])})
     row = next(r for r in operation_observations(original) if r['operation'] == operation)
-    assert row['role'] is None
+    assert row['role'] == 'You'
     assert any(p['quote'] == requirement for p in row['prerequisites'])
     assert requirement in row['condition_evidence']
 
@@ -263,8 +264,8 @@ async def test_real_partial_writer_final_audit_and_release_structure_keep_collec
     async def model(record, **kwargs):
         payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
         if kwargs['name'] == 'dimension_claim_review':
-            return json.dumps({'reviews': [{'claim_id': c['id'], 'verdict': 'supported',
-                'reason': 'Offline fixture: the complete original supports simultaneous page editing.'} for c in payload['claims']]})
+            return json.dumps({'reviews': [supported_review(c,
+                'Offline fixture: the complete original supports simultaneous page editing.') for c in payload['claims']]})
         original = payload['evidence_view']['facts'][0]
         return json.dumps({'claims': [dict(text='多人可以同时编辑页面，修改实时可见。', kind='fact',
             competitor='Notion', dimension='feature', fact_ids=[original['id']], source_ids=[original['source_id']],

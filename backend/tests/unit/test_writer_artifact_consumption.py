@@ -3,6 +3,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from claim_review_fixture import supported_review
 from pydantic import HttpUrl, TypeAdapter
 from test_capability_alignment import fact
 from test_stage_evidence_views import FixedTime, distributed_detail
@@ -130,7 +131,7 @@ def bound_model(inputs):
         payload = parse_json(kwargs['user'].split('\nJSON:\n')[1])
         inputs.append((kwargs['name'], kwargs['subagent'], payload))
         if kwargs['name'] == 'dimension_claim_review':
-            return json.dumps({'reviews': [{'claim_id': c['id'], 'verdict': 'supported', 'reason': 'All original object and membership conditions preserved.'} for c in payload['claims']]})
+            return json.dumps({'reviews': [supported_review(c, 'All original object and membership conditions preserved.') for c in payload['claims']]})
         claims = []
         for original in payload['evidence_view']['facts']:
             for binding in original.get('operation_observations', []):
@@ -254,7 +255,7 @@ async def test_four_recorded_operations_reach_real_writer_review_and_report_with
         payload = json.loads(user.split('\nJSON:\n')[1]); inputs.append(payload)
         if 'claims' in payload:
             assert all(c['operation_binding'] for c in payload['claims'])
-            return json.dumps({'reviews': [{'claim_id': c['id'], 'verdict': 'supported', 'reason': 'All bound operation, actor and object restrictions preserved.'} for c in payload['claims']]})
+            return json.dumps({'reviews': [supported_review(c, 'All bound operation, actor and object restrictions preserved.') for c in payload['claims']]})
         claims = []
         for f in payload['evidence_view']['facts']:
             for binding in f['operation_observations']:
@@ -356,7 +357,7 @@ async def test_generic_quick_writer_offers_and_requires_operation_identity(monke
     async def complete_text(*, system, user):
         payload = json.loads(user.split('\nJSON:\n')[1]); inputs.append(payload)
         if 'claims' in payload:
-            return json.dumps({'reviews': [{'claim_id': c['id'], 'verdict': 'supported', 'reason': 'All original membership conditions preserved.'} for c in payload['claims']]})
+            return json.dumps({'reviews': [supported_review(c, 'All original membership conditions preserved.') for c in payload['claims']]})
         original = payload['evidence_view']['facts'][0]
         claim = dict(text=text, kind='fact', competitor=original['competitor'], dimension=original['dimension'], fact_ids=[original['id']], source_ids=[original['source_id']])
         candidates = original.get('operation_observations', [])
@@ -401,7 +402,7 @@ async def test_generic_non_operation_fact_can_publish_without_an_operation_ident
     async def complete_text(*, system, user):
         payload = json.loads(user.split('\nJSON:\n')[1]); inputs.append(payload)
         if 'claims' in payload:
-            return json.dumps({'reviews': [{'claim_id': c['id'], 'verdict': 'supported', 'reason': 'Exact battery specification preserved.'} for c in payload['claims']]})
+            return json.dumps({'reviews': [supported_review(c, 'Exact battery specification preserved.') for c in payload['claims']]})
         assert not any(f.get('operation_observations') for f in payload['evidence_view']['facts'])
         assert 'For facts without operation candidates, omit observation_id' in system
         original = payload['evidence_view']['facts'][0]
@@ -431,7 +432,7 @@ async def test_operation_repair_keeps_audited_non_operation_fact_and_rechecks_in
     async def complete_text(*, system, user):
         payload = json.loads(user.split('\nJSON:\n')[1]); inputs.append(payload)
         if 'claims' in payload:
-            return json.dumps({'reviews': [{'claim_id': c['id'], 'verdict': 'supported', 'reason': 'Exact source observation and all original conditions preserved.'} for c in payload['claims']]})
+            return json.dumps({'reviews': [supported_review(c, 'Exact source observation and all original conditions preserved.') for c in payload['claims']]})
         claims = []
         for original in payload['evidence_view']['facts']:
             candidates = original.get('operation_observations', [])
