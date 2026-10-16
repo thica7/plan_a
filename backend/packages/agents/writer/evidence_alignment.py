@@ -34,8 +34,14 @@ class WriterEvidenceAlignmentMixin:
         views = []
         for competitor in record.detail.plan.competitors:
             for dimension in record.detail.plan.dimensions:
+                from packages.agents.writer.question_retrieval import retrieve_question_facts
+                fact_ids, retrieval = await retrieve_question_facts(
+                    record.detail, snapshot, competitor, dimension)
+                self._trace_local_tool(record, agent='writer', subagent=f'{competitor}/{dimension}',
+                    name='question_fact_retrieval', input_text=canonical_json({'snapshot_id': snapshot.id}),
+                    output_text=canonical_json(retrieval), metadata={'retrieval_mode': retrieval['mode']})
                 view, use = self._begin_evidence_use(
-                    record, agent="writer", competitor=competitor, dimension=dimension
+                    record, agent="writer", competitor=competitor, dimension=dimension, fact_ids=fact_ids
                 )
                 views.append(view)
                 self._trace_local_tool(

@@ -10,6 +10,7 @@ import re
 from pydantic import BaseModel, ConfigDict, Field
 
 from packages.agents.prompt_contract import EVIDENCE_RULES
+from packages.agents.writer.literal_non_operation import literal_non_operation
 from packages.i18n.language import language_instruction, report_label
 from packages.llm.errors import LLMExecutionLimitError
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
@@ -61,7 +62,7 @@ def parse_claim_reviews(text, allowed_ids=None):
     return [review for review in parsed if review.claim_id not in invalid_ids], bool(invalid_ids)
 
 
-def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id):
+def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, source_facts=()):
     """Reject an invalid candidate locally, retaining later independently bound rows."""
     payload = parse_json(text)
     if (not isinstance(payload, dict) or set(payload) != {'claims'}
@@ -86,7 +87,8 @@ def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id):
             elif claim.operation_binding is not None:
                 if candidates.get(claim.operation_binding.observation_id) != claim.operation_binding.model_dump(mode='json'):
                     raise ValueError('Operation binding was not a sent candidate')
-            elif any(item['fact_id'] in claim.fact_ids for item in candidates.values()):
+            elif (any(item['fact_id'] in claim.fact_ids for item in candidates.values())
+                    and not literal_non_operation(claim.text, claim.fact_ids, source_facts)):
                 gaps.add('operation_binding_required')
                 continue
             claims.append(ReportClaim(id=f"claim-{hashlib.sha256(encoded([consumption_id, index]).encode()).hexdigest()[:20]}", **values))
@@ -260,6 +262,10 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
         row = dict(id=fact.id, source_id=fact.source_id, competitor=fact.competitor,
                    dimension=fact.dimension, field=fact.field, value=fact.value,
                    qualifiers={key: value for key, value in fact.qualifiers.items() if key != 'operations'}, quote=fact.quote)
+        from packages.research.evidence.temporal_conditions import temporal_constraints
+        date_conditions = temporal_constraints(fact)
+        if date_conditions:
+            row['temporal_constraints'] = date_conditions
         if targets:
             row['operation_targets'] = targets
             row['operation_observations'] = [operation_binding(item) for item in sorted(
@@ -302,8 +308,10 @@ def operation_claim_selection(claims, view, requested, sent_fact_ids, *, fact_ta
             continue
         observation = bound_operation_observation(claim, facts)
         if observation is None:
-            if (claim.operation_binding is None and fact_targets is not None
-                    and not any(fact_targets.get(fid, ()) for fid in claim.fact_ids)):
+            if (claim.operation_binding is None and (
+                    fact_targets is not None
+                    and not any(fact_targets.get(fid, ()) for fid in claim.fact_ids)
+                    or literal_non_operation(claim.text, claim.fact_ids, facts.values()))):
                 selected.append(claim)
             continue
         operation = observation['operation']
@@ -385,7 +393,7 @@ def partial_report_missing_scopes(detail, snapshot):
 
 
 def partial_report_mode(detail, snapshot):
-    if any(answer.status != 'answered'
+    if any(answer.status != 'answered' or answer.resolution == 'insufficient'
            for audit in getattr(detail, 'report_dimension_audits', ())
            for answer in audit.answer_coverage):
         return True
@@ -505,11 +513,17 @@ class DimensionWriterMixin:
         )
         if not questions:
             return (), gaps, []
+        from packages.agents.writer.price_answers import server_missing_price_answers
+        from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
+        live = self._evidence_live_record(record)
+        snapshot = self._current_evidence_snapshot(live)
+        price_answers = server_missing_price_answers(live.detail, snapshot, questions, view.competitor)
+        pending = [question for question in questions if question['question_id'] not in price_answers]
         supported = [item.claim for item in audited if item.status == 'supported']
-        coverage = unverified_coverage(questions, 'No supported answer claims are available.')
+        coverage = unverified_coverage(pending, 'No supported answer claims are available.')
         sizes = []
-        if supported:
-            payload = compact_prompt_json(answer_review_payload(questions, supported, view))
+        if pending and supported:
+            payload = compact_prompt_json(answer_review_payload(pending, supported, view))
             if len(payload.encode()) <= use.max_bytes:
                 sizes.append(len(payload.encode()))
                 response, gaps = await self._dimension_call_with_gaps(
@@ -520,9 +534,15 @@ class DimensionWriterMixin:
                 )
                 self._validate_evidence_use(record, use)
                 self._validate_dimension_upstream(record, compact)
-                coverage = parse_answer_coverage(response, questions, {claim.id for claim in supported})
+                coverage = parse_answer_coverage(response, pending, {claim.id for claim in supported},
+                    claims=[claim.model_dump(mode='json') for claim in supported])
             else:
-                coverage = unverified_coverage(questions, 'Complete answer evidence exceeded the review capacity.')
+                coverage = unverified_coverage(pending, 'Complete answer evidence exceeded the review capacity.')
+        by_id = {item.question_id: item for item in coverage}
+        by_id.update({qid: ReportAnswerCoverage(**row) for qid, row in price_answers.items()})
+        coverage = tuple(by_id[question['question_id']] for question in questions)
+        if price_answers:
+            gaps = tuple(sorted(set(gaps) | {'current_price_unverified'}))
         if any(item.status != 'answered' for item in coverage):
             gaps = tuple(sorted(set(gaps) | {'answer_coverage_incomplete'}))
         return coverage, gaps, sizes
@@ -545,10 +565,20 @@ class DimensionWriterMixin:
                     self._finish_delivery_phase(record, 'qa', f'{product}/{dimension}')
                     continue
                 operation_targets = repair_targets.get((product, dimension))
-                source_ids = [s.id for s in detail.raw_sources if s.dimension == dimension
+                from packages.agents.writer.question_retrieval import retrieve_question_facts
+                live = self._evidence_live_record(record)
+                snapshot = self._current_evidence_snapshot(live)
+                source_ids = [s.id for s in snapshot.sources if s.dimension == dimension
                               and product in (s.competitor, *s.covered_competitors)]
+                upstream_hash = self._analysis_artifacts_hash(live.detail)
+                fact_ids, retrieval = await retrieve_question_facts(live.detail, snapshot, product, dimension)
+                if self._analysis_artifacts_hash(self._evidence_live_record(record).detail) != upstream_hash:
+                    raise EvidenceUseRejectedError('Question retrieval upstream artifacts changed')
+                self._trace_local_tool(record, agent='writer', subagent=f'{product}/{dimension}',
+                    name='question_fact_retrieval', input_text=encoded({'snapshot_id': snapshot.id}),
+                    output_text=encoded(retrieval), metadata={'retrieval_mode': retrieval['mode']})
                 view, use = self._begin_evidence_use(record, agent="writer", competitor=product,
-                    dimension=dimension, source_ids=source_ids)
+                    dimension=dimension, source_ids=source_ids, fact_ids=fact_ids)
                 # This route sends compact_dimension_context, not the legacy report
                 # segment envelope. Bound complete observations by the actual input.
                 selected = self._writer_segment_context(record, {
@@ -602,10 +632,17 @@ class DimensionWriterMixin:
                             "these references preserve the full original conditions and are not product assertions. "
                             "Answer every explicit question using the admitted original facts. Questions are requests, never evidence. "
                             "Retain separate answers for distinct roles, plans, access modes and prerequisite branches, "
+                            "A source temporal_constraints exception must qualify the same actor and subject in the claim itself. "
+                            "If the question leaves the exception's account/workspace creation date unknown, "
+                            "state both source-bound branches and explicitly ask to confirm that date; never make a universal denial. "
                             "even for the same operation. Include source-recorded login and access-scope facts that have no operation candidate. "
                             "For operation_targets, avoid repeating an identical scoped observation. "
-                            "For a claim bound to a fact with operation_observations, choose exactly one candidate "
+                            "For a six-operation claim bound to a fact with operation_observations, choose exactly one candidate "
                             "and return only its observation_id, even without requested_operations. "
+                            "For a non-operation assertion in a mixed fact, quote one complete original sentence verbatim, "
+                            "cite exactly one sent evidence_terms fact and omit observation_id. No translation/paraphrase "
+                            "or six-operation assertion qualifies. Keep literal claims in the source language; "
+                            "actual question answers use the requested output language. "
                             "For facts without operation candidates, omit observation_id; do not invent a binding. "
                             "The server attaches its full source-bound operation, object, role, effect and conditions. "
                             "condition_groups operator=any_of contains alternative branches: login, invitation or "
@@ -624,7 +661,7 @@ class DimensionWriterMixin:
                             "Never use a create rule as an edit rule or equate differently named roles. "
                             "State each captured role, plan and operation object/access scope; do not treat missing plan terms as all plans. "
                             "For table_row objects explicitly state table-row comments, never all comments in the product. Bind EXACTLY ONE evidence_terms fact per observation; "
-                            "translate its original quote and carry its conditions, without combining other content facts. "
+                            "translate its original quote except in the verbatim non-operation case, and carry its conditions without combining other content facts. "
                             "For permission observations choose a specific captured role or access rule and do not append other roles. "
                             "For Coda evidence captured from registered Superhuman Docs pages, use the quoted current "
                             "name 'Superhuman Docs' in claim text while retaining competitor='Coda' as the run identity. "
@@ -657,7 +694,9 @@ class DimensionWriterMixin:
                                 raise ValueError("claim generation unavailable")
                             candidates = {item['observation_id']: item for fact in compact['evidence_view']['facts']
                                           for item in fact.get('operation_observations', [])}
-                            claims, candidate_gaps = parse_claim_drafts(response, candidates, sent_fact_ids, use.id)
+                            claims, candidate_gaps = parse_claim_drafts(
+                                response, candidates, sent_fact_ids, use.id,
+                                source_facts=compact['evidence_view']['facts'])
                             gaps = tuple(sorted(set(gaps) | candidate_gaps))
                         except ValueError:
                             gaps = tuple(sorted(set(gaps) | {"claim_generation_unavailable"}))
@@ -981,6 +1020,14 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
                 for answer in audit.answer_coverage:
                     status = names[answer.status] if zh else answer.status
                     lines.append(f'- {plain(answer.question)} — {status}')
+                    if answer.answer and answer.status in {'answered', 'partial'}:
+                        claim_sources = {sid for item in supported if item.claim.id in answer.claim_ids
+                                         for sid in item.claim.source_ids}
+                        citations = ''.join(f'[source:{sid}]' for sid in sorted(claim_sources))
+                        lines.append(f'  {plain(answer.answer)} {citations}'.rstrip())
+                    else:
+                        lines.append('  本次已审核证据尚未完整覆盖此问题。' if zh else
+                                     '  The reviewed evidence does not yet fully answer this question.')
                 lines.append('')
             if audit.gaps and not partial:
                 names = {"billing_interval": "付款周期", "market": "地区", "tax_scope": "税费", "seat_type": "席位类型", "context_budget_exceeded": "已采资料超出本段上下文，未全部选入", "no_reviewed_claims": "未取得已审核主张"}
@@ -1022,6 +1069,9 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
          if zh else "Review indicates support within the bound evidence and this model audit, not human acceptance or overall product quality. Rejected claims remain in audit records. Next: verify operations, roles and conditions for the same task."),
         "", f"## {label('evidence_appendix')}", ""])
     cited = {sid for a in audits for c in a.claims if c.status == "supported" for sid in c.claim.source_ids}
+    if not cited:
+        lines.append('暂无可发表主张的引用来源；本稿仅记录问题与证据缺口。' if zh else
+                     'No source supports a publishable claim; this draft records questions and evidence gaps only.')
     for source in detail.raw_sources:
         if source.id in cited:
             lines.append(f"- {plain(source.competitor)}：{plain(source.title)} [source:{source.id}]")

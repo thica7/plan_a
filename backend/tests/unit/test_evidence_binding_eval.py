@@ -301,8 +301,8 @@ def test_native_downstream_diagnostic_writes_real_artifacts_without_search(monke
     rows = [module.allowed_payload(row) for row in cases() if row["id"] in module.SCORED]
     output = tmp_path / "diagnostic"
     result = asyncio.run(module.run_diagnostic(rows, output, timeout=30))
-    assert result["error_type"] == "RuntimeError"
-    assert "quality preflight" in result["error_reason"]
+    assert result["error_type"] is None
+    assert result["report_chars"] > 0  # A gap-only draft is useful, but is not deliverable.
     assert result["collector_status"] == "skipped" and result["deliverable"] is False
     assert result["semantic_quality"] == "pending_human"
     assert 0 < result["llm_transport_attempts"] <= 24

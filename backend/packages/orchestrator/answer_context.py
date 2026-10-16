@@ -246,11 +246,16 @@ def _amount_issues(service, snapshot, text, path, boundaries, facts, cited, patt
     return issues
 
 
-def _assertion_spans(markdown):
+def _assertion_spans(markdown, *, request_lines=()):
     """Paragraph citations stay local; each table row has its own source contract."""
     index = build_report_section_index(markdown)
     paragraph, first_line = [], 1
     for line_number, line in enumerate(markdown.splitlines(), 1):
+        if line in request_lines:
+            if paragraph:
+                yield first_line, "\n".join(paragraph)
+                paragraph = []
+            continue
         section = index.section_for_line(line_number)
         appendix = section is not None and (
             section.layer == "audit"
@@ -339,7 +344,25 @@ def audit_answer_boundaries(service, record, snapshot, *, producer_verified, ali
         return issues
     facts = {item.id: item for item in snapshot.facts}
     money_pattern = _money_pattern(facts)
-    for line_number, text in _assertion_spans(record.detail.report_md):
+    from packages.schema.decision_brief import safe_decision_brief_text
+
+    # Only the exact request line emitted for an authenticated generation audit
+    # is display context. Its answer and every other line remain assertions.
+    bound_scopes = {
+        (use.id, use.competitor, use.dimension)
+        for use in uses
+        if use.agent == "writer" and use.snapshot_id == snapshot.id
+        and use.status in {"validated", "reused"}
+    }
+    names = {"answered": "已回答", "partial": "部分回答", "unanswered": "未回答", "unverified": "尚未核实"}
+    request_lines = {
+        f"- {safe_decision_brief_text(answer.question)} — "
+        + (names[answer.status] if record.detail.output_language.startswith("zh") else answer.status)
+        for audit in record.detail.report_dimension_audits
+        if (audit.consumption_id, audit.competitor, audit.dimension) in bound_scopes
+        for answer in audit.answer_coverage
+    }
+    for line_number, text in _assertion_spans(record.detail.report_md, request_lines=request_lines):
         cited = {resolve_source_token(token, aliases) for token in source_tokens(text)} - {None}
         issues.extend(
             _amount_issues(

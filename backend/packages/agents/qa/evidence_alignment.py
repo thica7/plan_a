@@ -47,17 +47,31 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                     reasons.add("published_claim_missing_or_changed")
             if any(size > use.max_bytes for size in audit.review_context_bytes):
                 reasons.add("claim_review_context_exceeded")
-            from packages.agents.writer.answer_coverage import research_questions
+            from packages.agents.writer.answer_coverage import coverage_resolution_reasons, research_questions
             questions = research_questions(record.detail, audit.competitor, audit.dimension)
             expected = {item['question_id']: item['question'] for item in questions}
             actual = {item.question_id: item.question for item in audit.answer_coverage}
             if actual != expected or len(actual) != len(audit.answer_coverage):
                 reasons.add('answer_coverage_scope_changed')
             published_ids = {item.claim.id for item in published}
-            if (any(item.status != 'answered' or not item.claim_ids
-                    or not set(item.claim_ids) <= published_ids for item in audit.answer_coverage)
+            published_claims = [item.claim.model_dump(mode='json') for item in published]
+            from packages.agents.writer.price_answers import server_missing_price_answers
+            from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
+            price_answers = server_missing_price_answers(record.detail, snapshot, questions, audit.competitor)
+            def answer_invalid(item):
+                if item.resolution == 'insufficient':
+                    original = price_answers.get(item.question_id)
+                    return original is None or item != ReportAnswerCoverage(**original)
+                return (item.status != 'answered' or not item.claim_ids
+                        or not set(item.claim_ids) <= published_ids
+                        or bool(coverage_resolution_reasons(item, published_claims)))
+            if (any(answer_invalid(item) for item in audit.answer_coverage)
                     or questions and not audit.answer_coverage):
                 reasons.add('answer_coverage_incomplete')
+            if any(item.answer and item.status in {'answered', 'partial'}
+                   and safe_decision_brief_text(item.answer) not in record.detail.report_md
+                   for item in audit.answer_coverage):
+                reasons.add('published_answer_missing_or_changed')
         for reason in sorted(reasons):
             problem = f"主张引用审核失败：{reason}。请重新生成该产品和维度的报告内容。"
             issues.append(QCIssue(id=f"qa-claim-{service._evidence_artifact_hash([snapshot.id, index, reason])[:20]}",

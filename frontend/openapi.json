@@ -14851,6 +14851,29 @@
         ],
         "title": "AnswerBoundary"
       },
+      "AnswerEvidenceSpan": {
+        "properties": {
+          "claim_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Claim Id"
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Quote"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "claim_id",
+          "quote"
+        ],
+        "title": "AnswerEvidenceSpan"
+      },
       "AnswerRequirement": {
         "properties": {
           "competitor": {
@@ -26167,6 +26190,66 @@
             "maxLength": 800,
             "minLength": 1,
             "title": "Reason"
+          },
+          "answer": {
+            "type": "string",
+            "maxLength": 1200,
+            "title": "Answer",
+            "default": ""
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "direct",
+              "conditional",
+              "clarification",
+              "insufficient",
+              "unresolved"
+            ],
+            "title": "Resolution",
+            "default": "unresolved"
+          },
+          "conclusion": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no",
+              "depends",
+              "unknown",
+              "not_applicable"
+            ],
+            "title": "Conclusion",
+            "default": "unknown"
+          },
+          "evidence_spans": {
+            "items": {
+              "$ref": "#/components/schemas/AnswerEvidenceSpan"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Evidence Spans",
+            "default": []
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "title": "Missing Fields",
+            "default": []
+          },
+          "basis_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Snapshot Id"
           }
         },
         "additionalProperties": false,

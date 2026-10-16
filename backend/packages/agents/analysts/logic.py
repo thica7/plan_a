@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from packages.agents import SubagentContext
 from packages.agents.analysts.cards import build_claim_card_bundle
 from packages.agents.analysts.citation_tools import inspect_sources, validate_source_ids
-from packages.llm.errors import LLMExecutionLimitError
+from packages.llm.errors import LLMError, LLMExecutionLimitError
 from packages.memory import KBCacheEntry
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.refs import merge_ordered_refs
@@ -89,6 +89,34 @@ SWITCHING_REVIEW_TERMS = (
 
 if TYPE_CHECKING:
     from packages.orchestrator.service import RunRecord
+
+
+def _recoverable_json_output_error(error: LLMError) -> bool:
+    """The adapter aggregates format and authorization errors into LLMError.
+
+    Only complete parser diagnostics are recoverable here. Every provider in
+    an aggregate must have failed on format, so an auth/config error still stops.
+    """
+    message = str(error)
+    prefix = "LLM JSON request failed for all providers: "
+    if message.startswith(prefix):
+        parts = [part.partition(": ") for part in message[len(prefix):].split(" | ")]
+        if any(not provider or not separator for provider, separator, _ in parts):
+            return False
+        messages = [detail for _, _, detail in parts]
+    else:
+        messages = [message]
+    parser_diagnostic = (
+        r"(?:Expecting (?:value|property name enclosed in double quotes"
+        r"|',' delimiter|':' delimiter)"
+        r"|Unterminated string starting at|Invalid "
+        r"(?:\\escape|control character at|\\uXXXX escape)"
+        r"|Extra data): line \d+ column \d+ \(char \d+\)"
+    )
+    return all(detail in {
+        "LLM response did not contain a JSON object.",
+        "LLM response JSON root was not an object.",
+    } or re.fullmatch(parser_diagnostic, detail) is not None for detail in messages)
 
 
 class AnalystAgentMixin:
@@ -651,7 +679,10 @@ class AnalystAgentMixin:
                     context=context,
                     timeout_seconds=branch_timeout,
             )
-        except (TimeoutError, LLMExecutionLimitError) as exc:
+        except (TimeoutError, LLMError) as exc:
+            if (isinstance(exc, LLMError) and not isinstance(exc, LLMExecutionLimitError)
+                    and not _recoverable_json_output_error(exc)):
+                raise
             payload = self._deterministic_structured_knowledge_payload(
                 competitor=competitor,
                 dimension=dimension,
@@ -659,6 +690,8 @@ class AnalystAgentMixin:
             )
             if isinstance(exc, LLMExecutionLimitError):
                 react_payload['fallback_reason'] = str(exc)
+            elif isinstance(exc, LLMError):
+                react_payload['fallback_reason'] = f"llm_json_format_error: {exc}"
             else:
                 react_payload['analysis_timeout'] = f"one-shot analyst exceeded {branch_timeout:g}s"
             react_payload["deterministic_fallback"] = True

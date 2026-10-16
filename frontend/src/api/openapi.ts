@@ -2613,6 +2613,13 @@ export interface components {
              */
             view_fact_ids: string[];
         };
+        /** AnswerEvidenceSpan */
+        AnswerEvidenceSpan: {
+            /** Claim Id */
+            claim_id: string;
+            /** Quote */
+            quote: string;
+        };
         /** AnswerRequirement */
         AnswerRequirement: {
             /** Competitor */
@@ -7388,6 +7395,35 @@ export interface components {
             claim_ids: string[];
             /** Reason */
             reason: string;
+            /**
+             * Answer
+             * @default
+             */
+            answer: string;
+            /**
+             * Resolution
+             * @default unresolved
+             * @enum {string}
+             */
+            resolution: "direct" | "conditional" | "clarification" | "insufficient" | "unresolved";
+            /**
+             * Conclusion
+             * @default unknown
+             * @enum {string}
+             */
+            conclusion: "yes" | "no" | "depends" | "unknown" | "not_applicable";
+            /**
+             * Evidence Spans
+             * @default []
+             */
+            evidence_spans: components["schemas"]["AnswerEvidenceSpan"][];
+            /**
+             * Missing Fields
+             * @default []
+             */
+            missing_fields: string[];
+            /** Basis Snapshot Id */
+            basis_snapshot_id?: string | null;
         };
         /** ReportApprovalSignalRequest */
         ReportApprovalSignalRequest: {

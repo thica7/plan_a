@@ -126,7 +126,9 @@ def run_writer_quality_preflight(
     if dimension_writing_enabled(detail):
         from packages.business_intel.report_contract import compact_report_checks
         missing_content = [key for key, ok in compact_report_checks(
-            markdown, output_language=detail.output_language) if not ok]
+            markdown, output_language=detail.output_language,
+            allow_evidence_gaps=bool(detail.report_dimension_audits)
+                and partial_report_mode(detail, current_snapshot(detail))) if not ok]
         if missing_content:
             failure_reasons.append("compact_report_contract")
             missing_core_sections = list(dict.fromkeys([*missing_core_sections, *missing_content]))

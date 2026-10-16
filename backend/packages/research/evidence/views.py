@@ -216,7 +216,8 @@ def select_evidence_view(
     if max_bytes < 1:
         raise ValueError("evidence view byte budget must be positive")
     requested_ids = tuple(sorted(set(source_ids))) if source_ids is not None else None
-    requested_fact_ids = tuple(sorted(set(fact_ids))) if fact_ids is not None else None
+    requested_fact_ids = tuple(dict.fromkeys(fact_ids)) if fact_ids is not None else None
+    requested_fact_rank = {fact_id: index for index, fact_id in enumerate(requested_fact_ids or ())}
     allowed_sources = {
         source.id: source
         for source in snapshot.sources
@@ -350,6 +351,10 @@ def select_evidence_view(
                 for key in fact_capabilities.get(item, ())}
         return -100 * len((keys & axes) - seen) - max(
             (len(capability_products[key]) for key in keys), default=0)
+
+    def requested_priority(group):
+        return min(requested_fact_rank.get(item, len(requested_fact_rank)) for item in group)
+
     queues = {branch: deque(sorted(items, key=lambda group: (
         any(facts[item].status != "supported" for item in group),
         sum(len(facts[item].value_json.encode("utf-8")) + len(facts[item].quote.encode("utf-8")) for item in group),
@@ -407,6 +412,7 @@ def select_evidence_view(
         # Try an unrepresented product/branch's alternative sources before
         # allocating more observations to an already represented branch.
         branch = min((key for key, queue in queues.items() if queue), key=lambda key: (
+            min(requested_priority(group) for group in queues[key]),
             key[0] in represented_products, key in represented_branches,
             len(branches[key]) - len(queues[key]), key,
         ))
@@ -429,7 +435,9 @@ def select_evidence_view(
         if candidates:
             # Measure the whole source-paired prompt: a shorter quote can have
             # a much larger page header than another equally valid observation.
-            _, _, _, _, _, _, group, selected_facts, selected_sources, view = min(candidates, key=lambda item: item[:6])
+            _, _, _, _, _, _, group, selected_facts, selected_sources, view = min(
+                candidates, key=lambda item: (requested_priority(item[6]), *item[:6])
+            )
             queues[branch].remove(group)
     source_has_facts = {fact.source_id for fact in snapshot.facts}
     for source_id in sorted(allowed_sources):

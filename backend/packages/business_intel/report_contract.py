@@ -14,7 +14,7 @@ def dimension_report_profile(plan, *, topic, partial_evidence=False):
             topic, plan.target_product.use_cases if plan.target_product else ())))
 
 
-def compact_report_checks(markdown, *, output_language='zh-CN'):
+def compact_report_checks(markdown, *, output_language='zh-CN', allow_evidence_gaps=False):
     from packages.agents.writer.segment_contract import heading_key_for
     matches = list(re.finditer(r'(?m)^##\s+(.+?)\s*$', markdown))
     sections = {}
@@ -43,8 +43,8 @@ def compact_report_checks(markdown, *, output_language='zh-CN'):
     citation = re.compile(r'\[source:[^\]\s]+\]')
     return [
         ('executive_summary', len(prose(summary)) >= 12),
-        ('competitive_findings', bool(citation.search(findings)) and len(prose(findings)) >= 20),
-        ('evidence_appendix', bool(citation.search(sources)) and len(prose(sources)) >= 3),
+        ('competitive_findings', (allow_evidence_gaps or bool(citation.search(findings))) and len(prose(findings)) >= 20),
+        ('evidence_appendix', (allow_evidence_gaps or bool(citation.search(sources))) and len(prose(sources)) >= 3),
         ('confidence_notes', len(prose(risk)) >= 24
             and bool(re.search(r'审核|风险|限制|audit|review|risk|limitation', risk, re.I))
             and bool(re.search(r'下一步|验证|核验|next|verif', risk, re.I))),

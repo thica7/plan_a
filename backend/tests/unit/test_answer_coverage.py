@@ -325,12 +325,16 @@ def test_answer_coverage_preserves_missing_and_partial_as_incomplete():
                         "status": "partial",
                         "claim_ids": ["accepted"],
                         "reason": "Access scope was not answered.",
+                        "answer": "Sign-in is required; the access scope is not established.",
+                        "resolution": "conditional", "conclusion": "depends",
+                        "evidence_spans": [{"claim_id": "accepted", "quote": "Sign-in is required."}],
                     }
                 ]
             }
         ),
         questions,
         {"accepted"},
+        claims=[{"id": "accepted", "text": "Sign-in is required."}],
     )
     assert result[0].status == "partial"
     assert result[0].question == questions[0]["question"]
@@ -474,6 +478,10 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
                             "question_id": q["question_id"],
                             "status": "answered" if complete else "partial",
                             "claim_ids": [c["id"] for c in payload["claims"]],
+                                "answer": quote if complete else "Members have documents.",
+                                "resolution": "direct", "conclusion": "yes",
+                                "evidence_spans": [{"claim_id": c["id"], "quote": c["text"]}
+                                                   for c in payload["claims"]],
                             "reason": "Login is answered."
                             if complete
                             else "The login answer is omitted.",
@@ -504,7 +512,7 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
     await service._real_writer_step(record)
     assert calls.count("dimension_answer_coverage") == 1
     coverage = detail.report_dimension_audits[0].answer_coverage
-    assert len(coverage) == 1 and coverage[0].status == ("answered" if complete else "partial")
+    assert len(coverage) == 1 and coverage[0].status == ("answered" if complete else "unverified")
     if not complete:
         assert "# 局部调研报告" in detail.report_md
         assert "同操作与条件对照" not in detail.report_md
