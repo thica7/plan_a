@@ -211,8 +211,10 @@ def _money_pattern(facts):
 
 
 def _amount_issues(service, snapshot, text, path, boundaries, facts, cited, pattern):
+    from packages.research.evidence.monetary import monetary_mentions, source_credit_allowances
     from packages.research.evidence.report_claims import recorded_price_scope_assertion
-    content = text.replace("页面采集标价（不代表适用报价）：", "").replace("Captured page price (not an applicable quote): ", "")
+    content = text.replace("页面采集标价（不代表适用报价）：", "").replace(
+        "Captured page price (not an applicable quote): ", "")
     recorded_label = ("页面采集标价（不代表适用报价）：" in text
                       or "Captured page price (not an applicable quote): " in text)
     recorded_label = recorded_label and not recorded_price_scope_assertion(content)
@@ -224,15 +226,18 @@ def _amount_issues(service, snapshot, text, path, boundaries, facts, cited, patt
         for fact_id in local_allowed
         if facts[fact_id].source_id in cited
     }
+    allowance_bindings = {
+        mention.binding
+        for fact_id in local_allowed
+        if facts[fact_id].source_id in cited
+        for mention in source_credit_allowances(facts[fact_id], pattern)
+    }
     issues = []
-    for match in pattern.finditer(text):
-        currency = (match.group("prefix") or match.group("suffix")).upper()
-        currency = _SYMBOL_CURRENCY.get(currency, currency)
-        amount_text = (match.group("amount") or match.group("suffix_amount")).replace(",", "")
-        if match.group("prefix_sign") == "-":
-            amount_text = "-" + amount_text.lstrip("+-")
-        amount = Decimal(amount_text)
-        if (amount, currency) not in supported_money:
+    for mention in monetary_mentions(text, pattern):
+        supported = (mention.binding in allowance_bindings
+                     if mention.kind == 'credit_allowance'
+                     else (mention.amount, mention.currency) in supported_money)
+        if not supported:
             issue = _issue(
                 service,
                 snapshot,
@@ -241,7 +246,9 @@ def _amount_issues(service, snapshot, text, path, boundaries, facts, cited, patt
                 boundary=candidates[0] if candidates else None,
                 source_ids=tuple(sorted(cited)),
             )
-            issue.metadata.update(amount=str(amount), currency=currency)
+            issue.metadata.update(amount=str(mention.amount), currency=mention.currency,
+                                  amount_kind=mention.kind, plan=mention.plan,
+                                  period=mention.period)
             issues.append(issue)
     return issues
 

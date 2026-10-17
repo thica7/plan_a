@@ -127,16 +127,15 @@ async def test_final_qa_replays_question_filtered_generation_view():
             if kw["name"] == "dimension_answer_coverage":
                 return json.dumps(
                     {
+                        "version": 2,
                         "answers": [
                             dict(
                                 question_id=q["question_id"],
                                 status="answered",
                                 claim_ids=[c["id"] for c in payload["claims"]],
                                 reason="The login requirement is answered.",
-                                answer=login,
                                 resolution="direct", conclusion="yes",
-                                evidence_spans=[dict(claim_id=c['id'], quote=c['text'])
-                                                for c in payload['claims']],
+                                missing_fields=[],
                             )
                             for q in payload["questions"]
                         ]

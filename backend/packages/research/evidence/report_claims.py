@@ -119,12 +119,15 @@ class ReportDimensionAudit(BaseModel):
     gaps: tuple[str, ...] = ()
     review_context_bytes: tuple[int, ...] = ()
     answer_coverage: tuple[ReportAnswerCoverage, ...] = ()
+    answer_binding_version: Literal[2] | None = None
 
     @model_serializer(mode='wrap')
     def serialize_legacy_audit(self, handler):
         values = handler(self)
         if not self.answer_coverage:
             values.pop('answer_coverage', None)
+        if self.answer_binding_version is None:
+            values.pop('answer_binding_version', None)
         return values
 
 

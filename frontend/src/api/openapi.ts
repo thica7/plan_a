@@ -7424,6 +7424,8 @@ export interface components {
             missing_fields: string[];
             /** Basis Snapshot Id */
             basis_snapshot_id?: string | null;
+            /** Binding Version */
+            binding_version?: 2 | null;
         };
         /** ReportApprovalSignalRequest */
         ReportApprovalSignalRequest: {
@@ -7626,6 +7628,8 @@ export interface components {
              * @default []
              */
             answer_coverage: components["schemas"]["ReportAnswerCoverage"][];
+            /** Answer Binding Version */
+            answer_binding_version?: 2 | null;
         };
         /** ReportLayer */
         ReportLayer: {

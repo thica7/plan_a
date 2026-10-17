@@ -102,10 +102,9 @@ async def test_parent_prerequisite_survives_collector_admission_snapshot_and_wri
             return json.dumps({"claims": [claim]})
         if kwargs["name"] == "dimension_answer_coverage":
             # Transport fixture only; semantic quality is tested with real models separately.
-            return json.dumps({"answers": [dict(question_id=q["question_id"], status="answered",
+            return json.dumps({"version": 2, "answers": [dict(question_id=q["question_id"], status="answered",
                 claim_ids=[c["id"] for c in payload["claims"]],
-                answer=prerequisite, resolution="conditional", conclusion="depends",
-                evidence_spans=[dict(claim_id=c['id'], quote=c['text']) for c in payload['claims']],
+                resolution="conditional", conclusion="depends", missing_fields=[],
                 reason="Replay retains offline editing and its owner prerequisite.")
                 for q in payload["questions"]]})
         assert kwargs["name"] == "dimension_claim_review"

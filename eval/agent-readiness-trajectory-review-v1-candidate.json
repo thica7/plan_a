@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "unit": "question_episode",
+  "human_reviewed": 0,
+  "training_ready": false,
+  "annotations": [
+    {
+      "run_id": "run-5157e246b09c4e699cf707a164102db2",
+      "question_id": "question-5d51a946907175ab0e63",
+      "product": "Basecamp",
+      "report_sha256": "e93af067d4f30ee0a19c007c32957889b12b09b496d3d5111571ebfb001c7963",
+      "candidate_outcome": "success",
+      "label_status": "candidate",
+      "review_source": "agent_candidate",
+      "reason": "单题在账号创建日期未知时保留日期分支并请求确认；不代表整份报告或引用绑定已通过。"
+    },
+    {
+      "run_id": "run-a747ef6cdd69465aaa68eae0939bf7da",
+      "question_id": "question-d6009d962fbc28f8e3a1",
+      "product": "GitBook",
+      "report_sha256": "cb45671c5f147341a8cc536ad159930e0a996413ff30fcaa95b725df8827e077",
+      "candidate_outcome": "failure",
+      "label_status": "candidate",
+      "review_source": "agent_candidate",
+      "reason": "把Chat只归Enterprise并漏掉其他支持套餐；任务完成与QA状态不能替代事实正确性。"
+    },
+    {
+      "run_id": "run-3ab0d343ec914ac9931eca050bd44ff5",
+      "question_id": "question-76b9f6e0e7d1f68d4f0c",
+      "product": "GitBook",
+      "report_sha256": "874ab9b82f76ec127f6646b40f8c0485f9f066208a36c97b7119b896dc1b3906",
+      "candidate_outcome": "reasonable_abstention",
+      "label_status": "candidate",
+      "review_source": "agent_candidate",
+      "reason": "没有对应日期、市场、币种、周期与税费的Enterprise报价时明确资料不足，没有用额度金额代替采购价。"
+    }
+  ]
+}

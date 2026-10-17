@@ -26,12 +26,14 @@ class ReportAnswerCoverage(BaseModel):
     evidence_spans: tuple[AnswerEvidenceSpan, ...] = Field(default=(), max_length=8)
     missing_fields: tuple[str, ...] = Field(default=(), max_length=16)
     basis_snapshot_id: str | None = Field(default=None, max_length=120)
+    binding_version: Literal[2] | None = None
 
     @model_serializer(mode="wrap")
     def serialize_legacy_defaults(self, handler):
         result = handler(self)
         for key, default in (("answer", ""), ("resolution", "unresolved"), ("conclusion", "unknown"),
-                             ("evidence_spans", ()), ("missing_fields", ()), ("basis_snapshot_id", None)):
+                             ("evidence_spans", ()), ("missing_fields", ()), ("basis_snapshot_id", None),
+                             ("binding_version", None)):
             if getattr(self, key) == default:
                 result.pop(key, None)
         return result

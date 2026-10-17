@@ -473,15 +473,13 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
         if kwargs["name"] == "dimension_answer_coverage":
             return json.dumps(
                 {
+                    "version": 2,
                     "answers": [
                         {
                             "question_id": q["question_id"],
                             "status": "answered" if complete else "partial",
                             "claim_ids": [c["id"] for c in payload["claims"]],
-                                "answer": quote if complete else "Members have documents.",
-                                "resolution": "direct", "conclusion": "yes",
-                                "evidence_spans": [{"claim_id": c["id"], "quote": c["text"]}
-                                                   for c in payload["claims"]],
+                            "resolution": "direct", "conclusion": "yes", "missing_fields": [],
                             "reason": "Login is answered."
                             if complete
                             else "The login answer is omitted.",

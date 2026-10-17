@@ -1,0 +1,274 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-18",
+  "phase": "binding_money_and_agentic_rl_preparation",
+  "production_code_sha256": "fd980a62d853f84663924cd87662cc9a4909d613304a998c3d449dc8137abc1f",
+  "verification": {
+    "backend": {
+      "passed": 5043,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 241.13
+    },
+    "frontend": {
+      "passed": 279,
+      "test_files": 55,
+      "build": "passed"
+    },
+    "openapi": "export_and_generated_types_synchronized",
+    "changed_python_ruff": "E9,F passed",
+    "diff_check": "passed",
+    "spec_review": {
+      "critical": 0,
+      "important_unresolved": 0,
+      "related_tests_passed": 401,
+      "scope": "Anonymous implementation contracts only; real-report semantic gaps are recorded separately under semantic_review."
+    },
+    "exporter_quality_review": {
+      "critical": 0,
+      "important_unresolved": 0,
+      "tests_passed": 29
+    },
+    "first_full_run": {
+      "passed": 5041,
+      "failed": 1,
+      "skipped": 1,
+      "reason": "legacy integration transport fixture; synced v2 without changing semantic assertions; final full rerun passed"
+    }
+  },
+  "live_diagnostics": {
+    "mode": "exposed_old_human_reviewed_questions",
+    "runs": [
+      {
+        "product": "gitbook",
+        "run_id": "run-e820321d2423435e8247bc2d6fc2ff88",
+        "artifact_directory": "data/artifacts/agent-readiness-2026-10-18/gitbook-live",
+        "production_code_sha256": "fd980a62d853f84663924cd87662cc9a4909d613304a998c3d449dc8137abc1f",
+        "manifest_sha256": "b055908bb4ef426d840e7bf60238285747a3a7f262e5e2c2d4155cfda916b797",
+        "source_count": 3,
+        "report_chars": 1988,
+        "report_sha256": "599d77f007925f054368a44e2212990759f130ec42a23fdc9c598ba6784e9e28",
+        "llm_transport_attempts": 10,
+        "provider_tokens": 37380,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": true,
+        "full_report_deliverable": false,
+        "formal_user_accepted": false
+      },
+      {
+        "product": "miro",
+        "run_id": "run-07cb1639097a437eaeb55da0c894f242",
+        "artifact_directory": "data/artifacts/agent-readiness-2026-10-18/miro-live",
+        "production_code_sha256": "fd980a62d853f84663924cd87662cc9a4909d613304a998c3d449dc8137abc1f",
+        "manifest_sha256": "7533f6a07626d34367d786ee4110255fa3583f9caeb82a42bc472db0fab57f59",
+        "source_count": 1,
+        "report_chars": 720,
+        "report_sha256": "5c709c8707df13b7530d90b24fb0be68e7402e0ef8d408e61017439837a9d73f",
+        "llm_transport_attempts": 8,
+        "provider_tokens": 27712,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": true,
+        "full_report_deliverable": false,
+        "formal_user_accepted": false
+      }
+    ],
+    "calls": 18,
+    "provider_tokens": 65092,
+    "provider_usage_unknown_spans": 0,
+    "model": "deepseek-flash",
+    "provider_bill_usd": null,
+    "external_embedding_calls": 0,
+    "search_calls": 0,
+    "planner_or_full_graph_tested": false,
+    "canonical_index": "sparse diagnostic storage",
+    "writer_question_embedding": "existing local E5",
+    "reranker_used": false
+  },
+  "semantic_review": {
+    "reviewer": "independent_read_only_agent",
+    "user_accepted": false,
+    "blind_evaluation": false,
+    "artifact_sha256": "0b1567f31c0fd8fd7d8c1b7112188c3438928e3da8e4c2def734ade63ffaeddf",
+    "summary": {
+      "question_count": 5,
+      "body_verdict_counts": {
+        "正确": 2,
+        "局部": 1,
+        "遗漏": 2,
+        "错误": 0
+      },
+      "published_claim_count": 11,
+      "published_claims_with_material_condition_omission": 1,
+      "formal_deliverable_reports": 0,
+      "reports_reviewed": 2,
+      "critical_findings": 0,
+      "important_findings": 3,
+      "full_report_deliverable": false,
+      "overall_reason": "GitBook认证题遗漏；Miro两题遗漏且正文密码保护遗漏已采套餐条件。",
+      "transport_attempts": 18,
+      "provider_tokens_last_attempts": 65092,
+      "question_episode_body_verdict_counts": {
+        "正确": 2,
+        "局部": 0,
+        "遗漏": 3,
+        "错误": 0
+      }
+    },
+    "cases": [
+      {
+        "case_id": "answer-holdout-v1-004",
+        "product": "GitBook",
+        "runtime_question_id": "question-d6009d962fbc28f8e3a1",
+        "question_topic": "Essential 套餐能否因公开发布而使用 AI Assistant Chat 侧栏",
+        "body_verdict": "正确",
+        "published_status": "answered",
+        "question_episode_body_verdict": "正确"
+      },
+      {
+        "case_id": "answer-holdout-v1-005",
+        "product": "GitBook",
+        "runtime_question_id": "question-d91e6a2d12a78501e91e",
+        "question_topic": "Authenticated access 下仅登录但未获后端授权能否查看",
+        "body_verdict": "局部",
+        "published_status": "unverified",
+        "question_episode_body_verdict": "遗漏"
+      },
+      {
+        "case_id": "answer-holdout-v1-006",
+        "product": "GitBook",
+        "runtime_question_id": "question-76b9f6e0e7d1f68d4f0c",
+        "question_topic": "指定日期、中国、Enterprise、人民币、月付和含税的精确报价",
+        "body_verdict": "正确",
+        "published_status": "answered",
+        "question_episode_body_verdict": "正确"
+      },
+      {
+        "case_id": "condition-v1-001",
+        "product": "Miro",
+        "runtime_question_id": "question-27d82b722fe7b25d9de6",
+        "question_topic": "Free 套餐的公开链接 Visitor 能否编辑或评论",
+        "body_verdict": "遗漏",
+        "published_status": "unanswered",
+        "question_episode_body_verdict": "遗漏"
+      },
+      {
+        "case_id": "condition-v1-002",
+        "product": "Miro",
+        "runtime_question_id": "question-49514b05fd7f7eeef312",
+        "question_topic": "Guest 免登录访问和跨未邀请看板访问",
+        "body_verdict": "遗漏",
+        "published_status": "unanswered",
+        "question_episode_body_verdict": "遗漏"
+      }
+    ],
+    "important_findings": [
+      {
+        "id": "semantic-auth-body-omission",
+        "severity": "Important",
+        "product": "GitBook",
+        "claim_ids": [
+          "claim-c538cf2077a3ed88e6bc"
+        ],
+        "fact_ids": [
+          "evidence-fact-record-dd23c933cac072acc1d22bd82b8fa22d162f03ea522cc768f190d559d192b3a6"
+        ],
+        "finding": "正确的源支持完整V2选择被 answer_body_unresolved 降级，导致认证题逐题答案缺失。",
+        "next_step": "用匿名中文“只有…才能访问”限制句回归断言识别；继续保留角色、对象、套餐和完整claim重放守卫。"
+      },
+      {
+        "id": "semantic-miro-visitor-answer-omission",
+        "severity": "Important",
+        "product": "Miro",
+        "claim_ids": [
+          "claim-c87e2b44e99c17e51466"
+        ],
+        "fact_ids": [
+          "evidence-fact-record-bd70275f67eb2718c59800aaedf58c7c11b96a3ef9715a2e2641edda4229c10c",
+          "evidence-fact-record-4541c3e940723f416ff077da6ac32bca3770ff83e202944ec605927c8c551ed8"
+        ],
+        "finding": "已有直接套餐限制事实未进入writer generation view；组合编辑/评论主张绑定到manage_access，未能发布和回答。",
+        "next_step": "诊断问题事实召回与单操作候选选择，分别保留编辑和评论的源条件，不放松operation绑定。"
+      },
+      {
+        "id": "semantic-miro-password-plan-omitted",
+        "severity": "Important",
+        "product": "Miro",
+        "claim_ids": [
+          "claim-4579362a4eaf44a1a884"
+        ],
+        "bound_fact_ids": [
+          "evidence-fact-record-1c7e93f76fa188db3b6415cb99fd96c30c0b7f4289104176d76298130d48a49b"
+        ],
+        "qualifying_fact_ids": [
+          "evidence-fact-record-0ed2758fdbbef475e8a621171313a9afeacc1f3714383eb2be7dfad97e684fb4"
+        ],
+        "source_ids": [
+          "raw-source-8941df0b3e71b8e38ca7"
+        ],
+        "published_body": "可以为看板设置密码保护。",
+        "source_condition": "Depending on your Miro plan",
+        "finding": "同一已采来源/快照明确密码保护取决于套餐，但发布主张只绑定无条件短句，漏掉套餐及public board范围。该限定事实不在writer generation view。",
+        "boundary_of_finding": "本次证据足以证明套餐条件被遗漏；不据此猜测具体哪些套餐支持，也不声称所有Free套餐必定不支持。",
+        "next_step": "条件完整性应在事实整理与选择时保留同一能力的套餐范围，不能只让后续review看孤立短句。"
+      }
+    ]
+  },
+  "development_trajectories": {
+    "runs": 6,
+    "question_episodes": 16,
+    "candidate_counts": {
+      "unlabelled": 13,
+      "success": 1,
+      "failure": 1,
+      "reasonable_abstention": 1
+    },
+    "provider_tokens_known": 201297,
+    "runs_missing_provider_tokens": 0,
+    "human_reviewed": 0,
+    "training_ready": false,
+    "model_training_performed": false,
+    "output_directory": "data/artifacts/agent-readiness-2026-10-18/development-trajectories-v3",
+    "holdout_isolation": {
+      "status": "disjoint_candidate",
+      "candidate_cases": 8,
+      "formal_acceptance": false,
+      "training_ready": false
+    }
+  },
+  "independent_candidates": {
+    "cases": 8,
+    "products": 4,
+    "selected_official_documents": 9,
+    "capture_integrity_checks": 174,
+    "status": "candidate",
+    "human_reviewed": 0,
+    "model_test_runs": 0,
+    "reference_answers_sent_to_agents": false,
+    "review_file": "docs/optimization/2026-10-18-agent-readiness-human-review.md",
+    "exposure": "separately constructed; parent read after implementation freeze; no blind-test claim"
+  },
+  "training": {
+    "performed": false,
+    "weight_downloads": 0,
+    "rewards_assigned": false,
+    "training_ready": false
+  },
+  "secret_scan": {
+    "scope": "literal current configured credentials in nonignored text sources/docs/eval, built frontend and specified acceptance artifacts; excludes secret env bodies and Git history",
+    "configured_credential_count": 1,
+    "files_scanned": 1339,
+    "actual_secret_hit_paths": [],
+    "tracked_secret_config_paths": [],
+    "status": "pass"
+  },
+  "deferred": [
+    "question retrieval operation coverage",
+    "source-local condition completeness",
+    "Chinese only-if answer recognition",
+    "user review of eight new cases and three old candidate labels",
+    "formal independent answer evaluation",
+    "Docker and remote deployment verification"
+  ]
+}

@@ -88,6 +88,7 @@ planner → planner_hitl
 - **输出**：报告、分段结果、主张审核记录、引用、版本与依赖。功能问题在三种深度都进入分维度入口：保留产品和子问作用域，联合问逐产品审核，代词继承最近具名范围，末尾请求限制随原问保留。
 - **问题选证**：[`question_retrieval.py`](../backend/packages/agents/writer/question_retrieval.py) 在首轮草稿投影前及分段入口，对当前准入快照做本机 embedding 与词法 RRF；最多 128 个候选，每问三条、总计八条，可显式传入本机精排。使用已冻结的本机 E5 时，配置 `KB_EMBEDDING_PROVIDER=local-e5`；没有本机 provider 时明确记为 `degraded_lexical`，配置了严格本机模式而模型加载/推理失败则抛出。排序不证明事实正确，不保证全召回。模型计算离开事件循环，来源资格、当前快照与作用域在计算前后校验；选中顺序、版本和降级原因进入 trace。
 - **消费与回答**：视图按实际排名装入完整观察，消费凭据保留有序 `requested_fact_ids` 供 QA 重放。分段来源从 live snapshot 取得，避免旧词法投影排掉新来源。逐问记录实际 `answer`、`resolution`、`conclusion`、已支持 `claim_ids` 和从已发表主张逐字复制的 `evidence_spans`；审核 `reason` 不充当答案。格式、对象或可识别主体不符时降为未核实。超容量不截断问题、原文或条件。
+- **回答选择合同 v2**：新模型只返回问题 ID、状态及已审核主张 ID，不再另写答案和引用片段。服务器按选择顺序复制完整 `claim.text`，为每条 ID 生成一条完整 span；未知／重复 ID、单条超过 600 字或合计超过 1200 字均保留未核实，不裁去前提。新分段审计保存外层 `answer_binding_version=2`，live 入口拒绝旧 envelope，最终 QA 重放内层 `binding_version=2`、完整正文与 span 顺序；历史持久化记录保留读取兼容。它保证投影与绑定一致，不证明所选主张已经充分回答所有自然语言问题。
 - **混合事实**：同一观察里有其他操作候选时，非六类主张仅在它是单一已发送 `evidence_terms` 的完整原句或完整原文条目时允许无操作 ID；六类操作仍要求绑定。原句保留原语言，问题答案使用所选输出语言；原文匹配仍须通过来源、日期与模型主张审核。
 - **缺报价**：[`price_answers.py`](../backend/packages/agents/writer/price_answers.py) 对明确金额及口径的问题检查完整当前快照，不受 Writer 排名截取影响。只有未取得同市场、套餐、币种、周期及税费的合格现价时，服务器才给出快照绑定的不足答复；不虚构金额或引用。`answered + insufficient` 表示已明确答复资料不足，报告仍为局部稿，报价证据并未齐全。无关活动日期不会覆盖报价核验日期。
 - **边界**：不得自由查询新资料替换原引用。历史错误绑定继续拒绝；局部报告不等于完整覆盖，生成成功不等于事实准确率已通过独立人审。
@@ -143,6 +144,14 @@ Collector 对校验通过的上下文保留完整片段，避免原先的 1000 �
 - 跟踪 `prompt_id`、`prompt_version`、模板哈希与本次输入哈希。已登记模板有显式版本，其余模板仍可能记录为 `unversioned`，尚未完成全模板版本治理。
 
 核心阶段可记录 `llm`、`fallback` 或 `skipped` 及原因。预算不足、超时、格式错误、无证据和上下文省略分别检查；不能只看节点完成事件推断模型真正执行。实际调用、重试与保守计费记录见 [`execution_budget.py`](../backend/packages/llm/execution_budget.py)。系统为分析、比较、反思、写作和审核预留资源，仍需满足整次运行及工作区额度限制。
+
+### 金额分类与后续学习数据
+
+[`monetary.py`](../backend/packages/research/evidence/monetary.py) 在实际 Writer／最终 QA 金额审核入口逐金额区分 `credit_allowance / purchase_price / unknown`。额度例外须匹配本段引用且在当前生成视图放行的完整原文，绑定币种、金额、套餐、周期、授予动作和 credit 单位。试用期、仅限新用户等额外限制无法完整处理时保留 unknown；逗号／分号不能截掉限制。额度不进入结构化采购价，缺少市场、税费等条件的精确报价继续不足答复。
+
+[`prepare_agent_readiness.py`](../backend/scripts/prepare_agent_readiness.py) 只读真实运行的六类已保存产物，导出脱敏 `question_episode` 及共享运行轨迹。模型动作和 token 按运行计一次；单题候选标签、任务终态与真实性奖励分开。已曝光运行进入 development；独立候选按全量产品／文档身份校验隔离，运行没有回答审计也不能漏掉来源身份。原数据哈希、源码哈希、引用选择版本和截断标记保留；不能把这些摘要当作无损训练轨迹。
+
+当前 `success / failure / reasonable_abstention` 仅是待审核候选，`reward.correctness=null`、`training_ready=false`。新题 runtime 只含问题与来源身份，不含参考答案、原文节选或标签。暂未训练模型，也未建立自动奖励优化器；人审单与具体结果见[本轮交付](optimization/2026-10-18-agent-readiness-delivery.md)。
 
 ### 部署、缓存和中断恢复
 

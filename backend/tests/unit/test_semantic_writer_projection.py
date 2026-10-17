@@ -76,10 +76,9 @@ async def test_protected_writer_projects_new_semantic_source_and_replays_its_pro
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(c) for c in payload['claims']]})
         if kwargs['name'] == 'dimension_answer_coverage':
-            return json.dumps({'answers': [dict(question_id=q['question_id'], status='answered',
-                answer=login, resolution='direct', conclusion='yes',
+            return json.dumps({'version': 2, 'answers': [dict(question_id=q['question_id'], status='answered',
+                resolution='direct', conclusion='yes',
                 claim_ids=[c['id'] for c in payload['claims']],
-                evidence_spans=[dict(claim_id=c['id'], quote=c['text']) for c in payload['claims']],
                 missing_fields=[], reason='The published sign-in rule answers the question.')
                 for q in payload['questions']]})
         raise AssertionError(kwargs['name'])

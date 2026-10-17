@@ -26250,6 +26250,18 @@
               }
             ],
             "title": "Basis Snapshot Id"
+          },
+          "binding_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "const": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Version"
           }
         },
         "additionalProperties": false,
@@ -26681,6 +26693,18 @@
             "type": "array",
             "title": "Answer Coverage",
             "default": []
+          },
+          "answer_binding_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "const": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Binding Version"
           }
         },
         "additionalProperties": false,

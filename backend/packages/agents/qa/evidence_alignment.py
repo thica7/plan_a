@@ -64,7 +64,8 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                     return original is None or item != ReportAnswerCoverage(**original)
                 return (item.status != 'answered' or not item.claim_ids
                         or not set(item.claim_ids) <= published_ids
-                        or bool(coverage_resolution_reasons(item, published_claims)))
+                        or bool(coverage_resolution_reasons(item, published_claims,
+                            require_v2=audit.answer_binding_version == 2)))
             if (any(answer_invalid(item) for item in audit.answer_coverage)
                     or questions and not audit.answer_coverage):
                 reasons.add('answer_coverage_incomplete')

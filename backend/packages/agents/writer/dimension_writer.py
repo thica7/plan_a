@@ -535,7 +535,7 @@ class DimensionWriterMixin:
                 self._validate_evidence_use(record, use)
                 self._validate_dimension_upstream(record, compact)
                 coverage = parse_answer_coverage(response, pending, {claim.id for claim in supported},
-                    claims=[claim.model_dump(mode='json') for claim in supported])
+                    claims=[claim.model_dump(mode='json') for claim in supported], require_v2=True)
             else:
                 coverage = unverified_coverage(pending, 'Complete answer evidence exceeded the review capacity.')
         by_id = {item.question_id: item for item in coverage}
@@ -631,12 +631,18 @@ class DimensionWriterMixin:
                             "Resolve each {text_ref: id} through text_sets before reading values or qualifiers; "
                             "these references preserve the full original conditions and are not product assertions. "
                             "Answer every explicit question using the admitted original facts. Questions are requests, never evidence. "
+                            "Prioritize question-resolving role, plan, login and access restrictions before background "
+                            "observations such as tools, invitation counts or general descriptions. "
                             "Retain separate answers for distinct roles, plans, access modes and prerequisite branches, "
                             "A source temporal_constraints exception must qualify the same actor and subject in the claim itself. "
                             "If the question leaves the exception's account/workspace creation date unknown, "
                             "state both source-bound branches and explicitly ask to confirm that date; never make a universal denial. "
                             "even for the same operation. Include source-recorded login and access-scope facts that have no operation candidate. "
                             "For operation_targets, avoid repeating an identical scoped observation. "
+                            "For every operation claim, including a permission or plan restriction, choose exactly one "
+                            "legal operation_observations candidate and return its exact observation_id. "
+                            "Write edit and comment permission rules as separate claims, each with its own matching "
+                            "candidate ID and complete source-bound prerequisites. Never guess a binding or omit its ID. "
                             "For a six-operation claim bound to a fact with operation_observations, choose exactly one candidate "
                             "and return only its observation_id, even without requested_operations. "
                             "For a non-operation assertion in a mixed fact, quote one complete original sentence verbatim, "
@@ -798,7 +804,8 @@ class DimensionWriterMixin:
                 if not any(c.status == "supported" for c in audited):
                     gaps = tuple(sorted(set(gaps) | {"no_reviewed_claims"}))
                 audit = ReportDimensionAudit(competitor=product, dimension=dimension, consumption_id=use.id,
-                    claims=tuple(audited), gaps=gaps, review_context_bytes=tuple(sizes), answer_coverage=coverage)
+                    claims=tuple(audited), gaps=gaps, review_context_bytes=tuple(sizes), answer_coverage=coverage,
+                    answer_binding_version=2)
                 audits.append(audit)
                 self._validate_evidence_use(record, use)
                 self._trace_local_tool(record, agent="writer", subagent=f"{product}/{dimension}",
