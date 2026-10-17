@@ -65,7 +65,7 @@ _ANSWER_ASSERTION = re.compile(
     r"permitted|supported|unsupported|available|unavailable|limited|restricted|depends|"
     r"access|edit|modify|send|view|read|create|invite|share|sign|become)\b"
     r"|\b(?:has|have)\s+access\b|(?:^|[，,。；;]\s*)(?:是|否|能)(?=[，,。；;\s]|$)"
-    r"|可以|能够|不能|无法|不允许|允许|支持|不支持|需要|必须|仅限|取决于",
+    r"|可以|能够|不能|无法|看不到|看不见|不会|不可以|不具备|不允许|允许|支持|不支持|需要|必须|仅限|取决于",
     re.I,
 )
 _USER_CATEGORY = re.compile(

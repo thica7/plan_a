@@ -14,6 +14,7 @@ from packages.agents.prompt_contract import EVIDENCE_RULES
 from packages.research.extraction.semantic import (
     MAX_PAGE_CALLS, SEMANTIC_SCHEMA, SEMANTIC_SYSTEM,
     semantic_extraction, semantic_page_allowed, semantic_body_window,
+    semantic_focus_signature,
 )
 from packages.business_intel.entity_resolver import (
     identity_terms_for_competitor,
@@ -698,6 +699,9 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         async def semantic_extract(active_brief, page):
             return await self._collector_semantic_extract(record, active_brief, page, context)
 
+        async def question_review(active_brief, evidence_items):
+            return await self._collector_question_review(record, active_brief, evidence_items, context)
+
         result = await run_research_pipeline(
             brief,
             fetch=fetch,
@@ -705,6 +709,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             seed_candidates=seed_candidates,
             repair_tasks=self._collector_targeted_repairs(detail, competitor, dimension),
             semantic_extract=semantic_extract if detail.execution_mode == "real" else None,
+            question_review=question_review if detail.execution_mode == "real" and brief.questions else None,
         )
         if result.coverage is not None:
             self._record_collector_coverage(
@@ -745,6 +750,8 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                     "operation_gaps": [gap.model_dump(mode='json') for gap in result.gaps
                                        if gap.metadata.get('source') == 'operation_comparison'],
                     "repair_task_ids": [task.id for task in result.repair_tasks],
+                    "question_gaps": [gap.model_dump(mode='json') for gap in result.gaps
+                                      if gap.metadata.get('source') == 'question_coverage'],
                     "metrics": result.metrics,
                     "admission_rejections": admission_diagnostics[:12],
                     "candidate_ledger": [
@@ -982,7 +989,8 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         additions: list[RawSource],
         target_source_count: int,
     ) -> None:
-        if any(source.metadata.get('operation_repair_evidence_retained') for source in additions):
+        if any(source.metadata.get('operation_repair_evidence_retained')
+               or source.metadata.get('question_repair_evidence_retained') for source in additions):
             target_source_count += 1
         for source in additions:
             if len(target) >= target_source_count:
@@ -1289,28 +1297,42 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         ) for issue in feedback[:3]]
 
     async def _collector_semantic_extract(self, record, brief, page, context):
+        from packages.orchestrator.evidence_context import EvidenceUseRejectedError
+
         if not semantic_page_allowed(brief, page):
             return None
         record = self._evidence_live_record(record)
         body = page.text or page.markdown or page.snippet
-        key = (brief.competitor, brief.dimension, hashlib.sha256(body.encode()).hexdigest())
+        key = (brief.competitor, brief.dimension, hashlib.sha256(body.encode()).hexdigest(),
+               semantic_focus_signature(brief, page))
         cache = record.semantic_extraction_cache
         if key in cache:
             return semantic_extraction(brief, page, cache[key]) if cache[key] is not None else None
         page_limit = 3 if brief.research_depth == 'quick' and brief.dimension == 'feature' else MAX_PAGE_CALLS
         if any(field.startswith('operation.') for field in brief.required_fields):
             page_limit += 1
+        if brief.questions:
+            page_limit = max(page_limit, min(3, len(brief.questions)))
         if sum(item[:2] == key[:2] for item in cache) >= page_limit:
+            self._trace_local_tool(record, agent='collector', subagent=context.subagent,
+                name='collector_semantic_extract_skipped', input_text=page.final_url,
+                output_text=json.dumps({'reason': 'semantic_page_budget_exhausted',
+                    'page_limit': page_limit}), context=context,
+                metadata={'reason': 'semantic_page_budget_exhausted'})
             return None
         # Reserve the page before await, including failed attempts, across fallbacks.
         cache[key] = None
         from packages.research.evidence.operations import required_operations
+        active_ids = brief.metadata.get('active_question_ids')
+        questions = [question.model_dump(mode='json') for question in brief.questions
+                     if active_ids is None or question.question_id in active_ids]
         try:
             payload = await self._trace_llm_json(
                 record, agent="collector", subagent=context.subagent,
                 name="collector_semantic_extract", system=EVIDENCE_RULES + SEMANTIC_SYSTEM,
                 user=json.dumps({"product": brief.competitor, "dimension": brief.dimension,
                                  "research_focus": {"question": brief.topic[:800],
+                                                    "questions": questions,
                                                     "use_cases": brief.product_use_cases[:6],
                                                     "requested_operations": required_operations(brief.topic, brief.product_use_cases)},
                                  "url": page.final_url, "title": page.title,
@@ -1321,8 +1343,57 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             result = semantic_extraction(brief, page, payload)
             cache[key] = payload
             return result
+        except EvidenceUseRejectedError:
+            raise
         except Exception:  # bounded optional extraction must not lose deterministic evidence
             return None
+
+    async def _collector_question_review(self, record, brief, evidence_items, context):
+        """Route question gaps using admitted originals; this never publishes an answer."""
+        from packages.llm.errors import LLMError, LLMExecutionLimitError
+        from packages.research.question_evidence import (
+            QUESTION_EVIDENCE_SCHEMA, QUESTION_EVIDENCE_SYSTEM, question_review_payload,
+        )
+        try:
+            payload = question_review_payload(brief, evidence_items)
+        except ValueError:
+            return {'questions': [], '_question_stop_reason': 'capacity_exceeded'}
+        if not payload['evidence']:
+            capacity_limited = payload['capacity_limited']
+            return {'questions': [{'question_id': question.question_id,
+                'status': 'unverified' if capacity_limited else 'missing',
+                'evidence_ids': [], 'missing_fields': ['review_capacity' if capacity_limited
+                                                       else 'supporting_evidence'],
+                'reason': ('Admitted original observations exceed the review capacity.'
+                           if capacity_limited else
+                           'No admitted original observation is available for review.')}
+                for question in brief.questions],
+                '_question_review_metadata': payload['metadata'],
+                **({'_question_stop_reason': 'capacity_exceeded'} if capacity_limited else {})}
+        try:
+            assessment = await self._trace_llm_json(record, agent='collector', subagent=context.subagent,
+                name='collector_question_evidence_review', system=EVIDENCE_RULES + QUESTION_EVIDENCE_SYSTEM,
+                user=json.dumps(payload, ensure_ascii=False), schema_hint=QUESTION_EVIDENCE_SCHEMA,
+                context=context, timeout_seconds=30, max_output_tokens=700)
+        except LLMExecutionLimitError:
+            return {'questions': [], '_question_stop_reason': 'budget_exhausted'}
+        except (LLMError, TimeoutError):
+            return {'questions': [], '_question_stop_reason': 'unverified'}
+        except ValueError as error:
+            if type(error) is not ValueError:
+                raise
+            return {'questions': [], '_question_stop_reason': 'unverified'}
+        if isinstance(assessment, dict):
+            assessment['_question_review_metadata'] = payload['metadata']
+            if payload['capacity_limited']:
+                assessment['_question_stop_reason'] = 'capacity_exceeded'
+                rows = assessment.get('questions')
+                for row in rows if isinstance(rows, list) else []:
+                    if isinstance(row, dict) and row.get('status') == 'missing':
+                        row.update(status='unverified',
+                            missing_fields=['review_capacity'],
+                            reason='Some admitted originals were omitted from this capacity-limited review.')
+        return assessment
 
     def _research_brief(
         self,
@@ -1332,11 +1403,13 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
     ) -> ResearchBrief:
         target_source_count = self._collector_target_source_count(detail, dimension)
         depth_budget = research_depth_budget(detail.plan.research_depth, dimension=dimension)
+        from packages.research.question_scope import research_questions
         return ResearchBrief(
             run_id=detail.id,
             topic=detail.topic,
             competitor=competitor,
             dimension=dimension,
+            questions=research_questions(detail, competitor, dimension),
             research_depth=detail.plan.research_depth,
             product_name=detail.plan.target_product.name if detail.plan.target_product else "",
             product_category=detail.plan.target_product.category if detail.plan.target_product else "",

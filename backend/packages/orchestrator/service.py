@@ -138,7 +138,7 @@ from packages.schema.models import (
     TraceSpan,
 )
 from packages.schema.survey import UserResearchImportRequest, UserResearchImportResult
-from packages.search import SearchFilters, SearchResult, create_search_client
+from packages.search import SearchResult, create_search_client
 from packages.skills.registry import SkillRegistry
 from packages.tools import (
     EvidenceFetchResult,
@@ -297,7 +297,7 @@ class RunRecord:
     llm_budget: RunLLMBudget | None = None
     search_cache: dict[str, tuple[float, list[SearchResult]]] = field(default_factory=dict)
     search_locks: dict[str, asyncio.Lock] = field(default_factory=dict)
-    semantic_extraction_cache: dict[tuple[str, str, str], object] = field(default_factory=dict)
+    semantic_extraction_cache: dict[tuple[str, ...], object] = field(default_factory=dict)
     resume_task: asyncio.Task[None] | None = None
     pipeline_task: asyncio.Task[Any] | None = None
 

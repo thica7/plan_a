@@ -70,6 +70,13 @@ def _request(detail, question, product):
     dates = set(re.findall(
         r"(?:截至|截止|报价日期|价格日期|\bas of\b|\bprice (?:on|at)\b)\s*[:：]?\s*"
         r"(\d{4}-\d{2}-\d{2})(?!\d)", text, re.I))
+    for year, month, day in re.findall(
+        r'(?:截至|截止|报价日期|价格日期)\s*[:：]?\s*'
+        r'(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日', text):
+        try:
+            dates.add(date(int(year), int(month), int(day)).isoformat())
+        except ValueError:
+            return None
     if dates:
         if len(dates) != 1:
             return None

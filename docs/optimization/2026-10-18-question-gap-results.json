@@ -1,0 +1,129 @@
+{
+  "phase": "question-gap-2026-10-18",
+  "scope": "fixed reviewed official URLs; production Collector and downstream stages; search/Planner/full Graph not tested",
+  "formal_acceptance": "not_passed",
+  "full_reports_deliverable": 0,
+  "full_reports_tested": 3,
+  "tests": {
+    "backend_passed": 4934,
+    "backend_skipped": 1,
+    "backend_warnings": 212,
+    "frontend_passed": 279,
+    "frontend_build": "passed",
+    "openapi": "unchanged; export byte comparison passed",
+    "critical_ruff": "E9,F passed on changed Python files",
+    "first_backend_run": "4907 passed; one ps sandbox permission failure; isolated permission retest passed before final full run"
+  },
+  "attempts": [
+    {
+      "attempt": "miro",
+      "production_code_sha256": "4dd878c38be9d86b6c010b8e53339764bf992d8739655a755857dd455e91f781",
+      "manifest_sha256": "b36249a9a91590c35004fe6fb94bcca12e1b0ce3bf7d93af34f65a9f23edb6d3",
+      "status": "execution_complete",
+      "llm_transport_attempts": 10,
+      "provider_total_tokens": 32069,
+      "unknown_usage_spans": 0,
+      "snapshot_facts": 30,
+      "source_count": 1,
+      "report_characters": 1001,
+      "qa_blockers": 1,
+      "writer_producer_verified": true
+    },
+    {
+      "attempt": "basecamp",
+      "production_code_sha256": "4dd878c38be9d86b6c010b8e53339764bf992d8739655a755857dd455e91f781",
+      "manifest_sha256": "e86dc8c08d31cdca819205a7717589ad666e79a30e9f67d392aa25d1114db2ae",
+      "status": "execution_complete",
+      "llm_transport_attempts": 10,
+      "provider_total_tokens": 34244,
+      "unknown_usage_spans": 0,
+      "snapshot_facts": 45,
+      "source_count": 3,
+      "report_characters": 2016,
+      "qa_blockers": 1,
+      "writer_producer_verified": true
+    },
+    {
+      "attempt": "gitbook",
+      "production_code_sha256": "4dd878c38be9d86b6c010b8e53339764bf992d8739655a755857dd455e91f781",
+      "manifest_sha256": "7b796b65431304355c3c63bba38f3a9dcf0854ad9a62f035b41206c1dd8ba253",
+      "status": "execution_complete",
+      "llm_transport_attempts": 10,
+      "provider_total_tokens": 33574,
+      "unknown_usage_spans": 0,
+      "snapshot_facts": 78,
+      "source_count": 3,
+      "report_characters": 2014,
+      "qa_blockers": 2,
+      "writer_producer_verified": true
+    },
+    {
+      "attempt": "gitbook-v2",
+      "production_code_sha256": "150bc173b74967d3be836585c1726e03ab84816e30b54d2d4222bae62fb4da19",
+      "manifest_sha256": "a4e08582deafbdd67e4035ea48702dcc76fbb55cff24992825befd8c89f563d8",
+      "status": "execution_complete",
+      "llm_transport_attempts": 10,
+      "provider_total_tokens": 36318,
+      "unknown_usage_spans": 0,
+      "snapshot_facts": 96,
+      "source_count": 3,
+      "report_characters": 1687,
+      "qa_blockers": 2,
+      "writer_producer_verified": true
+    }
+  ],
+  "total_calls": 40,
+  "known_provider_tokens": 136205,
+  "unknown_provider_usage_spans": 0,
+  "provider_bill_usd": null,
+  "caps_per_run": {
+    "calls": 24,
+    "tokens": 80000,
+    "output": 2048,
+    "writer_review_output": 1600,
+    "question_review_output": 700,
+    "retries": 0
+  },
+  "external_embedding_calls": 0,
+  "search_calls": 0,
+  "latest_report_selection": {
+    "Miro": "miro-live",
+    "Basecamp": "basecamp-live",
+    "GitBook": "gitbook-v2-live"
+  },
+  "latest_body_review": {
+    "method": "post-generation read-only agent comparison to previously human-reviewed and exposed boundaries; not new user review or blind evaluation",
+    "pass": 7,
+    "partial": 0,
+    "omitted": 1,
+    "wrong": 0,
+    "scope": "body conclusion and source support; coverage contract and publication gates assessed separately",
+    "artifact_sha256": "1a352443c8e7f79e2c554a17dea9902a8f9571626a39df4a031f0dbaa71725c7"
+  },
+  "remaining": [
+    "Miro Guest current source rejected by security verification; Visitor formal capture succeeded",
+    "Miro Visitor answer is source-correct but its coverage claim/span binding is toolbar/invitation context rather than the plan restriction",
+    "Coverage response claim IDs are not paired with one verbatim span per ID; do not normalize missing proof away",
+    "Credits allowance and product purchase price are not typed distinctly enough for monetary boundary checks",
+    "Some inference conclusions need more precise fact binding, including Basecamp project scope",
+    "Question evidence input can omit complete observations at 12000 bytes; requires lossless deduplication and per-question allocation",
+    "Miro and Basecamp not fully rerun on final code; Basecamp parser replay is offline only"
+  ],
+  "unverified_deployment": [
+    "Docker not run on this machine",
+    "Qdrant HTTP",
+    "Redis integration",
+    "multiple workers",
+    "Temporal runtime",
+    "Postgres runtime"
+  ],
+  "reference_answers_sent_to_production_agents": false,
+  "secret_scan": {
+    "literal_files": 1301,
+    "literal_hits": 0,
+    "pattern_candidate_files": 1280,
+    "pattern_hits": 0,
+    "tracked_secret_configs": 0,
+    "history_scanned_this_phase": false
+  }
+}

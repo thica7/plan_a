@@ -31,6 +31,9 @@ _PERMISSION_SELECTION = re.compile(_SELECTOR_VERB + r'\s*["“\']?(?:' + ROLE_LA
 _ACCESS_CONTROL = re.compile(r'\b(?:restricts?|limits?|controls?|determines?)\s+(?:who|whether)\b[^.;\n]*|\b(?:restricts?|limits?)\s+access\b|\b(?:add|remove)\s+(?:a\s+)?restrictions?\b|'
     + _PERMISSION_SELECTION.pattern, re.I)
 _CHOICE_INTRO = re.compile(r'\b(?:choose|select)\b[^:\n]*(?:share|access|permissions?|modes?|options?)[^:\n]*:\s*$|\b(?:access|permissions?)\b[^:\n]*\b(?:states|modes|options)\b[^:\n]*:\s*$', re.I)
+_PASSIVE_AVAILABILITY = re.compile(
+    r'\b(?:is|are)\s+(?:not\s+)?(?:only\s+)?available\s+(?:for|to)\s+'
+    r'(?P<role>[A-Za-z][A-Za-z -]{0,60}?)(?=\s+(?:on|with)\s+|[.;\n)]|$)', re.I)
 
 
 def alternative_condition_blocks(text):
@@ -83,7 +86,18 @@ def _plan_from_text(text):
     if match and re.search(r'\band\b|\bor\b|,|Team/Business', match[1], re.I):
         return match[1]
     simple = _PLAN.search(text)
-    return simple.group() if simple else match[1] if match else None
+    if simple or match:
+        return simple.group() if simple else match[1]
+    # Arbitrary names are accepted only in an explicit source plan expression.
+    heading = re.fullmatch(r'\s*([A-Za-z][A-Za-z0-9/&+-]*(?:\s+[A-Za-z][A-Za-z0-9/&+-]*){0,4}\s+plans?)\s*', text)
+    if re.search(r'\b(?:can|cannot|may|must|is|are|requires?|needs?)\b', text, re.I):
+        heading = None
+    if heading:
+        return heading[1]
+    named = re.search(r'\b(?:on|with)\s+(?:the\s+)?([A-Z][A-Za-z0-9/&+-]*(?:(?:,\s*|\s+(?:and|or)\s+)[A-Z][A-Za-z0-9/&+-]*)*)\s+(plans?)\b', text)
+    if named:
+        return named[1] if re.search(r'\band\b|\bor\b|,', named[1]) else named[1] + ' ' + named[2]
+    return None
 
 
 def _permission_table_rows(fact, terms, conditions):
@@ -136,6 +150,10 @@ def _availability_plan(role, conditions, operation=None, object_type=None):
     for term in conditions:
         lines = term.splitlines()
         for index, line in enumerate(lines):
+            if (re.fullmatch(r'\s*[A-Za-z][A-Za-z0-9/&+ -]{0,70}\s+plans?\s*', line)
+                    and (heading_plan := _plan_from_text(line))):
+                candidates.append(heading_plan)
+                continue
             if operation:
                 for clause in re.split(r'[.;\n]', line):
                     if (re.match(r'^\W*On (?:the )?[^,]+,\s*you can\b', clause, re.I)
@@ -201,7 +219,7 @@ def operation_matches_text(operation, text):
         action = _ACCESS_CONTROL.sub('', action)
     if operation == 'read':
         action = re.sub(r'\bviews?\s+and\s+comments?\s+on\s+', 'view ', action, flags=re.I)
-    if operation == 'comment' and not re.search(
+    if operation == 'comment' and not _PASSIVE_AVAILABILITY.search(action) and not re.search(
         rf'\bcomment(?:s|ing)?\s+on\b|\b(?:{_MODAL}|to)\s+comment\b|'
         r'\b(?:add|leave|post|write|make)\s+(?:(?:a|an|the|new|inline|your|own|any)\s+)*comments?\b|'
         r'发表评论|添加(?:行内|页面)?评论|留下评论|(?:可以|只能|不能|允许|支持)(?:(?:直接|仅|仅仅|进行)|(?:查看|阅读)(?:并|和|及))?(?:评论|批注)|'
@@ -240,6 +258,12 @@ def role_key(value):
 
 def acting_role_match(clause):
     """A role inside an invitation, recipient or exclusion is not the subject."""
+    availability = _PASSIVE_AVAILABILITY.search(clause)
+    if availability:
+        # In "editing is available for reviewers", the recipient is exactly
+        # the actor of the named capability. Invitation recipients still differ.
+        return re.compile(re.escape(availability['role'])).search(
+            clause, availability.start('role'), availability.end('role'))
     predicate = re.search(rf'\b(?:{_MODAL}|needs?|requires?|(?:is|are) required|(?:has|have) access)\b', clause, re.I)
     if predicate is None:
         return None
@@ -507,7 +531,11 @@ def _observations_json(fact, products):
                 break
     # Negation is local to an action clause. A restriction on editing must not
     # turn an earlier affirmative comment permission into a denial.
-    clauses = re.split(rf"[.;\n。；]|\bbut\b|\bhowever\b|\bwhile\b|\bwhereas\b|但是|但|然而|\band\s+(?=(?:{_MODAL}|guests|members|editors|viewers|admins|owners)\b)", fact.quote, flags=re.I)
+    # An inline availability restriction names the capability recipient, while
+    # an outer UI selector names an access-control action. Keep their actors apart.
+    clause_text = re.sub(r'\(([^()\n]*\b(?:is|are)\s+(?:not\s+)?(?:only\s+)?available\b[^()\n]*)\)',
+                         r';\1;', fact.quote, flags=re.I)
+    clauses = re.split(rf"[.;\n。；]|\bbut\b|\bhowever\b|\bwhile\b|\bwhereas\b|但是|但|然而|\band\s+(?=(?:{_MODAL}|guests|members|editors|viewers|admins|owners)\b)", clause_text, flags=re.I)
     previous_role, previous_plan, previous_scope = heading_role, None, None
     for clause in clauses:
         label = re.match(r'^\s*\|\s*(' + _ROLE.pattern + r')\s*\|', clause, re.I) if role_definition else re.match(r'^\s*(?:[-*]\s*)?(' + ROLE_LABELS + r')\s*:', clause, re.I)

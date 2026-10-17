@@ -33,6 +33,21 @@ planner → planner_hitl
 - **输出**：`RawSource`、原文和元数据、分块索引状态、结构化事实、覆盖与缺口、采集跟踪记录。规则提取使用 `source_operation_rules`，模型语义提取使用 `bounded_semantic_capabilities`，同页两路结果分别准入，避免 ID 去重吞掉补充事实。两路均重放原文、位置和值的绑定。
 - **边界**：命中不代表准入。资料须通过来源角色、工作区/项目、版本/哈希、时效与正文校验；搜索摘要、旧报告和失败页面不能冒充当前一手证据。不同产品、型号、席位和计费周期不能拼成一个事实。
 
+#### 问题缺口驱动补证
+
+显式功能问题通过 [`question_scope.py`](../backend/packages/research/question_scope.py) 按产品分配到 `ResearchBrief.questions`，保留原问和稳定 ID。请求中的角色、套餐、预算与输出格式只用于选择资料，不写入产品事实。
+
+[`pipeline.py`](../backend/packages/research/pipeline.py) 在分析快照冻结前执行以下步骤：
+
+1. 按问题选择页面与完整连续正文窗口，保留原文位置和上下文；缓存同时绑定正文与问题 focus。
+2. [`question_evidence.py`](../backend/packages/research/question_evidence.py) 只把当前产品、维度中已准入的完整原文观察交给 Collector 的有界评估。评估返回 `candidate / missing / unverified` 和合法 evidence IDs，`candidate` 不代表答案已核实。
+3. 对缺口先重抽已抓正文，再使用原 brief 剩余的候选、搜索和抓取额度。显式问题分支优先走这条补证链，未带问题的分支保留原有通用补证。
+4. 新观察重新通过来源与原文准入，再进入 `RawSource`、知识库、分析快照和各下游 Agent。Writer/QA 继续独立检查实际答案、前提和引用；不会用评估理由代替答案。
+
+每分支最多一轮问题补证、两次问题证据评估。评估输出最多 700 token，输入最多 12000 bytes，按完整记录选择，不能截掉条件；容量省略记为未核实并保留计数。语义提取沿用分支共享调用上限，问题分支通常最多三次，旧操作分支较大上限仍生效；已耗尽时不会为每页重试。相同 focus/正文/窗口不重复调用。无进展、预算不足、容量不足、权威未验证和未核实分别记录在 `question_stop_reason`；问题缺口留在结果、coverage metadata 和 trace。证据依赖拒绝继续抛出，不能降为可选模型失败。
+
+多问题且完整正文不超过 12000 字符时保留全文，避免一个功能小节遮住另一问题；长文档及单问题仍选择连续窗口。这轮接线与验证见[交付记录](optimization/2026-10-18-question-gap-delivery.md)和[问题补证计划](optimization/2026-10-18-question-gap-plan.md)。固定官方 URL 的阶段诊断仍不代表 Planner 自动发现、完整 Graph 或生产稠密 RAG 已验收。
+
 ### Survey：用户研究检查
 
 - **入口**：[`survey/logic.py`](../backend/packages/agents/survey/logic.py) 的用户研究 enrichment。
@@ -76,6 +91,8 @@ planner → planner_hitl
 - **混合事实**：同一观察里有其他操作候选时，非六类主张仅在它是单一已发送 `evidence_terms` 的完整原句或完整原文条目时允许无操作 ID；六类操作仍要求绑定。原句保留原语言，问题答案使用所选输出语言；原文匹配仍须通过来源、日期与模型主张审核。
 - **缺报价**：[`price_answers.py`](../backend/packages/agents/writer/price_answers.py) 对明确金额及口径的问题检查完整当前快照，不受 Writer 排名截取影响。只有未取得同市场、套餐、币种、周期及税费的合格现价时，服务器才给出快照绑定的不足答复；不虚构金额或引用。`answered + insufficient` 表示已明确答复资料不足，报告仍为局部稿，报价证据并未齐全。无关活动日期不会覆盖报价核验日期。
 - **边界**：不得自由查询新资料替换原引用。历史错误绑定继续拒绝；局部报告不等于完整覆盖，生成成功不等于事实准确率已通过独立人审。
+
+回答校验另检查明确套餐排他性及强制升级建议：被引用主张必须有相同套餐集合的明确限制，不能把某套餐被包含写成只有该套餐可用。未知范围保持未核实；有限词法规则不等于普遍语义证明。中文明确报价年月日按请求解析，无效或矛盾日期不自动生成已回答记录。
 
 ### QA：审核与重做决策
 

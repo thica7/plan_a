@@ -30,6 +30,9 @@ def repair_task_from_gap(gap: QualityGap) -> RepairTask:
 
 def query_hints_for_gap(gap: QualityGap, fields: list[str]) -> list[str]:
     competitor = gap.competitor or ""
+    if gap.metadata.get("source") == "question_coverage":
+        question = str(gap.metadata.get("question") or "").strip()
+        return _dedupe([f"{competitor} official {question}"])
     if gap.metadata.get('source') == 'operation_comparison':
         operation = str(gap.metadata['operation']).replace('_', ' ')
         return [f'{competitor} official docs {operation} role plan permissions restrictions']

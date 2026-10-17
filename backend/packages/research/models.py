@@ -81,6 +81,11 @@ class ResearchBaseModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ResearchQuestion(ResearchBaseModel):
+    question_id: str = Field(min_length=1)
+    question: str = Field(min_length=1)
+
+
 class ResearchBrief(ResearchBaseModel):
     run_id: str
     topic: str
@@ -104,6 +109,7 @@ class ResearchBrief(ResearchBaseModel):
     include_homepage_candidates: bool = True
     gap_ids: list[str] = Field(default_factory=list)
     required_fields: list[str] = Field(default_factory=list)
+    questions: list[ResearchQuestion] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @property

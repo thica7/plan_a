@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from urllib.parse import urlparse
 
@@ -29,10 +30,11 @@ SEMANTIC_SYSTEM = (
     "select other products or navigation/marketing slogans. Return facts=[] when unsure."
 )
 _UNSAFE = re.compile(
-    r"ignore.{0,30}instructions|system prompt|api[_ -]?key|忽略.{0,20}指令|系统提示|"
-    r"\b(?:usd|eur|cny)\b|[$€¥]\s*\d|\d+\s*(?:美元|元/月|/month)", re.I,
+    r"ignore.{0,30}instructions|system prompt|api[_ -]?key|忽略.{0,20}指令|系统提示", re.I,
 )
-_CONDITION = re.compile(r"available (?:on|with|to)|requires?\b|\bneeds?\b|\bonly\b|\blimited to\b|\brestrict(?:ed|s|ions?)?\b|\bsubscribers?\b|\bmust\b|paid (?:plans?|workspaces?|users?)|not available|unsupported|not supported|\bcannot\b|\bcan't\b|仅限|需要|适用于|不支持|无法|限制", re.I)
+_PRICE = re.compile(r"\b(?:usd|eur|cny)\b|[$€¥]\s*\d|\d+\s*(?:美元|元/月|/month)", re.I)
+_AVAILABILITY = re.compile(r'\b(?:is|are)\s+(?:not\s+)?(?:only\s+)?(?:available|supported|unsupported|included)\b|:\s*(?:not\s+)?included\b|\bincluded in\b', re.I)
+_CONDITION = re.compile(r"available (?:on|with|to)|requires?\b|\bneeds?\b|\bonly\b|\blimited to\b|\brestrict(?:ed|s|ions?)?\b|\bsubscribers?\b|\bmust\b|paid (?:plans?|workspaces?|users?)|not available|not included|included in|unsupported|not supported|\bcannot\b|\bcan't\b|仅限|需要|适用于|不支持|无法|限制", re.I)
 _ACCESS_CONDITION = re.compile(r'\b(?:plans?|seats?|subscribers?|access|permissions?|locking|enterprise)\b|套餐|席位|权限|访问|锁定', re.I)
 _ACCESS_HEADING = re.compile(
     r'^(?:(?:doc|document|page|workspace)\s+)?(?:permissions?|roles?|access(?:\s+(?:requirements?|rules?|restrictions?|levels?))?|'
@@ -40,6 +42,111 @@ _ACCESS_HEADING = re.compile(
     r'^(?:权限|角色|资格|套餐|访问要求|访问规则)$', re.I,
 )
 _ROLE_LINE = re.compile(r'^\s*(?:[-*|]\s*)?(Can comment|Can view|Can edit(?: content)?|Can create|Can manage(?: access)?|Full access|Comment-only|Read-only)\s*(?:[:|]|$)', re.I)
+
+
+def _active_questions(brief):
+    questions = list(getattr(brief, 'questions', ()))
+    active = brief.metadata.get('active_question_ids')
+    if active is None:
+        return questions
+    if (not isinstance(active, list) or not active
+            or any(not isinstance(item, str) for item in active) or len(set(active)) != len(active)
+            or not set(active) <= {item.question_id for item in questions}):
+        return []
+    return [item for item in questions if item.question_id in active]
+
+
+def _question_terms(brief):
+    stop = {'the', 'and', 'for', 'with', 'can', 'does', 'our', 'has', 'have', 'from', 'that',
+            'this', 'they', 'their', 'only', 'now', 'already', 'because', 'will', 'what'}
+    terms = set()
+    product = set(re.findall(r'[a-z][a-z0-9_-]*', brief.competitor.casefold()))
+    for item in _active_questions(brief):
+        words = re.findall(r'[a-z][a-z0-9_-]{2,}', item.question.casefold())
+        terms.update(word for word in words if word not in stop | product)
+        terms.update(a + ' ' + b for a, b in zip(words, words[1:])
+                     if a not in stop | product and b not in stop | product)
+        for chunk in re.findall(r'[\u3400-\u9fff]{2,}', item.question):
+            terms.update(chunk[index:index + 2] for index in range(len(chunk) - 1))
+    return terms
+
+
+def _question_score(terms, text):
+    text = text.casefold()
+    matches = [(term, len(re.findall(r'(?<!\w)' + re.escape(term)
+                                    + (r's?' if ' ' not in term and not term.endswith('s') else '')
+                                    + r'(?!\w)', text))
+                if term.isascii() else text.count(term)) for term in terms]
+    return (sum((2 if ' ' in term else 1) for term, count in matches if count),
+            sum(min(2, count) for _, count in matches))
+
+
+def semantic_page_priority(brief: ResearchBrief, page: CapturedPage) -> tuple[int, int]:
+    """Lexical selection priority; matching a question never establishes a fact."""
+    return _question_score(_question_terms(brief), page.text or page.markdown or page.snippet)
+
+
+def _verified_headings(body, page):
+    headings, cursor = [], 0
+    source_headings = page.metadata.get('document_headings', [])
+    for index, item in enumerate(source_headings):
+        if (not isinstance(item, (list, tuple)) or len(item) != 2 or type(item[0]) is not int
+                or not 1 <= item[0] <= 6 or not isinstance(item[1], str)):
+            return []
+        matches = list(re.finditer(r'(?m)^' + re.escape(item[1].strip()) + r'\s*$', body[cursor:]))
+        if not matches:
+            continue
+        if len(matches) != 1:
+            remaining = sum(isinstance(other, (list, tuple)) and len(other) == 2
+                            and isinstance(other[1], str) and other[1].strip() == item[1].strip()
+                            for other in source_headings[index:])
+            if len(matches) != remaining:
+                return []
+        match = matches[0]
+        headings.append((cursor + match.start(), item[0], item[1]))
+        cursor += match.end()
+    return headings
+
+
+def _plan_heading_path(headings, position):
+    ancestors = []
+    for offset, level, heading in headings:
+        if offset > position:
+            break
+        while ancestors and ancestors[-1][1] >= level:
+            ancestors.pop()
+        ancestors.append((offset, level, heading))
+    plans = []
+    for index, item in enumerate(ancestors):
+        heading = item[2]
+        if heading.casefold() in {'compare plans', 'all plans', 'our plans', 'available plans', 'pricing plans'}:
+            continue
+        if (re.fullmatch(r'[\w /&+-]{1,70}\s+plans?|.{1,40}(?:套餐|计划|方案)', heading, re.I)
+                or index and ancestors[index - 1][2].casefold() in {'plans', 'pricing', '套餐', '定价'}
+                and re.fullmatch(r'[\w /&+-]{1,50}', heading)):
+            plans.append(item)
+    return plans
+
+
+def _complete_window(body, start, end):
+    end = min(len(body), end, start + MAX_INPUT_CHARS)
+    if end < len(body) and body[end - 1:end] != '\n':
+        boundary = body.rfind('\n', start, end)
+        if boundary >= start:
+            end = boundary + 1
+        else:
+            sentences = list(re.finditer(r'[.!?。！？](?:\s|$)', body[start:end]))
+            end = start + sentences[-1].end() if sentences else start
+    return start, body[start:end]
+
+
+def semantic_focus_signature(brief: ResearchBrief, page: CapturedPage) -> str:
+    start, window = _semantic_window(brief, page)
+    focus = {'questions': [(item.question_id, item.question) for item in _active_questions(brief)],
+             'topic': brief.topic, 'use_cases': brief.product_use_cases,
+             'start': start,
+             'window_hash': hashlib.sha256(window.encode()).hexdigest()}
+    return hashlib.sha256(json.dumps(focus, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:24]
 
 
 def _local_context(body: str, start: int, end: int, bounds=None) -> str | None:
@@ -78,20 +185,7 @@ def _local_context(body: str, start: int, end: int, bounds=None) -> str | None:
 
 def document_condition_context(body, page, start, end):
     """Use captured HTML headings only after verifying their ordered body positions."""
-    headings, cursor = [], 0
-    for item in page.metadata.get('document_headings', []):
-        if not isinstance(item, (list, tuple)) or len(item) != 2 or type(item[0]) is not int or not 1 <= item[0] <= 6 or not isinstance(item[1], str):
-            return None
-        matches = list(re.finditer(r'(?m)^' + re.escape(item[1].strip()) + r'\s*$', body[cursor:]))
-        if not matches:
-            # Navigation headings removed by the text extractor have no scope.
-            continue
-        if len(matches) != 1:
-            return None
-        match = matches[0]
-        position = cursor + match.start()
-        headings.append((position, item[0], item[1]))
-        cursor += match.end()
+    headings = _verified_headings(body, page)
     ancestors = []
     for position, level, _ in headings:
         if position > start:
@@ -114,12 +208,16 @@ def document_condition_context(body, page, start, end):
     quote_role = selector.get('recipient_role') or (quote_actor.group() if quote_actor else (
         source_role if re.search(r'\bAnyone with\b[^.;\n]*\blink\b', quote, re.I) else None))
     quote_actions = condition_operations(quote) | selector.get('operations', set())
+    plan_path = _plan_heading_path(headings, start)
     alternative_lines = {line.strip() for block in alternative_condition_blocks(body)
                          for line in block.splitlines()}
     # The same explicit actor/action restriction can precede an FAQ in another
     # section. A source title supplies scope only for its public-link reference;
     # it never makes the invited guest the actor of an inviter's action.
-    def same_role_requirement(line):
+    def same_role_requirement(line, offset):
+        other_plan = _plan_heading_path(headings, offset)
+        if plan_path and other_plan and plan_path[-1][0] != other_plan[-1][0]:
+            return False
         if (line.strip() in alternative_lines or not quote_role
                 or role_key(condition_role(line)) != role_key(quote_role)):
             return False
@@ -127,6 +225,8 @@ def document_condition_context(body, page, start, end):
         access_rule = re.search(r'\b(?:must|require[ds]?|only)\b[^.;\n]*\baccess\s+(?:(?:the|a|shared)\s+)*(?:boards?|pages?|documents?|docs?|items?|content)\b', line, re.I)
         return bool(actions & quote_actions or access_rule and quote_actions & {'read', 'comment', 'edit'})
     lower, level = next((item for item in ancestors if item[1] >= 2), ancestors[0])
+    if plan_path:
+        lower, level, _ = plan_path[-1]
     upper = next((position for position, other_level, _ in headings if position > start and other_level <= level), len(body))
     if level == 1 and lower == headings[0][0]:
         upper = next((position for position, _, _ in headings if position > start), len(body))
@@ -166,11 +266,14 @@ def document_condition_context(body, page, start, end):
                                        or lower <= offset < (intro_end if broad_section else upper)
                                        or any(begin <= offset < finish
                                               for begin, finish in access_introductions)
-                                       or same_role_requirement(line)):
+                                       or same_role_requirement(line, offset)):
             conditions.append(line.strip())
         offset += len(line)
     if root_heading and quote_role and role_key(source_role) == role_key(quote_role):
         conditions.append(root_heading)
+    # A source's own plan headings are conditions, including previously unseen
+    # plan names. Their scope comes from verified heading positions, not questions.
+    conditions.extend(heading for _, _, heading in plan_path)
     for begin, finish in access_introductions:
         conditions.extend(alternative_condition_blocks(body[begin:finish]))
     return (lower, upper), list(dict.fromkeys(conditions))
@@ -210,16 +313,66 @@ def _semantic_window(brief: ResearchBrief, page: CapturedPage) -> tuple[int, str
     """One bounded original window, selected for permission rules, not UI menus."""
     from packages.research.evidence.operations import required_operations
     body = page.text or page.markdown or page.snippet
+    if len(_active_questions(brief)) > 1 and len(body) <= MAX_INPUT_CHARS:
+        return 0, body
+    terms = _question_terms(brief)
+    coverage = _question_score(terms, body)[0]
+    if terms and coverage <= 1 and len(body) <= MAX_INPUT_CHARS:
+        return 0, body
+    if not coverage:
+        terms = set()
+    if terms:
+        headings = _verified_headings(body, page)
+        windows = [_complete_window(body, 0, len(body))]
+        for index, (start, level, _) in enumerate(headings):
+            finish = next((position for position, other_level, _ in headings[index + 1:]
+                           if other_level <= level), len(body))
+            windows.append(_complete_window(body, start, finish))
+        lines = list(re.finditer(r'[^\n]*(?:\n|$)', body))
+        for index, match in enumerate(lines):
+            if not _question_score(terms, match.group())[0]:
+                continue
+            # Keep the source section when it fits. Broad sections get a line-
+            # aligned local window, never a concatenation of matching sentences.
+            ancestors = [(position, level) for position, level, _ in headings if position <= match.start()]
+            lower = ancestors[-1][0] if ancestors else 0
+            upper = next((position for position, _, _ in headings if position > match.start()), len(body))
+            if upper - lower <= MAX_INPUT_CHARS and headings:
+                windows.append(_complete_window(body, lower, upper))
+            else:
+                start = max(lower, match.start() - 800)
+                start = body.rfind('\n', lower, start) + 1 if start > lower else lower
+                windows.append(_complete_window(body, start, min(upper, start + MAX_INPUT_CHARS)))
+            if ancestors:
+                # Repeated responsive rows may share a verified source section.
+                # A bounded complete row with neighbours disambiguates its exact
+                # occurrence while the full document still supplies conditions.
+                row_start = max(lower, lines[max(0, index - 2)].start())
+                row_end = min(upper, lines[min(len(lines) - 1, index + 3)].start())
+                if row_end > match.end():
+                    windows.append(_complete_window(body, row_start, row_end))
+        def availability_score(item):
+            scores = []
+            for line in re.finditer(r'[^\n]+', item[1]):
+                if _AVAILABILITY.search(line.group()):
+                    plan_headings = _plan_heading_path(headings, item[0] + line.start())
+                    scores.append(_question_score(terms, line.group())[0]
+                                  + _question_score(terms, ' '.join(text for _, _, text in plan_headings))[0])
+            return max(scores, default=0)
+        if any(availability_score(item) for item in windows):
+            return max(windows, key=lambda item: (availability_score(item), -len(item[1])))
+        return max(windows, key=lambda item: (_question_score(terms, item[1])[0],
+                                             -len(item[1]), _question_score(terms, item[1])[1]))
     if len(body) <= MAX_INPUT_CHARS or not (required_operations(brief.topic, brief.product_use_cases)
             or any(field.startswith('operation.') for field in brief.required_fields)):
-        return 0, body[:MAX_INPUT_CHARS]
+        return _complete_window(body, 0, len(body))
     focus = re.compile(r'(?im)^\s*(?:roles? (?:and|&) permissions?|(?:doc |page |workspace )?permissions?|'
         r'Can (?:view|edit|comment|manage)|Full access|Read.only|Comment.only|Who can use this feature|权限|角色)')
-    windows = [(0, body[:MAX_INPUT_CHARS])]
+    windows = [_complete_window(body, 0, len(body))]
     for match in list(focus.finditer(body))[:60]:
         start = max(0, match.start() - 600)
         start = body.rfind('\n', 0, start) + 1
-        windows.append((start, body[start:start + MAX_INPUT_CHARS]))
+        windows.append(_complete_window(body, start, len(body)))
     return max(windows, key=lambda item: (len(list(_ROLE_LINE.finditer(item[1]))) * 10
         + len(re.findall(r'(?im)^\s*(?:Can (?:view|edit|comment|manage)|Full access|Read.only|Comment.only)', item[1])) * 20
         + len(re.findall(r'\b(?:cannot|permissions?|requires?|paid plans|all plans)\b', item[1], re.I))))
@@ -280,7 +433,8 @@ def semantic_extraction(
             continue
         start = window_start + window.find(quote)
         end = start + len(quote)
-        if _UNSAFE.search(quote) or quote_quality_problem(quote, dimension=brief.dimension):
+        if (_UNSAFE.search(quote) or _PRICE.search(quote)
+                or quote_quality_problem(quote, dimension=brief.dimension)):
             continue
         # Capture text often has no blank-line paragraphs. Keep adjacent original
         # lines as evidence instead of rejecting every quote or dropping context.
@@ -304,10 +458,13 @@ def semantic_extraction(
         if foreign_subject or any(term in context.casefold() for term in confusion_terms_for_competitor(brief.competitor)):
             continue
         # These are source-local capabilities, not shared comparison slots.
-        key = "semantic_capability_" + hashlib.sha256((page.final_url + "\n" + quote).encode("utf-8")).hexdigest()[:16]
+        source_span = f'{page.final_url}\n{start}:{end}\n{quote}\n{context}'
+        key = "semantic_capability_" + hashlib.sha256(source_span.encode('utf-8')).hexdigest()[:16]
         table_context = _table_context(body, start, end) if quote.strip().startswith('|') else []
         if table_context:
             fact_conditions = [line for line in fact_conditions if not line.strip().startswith('*') or line in table_context]
+        if any(_UNSAFE.search(term) for term in [*table_context, *fact_conditions]):
+            continue
         fields[key] = {"status": "documented", "evidence_terms": list(dict.fromkeys([context, *table_context, *[item for item in fact_conditions if item != context]])), "conditions": fact_conditions}
         if table_context:
             fields[key]['table_context'] = table_context
@@ -318,9 +475,11 @@ def semantic_extraction(
     return ExtractionResult(
         competitor=brief.competitor, dimension=brief.dimension, source_candidate_id=page.candidate_id,
         captured_page_id=page.id, fields=fields, quotes=quotes, confidence=min(.8, page.quality_score),
+        extractor_version='question-focus-v1:' + semantic_focus_signature(brief, page),
         extractor_name=extractor_name, status="extracted" if fields else "partial",
         missing_fields=[] if fields else ["product_capabilities"],
-        metadata={"product_name": brief.product_name, "category": brief.product_category},
+        metadata={"product_name": brief.product_name, "category": brief.product_category,
+                  'active_question_ids': [item.question_id for item in _active_questions(brief)]},
     )
 
 
@@ -353,7 +512,7 @@ def extract_operation_rules(brief: ResearchBrief, page: CapturedPage) -> Extract
         actor_rule = actor and modal and actor.start() < modal.start()
         role_cells = [cell.strip() for cell in line.strip().strip('|').split('|')]
         role_definition = line.startswith('|') and len(role_cells) == 2 and _ROLE.fullmatch(role_cells[0])
-        if (_standalone_access_requirement(line) or _ROLE_LINE.match(line) or re.match(r'^\W*Only .+\bcan\b', line, re.I)
+        if (_AVAILABILITY.search(line) or _standalone_access_requirement(line) or _ROLE_LINE.match(line) or re.match(r'^\W*Only .+\bcan\b', line, re.I)
                 or actor_rule or role_definition or re.search(r'\byou can\b', line, re.I) or re.search(r'\b(?:requires?|needs?)\b', line, re.I) and any(
                     re.search(pattern, line, re.I) for _, pattern in OPERATIONS.values())
                 or line.startswith('|') and re.search(r'✅|✖|❌', line)):
@@ -368,10 +527,11 @@ def extract_operation_rules(brief: ResearchBrief, page: CapturedPage) -> Extract
     for line in candidates:
         parsed = semantic_extraction(brief, page, {'facts': [{'quote': line}]})
         observations[line] = [row for value in parsed.fields.values() for row in value['operations']]
-    candidates = [line for line in candidates if observations[line] or _standalone_access_requirement(line)]
+    candidates = [line for line in candidates if observations[line] or _standalone_access_requirement(line)
+                  or _AVAILABILITY.search(line)]
     selected, covered = [], set()
     while candidates and len(selected) < MAX_FACTS:
-        scored = [((_standalone_access_requirement(line),
+        scored = [((_question_score(_question_terms(brief), line), _standalone_access_requirement(line),
                     len({r['operation'] for r in observations[line] if not r['missing_fields'] and r['effect']=='allowed'} & (set(required) - covered)),
                     len({r['operation'] for r in observations[line]} & (set(required) - covered)), -len(line)), line)
                   for line in candidates]
@@ -380,6 +540,6 @@ def extract_operation_rules(brief: ResearchBrief, page: CapturedPage) -> Extract
         selected.append({'quote': line})
         covered.update(r['operation'] for r in observations[line])
     return semantic_extraction(
-        brief, page, {'facts': selected if required else []},
+        brief, page, {'facts': selected if required or _active_questions(brief) else []},
         extractor_name="source_operation_rules",
     )

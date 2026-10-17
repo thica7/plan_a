@@ -194,15 +194,28 @@ def _admission_rejection_reasons(
         ):
             reasons.append("capability_evidence_not_bound_to_body")
     if extraction.extractor_name in {"bounded_semantic_capabilities", "source_operation_rules"} and page is not None:
+        replay_brief = brief.model_copy(update={
+            'competitor': extraction.competitor, 'dimension': extraction.dimension,
+            'product_category': brief.product_category or str(extraction.metadata.get('category') or ''),
+            'product_name': brief.product_name or str(extraction.metadata.get('product_name') or ''),
+        })
+        if getattr(brief, 'questions', ()):
+            active = extraction.metadata.get('active_question_ids')
+            authorized = {item.question_id for item in brief.questions}
+            if (not isinstance(active, list) or not active
+                    or any(not isinstance(item, str) for item in active)
+                    or len(set(active)) != len(active) or not set(active) <= authorized):
+                reasons.append('semantic_question_focus_invalid')
+                return reasons
+            replay_brief = replay_brief.model_copy(update={
+                'metadata': {**brief.metadata, 'active_question_ids': active}})
         verified = semantic_extraction(
-            ResearchBrief(run_id="admission", topic=brief.topic, product_use_cases=brief.product_use_cases, competitor=extraction.competitor,
-                          dimension=extraction.dimension,
-                          required_fields=[field for field in brief.required_fields if field.startswith('operation.')],
-                          product_category=str(extraction.metadata.get("category") or ""),
-                          product_name=str(extraction.metadata.get("product_name") or "")),
+            replay_brief,
             page, {"facts": [{"quote": item.text} for item in extraction.quotes]},
+            extractor_name=extraction.extractor_name,
         )
-        if value != verified.fields.get(field) or quote != _quote_by_field(verified.quotes).get(field):
+        if (value != verified.fields.get(field) or quote != _quote_by_field(verified.quotes).get(field)
+                or extraction.extractor_version != verified.extractor_version):
             reasons.append("semantic_evidence_not_bound_to_body")
     if field == "price_rows" or (
         field == "price_points"
@@ -489,7 +502,7 @@ def raw_sources_from_research_result(
     candidate_by_id = {candidate.id: candidate for candidate in result.candidates}
     accepted_by_page = accepted_evidence_by_page(result.evidence_items)
     sources: list[RawSource] = []
-    if result.metrics.get('operation_repair_round_count'):
+    if result.metrics.get('operation_repair_round_count') or result.metrics.get('question_repair_round_count'):
         target_source_count = min(brief.max_fetches, target_source_count + 1)
 
     for page in sorted(
@@ -591,6 +604,9 @@ def raw_sources_from_research_result(
     if result.metrics.get('operation_repair_round_count'):
         for source in sources:
             source.metadata['operation_repair_evidence_retained'] = True
+    if result.metrics.get('question_repair_round_count'):
+        for source in sources:
+            source.metadata['question_repair_evidence_retained'] = True
     return sources
 
 

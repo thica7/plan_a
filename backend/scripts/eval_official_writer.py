@@ -11,6 +11,7 @@ from uuid import uuid4
 from packages.agents.context import SubagentContext
 from packages.business_intel.official_registry import registered_document, registry_snapshot
 from packages.enterprise import EnterpriseMemoryStore
+from packages.identity import normalize_url
 from packages.memory import KBCache, RunJournal
 from packages.observability import TraceStore
 from packages.orchestrator.checkpointer import GraphCheckpointer
@@ -76,11 +77,12 @@ async def collect_sources(service, record, payloads):
         candidates = [SourceCandidate(title=s["title"], url=s["url"], competitor=product,
             dimension="feature", origin="trusted_registry", confidence=.8)
             for case in payloads if case["product"] == product for s in case["sources"]]
+        candidates = list({normalize_url(candidate.url): candidate for candidate in candidates}.values())
         context = SubagentContext(run_id=record.detail.id, agent="collector", subagent=f"feature::{product}")
         sources = await service._collect_competitor_with_research_pipeline(
             record, record.detail, "feature", product, context, batch_sources=[],
             target_source_count=len(candidates), include_official=False, seed_candidates=candidates,
-            enable_search=False, enable_repair=False)
+            enable_search=False, enable_repair=True)
         record.detail.raw_sources.extend(sources)
         service._finish_delivery_phase(record, "collector", f"feature::{product}")
 

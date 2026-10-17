@@ -309,6 +309,8 @@ def _has_dimension_signal(dimension: str, normalized_text: str) -> bool:
     if any(signal in normalized_text for signal in signals):
         return True
     if "pricing" not in key and "persona" not in key and "user" not in key:
+        if re.search(r'\b(?:is|are)\s+(?:not\s+)?(?:only\s+)?(?:available|supported|unsupported|included)\b|:\s*(?:not\s+)?included\b', normalized_text):
+            return True
         if HARDWARE_SPEC_RE.search(normalized_text):
             return True
     if "pricing" in key:

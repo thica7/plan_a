@@ -96,6 +96,19 @@ def test_feature_only_material_generates_explicit_snapshot_bound_missing_price_a
     assert snapshot.model_dump_json() == before
 
 
+def test_explicit_chinese_quote_date_is_preserved_instead_of_the_run_date():
+    detail, snapshot, _ = price_case(money=False)
+    detail.created_at = AS_OF + timedelta(days=1)
+    question = QUESTION.replace('2026-10-16', '2026 年 10 月 16 日')
+    row = answer(detail, snapshot, question)['q-price']
+    assert '2026-10-16' in row['answer'] and '2026-10-17' not in row['answer']
+
+
+def test_invalid_explicit_chinese_quote_date_is_not_replaced_by_the_run_date():
+    detail, snapshot, _ = price_case(money=False)
+    assert answer(detail, snapshot, QUESTION.replace('2026-10-16', '2026 年 2 月 30 日')) == {}
+
+
 def test_complete_matching_quote_is_checked_even_if_writer_did_not_select_it():
     detail, snapshot, _ = price_case()
     detail.evidence_consumptions = []
