@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from packages.tools.webfetch_runtime import resolve_webfetch_v2_root
+from packages.tools.fetch_page import _capture_html
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ class AdvancedFetchResult:
     failure_reason: str | None = None
     error: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
+    capture_metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def snippet(self) -> str:
@@ -74,6 +76,7 @@ async def advanced_fetch_page(
         str(timeout_seconds),
         "--quality-threshold",
         str(quality_threshold),
+        "--include-source-html",
     ]
     if profile:
         command.extend(["--profile", profile])
@@ -150,6 +153,22 @@ async def advanced_fetch_page(
 
     quality_payload = payload.get("quality") or {}
     diagnostics = payload.get("diagnostics") or {}
+    extraction = payload.get("extraction") or {}
+    # HTML is an ephemeral parsing input. Do not retain it in raw/metadata/trace.
+    source_html = extraction.pop("source_html", "")
+    source_truncated = extraction.pop("source_html_truncated", False)
+    capture_metadata: dict[str, Any] = {}
+    if source_html:
+        source_bytes = source_html.encode('utf-8')
+        text, headings, capture_metadata = await asyncio.to_thread(
+            _capture_html, source_bytes[:2_000_000].decode('utf-8', errors='ignore'))
+        if source_truncated or len(source_bytes) > 2_000_000:
+            capture_metadata['capture_incomplete'] = True
+            capture_metadata['capture_gaps'].append('response_body_truncated')
+        payload['text'] = text
+        payload['markdown'] = f"# {payload.get('title') or ''}\n\n{text}"
+        extraction['headings'] = list(headings)
+        quality_payload['text_length'] = len(text)
     return AdvancedFetchResult(
         url=str(payload.get("url") or url),
         final_url=str(payload.get("final_url") or url),
@@ -173,6 +192,7 @@ async def advanced_fetch_page(
         failure_reason=diagnostics.get("failure_reason"),
         error=diagnostics.get("error") or stderr_text or None,
         raw=payload,
+        capture_metadata=capture_metadata,
     )
 
 

@@ -30,6 +30,7 @@ from packages.research.extraction.pricing_cards import rendered_price_cards
 from packages.research.extraction.quality import HARDWARE_SPEC_RE, quote_quality_problem
 from packages.research.extraction.feature import extract_generic_capabilities
 from packages.research.extraction.semantic import (
+    SEMANTIC_EXTRACTOR_NAMES,
     semantic_extraction,
     semantic_quote_quality_problem,
     source_rule_text_signal,
@@ -179,7 +180,7 @@ def _admission_rejection_reasons(
     if quote is not None:
         quote_problem = (
             semantic_quote_quality_problem(brief, quote.text)
-            if extraction.extractor_name in {"bounded_semantic_capabilities", "source_operation_rules"}
+            if extraction.extractor_name in SEMANTIC_EXTRACTOR_NAMES
             else quote_quality_problem(quote.text, dimension=extraction.dimension)
         )
         if quote_problem:
@@ -201,7 +202,7 @@ def _admission_rejection_reasons(
             or quote != expected_quote
         ):
             reasons.append("capability_evidence_not_bound_to_body")
-    if extraction.extractor_name in {"bounded_semantic_capabilities", "source_operation_rules"} and page is not None:
+    if extraction.extractor_name in SEMANTIC_EXTRACTOR_NAMES and page is not None:
         replay_brief = brief.model_copy(update={
             'competitor': extraction.competitor, 'dimension': extraction.dimension,
             'product_category': brief.product_category or str(extraction.metadata.get('category') or ''),
@@ -494,6 +495,29 @@ def raw_source_from_capture(
     )
 
 
+def _empty_rag_warm_start_for_page(
+    source: RawSource, competitor: str, dimension: str, url: str,
+) -> bool:
+    """Shape check only; the caller must separately verify retrieval and canonical scope."""
+    return bool(
+        source.candidate_origin == "rag_kb"
+        and source.fetch_method == "rag_kb_retrieve"
+        and source.metadata.get("kb_retrieved") is True
+        and source.metadata.get("source_material_level") == "kb_retrieval_chunk"
+        and not source.metadata.get("normalized_fields")
+        and not source.metadata.get("history_report_id")
+        and not source.failure_reason
+        and source.source_type == "webpage_verified"
+        and source.metadata.get("source_role", "source") == "source"
+        and source.metadata.get("kb_source_role", "source") == "source"
+        and normalize_competitor_key(source.competitor) == normalize_competitor_key(competitor)
+        and all(normalize_competitor_key(name) == normalize_competitor_key(competitor)
+                for name in source.covered_competitors)
+        and source.dimension == dimension
+        and source.url and normalize_url(str(source.url)) == normalize_url(url)
+    )
+
+
 def raw_sources_from_research_result(
     brief: ResearchBrief,
     result: ResearchResult,
@@ -506,10 +530,12 @@ def raw_sources_from_research_result(
     fallback_snippet: FallbackSnippetCallable,
     source_is_usable: SourceUsableCallable = lambda source: source_quality_problem(source) is None,
     rejection_diagnostics: list[dict[str, object]] | None = None,
+    _replaceable_rag_source_ids: frozenset[str] = frozenset(),
 ) -> list[RawSource]:
     candidate_by_id = {candidate.id: candidate for candidate in result.candidates}
     accepted_by_page = accepted_evidence_by_page(result.evidence_items)
     sources: list[RawSource] = []
+    replaced_ids: set[str] = set()
     if result.metrics.get('operation_repair_round_count') or result.metrics.get('question_repair_round_count'):
         target_source_count = min(brief.max_fetches, target_source_count + 1)
 
@@ -518,8 +544,19 @@ def raw_sources_from_research_result(
         key=lambda item: _research_page_score(item, accepted_by_page),
         reverse=True,
     ):
-        if len(batch_sources) + len(sources) >= target_source_count:
-            break
+        replacement_ids = {
+            source.id for source in batch_sources
+            if source.id in _replaceable_rag_source_ids - replaced_ids
+            and _empty_rag_warm_start_for_page(
+                source, brief.competitor, brief.dimension, page.final_url)
+            and page.status == "ok" and not page.failure_reason
+            and accepted_by_page.get(page.id)
+        }
+        if len(batch_sources) + len(sources) - len(replaced_ids) - len(replacement_ids) >= target_source_count:
+            record_raw_source_rejection(rejection_diagnostics, page=page,
+                candidate=candidate_by_id.get(page.candidate_id), reason="source_capacity",
+                detail="Accepted evidence cannot become a RawSource within the current source capacity.")
+            continue
         candidate = candidate_by_id.get(page.candidate_id)
         if candidate is None:
             record_raw_source_rejection(
@@ -549,7 +586,8 @@ def raw_sources_from_research_result(
                 detail="No accepted evidence items were attached to this captured page.",
             )
             continue
-        current_sources = [*batch_sources, *sources]
+        current_sources = [source for source in [*batch_sources, *sources]
+                           if source.id not in replaced_ids | replacement_ids]
         branch_sources = [
             source
             for source in current_sources
@@ -609,6 +647,7 @@ def raw_sources_from_research_result(
             )
             continue
         sources.append(source)
+        replaced_ids.update(replacement_ids)
     if result.metrics.get('operation_repair_round_count'):
         for source in sources:
             source.metadata['operation_repair_evidence_retained'] = True

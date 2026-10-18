@@ -47,6 +47,7 @@ from packages.research.evidence import (
     raw_sources_from_research_result,
     source_quality_problem,
 )
+from packages.research.evidence.admission import _empty_rag_warm_start_for_page
 from packages.research.extraction import extract_page
 from packages.research.models import ResearchBrief
 from packages.research.pipeline import run_research_pipeline
@@ -720,6 +721,13 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                 result.coverage.model_dump(mode="json"),
             )
         admission_diagnostics: list[dict[str, object]] = []
+        retrieved_keys = getattr(record, "_kb_retrieved_source_keys", set())
+        replaceable = [source for source in batch_sources
+            if _empty_rag_warm_start_for_page(source, competitor, dimension, str(source.url or ""))
+            and source.metadata.get("kb_document_workspace_id") == detail.workspace_id
+            and source.metadata.get("kb_document_project_id") in {None, detail.project_id}
+            and self._kb_retrieved_source_key(source) in retrieved_keys
+            and await self._rag_upgrade_reference_is_usable(detail, source, require_full=False)]
         sources = self._raw_sources_from_research_result(
             detail,
             brief,
@@ -727,8 +735,27 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             batch_sources=batch_sources,
             target_source_count=target_source_count,
             rejection_diagnostics=admission_diagnostics,
+            _replaceable_rag_source_ids=frozenset(source.id for source in replaceable),
         )
         await self._persist_captured_sources_to_kb(record, detail, sources, result, context)
+        from packages.research.question_delivery import _build_question_delivery
+        question_delivery = (_build_question_delivery(detail, brief, result, sources, admission_diagnostics)
+                             if brief.questions else None)
+        rag_upgrades = []
+        for source in sources:
+            targets = [old for old in replaceable if _empty_rag_warm_start_for_page(
+                old, source.competitor, source.dimension, str(source.url or ""))]
+            if (targets and source.metadata.get("normalized_fields")
+                    and source.metadata.get("kb_full_source_ingest_status") == "stored"
+                    and await self._rag_upgrade_reference_is_usable(detail, source)):
+                for old in targets:
+                    receipt = {
+                        "scope": [detail.id, detail.workspace_id, detail.project_id],
+                        "previous": self._rag_upgrade_source_record(old),
+                        "current": self._rag_upgrade_source_record(source),
+                    }
+                    self._remember_rag_upgrade(receipt)
+                    rag_upgrades.append(receipt)
         self._trace_local_tool(
             record,
             agent="collector",
@@ -754,6 +781,8 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                                       if gap.metadata.get('source') == 'question_coverage'],
                     "metrics": result.metrics,
                     "admission_rejections": admission_diagnostics[:12],
+                    "rag_warm_start_upgrades": rag_upgrades,
+                    **({'question_delivery_v1': question_delivery} if question_delivery else {}),
                     "candidate_ledger": [
                         {
                             "candidate_id": entry.candidate_id,
@@ -802,6 +831,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         batch_sources: list[RawSource],
         target_source_count: int,
         rejection_diagnostics: list[dict[str, object]] | None = None,
+        _replaceable_rag_source_ids: frozenset[str] = frozenset(),
     ) -> list[RawSource]:
         sources = raw_sources_from_research_result(
             brief,
@@ -818,6 +848,10 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                 competitor=brief.competitor,
                 dimension=brief.dimension,
                 url=url,
+                _ignored_source_ids=frozenset(source.id for source in batch_sources
+                    if source.id in _replaceable_rag_source_ids
+                    and _empty_rag_warm_start_for_page(
+                        source, brief.competitor, brief.dimension, url)),
             ),
             confidence_for_source=lambda candidate, page, snippet, items: max(
                 self._verified_source_confidence(
@@ -837,6 +871,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             ),
             source_is_usable=self._research_source_is_usable,
             rejection_diagnostics=rejection_diagnostics,
+            _replaceable_rag_source_ids=_replaceable_rag_source_ids,
         )
         history_by_url = {
             candidate.url: candidate.metadata
@@ -993,11 +1028,119 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                or source.metadata.get('question_repair_evidence_retained') for source in additions):
             target_source_count += 1
         for source in additions:
+            replacement = next((index for index, old in enumerate(target)
+                if self._is_verified_rag_upgrade(old, source)), None)
+            if replacement is not None:
+                others = [old for index, old in enumerate(target) if index != replacement]
+                if not self._source_already_in_batch(source, others):
+                    target[replacement] = source
+                continue
             if len(target) >= target_source_count:
-                break
+                continue
             if self._source_already_in_batch(source, target):
                 continue
             target.append(source)
+
+    @staticmethod
+    def _rag_upgrade_source_record(source: RawSource) -> dict[str, object]:
+        # Hash the actual input instead of copying prose into redacted traces.
+        # Coverage is filled later by collect_join and does not identify facts.
+        bound_source = json.dumps(source.model_dump(mode="json", exclude={"covered_competitors"}),
+            sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        return {
+            "id": source.id,
+            "source_sha256": hashlib.sha256(bound_source.encode()).hexdigest(),
+            **{key: source.metadata.get(key) for key in (
+                "kb_document_id", "kb_document_version", "kb_document_content_hash",
+                "kb_document_workspace_id", "kb_document_project_id",
+                "captured_page_id", "capture_content_hash", "fetched_at")},
+        }
+
+    async def _rag_upgrade_reference_is_usable(
+        self, detail: RunDetail, source: RawSource, *, require_full: bool = True,
+    ) -> bool:
+        from packages.knowledge.repository import KnowledgeRepository
+
+        if not await self._full_source_reference_is_valid(detail, source, require_full=require_full):
+            return False
+        async with KnowledgeRepository() as repo:
+            doc = await repo.get_document(
+                str(source.metadata.get("kb_document_id") or ""), scope=self._kb_scope(detail))
+        if doc is None:
+            return False
+        # Reuse warm-start scope, observed-time precedence, future-time rejection
+        # and dimension TTL against real canonical dates, including after restart.
+        return self._kb_scoped_hit_rejection_reason({
+            **doc.model_dump(), "document_id": doc.id, "document_version": doc.version,
+            "chunk_id": source.id, "score": 0.0,
+        }, {
+            "query": "validate_collector_rag_upgrade",
+            **self._kb_scope(detail).model_dump(),
+            "competitors": [source.competitor], "dimensions": [source.dimension],
+            "market": self._kb_source_market(detail, source) if require_full else self._kb_market(detail),
+            "source_roles": ["source"], "max_age_days": self._kb_max_age_days(source.dimension),
+        }) is None
+
+    def _remember_rag_upgrade(self, receipt: dict[str, object]) -> None:
+        if not hasattr(self, "_collector_rag_upgrades"):
+            self._collector_rag_upgrades = []
+        if receipt not in self._collector_rag_upgrades:
+            self._collector_rag_upgrades.append(receipt)
+
+    def _is_verified_rag_upgrade(
+        self, previous: RawSource, current: RawSource, detail: RunDetail | None = None,
+    ) -> bool:
+        if not (_empty_rag_warm_start_for_page(previous, current.competitor,
+                current.dimension, str(current.url or ""))
+                and current.metadata.get("normalized_fields")
+                and current.metadata.get("kb_full_source_ingest_status") == "stored"
+                and not current.failure_reason
+                and current.candidate_origin != "rag_kb"
+                and current.fetch_method not in {"", "rag_kb_retrieve"}):
+            return False
+        return any(
+            (detail is None or receipt["scope"] == [detail.id, detail.workspace_id, detail.project_id])
+            and receipt["previous"] == self._rag_upgrade_source_record(previous)
+            and receipt["current"] == self._rag_upgrade_source_record(current)
+            for receipt in getattr(self, "_collector_rag_upgrades", [])
+        )
+
+    async def _restore_verified_rag_upgrades(self, detail: RunDetail) -> None:
+        # RunJournal restores trace receipts, while runtime retrieval keys and
+        # pairs are intentionally transient. Recheck the current full canonical
+        # reference before using an already completed upgrade after resumption.
+        scope = [detail.id, detail.workspace_id, detail.project_id]
+        self._collector_rag_upgrades = [receipt
+            for receipt in getattr(self, "_collector_rag_upgrades", [])
+            if receipt["scope"] != scope]
+        sources = {source.id: source for source in detail.raw_sources}
+        for span in detail.trace_spans:
+            if span.agent != "collector" or span.name != "clean_research_pipeline":
+                continue
+            try:
+                payload = json.loads(span.full_output or "{}")
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            receipts = payload.get("rag_warm_start_upgrades", [])
+            if not isinstance(receipts, list):
+                continue
+            for receipt in receipts:
+                if not isinstance(receipt, dict) or receipt.get("scope") != scope:
+                    continue
+                old, new = receipt.get("previous"), receipt.get("current")
+                if not isinstance(old, dict) or not isinstance(new, dict):
+                    continue
+                previous, current = sources.get(old.get("id")), sources.get(new.get("id"))
+                if (previous is None or current is None
+                        or old != self._rag_upgrade_source_record(previous)
+                        or new != self._rag_upgrade_source_record(current)
+                        or not _empty_rag_warm_start_for_page(previous, current.competitor,
+                            current.dimension, str(current.url or ""))
+                        or not await self._rag_upgrade_reference_is_usable(detail, current)):
+                    continue
+                self._remember_rag_upgrade(receipt)
 
     def _should_collect_official_first(self, dimension: str) -> bool:
         key = dimension.casefold()
@@ -1036,6 +1179,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         competitor: str,
         dimension: str,
         url: str | None,
+        _ignored_source_ids: frozenset[str] = frozenset(),
     ) -> bool:
         if not url:
             return False
@@ -1047,6 +1191,8 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
             else (*detail.raw_sources, *batch_sources)
         )
         for source in existing_sources:
+            if source.id in _ignored_source_ids:
+                continue
             if source.id in detail.evidence_retired_source_ids:
                 continue
             if source.dimension != dimension or not self._source_matches_competitor(
@@ -2320,6 +2466,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                 "cross_competitor_search_failed",
             },
         )
+        await self._restore_verified_rag_upgrades(detail)
         detail.raw_sources = self._normalize_collected_sources(detail, dimensions)
         self._annotate_community_claim_clusters(detail, dimensions)
         normalized_count = len(detail.raw_sources)
@@ -2363,7 +2510,17 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         scoped_dimensions = set(dimensions)
         normalized: list[RawSource] = []
         seen: dict[tuple, int] = {}
+        upgraded_warm_ids = {
+            previous.id for previous in detail.raw_sources
+            if previous.dimension in scoped_dimensions or not scoped_dimensions
+            if previous.id not in detail.evidence_retired_source_ids
+            and any(current.id not in detail.evidence_retired_source_ids
+                and self._is_verified_rag_upgrade(previous, current, detail)
+                for current in detail.raw_sources)
+        }
         for source in detail.raw_sources:
+            if source.id in upgraded_warm_ids:
+                continue
             if scoped_dimensions and source.dimension not in scoped_dimensions:
                 normalized.append(source)
                 continue

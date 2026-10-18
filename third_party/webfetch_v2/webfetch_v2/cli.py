@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--screenshot", action="store_true")
     fetch.add_argument("--capture-network", action="store_true")
     fetch.add_argument("--cache", action="store_true", help="Persist result JSON/markdown/artifacts to the cache directory")
+    fetch.add_argument("--include-source-html", action="store_true", help="Include bounded transient HTML for the capture adapter")
     fetch.add_argument("--prefer-cache", action="store_true", help="Return cached result for the URL when available")
     fetch.add_argument("--cache-dir", type=Path, help="Override cache root directory")
     fetch.add_argument("--pretty", action="store_true")
@@ -90,7 +91,7 @@ async def run_fetch(args: argparse.Namespace) -> int:
         screenshot=args.screenshot,
         capture_network=args.capture_network,
     )
-    payload = result.to_dict()
+    payload = result.to_dict(include_source_html=args.include_source_html)
     if args.cache:
         payload["cache"] = write_cache(result, cache_root=args.cache_dir).to_dict()
     _print_json(payload, pretty=args.pretty)

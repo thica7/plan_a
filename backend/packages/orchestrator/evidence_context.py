@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -597,6 +598,7 @@ class EvidenceContextMixin:
                         "Recollection produced no new accepted evidence; reviewed outputs retained.",
                         {"outcome": "no_new_evidence", "snapshot_id": baseline.id,
                          "qa_findings_retained": len(detail.qa_findings)})
+                    self._finalize_question_delivery(record, documents, baseline)
                     self._persist_run(detail.id)
                     return baseline
                 detail.evidence_snapshot_id = prior_pointer
@@ -612,8 +614,68 @@ class EvidenceContextMixin:
             if (changes.added_sources or changes.removed_sources or changes.changed_sources
                     or changes.added_facts or changes.removed_facts or changes.changed_facts):
                 self._reconcile_evidence_artifacts(record)
+        self._finalize_question_delivery(record, documents, snapshot)
         self._persist_run(detail.id)
         return snapshot
+
+    def _finalize_question_delivery(self, record, documents, snapshot):
+        from packages.research.question_delivery import _question_delivery_capsules, _seal_question_delivery
+        if not callable(getattr(self, '_trace_local_tool', None)):
+            return
+        for capsule in list(_question_delivery_capsules(record.detail)):
+            scope = capsule.get('scope', {})
+            authorized = (self._research_brief(record.detail, scope.get('competitor'), scope.get('dimension'))
+                          if callable(getattr(self, '_research_brief', None)) else None)
+            observation = _seal_question_delivery(record.detail, capsule, documents, snapshot, authorized_brief=authorized)
+            output = canonical_json(observation)
+            if any(span.name == 'question_delivery_replay' and span.full_output == output
+                   for span in record.detail.trace_spans):
+                continue
+            self._trace_local_tool(record, agent='collector', subagent='question_delivery',
+                name='question_delivery_replay', input_text=canonical_json({'capsule_id': capsule['id'],
+                    'snapshot_id': snapshot.id}), output_text=output,
+                metadata={'capsule_id': capsule['id'], 'snapshot_id': snapshot.id})
+
+    def _record_question_delivery_view(self, record, view, use):
+        from packages.research.question_delivery import _observe_question_view
+        if not callable(getattr(self, '_trace_local_tool', None)):
+            return
+        seen = set()
+        for span in reversed(list(record.detail.trace_spans)):
+            if span.name != 'question_delivery_replay':
+                continue
+            try:
+                replay = json.loads(span.full_output)
+            except ValueError:
+                continue
+            capsule_id = replay.get('capsule_id')
+            scope = replay.get('scope', {})
+            if (replay.get('snapshot_id') != view.snapshot_id or capsule_id in seen
+                    or use.competitor and scope.get('competitor') != use.competitor
+                    or use.dimension and scope.get('dimension') != use.dimension):
+                continue
+            seen.add(capsule_id)
+            observation = _observe_question_view(view, use, replay)
+            observation['capsule_id'] = capsule_id
+            output = canonical_json(observation)
+            if any(item.name == 'question_delivery_view' and item.full_output == output
+                   for item in record.detail.trace_spans):
+                continue
+            self._trace_local_tool(record, agent=use.agent, subagent='question_delivery',
+                name='question_delivery_view', input_text=canonical_json({'consumption_id': use.id}),
+                output_text=output, metadata={'consumption_id': use.id, 'snapshot_id': view.snapshot_id})
+
+    def _record_question_writer_dispatch(self, record, view, use, prompt, span_start):
+        from packages.research.question_delivery import _observe_writer_dispatch, _question_delivery_capsules
+        record = self._evidence_live_record(record)
+        if not any(_question_delivery_capsules(record.detail)):
+            return
+        stored = next((item for item in record.detail.evidence_consumptions if item.id == use.id), use)
+        observation = _observe_writer_dispatch(record.detail, view, stored, prompt, span_start)
+        self._trace_local_tool(record, agent='writer', subagent=f'{use.competitor}/{use.dimension}',
+            name='question_delivery_writer_dispatch', input_text=canonical_json({'consumption_id': use.id}),
+            output_text=canonical_json(observation), metadata={'consumption_id': use.id,
+                'writer_span_id': observation['span_id'], 'snapshot_id': use.snapshot_id})
 
     @staticmethod
     def _collector_replacement_preserves_authority(original, replacement, admitted_ids):
@@ -904,4 +966,5 @@ class EvidenceContextMixin:
         record.detail.evidence_consumptions = [
             updated if item.id == use.id else item for item in record.detail.evidence_consumptions
         ]
+        self._record_question_delivery_view(record, current, updated)
         self._persist_run(record.detail.id)

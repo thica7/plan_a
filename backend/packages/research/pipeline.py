@@ -25,6 +25,7 @@ from packages.research.evidence import (
 )
 from packages.research.evidence.operations import operation_gaps, required_operations
 from packages.research.extraction import extract_page
+from packages.research.extraction.structured_evidence import extract_structured_evidence
 from packages.research.extraction.semantic import (
     extract_operation_rules,
     semantic_focus_signature,
@@ -147,7 +148,7 @@ async def run_research_pipeline(
                         continue
                     semantic_fingerprints.add(fingerprint)
                 supplemental = await semantic_extract(brief, page)
-                if supplemental is not None and supplemental.fields:
+                if supplemental is not None and (supplemental.fields or supplemental.metadata.get("proposal_diagnostics")):
                     extractions = dedupe_by_id([*extractions, supplemental])
         evidence_items = admit_evidence_items(extractions, brief=brief, captured_pages=captured_pages, candidates=candidates)
         gaps = [*evaluate_research_quality(brief, extractions, evidence_items), *operation_gaps(brief, evidence_items)]
@@ -277,7 +278,7 @@ async def run_research_pipeline(
                 continue
             semantic_page_ids.add(page.id)
             supplemental = await semantic_extract(semantic_brief, page)
-            if supplemental is not None and supplemental.fields:
+            if supplemental is not None and (supplemental.fields or supplemental.metadata.get("proposal_diagnostics")):
                 extractions = dedupe_by_id([*extractions, supplemental])
         evidence_items = admit_evidence_items(extractions, brief=semantic_brief, captured_pages=captured_pages, candidates=candidates)
         gaps = evaluate_research_quality(brief, extractions, evidence_items)
@@ -308,7 +309,7 @@ async def run_research_pipeline(
         for page in repair_pass.captured_pages:
             if page.status == 'ok':
                 supplemental = await semantic_extract(repair_brief, page)
-                if supplemental is not None and supplemental.fields:
+                if supplemental is not None and (supplemental.fields or supplemental.metadata.get("proposal_diagnostics")):
                     extractions = dedupe_by_id([*extractions, supplemental])
         evidence_items = admit_evidence_items(extractions, brief=repair_brief, captured_pages=captured_pages, candidates=candidates)
         gaps = [*evaluate_research_quality(brief, extractions, evidence_items), *operation_gaps(brief, evidence_items)]
@@ -429,6 +430,11 @@ async def _run_question_repair(
         metrics['question_stop_reason'] = reason
         return state, metrics
 
+    state.extractions = dedupe_by_id([*state.extractions, *[
+        extract_structured_evidence(brief, page) for page in state.captured_pages
+        if page.status == 'ok']])
+    state.evidence_items = admit_evidence_items(state.extractions, brief=brief,
+        captured_pages=state.captured_pages, candidates=state.candidates)
     gaps, stop = await review()
     metrics['question_initial_gap_count'] = len(gaps)
     if not gaps:
@@ -442,6 +448,10 @@ async def _run_question_repair(
     before_ids = {item.id for item in state.evidence_items if item.status == 'accepted'}
     tasks = repair_tasks_from_gaps(gaps)
     focus = _repair_brief(brief, tasks, round_index=1)
+    state.extractions = dedupe_by_id([*state.extractions, *[
+        extract_structured_evidence(focus, page) for page in state.captured_pages if page.status == 'ok']])
+    state.evidence_items = admit_evidence_items(state.extractions, brief=brief,
+        captured_pages=state.captured_pages, candidates=state.candidates)
     if semantic_extract is not None:
         for page in sorted(
             state.captured_pages, key=lambda page: semantic_page_priority(focus, page),
@@ -455,7 +465,7 @@ async def _run_question_repair(
             semantic_fingerprints.add(fingerprint)
             metrics['question_reextract_page_count'] += 1
             supplemental = await semantic_extract(focus, page)
-            if supplemental is not None and supplemental.fields:
+            if supplemental is not None and (supplemental.fields or supplemental.metadata.get("proposal_diagnostics")):
                 state.extractions = dedupe_by_id([*state.extractions, supplemental])
         state.evidence_items = admit_evidence_items(
             state.extractions, brief=brief, captured_pages=state.captured_pages,
@@ -515,7 +525,7 @@ async def _run_question_repair(
                     continue
                 semantic_fingerprints.add(fingerprint)
                 supplemental = await semantic_extract(focus, page)
-                if supplemental is not None and supplemental.fields:
+                if supplemental is not None and (supplemental.fields or supplemental.metadata.get("proposal_diagnostics")):
                     state.extractions = dedupe_by_id([*state.extractions, supplemental])
         state.evidence_items = admit_evidence_items(
             state.extractions, brief=brief, captured_pages=state.captured_pages,
@@ -809,6 +819,8 @@ def _evaluate_capture_set(
                        if page.status == 'ok' and brief.dimension == 'feature'
                        and (required_operations(brief.topic, brief.product_use_cases)
                             or brief.questions))
+    extractions.extend(extract_structured_evidence(brief, page) for page in pages
+                       if page.status == 'ok' and brief.questions)
     evidence_items = admit_evidence_items(
         extractions,
         brief=brief,

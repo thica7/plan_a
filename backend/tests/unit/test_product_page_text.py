@@ -88,12 +88,14 @@ async def test_event_loop_responds_while_product_html_is_being_parsed(monkeypatc
     started = threading.Event()
     release = threading.Event()
     finished = threading.Event()
+    fetch_module = import_module("packages.tools.fetch_page")
+    capture_html = fetch_module._capture_html
 
-    def paused_parser(body: str) -> str:
+    def paused_parser(body: str):
         started.set()
         release.wait(timeout=5.0)  # Watchdog only; success depends on response order.
         try:
-            return _html_to_text(body)
+            return capture_html(body)
         finally:
             finished.set()
 
@@ -103,7 +105,7 @@ async def test_event_loop_responds_while_product_html_is_being_parsed(monkeypatc
         release.set()
         return responded_during_parse
 
-    monkeypatch.setattr(import_module("packages.tools.fetch_page"), "_html_to_text", paused_parser)
+    monkeypatch.setattr(fetch_module, "_capture_html", paused_parser)
     transport = httpx.MockTransport(lambda request: httpx.Response(
         200, text=_product_html(), headers={"Content-Type": "text/html"}, request=request,
     ))

@@ -1,0 +1,983 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-19",
+  "status": "engineering_verified_report_acceptance_failed",
+  "baseline_commit": "2bb07363b795690dbab3c1715690e395e823ab6c",
+  "branch": "codex/pastoral-desktop",
+  "production_code_sha256": "9afef23c3ae0f92e2614d5f15371489b865eb100202e601066f863b2bc317fd4",
+  "production_hash_scope": "backend/packages Python; full freeze additionally covers all backend and vendored webfetch Python and selected references",
+  "freeze": {
+    "artifact": "data/artifacts/collector-question-delivery-2026-10-18/freeze.json",
+    "sha256": "8584a63679a75f6e9f5141f61b41f9ae789f28fa61b1f1690600639e1c96460d",
+    "files": 707,
+    "unchanged_after_runs": true,
+    "launch_wrapper_sha256": "c0a47ff7c5f2d0c5741d6443216086bc3a710204d0d518047fa072da4a3ee8c3",
+    "metrics_helpers_sha256": {
+      "/tmp/plan_a_v29_collect_metrics.py": "2251fe823569f09b080c1dd7ca5ac78da405b9db269311a36b2fd3337a0c5834",
+      "/tmp/plan_a_v29_capture_metrics.py": "fd36b59e8646f002afe253790a2efc2c68ef735feb80d2dd969516b6cb512c35",
+      "/tmp/plan_a_v29_contract_metrics.py": "051e01ebb021b69fdf07e21498f79cb4bc4881188f03af42a741fc0dedfc7968"
+    }
+  },
+  "implementation": {
+    "capture_structure_version": 1,
+    "delivery_contract_version": "question_delivery.v1",
+    "structured_extractor": "source_structured_rules",
+    "existing_rag_slot_upgrade": "verified same product/dimension/URL empty RAG source only; rechecks canonical TTL/future/version/hash/scope; no source budget increase",
+    "new_test_cases": 147,
+    "task_reviews": {
+      "capture_v4": "SPEC and QUALITY passed; each independently ran 127 tests",
+      "delivery_v2": "SPEC and QUALITY passed; each independently ran 617 tests",
+      "rag_upgrade_v2": "SPEC and QUALITY passed; each independently ran 310 tests",
+      "final_integration": "PASS; independent 147 tests plus 16 parser-hook tests"
+    },
+    "task_freeze_sha256": {
+      "capture_v4": "670f774d517eea6b9269b3d43eb011c335a701a27c22a9d2fdd05dc18aa62f6c",
+      "delivery_v2": "898715d62a7834a3d5ba2ec87d64720fd1a81f835b6808009857ba516ab2f429",
+      "rag_upgrade_v2": "98ea1e070c32c65f1c9179eee75b9991167ee2190f4568b4d11228b8b77c812d"
+    }
+  },
+  "offline_verification": {
+    "final_backend": {
+      "passed": 5811,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 167.09,
+      "log_sha256": "cfbd44583970c4db70fa84b358fd70b82fe426607a42b856334c94c5857764c1"
+    },
+    "first_backend_attempt": {
+      "passed": 5810,
+      "failed": 1,
+      "skipped": 1,
+      "failure": "Existing event-loop test patched old _html_to_text entry; adapted test to current _capture_html without weakening response-order assertion. Production stayed unchanged.",
+      "log_sha256": "63c83c257c83f106160600727b09d69e23f423bd3f8352c01f23a12fd375227d"
+    },
+    "root_new_cases": {
+      "passed": 147,
+      "seconds": 7.25
+    },
+    "parser_hook_targeted": {
+      "passed": 163,
+      "seconds": 7.61
+    },
+    "scoped_ruff": "pass",
+    "full_backend_ruff_baseline": [
+      {
+        "file": "backend/tests/unit/test_fact_projection.py",
+        "code": "F401",
+        "line": 2,
+        "unchanged_from_head": true
+      },
+      {
+        "file": "backend/tests/unit/test_fact_projection.py",
+        "code": "F401",
+        "line": 4,
+        "unchanged_from_head": true
+      },
+      {
+        "file": "backend/tests/unit/test_hardware_collection_minimal.py",
+        "code": "F401",
+        "line": 9,
+        "unchanged_from_head": true
+      },
+      {
+        "file": "backend/tests/unit/test_official_registry.py",
+        "code": "F401",
+        "line": 3,
+        "unchanged_from_head": true
+      }
+    ],
+    "openapi": {
+      "byte_identical": true,
+      "sha256": "c7cc29f619c32a09b4e8dc5f9159ae1c3f70e4a7ef9fae28f63aa80534013aad"
+    },
+    "frontend": "unchanged; not rerun",
+    "secret_scan": {
+      "scope": "literal current configured credentials in nonignored text sources/docs/eval, built frontend and specified acceptance artifacts; excludes secret env bodies and Git history",
+      "configured_credential_count": 1,
+      "files_scanned": 1353,
+      "actual_secret_hit_paths": [],
+      "tracked_secret_config_paths": [],
+      "status": "pass"
+    }
+  },
+  "protocol": {
+    "kind": "exposed development regression; post-run independent agent grading against user-reviewed boundaries",
+    "blind_holdout": false,
+    "reference_dataset": "eval/agent-readiness-holdout-v1-reviewed.jsonl",
+    "reference_dataset_sha256": "d3f36c6f50e530c74110a1eae8bbc7688e018c1235cc192a761864b1a61e58e3",
+    "runtime_fields": [
+      "id",
+      "product",
+      "question",
+      "sources(id,title,url)"
+    ],
+    "reference_answers_sent_to_runtime": false,
+    "fixed_official_source_groups": 4,
+    "attempts_per_group": 1,
+    "max_calls_per_group": 24,
+    "max_tokens_per_group": 80000,
+    "max_output_tokens": 2048,
+    "model_retries": 0,
+    "scope": "Collector through Analyst/Comparator/Reflector/Writer/QA fixed-source stages; no Planner/discovery/full Graph/dense semantic indexing/deployment acceptance"
+  },
+  "runs": [
+    {
+      "product": "Bitwarden",
+      "run_id": "run-be3678b65ba64f92aee75963277d8c6f",
+      "case_ids": [
+        "agent-readiness-holdout-v1-001",
+        "agent-readiness-holdout-v1-002"
+      ],
+      "artifact_directory": "data/artifacts/collector-question-delivery-2026-10-18/regression-bitwarden",
+      "status": "execution_complete",
+      "error_type": null,
+      "production_code_sha256": "9afef23c3ae0f92e2614d5f15371489b865eb100202e601066f863b2bc317fd4",
+      "manifest_sha256": "8ed43e6681c4da58362207340ddee6c603a8f7c960fdefd7a1c8d6e3a98c7c35",
+      "source_count": 3,
+      "snapshot_facts": 75,
+      "runtime_report_characters": 827,
+      "saved_report_characters": 827,
+      "saved_report_sha256": "1d64a1c9ab37870490b9734c7ef226ebea1db40e33dccd5ce7fa6592fc1a175f",
+      "run_sha256": "3b4b8debee797313de4069ad6de911f5441819fd703b07510eaa8d305a095721",
+      "summary_sha256": "11da7d7bd6d0e756c11729020a793d9b4839f7dd6f35f9cf15735784ebf2bef9",
+      "body_is_redaction_placeholder": false,
+      "saved_report_matches_saved_run": true,
+      "llm_transport_attempts": 10,
+      "provider_tokens": 33152,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 1,
+      "writer_producer_verified": true,
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 3
+      },
+      "qa_llm_names": {
+        "dimension_claim_review": 1,
+        "dimension_answer_coverage": 1,
+        "dimension_answer_review": 1
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "user_accepted": false,
+      "body_counts": {
+        "correct": 1,
+        "error": 0,
+        "omitted": 1
+      },
+      "answer_record_counts": {
+        "correct": 1,
+        "error": 0,
+        "omitted": 1
+      },
+      "deliverable": false,
+      "reward": null,
+      "training_ready": false
+    },
+    {
+      "product": "1Password",
+      "run_id": "run-622d1486190c4554b07baaa814e626da",
+      "case_ids": [
+        "agent-readiness-holdout-v1-003",
+        "agent-readiness-holdout-v1-004"
+      ],
+      "artifact_directory": "data/artifacts/collector-question-delivery-2026-10-18/regression-1password",
+      "status": "execution_complete",
+      "error_type": null,
+      "production_code_sha256": "9afef23c3ae0f92e2614d5f15371489b865eb100202e601066f863b2bc317fd4",
+      "manifest_sha256": "241e61181ce440fcab7b9a9ebcebc0f2830ce73e56c5635e740c7288a5ea98f6",
+      "source_count": 1,
+      "snapshot_facts": 3,
+      "runtime_report_characters": 859,
+      "saved_report_characters": 859,
+      "saved_report_sha256": "1b0422adde74e692b364e038023131f5aef16a02a58c8ab832fe129809a4d017",
+      "run_sha256": "82f998a37964f56ee6ee1da8aaca19e579b5e37d8266fbbbbaf0bc7af35664c7",
+      "summary_sha256": "dcb0a20ee34e5bbd93c7415563ed2766b3e555f8df8556aba9137b8e3c57cc8b",
+      "body_is_redaction_placeholder": false,
+      "saved_report_matches_saved_run": true,
+      "llm_transport_attempts": 10,
+      "provider_tokens": 17621,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 1,
+      "writer_producer_verified": true,
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 3
+      },
+      "qa_llm_names": {
+        "dimension_claim_review": 1,
+        "dimension_answer_coverage": 1,
+        "dimension_answer_review": 1
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "user_accepted": false,
+      "body_counts": {
+        "correct": 1,
+        "error": 0,
+        "omitted": 1
+      },
+      "answer_record_counts": {
+        "correct": 0,
+        "error": 0,
+        "omitted": 2
+      },
+      "deliverable": false,
+      "reward": null,
+      "training_ready": false
+    },
+    {
+      "product": "Dropbox",
+      "run_id": "run-3ac51b70740a437697467df9e0577a69",
+      "case_ids": [
+        "agent-readiness-holdout-v1-005",
+        "agent-readiness-holdout-v1-006"
+      ],
+      "artifact_directory": "data/artifacts/collector-question-delivery-2026-10-18/regression-dropbox",
+      "status": "blocked",
+      "error_type": "ValueError",
+      "production_code_sha256": "9afef23c3ae0f92e2614d5f15371489b865eb100202e601066f863b2bc317fd4",
+      "manifest_sha256": "c50ee121a3eeb8af388253728bad623f58b8eaa0eb98468841bffaf393ebc768",
+      "source_count": 0,
+      "snapshot_facts": 0,
+      "runtime_report_characters": 0,
+      "saved_report_characters": 0,
+      "saved_report_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "run_sha256": "ee104d84b71a085b423b9b56d1d9abea2ce2d3d63054dee22e375c25626ce118",
+      "summary_sha256": "f6912e9b37aad7748200ed2d4081f3a07ed1c37d7af1546090b7731aded01cb3",
+      "body_is_redaction_placeholder": false,
+      "saved_report_matches_saved_run": true,
+      "llm_transport_attempts": 0,
+      "provider_tokens": null,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 1,
+      "writer_producer_verified": false,
+      "llm_transport_by_agent": {
+        "collector": 0,
+        "analyst": 0,
+        "comparator": 0,
+        "reflector": 0,
+        "writer": 0,
+        "qa": 0
+      },
+      "qa_llm_names": {},
+      "actual_models": [],
+      "user_accepted": false,
+      "body_counts": {
+        "correct": 0,
+        "error": 0,
+        "omitted": 2
+      },
+      "answer_record_counts": {
+        "correct": 0,
+        "error": 0,
+        "omitted": 2
+      },
+      "deliverable": false,
+      "reward": null,
+      "training_ready": false
+    },
+    {
+      "product": "Cloudflare",
+      "run_id": "run-b23687305363460197d2b4ae55f7891c",
+      "case_ids": [
+        "agent-readiness-holdout-v1-007",
+        "agent-readiness-holdout-v1-008"
+      ],
+      "artifact_directory": "data/artifacts/collector-question-delivery-2026-10-18/regression-cloudflare",
+      "status": "execution_complete",
+      "error_type": null,
+      "production_code_sha256": "9afef23c3ae0f92e2614d5f15371489b865eb100202e601066f863b2bc317fd4",
+      "manifest_sha256": "ebfa24c6c25388a29054ab8c510abbd006f4500bd4a38032322ad9f2ca41a8e9",
+      "source_count": 1,
+      "snapshot_facts": 45,
+      "runtime_report_characters": 1131,
+      "saved_report_characters": 1131,
+      "saved_report_sha256": "2ebde017cc8c80361b1b3906abb520df4e187e1e026f66a7e438353740ec8f59",
+      "run_sha256": "d1421f1cc3a022c27ae07b31fec507d022f6548588dfdc9b174fdf57ea37251b",
+      "summary_sha256": "538a7bd21555bf6a1c4cbcef748b762d93f76ae2c02d62d3366b168354008275",
+      "body_is_redaction_placeholder": false,
+      "saved_report_matches_saved_run": true,
+      "llm_transport_attempts": 10,
+      "provider_tokens": 35035,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 0,
+      "writer_producer_verified": true,
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 3
+      },
+      "qa_llm_names": {
+        "dimension_claim_review": 1,
+        "dimension_answer_coverage": 1,
+        "dimension_answer_review": 1
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "user_accepted": false,
+      "body_counts": {
+        "correct": 1,
+        "error": 0,
+        "omitted": 1
+      },
+      "answer_record_counts": {
+        "correct": 1,
+        "error": 0,
+        "omitted": 1
+      },
+      "deliverable": false,
+      "reward": null,
+      "training_ready": false
+    }
+  ],
+  "content_review": {
+    "cases": [
+      {
+        "case_id": "agent-readiness-holdout-v1-001",
+        "product": "Bitwarden",
+        "body_status": "correct",
+        "answer_record_status": "correct",
+        "rationale": "正文明确结论“否”，并准确保留你加最多一名其他用户（总计两人）与最多两个 collections；题目限定新建于2026年，属于该当前套餐文档范围。答案记录结论 no 与同一已发布主张绑定，未把 Premium 或个人无限存储外推到 Free organization。",
+        "missing_conditions": [],
+        "evidence_ids": [
+          "evidence-fact-record-ac8a7510be40c1e61374f1bd79cc9a6d7deb7a3ec1307bc2e44d10eb6378c2d6"
+        ]
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-002",
+        "product": "Bitwarden",
+        "body_status": "omitted",
+        "answer_record_status": "omitted",
+        "rationale": "最终正文只有“尚未核实／本次已审核证据尚未完整覆盖此问题”，没有向用户提出 Remove member 还是 Delete account、My vault 还是组织所有数据的关键澄清。最终record也只有unverified、reason和missing_fields，没有answer或可交付的澄清正文。reason理解了歧义不等于实际完成澄清；按要求partial计遗漏。未发布的clarification与SSO草稿不能算交付。",
+        "missing_conditions": [
+          "实际向用户询问从组织移除成员还是永久删除账户。",
+          "实际向用户询问个人 My vault 还是组织所有 collections／My Items，并保留 Centralize organization ownership 的区别。",
+          "若进一步解释移除后账户访问，需保留无主密码 SSO trusted devices 分支、事先恢复主密码且移除前至少登录一次；最终正文没有该解释，故此处是未交付内容，不是已发布错误登录保证。"
+        ],
+        "evidence_ids": [
+          "evidence-fact-record-476f9b8035068edb9ea744daf95800ff68a39ad671ebb57791daf74478e98365",
+          "evidence-fact-record-320dfbb45a737dbe6752c83029629d4e5fa23680cf2242119fd5b95f7706cd24",
+          "evidence-fact-record-dede393f588c3a9db746b826fa0c213ee7a6f2151a94f2671f4b638e33e52679",
+          "evidence-fact-record-faa3c51c7e456e8091eea617fb8de0c82ac2fe7f0f830d284f474ed762a635f9",
+          "evidence-fact-record-5fda60694b1a7d58dec40bb0fb1163731ef4f1ce8d9852c8bdab54060c294d6a"
+        ]
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-003",
+        "product": "1Password",
+        "body_status": "correct",
+        "answer_record_status": "omitted",
+        "rationale": "正文明确访客没有自己的Private vault、只能访问一个选定保险库，并说明提升为家庭成员可得到Private与多个共享库，足以回答当前guest两者都不能；未声称永远不能换库。题目已给接受邀请并确认的前提，无须重复要求。正文没有将家庭正式成员能力套给guest。最终answer_coverage却是unverified、空claim_ids、无answer，reason为missing/invalid，故record计遗漏。",
+        "missing_conditions": {
+          "body": [],
+          "answer_record": [
+            "缺失绑定已发布claims的正式no答案记录。"
+          ],
+          "evidence_retention_note": [
+            "at a time及可换库原句在captured与model proposal存在，但因condition_capacity未作为独立fact准入；现有body没有反向推断永远不能换库，因此不据此把正文降为错误或遗漏。"
+          ]
+        },
+        "evidence_ids": [
+          "evidence-fact-record-70a2a0cac8a234ba33a91fbd75d9d9ac02ec5c6c8fe71f832baff46ea4158d51"
+        ]
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-004",
+        "product": "1Password",
+        "body_status": "omitted",
+        "answer_record_status": "omitted",
+        "rationale": "最终正文及record拒绝直接报精确价格，未编造金额，属于安全但不完整的回答。缺少Unified Access按组织需求与能力定制报价、应联系官方销售取得报价这一reference要求的核心理由与下一步；按partial计遗漏。record虽status=answered，其泛化insufficient内容不能覆盖原题。且一年计费周期、Unified Access产品已在题目中明确，server再次标billing_interval/plan缺失不符合题意。",
+        "missing_conditions": [
+          "明确Unified Access为按组织需求及所需能力定制报价。",
+          "建议取得官方销售报价，而非声称补齐普通输入即可由公开页核验精确适用金额。",
+          "将300人、一年、Unified Access已给定作为问题上下文；真正无法得出的包括报价、合同币种、汇率及适用税额。"
+        ],
+        "evidence_ids": []
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-005",
+        "product": "Dropbox",
+        "body_status": "omitted",
+        "answer_record_status": "omitted",
+        "rationale": "report.md 为空，answer_coverage 为空，未给出任何问题回答；无错误事实，但整题未交付。",
+        "missing_conditions": [
+          "直接邮件邀请共享文件夹、Can view 成员仍可下载的明确结论",
+          "Can view 禁止新增/编辑/删除与禁止下载的区别"
+        ],
+        "evidence_ids": {
+          "reference_source_id": "ah-s05",
+          "candidate_id": "source-candidate-a2b525e1b029edefa86a",
+          "capture_id": "captured-page-630b3d913597b1f1d68f",
+          "raw_source_ids": [],
+          "evidence_item_ids": [],
+          "fact_ids": [],
+          "claim_ids": [],
+          "snapshot_ids": [
+            "evidence-snapshot-b2a16682885d9f16b998c48d3f9a28a29760a768a07974b5dea7556249f47dfa"
+          ]
+        }
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-006",
+        "product": "Dropbox",
+        "body_status": "omitted",
+        "answer_record_status": "omitted",
+        "rationale": "report.md 为空，answer_coverage 为空，未给出任何问题回答；无错误事实，但整题未交付。",
+        "missing_conditions": [
+          "澄清实际操作：移除成员/取消共享文件夹/自己离开/删除链接",
+          "澄清原访问路径：成员或共享链接，以及是否允许保留副本",
+          "保留离开文件夹不自动关闭查看链接、删除链接只关闭该路径、允许保留副本停止同步的分支"
+        ],
+        "evidence_ids": {
+          "reference_source_id": "ah-s06",
+          "candidate_id": "source-candidate-60823611b92f7caed3db",
+          "capture_id": "captured-page-26915db80eebf3dd72ea",
+          "raw_source_ids": [],
+          "evidence_item_ids": [],
+          "fact_ids": [],
+          "claim_ids": [],
+          "snapshot_ids": [
+            "evidence-snapshot-b2a16682885d9f16b998c48d3f9a28a29760a768a07974b5dea7556249f47dfa"
+          ]
+        }
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-007",
+        "product": "Cloudflare",
+        "body_status": "correct",
+        "answer_record_status": "correct",
+        "rationale": "正文明确回答否，限定仅授予 example.com 的 Cache Domain Purge 只能清该域，不能据同一账户推导 other.example 权限；题目和答案记录明确无其他角色。另列 Cache Purge 背景未混同角色，也未扩展为DNS/计费编辑权限。",
+        "missing_conditions": [],
+        "evidence_ids": {
+          "reference_source_id": "ah-s07",
+          "candidate_id": "source-candidate-4e924570746695583588",
+          "capture_id": "captured-page-ffcab66db4d81556b3ed",
+          "recipe_id": "extraction-4c11e93695711375f12a-cc5bda54b75d",
+          "evidence_item_ids": [
+            "evidence-item-4f093e414596d6cd1b47",
+            "evidence-item-2871377568091f06b5b7",
+            "evidence-item-739663102a2425dc8a6e",
+            "evidence-item-db3ac205497aa64f3189"
+          ],
+          "raw_source_ids": [
+            "raw-source-c71a5d8161af6e06ae53"
+          ],
+          "fact_ids": [
+            "evidence-fact-record-9ea3050fc5fd281cac548dd5fe053bc2b2cf9e5606d68b4b2076b0dc4e149b8e",
+            "evidence-fact-record-7df9b64d6a591f5933bf1d971c3e666f170fa42b81a6ad540ee096a8bf9e88b0",
+            "evidence-fact-record-5a9f8ca4c135054ec7fb239ea6e8951e56de9275ea1722d7892dd0033ef3a8fd",
+            "evidence-fact-record-b2d12f3c02179a078a1427e7641bd0c08c5d202d0881c178e4ad3af5e2ecbbdf"
+          ],
+          "claim_ids": [
+            "claim-26397771756fbe1c24f6",
+            "claim-e64fd75e75b3be61d8f7",
+            "claim-550f6b7844d4f10c8133"
+          ],
+          "snapshot_ids": [
+            "evidence-snapshot-34d58fae5b0a459b5e263ee3997c11704a88e6f214bdefb7fd22cdf0e24e53ee",
+            "evidence-snapshot-6dd4115acbd1fd87c5dbc46ce4590920bdf63e14d4ae1db92c94d53d6836aeea"
+          ],
+          "writer_span_id": "span-37"
+        }
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-008",
+        "product": "Cloudflare",
+        "body_status": "omitted",
+        "answer_record_status": "omitted",
+        "rationale": "拒绝给无条件精确账单是正确方向，但只请求市场、套餐、税费和完整用量的通用模板，未明确至少需要CPU用量及其他计费资源用量；也未给按账户每月最低费用范围，且重复请求题目已给的套餐。属于条件不完整，按规则partial计omitted；没有捏造金额，因此不记事实error。",
+        "missing_conditions": [
+          "明确仅1500万动态请求不能决定准确账单，至少还需CPU毫秒实际用量",
+          "明确还需其他计费资源的实际用量，而非只列宽泛资料清单",
+          "保留Workers Paid/Standard与按账户每月最低费用的范围（本次捕获为$5/月/账户）"
+        ],
+        "evidence_ids": {
+          "reference_source_id": "ah-s09",
+          "candidate_id": "source-candidate-484dffddae603b05dc06",
+          "capture_id": "captured-page-b2404bd7ef02d33ed916",
+          "recipe_ids": [
+            "extraction-92fcab9c45fd0ee97a9a-4f53cda18c2b",
+            "extraction-8632e07b1a8484e1b125-4f53cda18c2b"
+          ],
+          "semantic_extraction_span_id": "span-6",
+          "raw_source_ids": [],
+          "evidence_item_ids": [],
+          "fact_ids": [],
+          "claim_ids": [],
+          "snapshot_basis_id": "evidence-snapshot-6dd4115acbd1fd87c5dbc46ce4590920bdf63e14d4ae1db92c94d53d6836aeea",
+          "writer_span_id": "span-37"
+        }
+      }
+    ],
+    "body_counts": {
+      "correct": 3,
+      "error": 0,
+      "omitted": 5
+    },
+    "answer_record_counts": {
+      "correct": 2,
+      "error": 0,
+      "omitted": 6
+    },
+    "deliverable_products": 0,
+    "products": 4,
+    "classification": "partial counts as omitted; body and final answer records graded separately; QA/trace status is not truth",
+    "full_private_grading_artifacts": [
+      {
+        "path": "/tmp/plan_a_v29_grade_first.json",
+        "sha256": "eec0ebac9c61aea4636db5bbc6f0499c0ea9122c20a8e19808f66188705794f9"
+      },
+      {
+        "path": "/tmp/plan_a_v29_grade_second.json",
+        "sha256": "208eadc4e5b682c4b185f8f26c21ad2c04137ac9c23ac007bf465185159a23a2"
+      }
+    ]
+  },
+  "collector_contract_observations": [
+    {
+      "group": "bitwarden",
+      "run_id": "run-be3678b65ba64f92aee75963277d8c6f",
+      "event_counts": {
+        "clean_research_pipeline": 1,
+        "question_delivery_replay": 2,
+        "question_delivery_view": 12,
+        "question_delivery_writer_dispatch": 1
+      },
+      "view_event_counts_by_agent": {
+        "collect_qa": 6,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 2,
+        "qa": 1
+      },
+      "accepted_entry_count": 29,
+      "recorded_conversion_missing_count": 0,
+      "final_replay_item_status_counts": {
+        "partial": 29
+      },
+      "final_replay_reason_counts": {
+        "extractor_unverified": 2,
+        "item_producer_mismatch": 29,
+        "item_replay_mismatch": 29,
+        "conversion_missing": 29,
+        "receipt_identity_mismatch": 27,
+        "snapshot_fact_binding_mismatch": 2,
+        "item_identity_mismatch": 1
+      },
+      "writer_dispatch": [
+        {
+          "status": "dispatch_succeeded",
+          "transport_attempts": 1,
+          "content_dispatched": true,
+          "observed_fact_count": 3,
+          "omitted_within_selected_view_count": 0,
+          "reasons": []
+        }
+      ],
+      "all_question_semantics": "unverified",
+      "new_rag_warm_start_upgrade_triggered": false
+    },
+    {
+      "group": "1password",
+      "run_id": "run-622d1486190c4554b07baaa814e626da",
+      "event_counts": {
+        "clean_research_pipeline": 1,
+        "question_delivery_replay": 2,
+        "question_delivery_view": 8,
+        "question_delivery_writer_dispatch": 1
+      },
+      "view_event_counts_by_agent": {
+        "collect_qa": 2,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 2,
+        "qa": 1
+      },
+      "accepted_entry_count": 2,
+      "recorded_conversion_missing_count": 0,
+      "final_replay_item_status_counts": {
+        "ready": 2
+      },
+      "final_replay_reason_counts": {},
+      "writer_dispatch": [
+        {
+          "status": "dispatch_succeeded",
+          "transport_attempts": 1,
+          "content_dispatched": true,
+          "observed_fact_count": 1,
+          "omitted_within_selected_view_count": 0,
+          "reasons": []
+        }
+      ],
+      "all_question_semantics": "unverified",
+      "new_rag_warm_start_upgrade_triggered": false
+    },
+    {
+      "group": "dropbox",
+      "run_id": "run-3ac51b70740a437697467df9e0577a69",
+      "event_counts": {
+        "clean_research_pipeline": 1,
+        "question_delivery_replay": 1
+      },
+      "view_event_counts_by_agent": {},
+      "accepted_entry_count": 0,
+      "recorded_conversion_missing_count": 0,
+      "final_replay_item_status_counts": {},
+      "final_replay_reason_counts": {},
+      "writer_dispatch": [],
+      "all_question_semantics": "unverified",
+      "new_rag_warm_start_upgrade_triggered": false
+    },
+    {
+      "group": "cloudflare",
+      "run_id": "run-b23687305363460197d2b4ae55f7891c",
+      "event_counts": {
+        "clean_research_pipeline": 1,
+        "question_delivery_replay": 2,
+        "question_delivery_view": 8,
+        "question_delivery_writer_dispatch": 1
+      },
+      "view_event_counts_by_agent": {
+        "collect_qa": 2,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 2,
+        "qa": 1
+      },
+      "accepted_entry_count": 15,
+      "recorded_conversion_missing_count": 0,
+      "final_replay_item_status_counts": {
+        "partial": 6,
+        "ready": 9
+      },
+      "final_replay_reason_counts": {
+        "extractor_unverified": 6,
+        "item_producer_mismatch": 6,
+        "item_replay_mismatch": 6,
+        "conversion_missing": 6
+      },
+      "writer_dispatch": [
+        {
+          "status": "dispatch_succeeded",
+          "transport_attempts": 1,
+          "content_dispatched": true,
+          "observed_fact_count": 4,
+          "omitted_within_selected_view_count": 0,
+          "reasons": []
+        }
+      ],
+      "all_question_semantics": "unverified",
+      "new_rag_warm_start_upgrade_triggered": false
+    }
+  ],
+  "recorded_item_id_presence": [
+    {
+      "group": "bitwarden",
+      "accepted_recorded": 25,
+      "in_current_normalized": 25,
+      "in_snapshot": 25,
+      "missing_normalized_ids": [],
+      "missing_snapshot_ids": [],
+      "comparison": "ID-presence only; not semantic acceptance or original unredacted replay"
+    },
+    {
+      "group": "1password",
+      "accepted_recorded": 1,
+      "in_current_normalized": 1,
+      "in_snapshot": 1,
+      "missing_normalized_ids": [],
+      "missing_snapshot_ids": [],
+      "comparison": "ID-presence only; not semantic acceptance or original unredacted replay"
+    },
+    {
+      "group": "dropbox",
+      "accepted_recorded": 0,
+      "in_current_normalized": 0,
+      "in_snapshot": 0,
+      "missing_normalized_ids": [],
+      "missing_snapshot_ids": [],
+      "comparison": "ID-presence only; not semantic acceptance or original unredacted replay"
+    },
+    {
+      "group": "cloudflare",
+      "accepted_recorded": 15,
+      "in_current_normalized": 15,
+      "in_snapshot": 15,
+      "missing_normalized_ids": [],
+      "missing_snapshot_ids": [],
+      "comparison": "ID-presence only; not semantic acceptance or original unredacted replay"
+    }
+  ],
+  "capture_archives": [
+    {
+      "product_group": "bitwarden",
+      "archive_file": "data/artifacts/collector-question-delivery-2026-10-18/regression-bitwarden/pipeline-captures.json",
+      "captures": [
+        {
+          "candidate_id": "source-candidate-69831a789e5de36e5a0b",
+          "capture_id": "captured-page-7542da3f061ee406cdf1",
+          "url": "https://bitwarden.com/help/remove-users/",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "a6fb93d2817cb886",
+          "body_characters": 3142,
+          "heading_count": 3,
+          "capture_structure_version": 1,
+          "capture_incomplete": false,
+          "capture_gaps": [],
+          "disclosure_count": 0,
+          "recovered_disclosure_count": 0,
+          "body_sha256": "a6fb93d2817cb8863d172b4fa7c3d5f385efa0cc78b39da868a1c9256acd716b",
+          "exported_body_sha256": "a6fb93d2817cb8863d172b4fa7c3d5f385efa0cc78b39da868a1c9256acd716b",
+          "body_redacted": false
+        },
+        {
+          "candidate_id": "source-candidate-b164e03a86491f34ecb4",
+          "capture_id": "captured-page-6cc1d7c60c3e0e140da8",
+          "url": "https://bitwarden.com/help/password-manager-plans/",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "bfd3616bd2bb046b",
+          "body_characters": 7022,
+          "heading_count": 12,
+          "capture_structure_version": 1,
+          "capture_incomplete": false,
+          "capture_gaps": [],
+          "disclosure_count": 0,
+          "recovered_disclosure_count": 0,
+          "body_sha256": "bfd3616bd2bb046bc61a7543f8a628c74ac9313d8d60c16dd3eae241ecad2fb8",
+          "exported_body_sha256": "bfd3616bd2bb046bc61a7543f8a628c74ac9313d8d60c16dd3eae241ecad2fb8",
+          "body_redacted": false
+        },
+        {
+          "candidate_id": "source-candidate-31c87c50c750c8ad77e1",
+          "capture_id": "captured-page-24942943dcd70c43edf9",
+          "url": "https://bitwarden.com/help/delete-member-accounts/",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "4b369da82acf7931",
+          "body_characters": 1473,
+          "heading_count": 3,
+          "capture_structure_version": 1,
+          "capture_incomplete": false,
+          "capture_gaps": [],
+          "disclosure_count": 0,
+          "recovered_disclosure_count": 0,
+          "body_sha256": "4b369da82acf793105141386b833e6b4fe034eb05aec4a6d8c771f1b5abb830a",
+          "exported_body_sha256": "be65443112bdf3df2f095233adad13e79a96295ae3b42ebd2bedd811462d02a9",
+          "body_redacted": true
+        }
+      ]
+    },
+    {
+      "product_group": "1password",
+      "archive_file": "data/artifacts/collector-question-delivery-2026-10-18/regression-1password/pipeline-captures.json",
+      "captures": [
+        {
+          "candidate_id": "source-candidate-92ef7a341e254a59eaf1",
+          "capture_id": "captured-page-d966813e1eb6041b79b6",
+          "url": "https://support.1password.com/guests/",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "34c4034cb2dfe9a2",
+          "body_characters": 2272,
+          "heading_count": 6,
+          "capture_structure_version": 1,
+          "capture_incomplete": false,
+          "capture_gaps": [],
+          "disclosure_count": 0,
+          "recovered_disclosure_count": 0,
+          "body_sha256": "34c4034cb2dfe9a2206d287bf8d7344129a0629d2567ea60023c69829eb978a5",
+          "exported_body_sha256": "34c4034cb2dfe9a2206d287bf8d7344129a0629d2567ea60023c69829eb978a5",
+          "body_redacted": false
+        },
+        {
+          "candidate_id": "source-candidate-46e7b6247568b1f54f2f",
+          "capture_id": "captured-page-db14373bc6c16ba99a2a",
+          "url": "https://1password.com/pricing",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "44d4dbc5ea1ace04",
+          "body_characters": 1159,
+          "heading_count": 26,
+          "capture_structure_version": 1,
+          "capture_incomplete": true,
+          "capture_gaps": [
+            "empty_disclosure_question"
+          ],
+          "disclosure_count": 5,
+          "recovered_disclosure_count": 0,
+          "body_sha256": "44d4dbc5ea1ace04703777ea50bd00dafa3a65d8bdef5dc4ead24c9c8a6903c3",
+          "exported_body_sha256": "44d4dbc5ea1ace04703777ea50bd00dafa3a65d8bdef5dc4ead24c9c8a6903c3",
+          "body_redacted": false
+        }
+      ]
+    },
+    {
+      "product_group": "dropbox",
+      "archive_file": "data/artifacts/collector-question-delivery-2026-10-18/regression-dropbox/pipeline-captures.json",
+      "captures": [
+        {
+          "candidate_id": "source-candidate-a2b525e1b029edefa86a",
+          "capture_id": "captured-page-630b3d913597b1f1d68f",
+          "url": "https://help.dropbox.com/share/set-file-folder-permissions",
+          "status": "rejected",
+          "fetch_method": "webfetch_v2:static",
+          "source_material_level": "unknown",
+          "content_hash": "19d2391336538040",
+          "body_characters": 33,
+          "heading_count": 0,
+          "capture_structure_version": 1,
+          "capture_incomplete": false,
+          "capture_gaps": [],
+          "disclosure_count": 0,
+          "recovered_disclosure_count": 0,
+          "body_sha256": "19d239133653804074f2f30a0bd5e7b40c5f3fac3cee3d6614a5aa75396b1c2e",
+          "exported_body_sha256": "19d239133653804074f2f30a0bd5e7b40c5f3fac3cee3d6614a5aa75396b1c2e",
+          "body_redacted": false
+        },
+        {
+          "candidate_id": "source-candidate-60823611b92f7caed3db",
+          "capture_id": "captured-page-26915db80eebf3dd72ea",
+          "url": "https://help.dropbox.com/share/unshare-folder",
+          "status": "rejected",
+          "fetch_method": "webfetch_v2:static",
+          "source_material_level": "unknown",
+          "content_hash": "19d2391336538040",
+          "body_characters": 33,
+          "heading_count": 0,
+          "capture_structure_version": 1,
+          "capture_incomplete": false,
+          "capture_gaps": [],
+          "disclosure_count": 0,
+          "recovered_disclosure_count": 0,
+          "body_sha256": "19d239133653804074f2f30a0bd5e7b40c5f3fac3cee3d6614a5aa75396b1c2e",
+          "exported_body_sha256": "19d239133653804074f2f30a0bd5e7b40c5f3fac3cee3d6614a5aa75396b1c2e",
+          "body_redacted": false
+        }
+      ]
+    },
+    {
+      "product_group": "cloudflare",
+      "archive_file": "data/artifacts/collector-question-delivery-2026-10-18/regression-cloudflare/pipeline-captures.json",
+      "captures": [
+        {
+          "candidate_id": "source-candidate-4e924570746695583588",
+          "capture_id": "captured-page-ffcab66db4d81556b3ed",
+          "url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "f3919b3168f9f503",
+          "body_characters": 13338,
+          "heading_count": 4,
+          "capture_structure_version": 1,
+          "capture_incomplete": false,
+          "capture_gaps": [],
+          "disclosure_count": 0,
+          "recovered_disclosure_count": 0,
+          "body_sha256": "f3919b3168f9f50328d5943b6f6d925875aef16b3da61426a87e96613370d18c",
+          "exported_body_sha256": "f3919b3168f9f50328d5943b6f6d925875aef16b3da61426a87e96613370d18c",
+          "body_redacted": false
+        },
+        {
+          "candidate_id": "source-candidate-484dffddae603b05dc06",
+          "capture_id": "captured-page-b2404bd7ef02d33ed916",
+          "url": "https://developers.cloudflare.com/workers/platform/pricing/",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "89613775ecbce4ab",
+          "body_characters": 26644,
+          "heading_count": 30,
+          "capture_structure_version": 1,
+          "capture_incomplete": false,
+          "capture_gaps": [],
+          "disclosure_count": 4,
+          "recovered_disclosure_count": 4,
+          "body_sha256": "89613775ecbce4ab746836337a5047cb60d0895b925d63fbd1115977010a726b",
+          "exported_body_sha256": "89613775ecbce4ab746836337a5047cb60d0895b925d63fbd1115977010a726b",
+          "body_redacted": false
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "llm_transport_attempts": 30,
+    "provider_tokens_recorded": 85808,
+    "provider_usage_unknown_transport_spans": 0,
+    "actual_models": [
+      "deepseek-flash"
+    ],
+    "source_count": 5,
+    "snapshot_facts": 123,
+    "captured_pages": 9,
+    "redacted_capture_bodies": 1
+  },
+  "integrity": {
+    "old_artifacts_unchanged": 268,
+    "old_artifact_manifest_sha256": "d281e1cfc36d7946a24e6c07ebe247daa8154914bebf84784c5fa9e45cb693c5",
+    "reviewed_reference_and_trajectory_labels_modified": false
+  },
+  "remaining_blockers": [
+    {
+      "stage": "capture",
+      "issue": "Dropbox pages returned 33-character navigation shells and were rejected; browser route did not yield usable body."
+    },
+    {
+      "stage": "capture_to_extraction",
+      "issue": "1Password pricing FAQ answers remained in disclosure metadata; empty question text and browser_fetch_error left them out of body/proposals."
+    },
+    {
+      "stage": "question_window",
+      "issue": "Cloudflare pricing body was captured but duplicate Footnotes headings made section selection ambiguous; actual model body was empty and no billing facts were admitted."
+    },
+    {
+      "stage": "snapshot_to_writer",
+      "issue": "Bitwarden ownership/My Items/delete-account original facts were not selected into Writer evidence_view; upstream analysis retained only a partial paraphrase."
+    },
+    {
+      "stage": "answer_publication",
+      "issue": "1Password guest body was correct but final answer record became unverified; generic pricing templates were falsely marked answered while omitting known product-specific reasons and missing inputs."
+    }
+  ],
+  "limitations": [
+    "Trace redaction can make delivery capsules partial; actual facts may still be in snapshot. No redaction bypass.",
+    "Only supported semantic recipes are replayed; unrecognized deterministic extraction remains unverified.",
+    "Writer dispatch success proves completeness only relative to its already selected view, not coverage of all relevant snapshot facts.",
+    "One stored Writer input and one capture body were redacted; cannot claim exact full plaintext reconstruction.",
+    "Real new-project runs did not trigger same-page RAG warm-start upgrade; that branch has offline actual SQLite/RunJournal validation only.",
+    "Canonical normalized annotations are historical; current RawSource and actual snapshot are authoritative.",
+    "Finite native table/FAQ recovery does not ensure arbitrary natural-language semantic completeness.",
+    "No controlled before/after A/B; changed upstream responses prevent an overall improvement claim.",
+    "Replay conversion_missing reasons can coexist with actual normalized/snapshot ID presence; use direct stage reconciliation instead of inferring database loss from unverified replay."
+  ],
+  "user_accepted": false,
+  "reward": null,
+  "training_ready": false,
+  "training_performed": false,
+  "weights_downloaded": false,
+  "docker_executed": false
+}

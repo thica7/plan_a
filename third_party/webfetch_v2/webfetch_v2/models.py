@@ -44,6 +44,8 @@ class ExtractionResult:
     headings: list[tuple[int, str]] = field(default_factory=list)
     pricing_control_html: list[str] = field(default_factory=list)
     pricing_offer_json: list[str] = field(default_factory=list)
+    source_html: str = ""
+    source_html_truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -92,5 +94,9 @@ class FetchResult:
     network: list[NetworkEntry] = field(default_factory=list)
     extraction: ExtractionResult = field(default_factory=lambda: ExtractionResult(method="unknown"))
 
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+    def to_dict(self, *, include_source_html: bool = False) -> dict[str, Any]:
+        payload = asdict(self)
+        if not include_source_html:
+            payload['extraction'].pop('source_html', None)
+            payload['extraction'].pop('source_html_truncated', None)
+        return payload

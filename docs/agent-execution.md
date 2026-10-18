@@ -2,7 +2,9 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-当前真实验证见[完整证据与答案发表恢复](optimization/2026-10-18-evidence-recovery-delivery.md)：5664项后端通过，四组40次真实调用；正文3正确／1错误／4遗漏，记录2正确／6遗漏，仍0/4报告达标。下面是有限规则及实际入口；中文数量结论误拒、下载规则投影遗漏、计费行／FAQ漏提取和错误缺证陈述仍未解决。实现检查通过不等于语义验收。
+当前真实验证见[Collector逐题交付](optimization/2026-10-19-collector-question-delivery.md)：后端5811通过/1跳过；四组30次真实调用，正文3正确/5遗漏、记录2正确/6遗漏，0/4完整报告可交付。三组核心下游Agent实际执行，Dropbox采集阻断未调用下游。合同已接线不代表全召回或语义合格；抓取、选窗、Writer原始选证及最终回答状态仍有明确缺口。
+
+此前真实验证见[完整证据与答案发表恢复](optimization/2026-10-18-evidence-recovery-delivery.md)：5664项后端通过，四组40次真实调用；正文3正确／1错误／4遗漏，记录2正确／6遗漏，仍0/4报告达标。下面是有限规则及实际入口；中文数量结论误拒、下载规则投影遗漏、计费行／FAQ漏提取和错误缺证陈述仍未解决。实现检查通过不等于语义验收。
 
 ## 1. 执行顺序
 
@@ -40,6 +42,16 @@ planner → planner_hitl
 已识别的身份认证、保留副本及访问路径例外由 [`source_exceptions.py`](../backend/packages/research/evidence/source_exceptions.py) 从已准入的同一抓取生成局部收据，保留原条目及事件身份。普通原句上限800字符；完整原始条件组／except列表允许最多1600字符，超过时保留缺口，不能裁掉分支。它不授予新来源资格，旧快照不会自动补写收据。
 
 完整规则收据现在按同源身份和全部分支去重，后续 `To unshare...` 操作引导不会吞掉前面的 except 列表。兼容当前官方页面之间的一般规则与具体例外可生成 `source_exception_bindings` 候选；只有完整双方 fact/source 已发送且条件均重放时，才可有限豁免多事实限制。认证规则采用完整有限语法，未知余文拒绝；收据文字不能代替完整 origin。
+
+#### 逐题交付合同
+
+[`question_delivery.py`](../backend/packages/research/question_delivery.py) 在真实 Collector 存储出口生成 `question_delivery_v1`，区分抓取、提案、原文验证、准入、来源转换和快照封存。每个问题保留原问、实际提取批次及事实关联；失败、超容量、未转换或未存储均保留原因。请求条件不成为事实，模型自报完成不能关闭机械缺口。
+
+抓取层从同一正文根提取标题和内容，恢复真实折叠问答；已知缺口在原有预算内最多尝试一次浏览器升级。[`structured_evidence.py`](../backend/packages/research/extraction/structured_evidence.py) 从当前问题窗口中的完整计费行和实际恢复问答补提案，仍经过原验证器与准入，不新增模型调用、不计算采购总价。
+
+封存时用规范正文、实际当前来源及快照重放合同。canonical 的历史 `normalized_fields` 注解不是当前事实的权威，不能因旧注解缺少新事实而误判存储丢失。后续 Agent 在真实消费校验后记录 `question_delivery_view`；它只证明本地选择。Writer 的 `question_delivery_writer_dispatch` 另按实际请求、模型 span、完整原句、值及条件核对准备、发送与省略，其他 Agent 的发送状态保持未核实。一般自然语言的语义完整性和报告质量仍须独立验收。
+
+同页知识库占位来源仅在真实检索、当前准入和规范正文校验均通过后，才用当前完整来源替换原名额；不增加来源预算，不合并旧事实或旧日期。join双顺序与RunJournal恢复重验原有TTL、未来时间、版本、哈希和范围。审计凭据采用必要引用及哈希，普通标题脱敏不应破坏该替换关系。其本轮验收为离线真实SQLite/RunJournal测试，新项目四组未触发该分支。
 
 #### 问题缺口驱动补证
 

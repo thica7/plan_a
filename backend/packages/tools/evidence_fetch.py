@@ -108,7 +108,8 @@ async def _fetch_evidence_page(
         min_text_chars=min_text_chars,
     )
     price_missing = require_price_content and not _has_currency_amount(basic.text)
-    if basic_sufficient and not price_missing:
+    capture_incomplete = bool(basic.capture_metadata.get('capture_incomplete'))
+    if basic_sufficient and not price_missing and not capture_incomplete:
         return _with_price_check(_from_basic_fetch(basic), require_price_content)
     if not allow_advanced:
         if basic_sufficient:
@@ -121,13 +122,15 @@ async def _fetch_evidence_page(
 
     advanced = await advanced_fetch_page(
         url,
-        mode="browser" if price_missing or retry_public_document else "auto",
+        mode="browser" if price_missing or retry_public_document or capture_incomplete else "auto",
         timeout_seconds=max(15.0, timeout_seconds),
         quality_threshold=advanced_quality_threshold,
         capture_network=True,
     )
     if _advanced_fetch_is_better(advanced, basic, advanced_quality_threshold):
         captured = _with_price_check(_from_advanced_fetch(advanced), require_price_content)
+        if capture_incomplete:
+            captured = _retain_capture_gaps(captured, basic)
         if retry_public_document:
             captured = replace(captured, capture_metadata={**captured.capture_metadata,
                 "http_status_before_browser": 403, "public_document_browser_retry": True})
@@ -148,6 +151,9 @@ async def _fetch_evidence_page(
                         or "advanced_result_rejected",
                     },
                 )
+            if capture_incomplete:
+                fallback = replace(fallback, capture_metadata={**fallback.capture_metadata,
+                    'capture_upgrade_failure_reason': advanced.failure_reason or 'advanced_result_rejected'})
             return fallback
         return _from_basic_fetch(
             basic,
@@ -156,6 +162,33 @@ async def _fetch_evidence_page(
             advanced_fetch_attempted=True,
         )
     return _from_failed_fetch(basic, advanced)
+
+
+def _retain_capture_gaps(result: EvidenceFetchResult, basic: FetchPageResult) -> EvidenceFetchResult:
+    """A browser's long text cannot erase a known unresolved source structure."""
+    metadata = dict(result.capture_metadata)
+    completed = {_disclosure_identity(item) for item in metadata.get('disclosures', [])
+                 if item.get('status') == 'complete' and _disclosure_identity(item) is not None}
+    unresolved = [item for item in basic.capture_metadata.get('disclosures', [])
+                  if item.get('status') != 'complete'
+                  and (_disclosure_identity(item) is None or _disclosure_identity(item) not in completed)]
+    if not metadata.get('capture_structure_version') or unresolved:
+        metadata['capture_incomplete'] = True
+        metadata['capture_gaps'] = list(dict.fromkeys([
+            *metadata.get('capture_gaps', []),
+            *(item.get('reason', 'capture_incomplete') for item in unresolved),
+            *([] if metadata.get('capture_structure_version') else basic.capture_metadata.get('capture_gaps', [])),
+        ]))
+        metadata['disclosures'] = [*metadata.get('disclosures', []), *unresolved]
+    return replace(result, capture_metadata=metadata)
+
+
+def _disclosure_identity(item: dict[str, Any]) -> tuple[str, ...] | None:
+    if item.get('kind') == 'aria_controls' and item.get('panel_id'):
+        return ('aria_controls', item.get('control_id', ''), item['panel_id'], item.get('question', ''))
+    if item.get('kind') == 'details' and item.get('element_id'):
+        return ('details', item['element_id'], item.get('question', ''))
+    return None
 
 
 def _has_currency_amount(text: str) -> bool:
@@ -277,7 +310,8 @@ def _from_basic_fetch(
         text_length=len(result.text),
         failure_reason=failure_reason,
         content_type=result.content_type,
-        capture_metadata={"document_headings": list(result.document_headings),
+        capture_metadata={**result.capture_metadata,
+                          "document_headings": list(result.document_headings),
                           "pricing_controls": list(result.pricing_controls),
                           "pricing_offer_json": list(result.pricing_offer_json)},
         source_material_level=(
@@ -328,6 +362,7 @@ def _from_advanced_fetch(result: AdvancedFetchResult) -> EvidenceFetchResult:
             else "unknown"
         ),
         capture_metadata={
+            **result.capture_metadata,
             "document_headings": (result.raw.get('extraction') or {}).get('headings', []),
             "pricing_controls": list(_pricing_controls(
                 ''.join((result.raw.get('extraction') or {}).get('pricing_control_html', [])))),

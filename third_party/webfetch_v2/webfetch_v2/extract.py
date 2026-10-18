@@ -83,9 +83,13 @@ def extract_best_content(html_body: str, title: str, *, status_code: int | None 
     extractor remains BeautifulSoup/regex so default operation has no heavy dependency.
     """
 
+    source_bytes = html_body.encode('utf-8')
+    source_html = source_bytes[:2_000_000].decode('utf-8', errors='ignore')
+    source_truncated = len(source_bytes) > 2_000_000
     raw_candidates = _raw_extraction_candidates(html_body)
     if not raw_candidates:
-        return ExtractedContent(text="", extraction=ExtractionResult(method="none"))
+        return ExtractedContent(text="", extraction=ExtractionResult(method="none", source_html=source_html,
+                                                                     source_html_truncated=source_truncated))
 
     scored: list[tuple[str, str, float, int, str | None]] = []
     for method, text, error in raw_candidates:
@@ -108,7 +112,8 @@ def extract_best_content(html_body: str, title: str, *, status_code: int | None 
     ]
     return ExtractedContent(
         text=best[1],
-        extraction=ExtractionResult(method=best[0], candidates=candidates, headings=extract_headings(html_body)),
+        extraction=ExtractionResult(method=best[0], candidates=candidates, headings=extract_headings(html_body),
+                                    source_html=source_html, source_html_truncated=source_truncated),
     )
 
 

@@ -4,8 +4,10 @@ import asyncio
 import hashlib
 import html
 import re
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, field
 from io import BytesIO
+from typing import Any
 from urllib.parse import urljoin
 
 import httpx
@@ -19,6 +21,7 @@ from packages.crawler.policy import SSRFError, SSRFGuard
 
 _MAX_REDIRECTS = 8
 _DEFAULT_MAX_BYTES = 2_000_000
+_HIDDEN_CLASSES = {'hidden', 'tw:hidden'}
 # Keep short specification tables out of trafilatura's unstructured baseline rescue.
 _HTML_TEXT_CONFIG = use_config()
 _HTML_TEXT_CONFIG.set("DEFAULT", "MIN_EXTRACTED_SIZE", "0")
@@ -37,6 +40,7 @@ class FetchPageResult:
     document_headings: tuple[tuple[int, str], ...] = ()
     pricing_controls: tuple[dict, ...] = ()
     pricing_offer_json: tuple[str, ...] = ()
+    capture_metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def snippet(self) -> str:
@@ -120,7 +124,10 @@ async def fetch_page(
             error=f"Unsupported content type: {content_type}", content_type=content_type,
         )
     title = _extract_title(body)
-    text = await asyncio.to_thread(_html_to_text, body)
+    text, headings, capture_metadata = await asyncio.to_thread(_capture_html, body)
+    if len(response.content) > max(0, max_bytes):
+        capture_metadata["capture_incomplete"] = True
+        capture_metadata["capture_gaps"].append("response_body_truncated")
     return FetchPageResult(
         url=str(response.url),
         ok=bool(text),
@@ -129,9 +136,10 @@ async def fetch_page(
         content_hash=_hash_text(text or body),
         status_code=response.status_code,
         content_type=content_type,
-        document_headings=_document_headings(body),
+        document_headings=headings,
         pricing_controls=_pricing_controls(body),
         pricing_offer_json=_pricing_offer_json(body),
+        capture_metadata=capture_metadata,
     )
 
 
@@ -188,47 +196,234 @@ def _extract_title(body: str) -> str:
 
 
 def _document_headings(body: str) -> tuple[tuple[int, str], ...]:
-    try:
-        tree = document_fromstring(body.encode('utf-8'), parser=HTMLParser(remove_comments=True))
-    except (ParserError, ValueError):
-        return ()
-    for node in tree.xpath('//nav | //footer | //script | //style'):
-        node.drop_tree()
-    return tuple((int(node.tag[1]), _collapse_space(node.text_content()))
-                 for node in tree.xpath('//h1 | //h2 | //h3 | //h4 | //h5 | //h6')
-                 if node.text_content().strip()
-                 and _heading_block_visible(node))
+    return _capture_html(body)[1]
 
 
 def _heading_block_visible(node) -> bool:
-    return not any(parent.get('hidden') is not None or parent.get('aria-hidden') == 'true'
-                   or re.search(r'display\s*:\s*none|visibility\s*:\s*hidden', parent.get('style', ''), re.I)
-                   for parent in [node, *node.iterancestors()])
+    return all(_node_visible(parent) for parent in [node, *node.iterancestors()])
 
 
 def _html_to_text(body: str) -> str:
+    return _capture_html(body)[0]
+
+
+def _capture_html(body: str) -> tuple[str, tuple[tuple[int, str], ...], dict[str, Any]]:
+    """Extract one source scope and restore only explicit, verifiable disclosures."""
+    metadata: dict[str, Any] = {"capture_structure_version": 1, "content_root": "body",
+                              "capture_incomplete": False, "capture_gaps": [], "disclosures": []}
     try:
         parser = HTMLParser(encoding="utf-8", huge_tree=True, remove_comments=True)
         tree = document_fromstring(body.encode("utf-8"), parser=parser)
     except (ParserError, ValueError):
-        tree = None
-    if tree is not None:
-        for node in tree.xpath("//nav | //footer"):
+        metadata.update(capture_incomplete=True, capture_gaps=["html_parse_failed"])
+        return "", (), metadata
+    for node in tree.xpath('//script|//style|//noscript|//template|//svg'):
+        if node.getparent() is not None:
             node.drop_tree()
-        body = tostring(tree, encoding="unicode")
+    # ID ambiguity is document wide, even when the duplicate is outside the content root.
+    ids: dict[str, list] = {}
+    for node in tree.xpath('//*[@id]'):
+        ids.setdefault(node.get('id'), []).append(node)
+    controls: dict[str, list] = {}
+    for node in tree.xpath('//button[@aria-controls]'):
+        if _effective_disclosure_button(node):
+            controls.setdefault(node.get('aria-controls'), []).append(node)
+    for node in tree.xpath('//nav|//footer'):
+        if node.getparent() is not None:
+            node.drop_tree()
+    mains = [node for node in tree.xpath('//main') if _heading_block_visible(node)]
+    articles = [node for node in tree.xpath('//article') if _heading_block_visible(node)]
+    roots = mains or articles
+    if len(roots) == 1:
+        root = roots[0]
+    else:
+        root = tree.find('body')
+        if root is None:
+            root = tree
+        if roots:
+            metadata["capture_gaps"].append("ambiguous_content_root")
+    metadata["content_root"] = root.tag
+    if not _heading_block_visible(root):
+        metadata.update(capture_incomplete=True, capture_gaps=['hidden_content_root'])
+        return '', (), metadata
+    members = set(root.iter())
+    disclosures = []
+    revealed = set()
+    for node in root.iter():
+        if node.tag == 'details' and _heading_block_visible(node):
+            summaries = node.findall('summary')
+            if len(summaries) != 1 or not _heading_block_visible(summaries[0]):
+                continue
+            summary = summaries[0]
+            answer_node = deepcopy(node)
+            for child in answer_node.findall('summary'):
+                child.drop_tree()
+            answer = _disclosure_answer(answer_node)
+            question = _visible_source_text(summary)
+            record = _disclosure_record('details', question, answer)
+            record['source_path'] = tree.getroottree().getpath(node)
+            if node.get('id') and len(ids.get(node.get('id'), [])) == 1:
+                record['element_id'] = node.get('id')
+            disclosures.append((node, record))
+        elif node.tag == 'button' and node.get('aria-controls') and _effective_disclosure_button(node):
+            question = _visible_source_text(node)
+            targets = node.get('aria-controls', '').split()
+            panels = ids.get(targets[0], []) if len(targets) == 1 else []
+            panel = panels[0] if len(panels) == 1 else None
+            reason = None
+            if len(controls.get(node.get('aria-controls'), [])) != 1 or (node.get('id') and len(ids[node.get('id')]) != 1):
+                reason = 'ambiguous_disclosure_control'
+            elif panel is None:
+                reason = 'ambiguous_disclosure_panel' if panels else 'missing_disclosure_panel'
+            elif panel not in members or node in panel.iter() or panel in node.iter():
+                reason = 'disclosure_panel_outside_scope'
+            elif any(not _node_visible(parent) for parent in panel.iterancestors()):
+                reason = 'hidden_disclosure_ancestor'
+            if reason:
+                record = _disclosure_record('aria_controls', question, '')
+                record.update(reason=reason, panel_id=targets[0] if len(targets) == 1 else '')
+            else:
+                revealed.add(panel)
+                record = _disclosure_record('aria_controls', question,
+                                            _disclosure_answer(panel, reveal=True))
+            record.update(control_id=node.get('id', ''), source_path=tree.getroottree().getpath(node))
+            if panel is not None:
+                record['panel_id'] = panel.get('id', '')
+            disclosures.append((node, record))
+    # The only hidden content admitted is the exact panel of an effective disclosure.
+    clone = deepcopy(root)
+    copies = dict(zip(root.iter(), clone.iter(), strict=True))
+    for node in revealed:
+        _reveal_node(copies[node])
+    _drop_hidden(clone)
+    headings = tuple((int(node.tag[1]), _collapse_space(node.text_content()))
+                     for node in clone.xpath('.//h1|.//h2|.//h3|.//h4|.//h5|.//h6')
+                     if node.text_content().strip())
     text = trafilatura_extract(
-        tree if tree is not None else body,
+        deepcopy(clone),
         include_comments=False,
         include_tables=True,
         favor_recall=True,
         config=_HTML_TEXT_CONFIG,
     )
-    if text and text.strip():
-        return _restore_headings(tree, text.strip()) if tree is not None else text.strip()
-    cleaned = re.sub(r"(?is)<(script|style|noscript|svg).*?</\1>", " ", body)
-    cleaned = re.sub(r"(?is)<[^>]+>", " ", cleaned)
-    cleaned = html.unescape(cleaned)
-    return _collapse_space(cleaned)
+    text = (text or '').strip()
+    if not text or 'ambiguous_content_root' in metadata['capture_gaps']:
+        text = '\n'.join(part.strip() for part in clone.itertext() if part.strip())
+    protected_quotes = []
+    for node, record in disclosures:
+        if record['status'] == 'complete':
+            quote = record['quote']
+            record['recovered'] = quote not in text
+            if quote not in text:
+                text = _insert_disclosure(clone, copies[node], text, record, protected_quotes)
+            protected_quotes.append(quote)
+        else:
+            metadata['capture_gaps'].append(record['reason'])
+        metadata['disclosures'].append(record)
+    text = _restore_headings(clone, text)
+    for record in metadata['disclosures']:
+        if record['status'] == 'complete':
+            record['quote_start'] = text.find(record['quote'])
+            if record['quote_start'] < 0:
+                record.update(status='incomplete', reason='disclosure_quote_not_captured')
+                metadata['capture_gaps'].append(record['reason'])
+            else:
+                record['quote_hash'] = _hash_text(record['quote'])
+    metadata['capture_gaps'] = list(dict.fromkeys(metadata['capture_gaps']))
+    metadata['capture_incomplete'] = bool(metadata['capture_gaps'])
+    return text, headings, metadata
+
+
+def _node_visible(node) -> bool:
+    return not (node.get('hidden') is not None or node.get('aria-hidden', '').casefold() == 'true'
+                or _HIDDEN_CLASSES.intersection(node.get('class', '').split())
+                or re.search(r'display\s*:\s*none|visibility\s*:\s*hidden', node.get('style', ''), re.I))
+
+
+def _effective_disclosure_button(node) -> bool:
+    return (_heading_block_visible(node) and node.get('aria-expanded') in {'true', 'false'}
+            and node.get('role', 'button') == 'button'
+            and not any(parent.get('disabled') is not None or parent.get('aria-disabled') == 'true'
+                        for parent in [node, *node.iterancestors()]))
+
+
+def _reveal_node(node) -> None:
+    node.attrib.pop('hidden', None)
+    node.attrib.pop('aria-hidden', None)
+    node.attrib.pop('style', None)
+    if node.get('class'):
+        node.set('class', ' '.join(value for value in node.get('class').split() if value not in _HIDDEN_CLASSES))
+
+
+def _drop_hidden(root) -> None:
+    for node in list(root.iterdescendants()):
+        if not _node_visible(node) and node.getparent() is not None:
+            node.drop_tree()
+
+
+def _visible_source_text(node, *, reveal=False) -> str:
+    clone = deepcopy(node)
+    if reveal:
+        _reveal_node(clone)
+    elif not _node_visible(clone):
+        return ''
+    _drop_hidden(clone)
+    return _collapse_space(' '.join(clone.itertext()))
+
+
+def _disclosure_answer(node, *, reveal=False) -> str:
+    """Headings and nested summaries alone do not constitute an answer."""
+    if re.fullmatch(r'h[1-6]|summary', node.tag):
+        return ''
+    clone = deepcopy(node)
+    if reveal:
+        _reveal_node(clone)
+    _drop_hidden(clone)
+    answer = _visible_source_text(clone)
+    for heading in clone.xpath('.//h1|.//h2|.//h3|.//h4|.//h5|.//h6|.//summary'):
+        heading.drop_tree()
+    return answer if _visible_source_text(clone) else ''
+
+
+def _disclosure_record(kind: str, question: str, answer: str) -> dict[str, Any]:
+    if answer == question:
+        answer = ''
+    complete = bool(question and answer)
+    record = {'kind': kind, 'question': question, 'answer': answer,
+              'quote': f'{question}\n{answer}' if complete else '',
+              'status': 'complete' if complete else 'incomplete', 'recovered': False}
+    if not complete:
+        record['reason'] = 'empty_disclosure_panel' if question else 'empty_disclosure_question'
+    return record
+
+
+def _source_match(value: str, text: str, protected=()):
+    matches = list(re.finditer(r'\s+'.join(map(re.escape, value.split())), text))
+    matches = [match for match in matches
+               if not any(match.start() < end and start < match.end() for start, end in protected)]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _insert_disclosure(root, node, text: str, record: dict[str, Any], protected_quotes=()) -> str:
+    protected = [match.span() for quote in protected_quotes for match in re.finditer(re.escape(quote), text)]
+    question = _source_match(record['question'], text, protected)
+    answer = _source_match(record['answer'], text, protected)
+    if question and answer and question.end() <= answer.start() and not text[question.end():answer.start()].strip():
+        return text[:question.start()] + record['quote'] + text[answer.end():]
+    match = question or answer
+    if match:
+        return text[:match.start()] + record['quote'] + text[match.end():]
+    # Locate the first later captured block; never move a disclosure past a later section.
+    seen = False
+    for block in root.iter():
+        if block is node:
+            seen = True
+        if not seen or block is node or block.tag not in {'p', 'li', 'table', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'}:
+            continue
+        anchor = _collapse_space(block.text_content())
+        if len(anchor) >= 16 and (match := _source_match(anchor, text, protected)):
+            return text[:match.start()] + record['quote'] + '\n' + text[match.start():]
+    return f"{text}\n{record['quote']}".strip()
 
 
 def _restore_headings(tree, text: str) -> str:

@@ -191,7 +191,9 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.p
 
 ## 验证与交付边界
 
-本轮[完整证据与答案发表恢复](docs/optimization/2026-10-18-evidence-recovery-delivery.md)：修复完整例外收据、跨页双绑定、服务选窗、Writer 原句投影及有限计费范围校验；新增127项匿名测试，最终后端 **5664通过／1跳过**，变更范围 Ruff、diff、OpenAPI 对比通过（全库另有四项既存 unused import）。四组各一次 **40调用／148957 token**；独立实读正文 **3正确、1错误、4遗漏**，回答记录 **2正确、6遗漏**，**0/4报告达标**。访客限制和域范围题已交付，中文数量结论误拒、下载规则丢失、价格行／FAQ漏提取及错误缺证声明仍阻断；不能宣称整体改善。运行前后690份冻结文件保持不变；旧147产物与参考标签未改。新报告未获用户验收，训练关闭。[结构化结果](docs/optimization/2026-10-18-evidence-recovery-results.json)。
+本轮[Collector逐题交付与同页RAG升级](docs/optimization/2026-10-19-collector-question-delivery.md)：接通真实捕获、提案、准入、来源转换、快照、Agent视图和Writer实际发送诊断；补源结构恢复和已验证空RAG来源升级。新增147项测试，最终后端 **5811通过／1跳过**，变更范围Ruff、diff、OpenAPI及累计审查通过。四组各首次运行共 **30调用／85808 token**；正文 **3正确、0错误、5遗漏**，回答记录 **2正确、0错误、6遗漏**，仍 **0/4可交付**。Dropbox仅得导航壳，下游未执行；1Password FAQ问题文字缺失、Cloudflare重复标题导致空选窗、Bitwarden关键原始事实未选入Writer及回答状态假阳性仍阻断。已记录事实ID无转换丢失不代表语义齐全，正常脱敏可使审计partial。已曝光非盲，未训练，新报告未获用户验收。[结构化结果](docs/optimization/2026-10-19-collector-question-delivery-results.json)。
+
+上一轮[完整证据与答案发表恢复](docs/optimization/2026-10-18-evidence-recovery-delivery.md)：修复完整例外收据、跨页双绑定、服务选窗、Writer 原句投影及有限计费范围校验；新增127项匿名测试，最终后端 **5664通过／1跳过**，变更范围 Ruff、diff、OpenAPI 对比通过（全库另有四项既存 unused import）。四组各一次 **40调用／148957 token**；独立实读正文 **3正确、1错误、4遗漏**，回答记录 **2正确、6遗漏**，**0/4报告达标**。访客限制和域范围题已交付，中文数量结论误拒、下载规则丢失、价格行／FAQ漏提取及错误缺证声明仍阻断；不能宣称整体改善。运行前后690份冻结文件保持不变；旧147产物与参考标签未改。新报告未获用户验收，训练关闭。[结构化结果](docs/optimization/2026-10-18-evidence-recovery-results.json)。
 
 上一轮[关键例外与计费准入记录](docs/optimization/2026-10-18-exception-billing-delivery.md)：新增来源局部例外收据、计费规则/完整表格准入及具体缺项答复，独立实现审查通过；最终后端 **5537 通过／1 跳过**，OpenAPI 字节一致，前端未变未重跑。四产品各一次真实阶段开发回归共 **40 调用／151761 token**；独立实读正文 **3 正确、3 错误、2 遗漏**，回答记录 **3 正确、1 错误、4 遗漏**，**0/4 报告达到内容交付标准**。当前仍有重复收据挤占字节预算及跨官方页的 SSO 例外遗漏、完整 Dropbox 例外块被尾随操作引导误弃、回答覆盖假阳性及 Cloudflare 选错服务窗口；不能宣称整体质量改善。九份完整捕获已保存，其中一份有明确脱敏标记；旧两轮98个文件及审核题目保持不变。详见[结构化结果](docs/optimization/2026-10-18-exception-billing-results.json)。新报告未获用户验收，训练关闭。
 

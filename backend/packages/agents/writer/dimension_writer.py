@@ -710,6 +710,7 @@ class DimensionWriterMixin:
                             response = None
                             gaps = tuple(sorted(set(gaps) | {'question_context_budget_exceeded'}))
                         else:
+                            writer_span_start = len(self._evidence_live_record(record).detail.trace_spans)
                             response, gaps = await self._dimension_call_with_gaps(record, gaps, agent="writer", subagent=f"{product}/{dimension}",
                             name="dimension_claim_writer", system=EVIDENCE_RULES + language_instruction(detail.output_language) + RESOURCE_SCOPE_RULES +
                             "Write up to 8 atomic plain-text observations for only this product and dimension. "
@@ -792,6 +793,8 @@ class DimensionWriterMixin:
                             "All facts in this JSON view passed answer boundaries. Use only their exact fact and source IDs.",
                             user=decision_brief_prompt_context(detail.plan.decision_brief) + "\nJSON:\n" + prompt)
                         self._validate_evidence_use(record, use)
+                        if writer_context_bytes <= use.max_bytes:
+                            self._record_question_writer_dispatch(record, view, use, prompt, writer_span_start)
                         self._validate_dimension_upstream(record, compact)
                         try:
                             if response is None:

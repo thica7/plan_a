@@ -16,6 +16,8 @@ from packages.research.extraction.billing_rules import (
 from packages.research.evidence.source_exceptions import complete_rule_blocks
 from packages.research.models import CapturedPage, EvidenceQuote, ExtractionResult, ResearchBrief
 
+SEMANTIC_EXTRACTOR_NAMES = frozenset({"bounded_semantic_capabilities", "source_operation_rules", "source_structured_rules"})
+
 MAX_INPUT_CHARS = 12000
 MAX_FACTS = 6
 MAX_PAGE_CALLS = 2
@@ -719,22 +721,52 @@ def semantic_extraction(
     if _billing_service_scope(brief, body, page) == (0, ''):
         condition_gaps.append('source_billing_service_scope_unresolved')
     seen = set()
-    for fact in facts[:MAX_FACTS] if isinstance(facts, list) and semantic_page_allowed(brief, page) else []:
+    diagnostics = []
+    focus = semantic_focus_signature(brief, page)
+    allowed = semantic_page_allowed(brief, page)
+    for index, fact in enumerate(facts if isinstance(facts, list) else []):
+        original = fact.get("quote") if isinstance(fact, dict) else None
+        diagnostic = {"source": {"origin": "model" if extractor_name == "bounded_semantic_capabilities" else "native",
+                                  "name": extractor_name}, "index": index,
+                      "original_quote": original,
+                      "quote_hash": hashlib.sha256(original.encode()).hexdigest() if isinstance(original, str) else None,
+                      "page_hash": page.content_hash, "focus": focus,
+                      "quote_anchor": {"quote": original, "source_url": page.final_url,
+                                       "start_offset": None, "end_offset": None},
+                      "verified_field_ids": [], "reason": None}
+        diagnostics.append(diagnostic)
+        if index >= MAX_FACTS:
+            diagnostic['reason'] = 'capacity'
+            continue
+        if not allowed:
+            diagnostic['reason'] = 'page_not_allowed'
+            continue
         quote = fact.get("quote") if isinstance(fact, dict) else None
-        if not isinstance(quote, str) or quote in seen or not 18 <= len(quote) <= MAX_CONTEXT_CHARS:
+        if not isinstance(quote, str) or not 18 <= len(quote) <= MAX_CONTEXT_CHARS:
+            diagnostic['reason'] = 'invalid'
+            continue
+        if quote in seen:
+            diagnostic['reason'] = 'duplicate'
             continue
         quote = _restore_table_edges(body, window, quote)
         quote = _restore_bullet(body, window, quote)
         if quote in seen or (len(quote) > MAX_QUOTE_CHARS and quote not in rule_blocks):
+            diagnostic['reason'] = 'duplicate' if quote in seen else 'quote_capacity'
             continue
         # The model selects text, not a trusted offset. Bind it only to the
         # unique occurrence in the exact window sent to the model.
         if window.count(quote) != 1:
+            diagnostic['reason'] = 'not_original' if quote not in window else 'ambiguous_original'
             continue
         start = window_start + window.find(quote)
         end = start + len(quote)
+        diagnostic['quote_anchor'] = {'quote': quote, 'source_url': page.final_url,
+                                      'start_offset': start, 'end_offset': end}
         if (_UNSAFE.search(quote) or _PRICE.search(quote) and not _billing_rule(brief, quote)
                 or semantic_quote_quality_problem(brief, quote)):
+            diagnostic['reason'] = ('unsafe' if _UNSAFE.search(quote) else
+                                    'billing_question_required' if _PRICE.search(quote) and not _billing_rule(brief, quote)
+                                    else semantic_quote_quality_problem(brief, quote))
             continue
         # Capture text often has no blank-line paragraphs. Keep adjacent original
         # lines as evidence instead of rejecting every quote or dropping context.
@@ -743,6 +775,7 @@ def semantic_extraction(
                    else document_condition_context(body, page, start, end))
         if billing and section is None:
             condition_gaps.append('source_condition_context_budget_exceeded')
+            diagnostic['reason'] = 'condition_capacity'
             continue
         fact_conditions = section[1] if section else conditions
         relevant_blocks = [block for block in rule_blocks if quote in block or block == quote]
@@ -755,11 +788,13 @@ def semantic_extraction(
             table_context = billing_table_context(body, start, end, section[0])
             if not table_context:
                 condition_gaps.append('source_billing_table_context_invalid')
+                diagnostic['reason'] = 'table_context_invalid'
                 continue
             lower = body.rfind(table_context[0], section[0][0], start)
             last = table_context[-1] if len(table_context) > 1 else quote
             upper_start = body.find(last, end if len(table_context) > 1 else start, section[0][1])
             if lower < 0 or upper_start < 0:
+                diagnostic['reason'] = 'table_anchor_invalid'
                 continue
             if not _verified_headings(body, page):
                 # Without section metadata, only the adjacent original block
@@ -781,6 +816,7 @@ def semantic_extraction(
                 ))
                 or sum(len(line) for line in fact_conditions) > 4096):
             condition_gaps.append("source_condition_context_budget_exceeded")
+            diagnostic['reason'] = 'condition_capacity'
             continue
         if billing and table_context:
             # The exact selected row plus complete header and notes are enough;
@@ -790,6 +826,7 @@ def semantic_extraction(
             context = _local_context(body, start, end, section[0] if section else None)
         if context is None or _UNSAFE.search(context):
             condition_gaps.append("source_condition_context_budget_exceeded")
+            diagnostic['reason'] = 'local_context_capacity' if context is None else 'unsafe'
             continue
         foreign_subject = False
         for word in re.findall(r"\b[A-Za-z][A-Za-z0-9]*\b", context):
@@ -797,6 +834,7 @@ def semantic_extraction(
             if other and other.canonical_name.casefold() != brief.competitor.casefold():
                 foreign_subject = True
         if foreign_subject or any(term in context.casefold() for term in confusion_terms_for_competitor(brief.competitor)):
+            diagnostic['reason'] = 'foreign_subject'
             continue
         # These are source-local capabilities, not shared comparison slots.
         source_span = f'{page.final_url}\n{start}:{end}\n{quote}\n{context}'
@@ -806,9 +844,11 @@ def semantic_extraction(
         if table_context:
             fact_conditions = [line for line in fact_conditions if not line.strip().startswith('*') or line in table_context]
         if any(_UNSAFE.search(term) for term in [*table_context, *fact_conditions]):
+            diagnostic['reason'] = 'unsafe'
             continue
         if billing and sum(map(len, dict.fromkeys([context, *table_context, *fact_conditions]))) > 4096:
             condition_gaps.append('source_condition_context_budget_exceeded')
+            diagnostic['reason'] = 'condition_capacity'
             continue
         fields[key] = {"status": "documented", "evidence_terms": list(dict.fromkeys([context, *table_context, *[item for item in fact_conditions if item != context]])), "conditions": fact_conditions}
         if section:
@@ -819,7 +859,8 @@ def semantic_extraction(
         fields[key]['operations'] = structured_operations(quote, fields[key]['evidence_terms'], brief.competitor, table_context=table_context)
         quotes.append(EvidenceQuote(text=quote, source_url=page.final_url, field=key, start_offset=start, end_offset=end))
         seen.add(quote)
-    return ExtractionResult(
+        diagnostic['verified_field_ids'] = [key]
+    result = ExtractionResult(
         competitor=brief.competitor, dimension=brief.dimension, source_candidate_id=page.candidate_id,
         captured_page_id=page.id, fields=fields, quotes=quotes, confidence=min(.8, page.quality_score),
         extractor_version='question-focus-v1:' + semantic_focus_signature(brief, page),
@@ -827,8 +868,12 @@ def semantic_extraction(
         missing_fields=[] if fields else ["product_capabilities"],
         metadata={"product_name": brief.product_name, "category": brief.product_category,
                   'active_question_ids': [item.question_id for item in _active_questions(brief)],
-                  'source_condition_gaps': list(dict.fromkeys(condition_gaps))},
+                  'source_condition_gaps': list(dict.fromkeys(condition_gaps)),
+                  'proposal_diagnostics': diagnostics},
     )
+    # Keep repeated failures and different proposal batches observable through pipeline deduplication.
+    fingerprint = hashlib.sha256(json.dumps(diagnostics, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:12]
+    return result.model_copy(update={'id': result.id + '-' + fingerprint})
 
 
 def _standalone_access_requirement(quote):
