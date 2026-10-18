@@ -10,6 +10,7 @@ import re
 from pydantic import BaseModel, ConfigDict, Field
 
 from packages.agents.prompt_contract import EVIDENCE_RULES
+from packages.agents.writer.answer_coverage import RESOURCE_SCOPE_RULES
 from packages.agents.writer.literal_non_operation import literal_non_operation
 from packages.i18n.language import language_instruction, report_label
 from packages.llm.errors import LLMExecutionLimitError
@@ -69,6 +70,9 @@ def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, sourc
             or not isinstance(payload['claims'], list) or len(payload['claims']) > 32):
         raise ValueError('invalid claim envelope')
     claims, gaps = [], set()
+    from packages.research.evidence.source_exceptions import verified_exception_binding
+    originals = {fact.id: fact for fact in source_facts if not isinstance(fact, dict)
+                 and fact.id in sent_fact_ids}
     for index, row in enumerate(payload['claims']):
         if len(claims) == 8:
             gaps.add('claim_count_limit_exceeded')
@@ -78,6 +82,9 @@ def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, sourc
             values = claim.model_dump(exclude={'observation_id'})
             if not set(claim.fact_ids) <= sent_fact_ids:
                 raise ValueError('Claim cites a fact not sent to the writer')
+            from packages.research.evidence.operations import required_operations
+            exception_pair = len(claim.fact_ids) == 2 and verified_exception_binding(
+                claim, [originals[fid] for fid in claim.fact_ids if fid in originals])
             if claim.observation_id is not None:
                 bound = candidates.get(claim.observation_id)
                 if bound is None or (claim.operation_binding is not None
@@ -88,10 +95,17 @@ def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, sourc
                 if candidates.get(claim.operation_binding.observation_id) != claim.operation_binding.model_dump(mode='json'):
                     raise ValueError('Operation binding was not a sent candidate')
             elif (any(item['fact_id'] in claim.fact_ids for item in candidates.values())
-                    and not literal_non_operation(claim.text, claim.fact_ids, source_facts)):
+                    and not literal_non_operation(claim.text, claim.fact_ids, source_facts)
+                    and not (exception_pair and not required_operations(claim.text))):
                 gaps.add('operation_binding_required')
                 continue
-            claims.append(ReportClaim(id=f"claim-{hashlib.sha256(encoded([consumption_id, index]).encode()).hexdigest()[:20]}", **values))
+            published = ReportClaim(id=f"claim-{hashlib.sha256(encoded([consumption_id, index]).encode()).hexdigest()[:20]}", **values)
+            if len(claim.fact_ids) != 1 and not exception_pair:
+                raise ValueError('Multiple facts require a complete sent exception pair')
+            if exception_pair and published.operation_binding is None and required_operations(claim.text):
+                gaps.add('operation_binding_required')
+                continue
+            claims.append(published)
         except ValueError:
             gaps.add('claim_candidate_invalid')
     return claims, gaps
@@ -231,6 +245,7 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
                    evidence_view={'facts': []})
     from packages.research.evidence.source_exceptions import (
         required_question_clarifications,
+        source_exception_bindings,
         source_exception_constraints,
     )
     clarifications = required_question_clarifications(questions)
@@ -297,6 +312,25 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
     if requested_operations:
         payload['requested_operations'] = list(requested_operations)
         payload['missing_operations'] = [op for op in requested_operations if op not in covered]
+    sent_ids = {row['id'] for row in payload['evidence_view']['facts']}
+    bindings = source_exception_bindings([fact for fact in view.facts if fact.id in sent_ids])
+    if bindings:
+        candidate = {**payload, 'source_exception_bindings': list(bindings)}
+        if len(compact_prompt_json(candidate).encode()) <= max_bytes:
+            payload = candidate
+        else:
+            omitted = True
+    if questions:
+        from packages.agents.writer.literal_non_operation import literal_non_operation_originals
+        originals_by_id = {fact.id: fact for fact in view.facts}
+        for row in payload['evidence_view']['facts']:
+            if not row.get('operation_targets'):
+                continue
+            originals = literal_non_operation_originals(originals_by_id[row['id']], questions=questions)
+            if originals:
+                row['non_operation_originals'] = originals
+                if len(compact_prompt_json(payload).encode()) > max_bytes:
+                    row.pop('non_operation_originals')
     for key, value in upstream.items():
         candidate = {**payload, key: value, 'upstream_context_gaps': [
             gap for gap in payload['upstream_context_gaps'] if gap != key + '_context_budget_exceeded']}
@@ -308,6 +342,8 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
 def operation_claim_selection(claims, view, requested, sent_fact_ids, *, fact_targets=None):
     """Retain distinct scoped answers, including non-operation access facts."""
     from packages.research.evidence.operations import bound_operation_observation
+    from packages.research.evidence.operations import required_operations
+    from packages.research.evidence.source_exceptions import verified_exception_binding
     facts = {fact.id: fact for fact in view.facts}
     selected, covered = [], set()
     for claim in claims:
@@ -315,6 +351,12 @@ def operation_claim_selection(claims, view, requested, sent_fact_ids, *, fact_ta
             continue
         observation = bound_operation_observation(claim, facts)
         if observation is None:
+            if len(claim.fact_ids) > 1:
+                if (claim.operation_binding is None and not required_operations(claim.text)
+                        and verified_exception_binding(
+                            claim, [facts[fid] for fid in claim.fact_ids if fid in facts])):
+                    selected.append(claim)
+                continue
             if (claim.operation_binding is None and (
                     fact_targets is not None
                     and not any(fact_targets.get(fid, ()) for fid in claim.fact_ids)
@@ -534,7 +576,7 @@ class DimensionWriterMixin:
         coverage = unverified_coverage(pending, 'No supported answer claims are available.')
         sizes = []
         if pending and supported:
-            payload = compact_prompt_json(answer_review_payload(pending, supported, view))
+            payload = compact_prompt_json(answer_review_payload(pending, supported, view, include_originals=False))
             if len(payload.encode()) <= use.max_bytes:
                 sizes.append(len(payload.encode()))
                 response, gaps = await self._dimension_call_with_gaps(
@@ -552,6 +594,7 @@ class DimensionWriterMixin:
                     additional_fact_ids={row['id'] for row in compact.get('evidence_view', {}).get('facts', ())})
                 review_payload['proposed_answers'] = [item.model_dump(mode='json', include={
                     'question_id', 'status', 'claim_ids', 'resolution', 'conclusion', 'missing_fields',
+                    'answer', 'evidence_spans', 'binding_version',
                 }) for item in coverage]
                 review_prompt = compact_prompt_json(review_payload)
                 # A proposal never survives an unavailable or invalid semantic review.
@@ -668,7 +711,7 @@ class DimensionWriterMixin:
                             gaps = tuple(sorted(set(gaps) | {'question_context_budget_exceeded'}))
                         else:
                             response, gaps = await self._dimension_call_with_gaps(record, gaps, agent="writer", subagent=f"{product}/{dimension}",
-                            name="dimension_claim_writer", system=EVIDENCE_RULES + language_instruction(detail.output_language) +
+                            name="dimension_claim_writer", system=EVIDENCE_RULES + language_instruction(detail.output_language) + RESOURCE_SCOPE_RULES +
                             "Write up to 8 atomic plain-text observations for only this product and dimension. "
                             "Resolve each {text_ref: id} through text_sets before reading values or qualifiers; "
                             "these references preserve the full original conditions and are not product assertions. "
@@ -695,6 +738,7 @@ class DimensionWriterMixin:
                             "For a six-operation claim bound to a fact with operation_observations, choose exactly one candidate "
                             "and return only its observation_id, even without requested_operations. "
                             "For a non-operation assertion in a mixed fact, quote one complete original sentence verbatim, "
+                            "Publish each question's direct complete restrictions from non_operation_originals before invitation, upgrade or other background. "
                             "cite exactly one sent evidence_terms fact and omit observation_id. No translation/paraphrase "
                             "or six-operation assertion qualifies. Keep literal claims in the source language; "
                             "actual question answers use the requested output language. "
@@ -715,8 +759,11 @@ class DimensionWriterMixin:
                             "Describe only source-recorded operations. Prioritize requested_operations when present. "
                             "Never use a create rule as an edit rule or equate differently named roles. "
                             "State each captured role, plan and operation object/access scope; do not treat missing plan terms as all plans. "
-                            "For table_row objects explicitly state table-row comments, never all comments in the product. Bind EXACTLY ONE evidence_terms fact per observation; "
-                            "translate its original quote except in the verbatim non-operation case, and carry its conditions without combining other content facts. "
+                            "For table_row objects explicitly state table-row comments, never all comments in the product. Bind one evidence_terms fact by default. "
+                            "Only a source_exception_bindings candidate permits its exact two sent facts and exact two sources together; "
+                            "state the complete main rule and specific exception, including all actor, role, plan, timing and access prerequisites. "
+                            "This pair does not waive the exact observation_id requirement for any six-operation assertion. "
+                            "Translate the original quote except in the verbatim non-operation case, and carry its conditions without combining other content facts. "
                             "For permission observations choose a specific captured role or access rule and do not append other roles. "
                             "For Coda evidence captured from registered Superhuman Docs pages, use the quoted current "
                             "name 'Superhuman Docs' in claim text while retaining competitor='Coda' as the run identity. "
@@ -734,6 +781,8 @@ class DimensionWriterMixin:
                             "Pricing: state collected page amounts only, exact currency and amount basis; "
                             "unknown billing interval, market and tax remain unknown. Per-month display is not proof of monthly billing. "
                             "No full bill, current applicable price, savings or winner. "
+                            "Collection/admission/selection status comes from the server, never a product-page claim. "
+                            "Do not claim that all captured material lacks pricing based on a role or permission source. "
                             "upstream_analysis, comparison_assessment and reflection_constraints are verified producer "
                             "outputs for reasoning and constraints, not original evidence or independent product facts. "
                             "Apply their limitations and decision context; every factual claim still needs its bound original fact. "
@@ -751,7 +800,7 @@ class DimensionWriterMixin:
                                           for item in fact.get('operation_observations', [])}
                             claims, candidate_gaps = parse_claim_drafts(
                                 response, candidates, sent_fact_ids, use.id,
-                                source_facts=compact['evidence_view']['facts'])
+                                source_facts=[fact for fact in view.facts if fact.id in sent_fact_ids])
                             gaps = tuple(sorted(set(gaps) | candidate_gaps))
                         except ValueError:
                             gaps = tuple(sorted(set(gaps) | {"claim_generation_unavailable"}))
@@ -783,7 +832,7 @@ class DimensionWriterMixin:
                         payload = compact_prompt_json(review_payload(batch, view))
                         sizes.append(len(payload.encode()))
                         response, gaps = await self._dimension_call_with_gaps(record, gaps, agent="qa", subagent=f"{product}/{dimension}",
-                            name="dimension_claim_review", system=
+                            name="dimension_claim_review", system=RESOURCE_SCOPE_RULES +
                             "Audit each atomic claim against ONLY its bound original quotes, values and qualifiers. "
                             "Resolve every {text_ref: id} through text_sets before auditing any quote, value, "
                             "operation binding or nested condition group. These exact references share full "

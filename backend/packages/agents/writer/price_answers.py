@@ -78,7 +78,51 @@ def _plan(text, product):
     return next(iter(unique.values())) if len(unique) == 1 else None
 
 
-def _request(detail, question, product):
+_BILLING_SCOPE_LABELS = {
+    'plan': r'\b(?:plans?|tiers?)\b|套餐|方案|免费版|企业版',
+    'usage_model': r'\busage models?\b|用量模式',
+}
+_BILLING_NAME = r'[A-Z][A-Za-z0-9_+-]*(?:\s+[A-Z][A-Za-z0-9_+-]*){0,4}'
+
+
+def _billing_name_matches(text):
+    """One grammar supplies both exact names and their complete source spans."""
+    name = '(' + _BILLING_NAME + ')'
+    return {
+        axis: tuple(re.finditer(r'(?<![A-Za-z0-9_+-])' + name + suffix, text))
+        for axis, suffix in (('plan', r'\s+(?i:plans?|tiers?)\b'),
+                             ('usage_model', r'\s+(?i:usage models?)\b'))
+    }
+
+
+def _billing_names(text):
+    return {
+        axis: {re.sub(r'^The\s+', '', match[1]).strip() for match in matches}
+        for axis, matches in _billing_name_matches(text).items()
+    }
+
+
+def _source_billing_names(fact):
+    """Names from the same admitted original, never a vendor/SKU dictionary."""
+    return _billing_names('\n'.join(dict.fromkeys(value for _, value in _source_strings(fact))))
+
+
+def _source_matched_request_scope(text, facts):
+    matched = {'plan': set(), 'usage_model': set()}
+    for fact in facts:
+        names = _source_billing_names(fact)
+        current = {axis: {name for name in candidates
+                         if re.search(r'(?<![A-Za-z0-9_+-])' + re.escape(name)
+                                      + r'(?![A-Za-z0-9_+-])', text, re.I)}
+                   for axis, candidates in names.items()}
+        # The mode and named plan must be matched within this same original.
+        if all(not names[axis] or current[axis] for axis in names):
+            for axis in matched:
+                matched[axis].update(current[axis])
+    return {axis: next(iter(names)) for axis, names in matched.items() if len(names) == 1}
+
+
+def _request(detail, question, product, *, source_facts=()):
     text = question["question"]
     if not re.search(r"价格|定价|报价|月费|年费|金额|多少钱|总价|账单|"
                      r"\b(?:pric(?:e|ing)|costs?|fees?|quotes?|bill|invoice)\b", text, re.I):
@@ -124,6 +168,7 @@ def _request(detail, question, product):
         "currency": currency, "plan": plan,
         "billing_interval": ("monthly" if monthly else "annual") if monthly != annual else None,
     }.items() if value is not None}
+    context.update(_source_matched_request_scope(text, source_facts))
     if tax:
         context["tax_scope"] = tax
     return market, as_of, context
@@ -228,16 +273,114 @@ def _scope_gaps(fields, context):
     }
 
 
+def _positive_cpu_time_rate(value, header=''):
+    """One monetary rate with a time denominator, shared by prose and its table cell."""
+    from decimal import Decimal
+    rates = re.finditer(
+        r'(?<![-\w])(?:[$€¥]|\b(?:USD|EUR|CNY)\s*)\s*(\d+(?:\.\d+)?)\s*'
+        r'(?:per|/)\s*(?:additional\s+)?'
+        r'(?:(?:million|billion|\d[\d,]*)(?:\s+(?:million|billion))?\s*)?'
+        r'(?:(?:CPU\s+)?(?P<unit>milliseconds?|ms|seconds?)\b)?'
+        r'(?=$|\s*(?:[;,.()]|Max\b))', value, re.I)
+    return any(Decimal(rate[1]) > 0 and not re.search(r'-\s*$', value[:rate.start()])
+               and (rate['unit'] or re.search(r'\b(?:milliseconds?|ms|seconds?)\b', header, re.I))
+               for rate in rates)
+
+
+def _unknown_billing_scope(text):
+    matches = _billing_name_matches(text)
+    return any(not any(named.start() <= scope.start() and scope.end() <= named.end()
+                       for named in matches[axis])
+               for axis, label in _BILLING_SCOPE_LABELS.items()
+               for scope in re.finditer(label, text, re.I))
+
+
+def _matching_billing_applicability(source_text, requested):
+    """Finite affirmative access grammar, not general pricing entailment.
+
+    A complete relevant plan+mode sentence must match every word. A denial,
+    quotation, conditional or unknown remainder cannot borrow a positive name.
+    Retained background without that named relation remains for semantic QA.
+    """
+    if not all(axis in requested for axis in _BILLING_SCOPE_LABELS):
+        return False
+    positive = (
+        rf'(?i:Users on (?:the )?|The )(?P<plan>{_BILLING_NAME})(?i: (?:plans?|tiers?) '
+        rf'(?:have access to|has access to|can use) (?:the )?)(?P<usage_model>{_BILLING_NAME})'
+        rf'(?i: usage models?)(?:, while the bill depends on CPU time for '
+        rf'(?P<cpu_mode>{_BILLING_NAME})(?i: usage models?))?[.!]'
+    )
+    found = False
+    for sentence in re.split(r'(?<=[.!?。！？])\s+|\n', source_text):
+        names = _billing_names(sentence)
+        if (requested['usage_model'] not in names['usage_model']
+                or not re.search(_BILLING_SCOPE_LABELS['plan'], sentence, re.I)):
+            continue
+        match = re.fullmatch(positive, sentence.strip())
+        if (_unknown_billing_scope(sentence) or match is None
+                or any(names[axis] != {requested[axis]} for axis in _BILLING_SCOPE_LABELS)
+                or any(match[axis] != requested[axis] for axis in _BILLING_SCOPE_LABELS)
+                or match['cpu_mode'] and match['cpu_mode'] != requested['usage_model']):
+            return False
+        found = True
+    return found
+
+
 def _cpu_billing_dependency(fact, question, product):
     texts = [text for _, text in _source_strings(fact)]
     source_text = '\n'.join(dict.fromkeys(texts))
-    source_plan, requested_plan = _plan(source_text, product), _plan(question, product)
-    if source_plan and (not requested_plan or source_plan.casefold() != requested_plan.casefold()):
+    names = _source_billing_names(fact)
+    requested = _source_matched_request_scope(question, [fact])
+    table = fact.qualifiers.get('table_context')
+    if table:
+        from packages.research.extraction.billing_rules import _cells
+        # A structured row has its own complete applicability rule. Other
+        # retained background and notes remain evidence for semantic QA.
+        if not _matching_billing_applicability(source_text, requested) or _unknown_billing_scope(fact.quote):
+            return False
+        if any(values and values != {requested.get(axis)}
+               for axis, values in _billing_names(fact.quote).items()):
+            return False
+        header, row = _cells(table[0]), _cells(fact.quote)
+        if not header or not row or len(header) != len(row):
+            return False
+        model = requested.get('usage_model')
+        if model and row[0].casefold() != model.casefold():
+            return False
+        for label, value in zip(header, row, strict=True):
+            if not re.search(r'\bCPU\b', label, re.I):
+                continue
+            if (_unknown_billing_scope(label)
+                    or any(values and values != {requested.get(axis)}
+                           for axis, values in _billing_names(label).items())):
+                continue
+            if re.search(r'\b(?:free|no charge|not billed|not charged)\b|免费|不计费|不收费', value, re.I):
+                continue
+            if _positive_cpu_time_rate(value, label):
+                return True
+        # Another row, Duration column or footnote cannot override this CPU cell.
         return False
-    if not source_plan and re.search(r'\b(?:plan|tier)\b|套餐|方案|免费版|企业版', source_text, re.I):
+    if _unknown_billing_scope(source_text):
+        return False
+    if any(names[axis] and axis not in requested for axis in names):
+        return False
+    if all(names.values()) and not _matching_billing_applicability(source_text, requested):
         return False
     for sentence in re.split(r'(?<=[.!?。！？])\s+|\n', source_text):
+        sentence_names = _billing_names(sentence)
+        if _unknown_billing_scope(sentence):
+            continue
+        if any(values and values != {requested.get(axis)}
+               for axis in names for values in [sentence_names[axis] or names[axis]]):
+            continue
         if not re.search(r'\bCPU\b', sentence, re.I) or not billing_rule_text_signal(sentence):
+            continue
+        from packages.research.extraction.billing_rules import _RATE
+        if _RATE.search(sentence) and not _positive_cpu_time_rate(sentence):
+            continue
+        if re.search(r'\bCPU\b.{0,100}\b(?:billed|charged)\b.{0,100}'
+                     r'\bper\s+(?:(?:additional|million|billion|\d[\d,]*)\s+)*requests?\b'
+                     r'|CPU[^。！？\n]{0,60}按请求计费', sentence, re.I):
             continue
         if re.search(r'\b(?:not|never|no|free|excluded|without)\b|不计费|不收费|免费|无关', sentence, re.I):
             continue
@@ -314,6 +457,14 @@ def server_missing_price_answers(detail, snapshot, questions, product) -> dict[s
         if parsed is None:
             continue
         market, as_of, context = parsed
+        observed_at = datetime.combine(as_of, time.max, tzinfo=UTC)
+        eligible_sources = {source.id for view in views for source in view.sources
+                            if source.role == 'source' and source.material_level in {'full_source', 'kb_document'}
+                            and not _qualification(source, observed_at)}
+        originals = [fact for view in views for fact in view.facts
+                     if fact.field == 'evidence_terms' and fact.status == 'supported'
+                     and fact.source_id in eligible_sources]
+        context.update(_source_matched_request_scope(question['question'], originals))
         incomplete = _incomplete_quote_answer(question, snapshot, market, as_of, context, views)
         if incomplete is not None:
             result[question["question_id"]] = incomplete

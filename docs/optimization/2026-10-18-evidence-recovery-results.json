@@ -1,0 +1,824 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-18",
+  "title": "完整证据、服务选窗与答案发表恢复",
+  "evaluation_kind": "exposed_development_regression",
+  "blind_holdout": false,
+  "baseline_commit": "c2eebbd2140ef392e684be680a2700aebba64328",
+  "production_code_sha256": "f3a388a550df82104a7591985daca60d260843cf613d8041016f35166ac5515d",
+  "reference_dataset_sha256": "d3f36c6f50e530c74110a1eae8bbc7688e018c1235cc192a761864b1a61e58e3",
+  "reference_answers_sent_to_runtime": false,
+  "runtime_input_fields": [
+    "id",
+    "product",
+    "question",
+    "sources(id,title,url)"
+  ],
+  "freeze": {
+    "artifact": "data/artifacts/evidence-recovery-2026-10-18/freeze.json",
+    "sha256": "3342da944880d6a81d2d818b41790d62c30756368074f44aadf0305a11834a46",
+    "frozen_file_count": 690,
+    "scope": "all 685 backend Python files plus registry, reference and protocol; launch/freeze/metrics helper SHA separately frozen"
+  },
+  "engineering_validation": {
+    "baseline_commit": "c2eebbd2140ef392e684be680a2700aebba64328",
+    "production_code_sha256": "f3a388a550df82104a7591985daca60d260843cf613d8041016f35166ac5515d",
+    "frozen_file_count": 690,
+    "backend": {
+      "passed": 5664,
+      "failed": 0,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 170.81,
+      "exit_code": 0
+    },
+    "new_anonymous_tests": {
+      "exceptions": 24,
+      "service_windows": 21,
+      "answer_publication": 82,
+      "total": 127
+    },
+    "independent_reviews": {
+      "exceptions": {
+        "spec": "pass",
+        "quality": "pass",
+        "each_test_count": 88
+      },
+      "service_windows": {
+        "spec": "pass",
+        "quality": "pass",
+        "each_test_count": 79
+      },
+      "answer_publication": {
+        "spec": "limited_pass",
+        "quality": "limited_pass",
+        "each_test_count": 162,
+        "free_name_negation_not_fixed": true
+      },
+      "late_service_fixture": {
+        "quality": "pass",
+        "test_count": 71,
+        "old_partial_title_question_still_returns_empty": true
+      }
+    },
+    "ruff": {
+      "packages_scripts_and_all_changed_tests": "pass",
+      "entire_backend": "4 preexisting F401 in 3 unchanged test files",
+      "unchanged_files": [
+        "backend/tests/unit/test_fact_projection.py",
+        "backend/tests/unit/test_hardware_collection_minimal.py",
+        "backend/tests/unit/test_official_registry.py"
+      ]
+    },
+    "openapi": {
+      "byte_identical": true,
+      "sha256": "39514142c2f35c753442ae7ec559840757633840cd446315ef53e0b95b3d513e"
+    },
+    "git_diff_check": "pass",
+    "frontend": "unchanged, not rerun",
+    "prior_artifact_files_unchanged": 147,
+    "reference_answers_sent_to_runtime": false,
+    "training_performed": false
+  },
+  "budget": {
+    "groups": 4,
+    "runs_per_group": 1,
+    "max_calls_per_group": 24,
+    "max_tokens_per_group": 80000,
+    "max_output_tokens": 2048,
+    "model_retries": 0
+  },
+  "actual_usage": {
+    "llm_transport_attempts": 40,
+    "provider_tokens": 148957,
+    "unknown_usage_spans": 0,
+    "actual_models": [
+      "deepseek-flash"
+    ],
+    "external_embedding_calls": 0,
+    "weight_downloads": 0,
+    "training_runs": 0
+  },
+  "aggregate": {
+    "body": {
+      "correct": 3,
+      "error": 1,
+      "omitted": 4
+    },
+    "answer_records": {
+      "correct": 2,
+      "error": 0,
+      "omitted": 6
+    },
+    "content_deliverable_products": 0,
+    "full_report_deliverable_products": 0,
+    "total_products": 4,
+    "user_accepted_products": 0
+  },
+  "record_grading_scope": "answer_coverage record plus its actual claim_ids/evidence_spans; unrelated audited product claims are separately assessed as body/other_report_errors. Partial or incomplete answer is counted omitted, not promoted by internal reason.",
+  "previous_frozen_run": {
+    "production_code_sha256": "9d12c3173cdb1df2b313c8a023022f243b2b02c243b52bcd702487ad6e3f2488",
+    "body": {
+      "correct": 3,
+      "error": 3,
+      "omitted": 2
+    },
+    "answer_records": {
+      "correct": 3,
+      "error": 1,
+      "omitted": 4
+    },
+    "provider_tokens": 151761,
+    "content_deliverable_products": 0,
+    "comparison_limit": "Not a controlled A/B; same exposed questions and stochastic outputs. No established overall quality improvement."
+  },
+  "products": [
+    {
+      "product": "Bitwarden",
+      "run_id": "run-7816e30ef16742918d20b42f25524b68",
+      "case_ids": [
+        "agent-readiness-holdout-v1-001",
+        "agent-readiness-holdout-v1-002"
+      ],
+      "artifact_directory": "data/artifacts/evidence-recovery-2026-10-18/regression-bitwarden",
+      "status": "execution_complete",
+      "error_type": null,
+      "production_code_sha256": "f3a388a550df82104a7591985daca60d260843cf613d8041016f35166ac5515d",
+      "manifest_sha256": "1d2d8a730740d7850d431beccb54d0e13b14a2c4a31d292f76a430e6fc719aba",
+      "source_count": 3,
+      "snapshot_facts": 72,
+      "runtime_report_characters": 971,
+      "saved_report_characters": 971,
+      "saved_report_sha256": "c32b4cbe9ffd007122e62763ba41e4d5f0b4a4053ee11d804308dd17372b30e9",
+      "run_sha256": "932e5a2603687a5f991f86845b01ce1ea91b6d157178e6294afa30dbce18b323",
+      "summary_sha256": "4e5907a783aeac84417205ae3168c55f86c83bf50cd082be455879e91e858935",
+      "body_is_redaction_placeholder": false,
+      "saved_report_matches_saved_run": true,
+      "llm_transport_attempts": 10,
+      "provider_tokens": 35161,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 1,
+      "writer_producer_verified": true,
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 3
+      },
+      "qa_llm_names": {
+        "dimension_claim_review": 1,
+        "dimension_answer_coverage": 1,
+        "dimension_answer_review": 1
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "user_accepted": false,
+      "content_deliverable": false,
+      "full_report_deliverable": false,
+      "case_body_grades": {
+        "agent-readiness-holdout-v1-001": "correct",
+        "agent-readiness-holdout-v1-002": "omitted"
+      },
+      "case_record_grades": {
+        "agent-readiness-holdout-v1-001": "omitted",
+        "agent-readiness-holdout-v1-002": "omitted"
+      }
+    },
+    {
+      "product": "1Password",
+      "run_id": "run-1557e0ab8c6f48ea989d46aa05c39b47",
+      "case_ids": [
+        "agent-readiness-holdout-v1-003",
+        "agent-readiness-holdout-v1-004"
+      ],
+      "artifact_directory": "data/artifacts/evidence-recovery-2026-10-18/regression-1password",
+      "status": "execution_complete",
+      "error_type": null,
+      "production_code_sha256": "f3a388a550df82104a7591985daca60d260843cf613d8041016f35166ac5515d",
+      "manifest_sha256": "19866620f9c83e6ef3cf61e6c17b48dc94f02cac269debffb2dc8978d87cce0f",
+      "source_count": 1,
+      "snapshot_facts": 21,
+      "runtime_report_characters": 1285,
+      "saved_report_characters": 1285,
+      "saved_report_sha256": "58c3021a32b08719dd3f4053e96798b27c421c73743138a640f72bbd191c9080",
+      "run_sha256": "542a70de9924d1ef439573fc999da7472b46c46522eaee71df979bf1b86f0838",
+      "summary_sha256": "546fc91f4a7bd6cc01aa99c67dad6340ca6e06e0f0e1fd764fd0994621f77231",
+      "body_is_redaction_placeholder": false,
+      "saved_report_matches_saved_run": true,
+      "llm_transport_attempts": 10,
+      "provider_tokens": 34865,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 0,
+      "writer_producer_verified": true,
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 3
+      },
+      "qa_llm_names": {
+        "dimension_claim_review": 1,
+        "dimension_answer_coverage": 1,
+        "dimension_answer_review": 1
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "user_accepted": false,
+      "content_deliverable": false,
+      "full_report_deliverable": false,
+      "case_body_grades": {
+        "agent-readiness-holdout-v1-003": "correct",
+        "agent-readiness-holdout-v1-004": "omitted"
+      },
+      "case_record_grades": {
+        "agent-readiness-holdout-v1-003": "correct",
+        "agent-readiness-holdout-v1-004": "omitted"
+      }
+    },
+    {
+      "product": "Dropbox",
+      "run_id": "run-a150462e14494d4c9afef4c99df756bc",
+      "case_ids": [
+        "agent-readiness-holdout-v1-005",
+        "agent-readiness-holdout-v1-006"
+      ],
+      "artifact_directory": "data/artifacts/evidence-recovery-2026-10-18/regression-dropbox",
+      "status": "execution_complete",
+      "error_type": null,
+      "production_code_sha256": "f3a388a550df82104a7591985daca60d260843cf613d8041016f35166ac5515d",
+      "manifest_sha256": "d6bec1a919909055a446841ff6780899d5287bc6eb23c6dea6f18ed02c788f76",
+      "source_count": 2,
+      "snapshot_facts": 48,
+      "runtime_report_characters": 1053,
+      "saved_report_characters": 1053,
+      "saved_report_sha256": "4e23ca2f9640b18585d714e9219a462a1a865eb4f29df2ee132074d78de1d0d6",
+      "run_sha256": "b7d756b4b80bbd99dbcf43060ba644952d8e0328312bb8fac522125daadd7cc2",
+      "summary_sha256": "f0161c5a10499c95a7a2f4cbb6d01172ba936a634020cdef669c11dbe7f5c119",
+      "body_is_redaction_placeholder": false,
+      "saved_report_matches_saved_run": true,
+      "llm_transport_attempts": 10,
+      "provider_tokens": 40923,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 1,
+      "writer_producer_verified": true,
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 3
+      },
+      "qa_llm_names": {
+        "dimension_claim_review": 1,
+        "dimension_answer_coverage": 1,
+        "dimension_answer_review": 1
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "user_accepted": false,
+      "content_deliverable": false,
+      "full_report_deliverable": false,
+      "case_body_grades": {
+        "agent-readiness-holdout-v1-005": "omitted",
+        "agent-readiness-holdout-v1-006": "omitted"
+      },
+      "case_record_grades": {
+        "agent-readiness-holdout-v1-005": "omitted",
+        "agent-readiness-holdout-v1-006": "omitted"
+      }
+    },
+    {
+      "product": "Cloudflare",
+      "run_id": "run-2512eb94c72b4f13b9b3618530526f87",
+      "case_ids": [
+        "agent-readiness-holdout-v1-007",
+        "agent-readiness-holdout-v1-008"
+      ],
+      "artifact_directory": "data/artifacts/evidence-recovery-2026-10-18/regression-cloudflare",
+      "status": "execution_complete",
+      "error_type": null,
+      "production_code_sha256": "f3a388a550df82104a7591985daca60d260843cf613d8041016f35166ac5515d",
+      "manifest_sha256": "349a223a2dc8c450e1bc91a1f7978f8d07c5b0e7c0770d7259fbfdcaaf4693d5",
+      "source_count": 2,
+      "snapshot_facts": 60,
+      "runtime_report_characters": 1655,
+      "saved_report_characters": 1655,
+      "saved_report_sha256": "52b3610339fc00af4125eb16a8a224037c2071498cf2198a94e374b790b5f7fb",
+      "run_sha256": "a844102f1a9ca86f65a2610fa5a955a02a65eda901d156cc2c0cd8c00bd1dc5d",
+      "summary_sha256": "d404b987455498ff4182f30550232af361fdc564bc008403f08fcfcb56f4e25e",
+      "body_is_redaction_placeholder": false,
+      "saved_report_matches_saved_run": true,
+      "llm_transport_attempts": 10,
+      "provider_tokens": 38008,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 1,
+      "writer_producer_verified": true,
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 3
+      },
+      "qa_llm_names": {
+        "dimension_claim_review": 1,
+        "dimension_answer_coverage": 1,
+        "dimension_answer_review": 1
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "user_accepted": false,
+      "content_deliverable": false,
+      "full_report_deliverable": false,
+      "case_body_grades": {
+        "agent-readiness-holdout-v1-007": "correct",
+        "agent-readiness-holdout-v1-008": "error"
+      },
+      "case_record_grades": {
+        "agent-readiness-holdout-v1-007": "correct",
+        "agent-readiness-holdout-v1-008": "omitted"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "agent-readiness-holdout-v1-001",
+      "product": "Bitwarden",
+      "body_grade": "correct",
+      "answer_record_grade": "omitted",
+      "body_reason": "竞争发现第一条明确说创建者加最多一位其他用户，最多两个 collections，并明确三人三 collections 均超限。适用于题目给定的新账户 Free organization，未混入个人库容量或 Premium 能力。问题回答栏目仍标尚未核实，与已交付事实不一致；按正文实质答案记 correct，不能据此给结构记录补答案。",
+      "answer_record_reason": "answer_coverage 为 unverified，claim_ids=[]，没有 answer/resolution/conclusion；reason 仅为 Answer coverage response was missing or invalid。故结构记录遗漏，并非来源没有采到。",
+      "fact_ids": [
+        "evidence-fact-record-79b8833a9ebaa631510cf3a43081768bf90b3e55965c5078861f15e915268132"
+      ],
+      "gap_stages": [
+        {
+          "stage": "写作",
+          "detail": "已发布正确主张，但没有生成有效的逐题回答记录。"
+        },
+        {
+          "stage": "审核",
+          "detail": "回答覆盖缺失被保留为 unverified；不能由 claim supported 或通用 QA 状态替代答案覆盖。"
+        }
+      ],
+      "coverage_false_positive": false,
+      "other_report_errors": []
+    },
+    {
+      "id": "agent-readiness-holdout-v1-002",
+      "product": "Bitwarden",
+      "body_grade": "omitted",
+      "answer_record_grade": "omitted",
+      "body_reason": "只发布永久删除账户/组织的通用警告，未确认“删掉”是哪种操作、条目归谁所有，也未给组织移除与账户删除的条件分支。因此不能回答“密码是否还会留下”。未把该警告自行解释成“用户全部密码必删”，但不能把局部事实当整题已回答。",
+      "answer_record_reason": "answer_coverage 为 unverified，claim_ids=[]，缺 answer 与实际澄清问题；“本次已审核证据尚未完整覆盖”未给已知规则和具体歧义，不能算合理 clarify/insufficient。",
+      "fact_ids": [
+        "evidence-fact-record-3ad66f9afcf45ec3a682b1551fa029adef01690e3a5d20b85e6f9a9243004d9f",
+        "evidence-fact-record-7e9b8a905de2f9a4f30e4c2fb3dca2a5640de2f7060950fb3e67cba9ee07bced",
+        "evidence-fact-record-85d6241d13561e6b9690dc3f0853a51b843bdf33a5c0b4cb245193c63cac5a93",
+        "evidence-fact-record-f1ad991f21960d6d0ceac468b7563349aa81c5373c23a867857368d2652c1d90"
+      ],
+      "gap_stages": [
+        {
+          "stage": "选证",
+          "detail": "所有权核心事实已在 snapshot，并在 Analyst 事件里明确，但 Writer requested_fact_ids 仅四个核心条目，不含 centralize/collections 两条，Writer 实际 fact_ids 亦无这两条。"
+        },
+        {
+          "stage": "写作",
+          "detail": "未生成 Remove/Delete 及个人/组织所有权的澄清与分支回答；从同一 evidence_terms 仅写出删除警告。"
+        },
+        {
+          "stage": "审核",
+          "detail": "source_exception_unresolved / missing_or_duplicate_review 挡下成员移除和 SSO 候选，未促成足够回答；审核原因未进入正文不能补答。"
+        }
+      ],
+      "coverage_false_positive": false,
+      "other_report_errors": []
+    },
+    {
+      "id": "agent-readiness-holdout-v1-003",
+      "product": "1Password",
+      "body_grade": "correct",
+      "answer_record_grade": "correct",
+      "body_reason": "正文和问题回答栏目均明确访客没有 Private vault，只能同一时间访问一个所选库，并说明可先移除再换库；身份限定为 Families guest，没有把家庭成员的多库权限套给 guest。",
+      "answer_record_reason": "answer_coverage 为 answered/direct/no，answer 与 evidence_spans 实际写出两个否定及换库边界，claim_ids 与已发布主张相匹配。",
+      "fact_ids": [
+        "evidence-fact-record-24c54816d7da1c2273fac28cfdfb427756e6d296be03a6db8a712d7f0f49152f",
+        "evidence-fact-record-1b8a5c295ed943c5c53c8ad3ce2f6c1ad660389fad9ec9462d65e5023770ec9e",
+        "evidence-fact-record-387733d19e8de64ae029e84b4575709b38260f382f63e79103689f1b58afc020"
+      ],
+      "gap_stages": [],
+      "coverage_false_positive": false,
+      "other_report_errors": []
+    },
+    {
+      "id": "agent-readiness-holdout-v1-004",
+      "product": "1Password",
+      "body_grade": "omitted",
+      "answer_record_grade": "omitted",
+      "body_reason": "拒绝编造精确人民币含税价本身有边界，但只给通用“请求及已准入资料不足”和市场/套餐/计费周期模板；未说明 Unified Access 按组织需求与所需能力定制报价、应取得官方销售报价，也未落到币种与适用税务。因此按部分缺失记 omitted，不能因 resolution=insufficient 自动算正确。",
+      "answer_record_reason": "answered/insufficient 的 answer 与正文相同；claim_ids=[]，missing_fields=[billing_interval,market,plan]，没有已知定价规则或销售步骤。题目已给一年和 Unified Access，模板应至少确认已知条件；一年合同期限与付款/计费频率可能不同，不能仅凭 billing_interval 字段认定新增事实错误，故不用 error 替代可证实的遗漏。",
+      "fact_ids": [],
+      "gap_stages": [
+        {
+          "stage": "采集",
+          "detail": "captured-page-791bc38d3aad73f4d2a0 status=ok、text_length=2258；metadata.document_headings 包含 How do I get pricing for Unified Access?，但当前 text/markdown 未含该 FAQ 答案。仅能确认捕获内容不完整，不能由标题还原定制报价措辞。"
+        },
+        {
+          "stage": "准入",
+          "detail": "clean_research_pipeline.admission_rejections 明示 pricing 页 missing_accepted_evidence，candidate_ledger 为 fetched/captured_without_field_evidence；snapshot 仅有 guest 源，pricing 没有 source/fact ID。"
+        },
+        {
+          "stage": "选证",
+          "detail": "问题审核另记录 capacity_exceeded、omitted_evidence_count=2，但无证据证明这两条就是定制报价；不能用容量原因掩盖已查实的捕获/准入缺口。"
+        },
+        {
+          "stage": "写作",
+          "detail": "通用不足模板未交付 Unified Access 定价规则与获取销售报价的下一步。"
+        },
+        {
+          "stage": "审核",
+          "detail": "answered/insufficient 的结构标签没有修复缺少已知规则的问题。"
+        }
+      ],
+      "coverage_false_positive": false,
+      "other_report_errors": []
+    },
+    {
+      "id": "agent-readiness-holdout-v1-005",
+      "product": "Dropbox",
+      "body_grade": "omitted",
+      "answer_record_grade": "omitted",
+      "body_reason": "问题栏的“结论：否”方向正确；正文仅陈述可以评论、不可新增/编辑/删除，没有给出关键的仍可查看和下载规则。按本次完整回答标准属于部分回答而遗漏，未发现把 Can view 说成禁下载的产品事实错误。不能用未进入正文的 reason 补齐。",
+      "answer_record_reason": "answer_coverage.answer 与两个 claim_ids 仅绑定评论和不可增改删；conclusion=no 正确。reason 才提到查看/下载/分享，并错误地称这些已由发布声明明确；这段内部说明不能代替 answer 中缺失的下载规则，整体按缺项记 omitted。",
+      "fact_ids": [
+        "evidence-fact-record-3bc8f6ed8530f066298f3fa92115f92c0e1e152cd59aed3ae4864310b9a15bca",
+        "evidence-fact-record-038d2336bf9c89cc069bea25c05bd9a7d5d342e03cfeb4aed8680402e650fdde",
+        "evidence-fact-record-0d4fd0a0ffbc44022e2e660b2b652f0e7ca11e0465b376b6c33453bb52967081"
+      ],
+      "gap_stages": [
+        {
+          "stage": "采集",
+          "finding": "当前捕获具有 Can view 可下载和直接共享不可禁下载两条明确规则；无外部来源缺失。"
+        },
+        {
+          "stage": "准入",
+          "finding": "上述规则已在 analysis snapshot；不是事实未准入。"
+        },
+        {
+          "stage": "选择",
+          "finding": "Writer 实际 span-32 full_input 包含可下载完整行；可下载事实已被选择。"
+        },
+        {
+          "stage": "写作",
+          "finding": "span-32 原始输出首条完整写出可查看/下载/分享/评论；最终 report_dimension_audits 删除了该完整条目，只保留 operation comment/edit 两条。丢失发生在 Writer 输出到最终主张处理/绑定环，不能归因模型不知道规则。"
+        },
+        {
+          "stage": "审核",
+          "finding": "span-34/35 coverage 在仅剩评论/编辑声明时仍标 answered 并在 reason 声称已发布下载规则；未检查关键回答是否进入 answer。"
+        }
+      ],
+      "coverage_false_positive": true,
+      "other_report_errors": []
+    },
+    {
+      "id": "agent-readiness-holdout-v1-006",
+      "product": "Dropbox",
+      "body_grade": "omitted",
+      "answer_record_grade": "omitted",
+      "body_reason": "问题栏仅写尚未核实，未给出“不能一概保证”的条件回答，也未真正询问具体操作、原访问路径及是否保留副本。正文有离开后查看链接仍有效和三项取消共享例外，但不足以回答成员权限、独立链接、保留副本之间的关系。",
+      "answer_record_reason": "最终 answer_coverage 为 unverified、claim_ids=[]、reason=Answer coverage response was missing or invalid，没有可用 clarification 或条件答文。未审核的草拟主张只作诊断，不当作已发布答案来补全。",
+      "fact_ids": [
+        "evidence-fact-record-326ab39867985543c23f853a0b4be690f903996f8cec519e9b6bd03a3d7d181d",
+        "evidence-fact-record-f81a5e4566e566eace93dbfbd774b7d50a5f5edd528d7cfda87dd9216769646c",
+        "evidence-fact-record-a0723f4a26350c86e9b86076d9c1e91e1bbdae34227a9668b7f58e47a355460f"
+      ],
+      "gap_stages": [
+        {
+          "stage": "采集",
+          "finding": "当前全页捕获有成员失权、取消共享、保留副本、创建者离开后链接仍启用，以及删除链接规则。采集到页面不等于完整原页送到 Writer。"
+        },
+        {
+          "stage": "准入",
+          "finding": "成员失权、保留副本与三项例外已在 snapshot；删除链接规则在 Collector 原始提取输出中存在，但没有进入 snapshot。clean_research_pipeline 记录 admission_rejections=[]，因此仅能定位在提取结果到 canonical 表示之间，不能断言明确被某准入规则拒绝。"
+        },
+        {
+          "stage": "选择",
+          "finding": "Writer span-32 实际 prompt 有保留副本、链接创建者离开、完整三例外；没有成员失权原句，也没有停用链接 no longer works 规则。成员失权属于已准入后漏选；不能用 consumption receipt 或 source id 替代已送 full origin 的证明。"
+        },
+        {
+          "stage": "写作",
+          "finding": "Writer 草拟了副本/澄清，但错误集中绑定 unshare fact；没有覆盖删除/未删除独立链接与自己离开的完整分支。"
+        },
+        {
+          "stage": "审核",
+          "finding": "副本和澄清草稿最终 unreviewed，coverage 结构最后回落 unverified，正文未获得有用的条件说明。拒绝无依据结论合理，但不能将现有已知规则和真实澄清问题一起省略。"
+        }
+      ],
+      "coverage_false_positive": false,
+      "other_report_errors": []
+    },
+    {
+      "id": "agent-readiness-holdout-v1-007",
+      "product": "Cloudflare",
+      "body_grade": "correct",
+      "answer_record_grade": "correct",
+      "body_reason": "直接回答否，并说明 Cache Domain Purge 作用于被授权特定域；example.com 的授权不能据此扩展到同账户 other.example。题目已给出仅此角色，没有凭空要求用户证明或拒绝回答。",
+      "answer_record_reason": "answer_coverage direct/no 与两条 supported claim 一致，实际给出限定域与否定结论。虽然记录 resolution=direct 而参考名称为 conditional_answer，语义已保留题目授权条件，不因标签名称扣错。",
+      "fact_ids": [
+        "evidence-fact-record-142b20229292b3234c28565a2a979b8f1b95526859f79f02b2ad1d921d6df7be",
+        "evidence-fact-record-a8f3143ba238fae4ad2d6bb0f2bf961de3153c3077737aed5092ba7fe89513c0",
+        "evidence-fact-record-d76073936230ac9e68ab4bb1eb21897500192623af64d36edbd743d38fb7a075"
+      ],
+      "gap_stages": [
+        {
+          "stage": "无",
+          "finding": "此局部问题的最终选择、写作和审核输出足够。上游 Comparator 曾错称没捕获角色，未污染最终答案；不能据该上游问题将最终正确答案判错。"
+        }
+      ],
+      "coverage_false_positive": false,
+      "other_report_errors": []
+    },
+    {
+      "id": "agent-readiness-holdout-v1-008",
+      "product": "Cloudflare",
+      "body_grade": "error",
+      "answer_record_grade": "omitted",
+      "body_reason": "拒绝给无条件精确总账单本身合理，也保留了 Paid/Standard 与账户每月最低 5 USD。但正文“已捕获的资料未给出每百万次请求单价”被同轮 pricing capture 直接反驳；同时没有明确本题实际仍缺 CPU 用量及其他计费资源用量。属于错误前提和遗漏并存，整题 error。",
+      "answer_record_reason": "本题 answer_coverage 的 insufficient 方向合理，没有给出虚构精确总额，也未绑定错误缺证主张（claim_ids=[]）。但仅泛称市场/税费/完整用量，未明确 CPU 缺项、未保留完整已知计费规则，按部分回答记 omitted。同维度已审计的假称未采及静态请求条件错误单列 other_report_errors，不计入本条记录错误。",
+      "fact_ids": [
+        "evidence-fact-record-2533cf34879732f19e8d9a86fc9942a74d226c3d08face7edfe2739668842b6b",
+        "evidence-fact-record-5f7ce2bdbc9ed8e2504e7e067fa5f7a40b88e0ffd75ed031b491da3a051fbd86",
+        "evidence-fact-record-29ee73b2403ebc3df372d974905026513f3a6a4acc98b02fc5c92598082f6711"
+      ],
+      "gap_stages": [
+        {
+          "stage": "采集",
+          "finding": "当前 pricing 全文已捕获价格表、CPU 条款及示例；不是页面访问失败。Collector span-6 实际 full_input 有 $0.30/$0.02。"
+        },
+        {
+          "stage": "准入",
+          "finding": "Collector 语义输出只保留模式与脚注，未抽出请求/CPU 价格行；snapshot 所有字段未找到 $0.30/$0.02。第一实质遗漏在采集后语义提取到 canonical 表示环，不能谎称外部官方资料未采到。"
+        },
+        {
+          "stage": "选择",
+          "finding": "Writer 实际 full_input 无请求和 CPU 费率，只有有限事实与 CPU 运行脚注；上游 Comparator 更误称只有 roles 来源。来源 receipt 不证明完整 pricing 原文已送 Writer。"
+        },
+        {
+          "stage": "写作",
+          "finding": "Writer 将选文不完整扩大成“已捕获资料没有单价”，并省略 CPU 明确缺项及 Caching 例外。"
+        },
+        {
+          "stage": "审核",
+          "finding": "dimension_claim_review 将错误缺证断言及无条件静态免费声明标 supported；最终服务端 coverage 生成泛用 insufficient，未把本题 CPU 缺项和肯定规则写入答案。"
+        }
+      ],
+      "coverage_false_positive": false,
+      "other_report_errors": [
+        {
+          "claim_id": "claim-dcb9661dc0a7931fffc0",
+          "audited_claim_grade": "error",
+          "explanation": "当前 capture 及 Collector 实际 prompt 已含请求和 CPU 费率，审计仍将“已捕获资料未给单价”标 supported。此条未在本题 answer_coverage.claim_ids 中绑定，故是正文/claim guard 错误，不能据此把该 coverage 记录判 error。"
+        },
+        {
+          "claim_id": "claim-b6651df314d8cf9e2083",
+          "audited_claim_grade": "error",
+          "explanation": "静态资源免费不限量概括遗漏同页 Workers Caching 计费例外，审计仍标 supported。此条未由本题 answer_coverage 绑定，是额外报告条件错误。"
+        }
+      ]
+    }
+  ],
+  "capture_archives": [
+    {
+      "product_group": "bitwarden",
+      "archive_file": "data/artifacts/evidence-recovery-2026-10-18/regression-bitwarden/pipeline-captures.json",
+      "captures": [
+        {
+          "candidate_id": "source-candidate-69831a789e5de36e5a0b",
+          "capture_id": "captured-page-7542da3f061ee406cdf1",
+          "url": "https://bitwarden.com/help/remove-users/",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "a6fb93d2817cb886",
+          "body_characters": 3142,
+          "heading_count": 4,
+          "body_sha256": "a6fb93d2817cb8863d172b4fa7c3d5f385efa0cc78b39da868a1c9256acd716b",
+          "exported_body_sha256": "a6fb93d2817cb8863d172b4fa7c3d5f385efa0cc78b39da868a1c9256acd716b",
+          "body_redacted": false
+        },
+        {
+          "candidate_id": "source-candidate-b164e03a86491f34ecb4",
+          "capture_id": "captured-page-6cc1d7c60c3e0e140da8",
+          "url": "https://bitwarden.com/help/password-manager-plans/",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "bfd3616bd2bb046b",
+          "body_characters": 7022,
+          "heading_count": 13,
+          "body_sha256": "bfd3616bd2bb046bc61a7543f8a628c74ac9313d8d60c16dd3eae241ecad2fb8",
+          "exported_body_sha256": "bfd3616bd2bb046bc61a7543f8a628c74ac9313d8d60c16dd3eae241ecad2fb8",
+          "body_redacted": false
+        },
+        {
+          "candidate_id": "source-candidate-31c87c50c750c8ad77e1",
+          "capture_id": "captured-page-24942943dcd70c43edf9",
+          "url": "https://bitwarden.com/help/delete-member-accounts/",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "4b369da82acf7931",
+          "body_characters": 1473,
+          "heading_count": 4,
+          "body_sha256": "4b369da82acf793105141386b833e6b4fe034eb05aec4a6d8c771f1b5abb830a",
+          "exported_body_sha256": "be65443112bdf3df2f095233adad13e79a96295ae3b42ebd2bedd811462d02a9",
+          "body_redacted": true
+        }
+      ]
+    },
+    {
+      "product_group": "1password",
+      "archive_file": "data/artifacts/evidence-recovery-2026-10-18/regression-1password/pipeline-captures.json",
+      "captures": [
+        {
+          "candidate_id": "source-candidate-92ef7a341e254a59eaf1",
+          "capture_id": "captured-page-f71d2aedc2d409404185",
+          "url": "https://support.1password.com/guests/",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "48266990555bee8b",
+          "body_characters": 2133,
+          "heading_count": 7,
+          "body_sha256": "48266990555bee8bc0f00fd5580df551e82f6660e80e3f711d0e6d2847433b92",
+          "exported_body_sha256": "48266990555bee8bc0f00fd5580df551e82f6660e80e3f711d0e6d2847433b92",
+          "body_redacted": false
+        },
+        {
+          "candidate_id": "source-candidate-46e7b6247568b1f54f2f",
+          "capture_id": "captured-page-791bc38d3aad73f4d2a0",
+          "url": "https://1password.com/pricing",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "646f516814bafe92",
+          "body_characters": 2258,
+          "heading_count": 26,
+          "body_sha256": "646f516814bafe92926050e3b5cc37920d98bf7649174beb88700061f8c6f0c8",
+          "exported_body_sha256": "646f516814bafe92926050e3b5cc37920d98bf7649174beb88700061f8c6f0c8",
+          "body_redacted": false
+        }
+      ]
+    },
+    {
+      "product_group": "dropbox",
+      "archive_file": "data/artifacts/evidence-recovery-2026-10-18/regression-dropbox/pipeline-captures.json",
+      "captures": [
+        {
+          "candidate_id": "source-candidate-a2b525e1b029edefa86a",
+          "capture_id": "captured-page-a4a3e943290f24bc85b0",
+          "url": "https://help.dropbox.com/share/set-file-folder-permissions",
+          "status": "ok",
+          "fetch_method": "webfetch_v2:static",
+          "source_material_level": "full_source",
+          "content_hash": "90c4e0c8bd2928ca",
+          "body_characters": 9144,
+          "heading_count": 19,
+          "body_sha256": "90c4e0c8bd2928caba2460f3f7bc164f6a657176dd5750f237ad164bb1c101ee",
+          "exported_body_sha256": "90c4e0c8bd2928caba2460f3f7bc164f6a657176dd5750f237ad164bb1c101ee",
+          "body_redacted": false
+        },
+        {
+          "candidate_id": "source-candidate-60823611b92f7caed3db",
+          "capture_id": "captured-page-c787caa76524858ae949",
+          "url": "https://help.dropbox.com/share/unshare-folder",
+          "status": "ok",
+          "fetch_method": "webfetch_v2:static",
+          "source_material_level": "full_source",
+          "content_hash": "57b7c03d6c222ac6",
+          "body_characters": 5520,
+          "heading_count": 12,
+          "body_sha256": "57b7c03d6c222ac6e331d05800dfcfb3564e8165ee24103281544697b6b7fac9",
+          "exported_body_sha256": "57b7c03d6c222ac6e331d05800dfcfb3564e8165ee24103281544697b6b7fac9",
+          "body_redacted": false
+        }
+      ]
+    },
+    {
+      "product_group": "cloudflare",
+      "archive_file": "data/artifacts/evidence-recovery-2026-10-18/regression-cloudflare/pipeline-captures.json",
+      "captures": [
+        {
+          "candidate_id": "source-candidate-4e924570746695583588",
+          "capture_id": "captured-page-ffcab66db4d81556b3ed",
+          "url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "f3919b3168f9f503",
+          "body_characters": 13338,
+          "heading_count": 5,
+          "body_sha256": "f3919b3168f9f50328d5943b6f6d925875aef16b3da61426a87e96613370d18c",
+          "exported_body_sha256": "f3919b3168f9f50328d5943b6f6d925875aef16b3da61426a87e96613370d18c",
+          "body_redacted": false
+        },
+        {
+          "candidate_id": "source-candidate-484dffddae603b05dc06",
+          "capture_id": "captured-page-609467a4aec2a444943d",
+          "url": "https://developers.cloudflare.com/workers/platform/pricing/",
+          "status": "ok",
+          "fetch_method": "basic_httpx",
+          "source_material_level": "full_source",
+          "content_hash": "c1b03d385d3b47d6",
+          "body_characters": 22435,
+          "heading_count": 31,
+          "body_sha256": "c1b03d385d3b47d6f05aa8ca2cca61940bb31843f4f11f6c7aec97ec605f8257",
+          "exported_body_sha256": "c1b03d385d3b47d6f05aa8ca2cca61940bb31843f4f11f6c7aec97ec605f8257",
+          "body_redacted": false
+        }
+      ]
+    }
+  ],
+  "capture_archive_summary": {
+    "completed_captures": 9,
+    "exported_body_hashes_verified": 9,
+    "redacted_bodies": 1,
+    "redacted_capture": "Bitwarden delete-member-accounts",
+    "all_original_bodies_exactly_replayable": false
+  },
+  "independent_grades": [
+    {
+      "reviewer": "independent_readonly_ai_a",
+      "artifact": "data/artifacts/evidence-recovery-2026-10-18/independent-grades/plan_a_v28_grade_a.json",
+      "sha256": "df8d60b5c8e93e5602a746642462210cc4f95c1987a260f19e87f307f0d7262e"
+    },
+    {
+      "reviewer": "independent_readonly_ai_b",
+      "artifact": "data/artifacts/evidence-recovery-2026-10-18/independent-grades/plan_a_v28_grade_b.json",
+      "sha256": "f8298dccff0f360f6abf90199d9e1eee64268245fa8649e8237b77dbce3eb3a5"
+    }
+  ],
+  "root_additional_trace_triage": [
+    {
+      "case_id": "agent-readiness-holdout-v1-001",
+      "finding": "Coverage and review model outputs both propose the correct answered/no claim; the isolated single-question parse still rejects it with answer_body_unresolved. Existing parse_answer_coverage already catches errors per row. Batch poisoning was an initial incorrect hypothesis, disproved by isolated replay.",
+      "evidence": "regression-bitwarden/trace.json plus answer-001-guard-replay.json",
+      "not_fixed_in_frozen_run": true
+    }
+  ],
+  "next_priorities": [
+    {
+      "order": 1,
+      "action": "Fix the deterministic answer_body_unresolved false rejection for valid Chinese quantity-cap and exceed-limit conclusions; keep exact claim/evidence binding and wrong-number controls. Existing per-row parse isolation already exists."
+    },
+    {
+      "order": 2,
+      "action": "Preserve direct predicates from source through claim binding; a comment/edit claim cannot prove download permission, and review reason cannot add an absent predicate."
+    },
+    {
+      "order": 3,
+      "action": "Track captured/extracted/admitted/selected/published states server-side; product-page claims cannot assert collection absence."
+    },
+    {
+      "order": 4,
+      "action": "Recover actual billing table rows and pricing FAQ body, then preserve compatible operation, ownership, retained-copy and link dependencies under the current budget."
+    },
+    {
+      "order": 5,
+      "action": "Freeze a new version and repeat declared development regression, then collect a genuinely unexposed human-reviewed set before broader acceptance or any training."
+    }
+  ],
+  "known_limits": [
+    "Free plan name can still trigger the pre-existing free-word negation omission.",
+    "Finite complete source and positive applicability grammar is not general NLI.",
+    "The old partial-title Usage-plan question still returns an empty window; two old fixtures now explicitly name the agreed full service heading without changing source or assertions.",
+    "Dropbox original complete-rule origin closure remains partial under the existing 14000-byte/eight-fact capacity; receipt text is not proof its complete origin was sent.",
+    "Old normalized fields/snapshots are not retroactively upgraded.",
+    "Fixed official URL production-stage diagnostics do not accept Planner automatic competitor discovery, full Graph, broad multi-dimensional product reports or production dense RAG indexing.",
+    "HTTP Qdrant, Redis multiworker, Temporal, Docker and deployment acceptance were not run.",
+    "Entire-backend Ruff still reports four pre-existing unused imports in three unchanged tests; changed scope and packages/scripts pass."
+  ],
+  "previous_artifact_files_unchanged": 147,
+  "frontend_retested": false,
+  "reward": null,
+  "training_ready": false,
+  "user_accepted": false,
+  "security_scan": {
+    "scope": "literal current configured credentials in nonignored text sources/docs/eval, built frontend and specified acceptance artifacts; excludes secret env bodies and Git history",
+    "configured_credential_count": 1,
+    "files_scanned": 1419,
+    "actual_secret_hit_paths": [],
+    "tracked_secret_config_paths": [],
+    "status": "pass"
+  }
+}

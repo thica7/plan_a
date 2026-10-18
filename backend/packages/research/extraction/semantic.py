@@ -138,26 +138,138 @@ def semantic_page_priority(brief: ResearchBrief, page: CapturedPage) -> tuple[in
     return _question_score(_question_terms(brief), page.text or page.markdown or page.snippet)
 
 
-def _verified_headings(body, page):
-    headings, cursor = [], 0
+def _heading_resolution(body, page):
+    """Constrain all original line candidates in metadata order, retaining unknowns."""
     source_headings = page.metadata.get('document_headings', [])
+    entries = []
+    if not isinstance(source_headings, (list, tuple)):
+        return {'valid': False, 'entries': entries, 'headings': []}
     for index, item in enumerate(source_headings):
         if (not isinstance(item, (list, tuple)) or len(item) != 2 or type(item[0]) is not int
-                or not 1 <= item[0] <= 6 or not isinstance(item[1], str)):
-            return []
-        matches = list(re.finditer(r'(?m)^' + re.escape(item[1].strip()) + r'\s*$', body[cursor:]))
-        if not matches:
-            continue
-        if len(matches) != 1:
-            remaining = sum(isinstance(other, (list, tuple)) and len(other) == 2
-                            and isinstance(other[1], str) and other[1].strip() == item[1].strip()
-                            for other in source_headings[index:])
-            if len(matches) != remaining:
-                return []
-        match = matches[0]
-        headings.append((cursor + match.start(), item[0], item[1]))
-        cursor += match.end()
-    return headings
+                or not 1 <= item[0] <= 6 or not isinstance(item[1], str) or not item[1].strip()
+                or '\n' in item[1] or '\r' in item[1]):
+            return {'valid': False, 'entries': entries, 'headings': []}
+        positions = [match.start() for match in re.finditer(
+            r'(?m)^' + re.escape(item[1].strip()) + r'[ \t]*$', body)]
+        entries.append({'ordinal': index, 'level': item[0], 'title': item[1],
+                        'positions': positions})
+    present = [entry for entry in entries if entry['positions']]
+    previous = -1
+    for entry in present:
+        entry['positions'] = [position for position in entry['positions'] if position > previous]
+        if not entry['positions']:
+            return {'valid': False, 'entries': entries, 'headings': []}
+        previous = entry['positions'][0]
+    following = len(body)
+    for entry in reversed(present):
+        entry['positions'] = [position for position in entry['positions'] if position < following]
+        if not entry['positions']:
+            return {'valid': False, 'entries': entries, 'headings': []}
+        following = entry['positions'][-1]
+    for index, entry in enumerate(entries):
+        before = next((other for other in reversed(entries[:index]) if other['positions']), None)
+        after = next((other for other in entries[index + 1:] if other['positions']), None)
+        entry['interval'] = [before['positions'][0] + len(before['title']) if before else 0,
+                             after['positions'][-1] if after else len(body)]
+    # A surviving ambiguous candidate is never guessed or silently dropped.
+    valid = all(len(entry['positions']) == 1 for entry in present)
+    headings = [(entry['positions'][0], entry['level'], entry['title']) for entry in present] if valid else []
+    return {'valid': valid, 'entries': entries, 'headings': headings}
+
+
+def _verified_headings(body, page):
+    return _heading_resolution(body, page)['headings']
+
+
+def _resolved_heading_path(resolution, position):
+    """An absent ancestor cannot be replaced by the preceding visible sibling."""
+    entries = resolution['entries']
+    latest = next((entry for entry in reversed(entries)
+                   if len(entry['positions']) == 1 and entry['positions'][0] <= position), None)
+    if not resolution['valid'] or latest is None:
+        return None
+    ancestors = []
+    for entry in entries[:latest['ordinal'] + 1]:
+        while ancestors and ancestors[-1]['level'] >= entry['level']:
+            ancestors.pop()
+        ancestors.append(entry)
+    return ancestors if all(len(entry['positions']) == 1 for entry in ancestors) else None
+
+
+def _resolved_subtree_end(resolution, entry, body_length):
+    peer = next((other for other in resolution['entries'][entry['ordinal'] + 1:]
+                 if other['level'] <= entry['level']), None)
+    return (peer['positions'][0] if len(peer['positions']) == 1 else None) if peer else body_length
+
+
+def _resolved_intro_end(resolution, entry, body_length):
+    """A missing first child makes the parent's introduction boundary unknown."""
+    following = resolution['entries'][entry['ordinal'] + 1:entry['ordinal'] + 2]
+    if not following:
+        return body_length
+    return following[0]['positions'][0] if len(following[0]['positions']) == 1 else None
+
+
+def _billing_service_scope(brief, body, page):
+    """Select one complete explicitly named source subtree before lexical scoring."""
+    if (not _billing_questions(brief) or not billing_rule_text_signal(body)
+            or not page.metadata.get('document_headings')):
+        return None
+    resolution = _heading_resolution(body, page)
+    if not resolution['valid']:
+        return 0, ''
+    siblings, parents = {}, []
+    for entry in resolution['entries']:
+        while parents and parents[-1]['level'] >= entry['level']:
+            parents.pop()
+        parent = parents[-1]['ordinal'] if parents else None
+        siblings.setdefault(parent, []).append(entry)
+        parents.append(entry)
+    candidates = []
+    for group in siblings.values():
+        # Structural peers constrain service selection even when a peer has no
+        # rate text or its missing boundary prevents closing the prior subtree.
+        if len(group) >= 2:
+            candidates.extend(group)
+    if not candidates:
+        return None
+    mentions = []
+    for question in _billing_questions(brief):
+        text = ' '.join(question.question.casefold().split())
+        matches = [(entry, match.span()) for entry in candidates
+                   for match in re.finditer(r'(?<!\w)' + re.escape(' '.join(entry['title'].casefold().split()))
+                                            + r'(?!\w)', text)]
+        mentions.extend(entry for entry, span in matches if not any(
+            other_span[0] <= span[0] and span[1] <= other_span[1] and other_span != span
+            for _, other_span in matches))
+    selected = {entry['ordinal']: entry for entry in mentions}
+    # A named descendant is more specific than its named ancestor.
+    for ordinal in list(selected):
+        entry = selected[ordinal]
+        finish = next((other['ordinal'] for other in resolution['entries'][ordinal + 1:]
+                       if other['level'] <= entry['level']), len(resolution['entries']))
+        if any(ordinal < other < finish for other in selected):
+            selected.pop(ordinal)
+    if len(selected) != 1:
+        return 0, ''
+    entry = next(iter(selected.values()))
+    start = entry['positions'][0] if len(entry['positions']) == 1 else None
+    finish = _resolved_subtree_end(resolution, entry, len(body))
+    path = _resolved_heading_path(resolution, start) if start is not None else None
+    if start is None or finish is None or path is None:
+        return 0, ''
+    if any(_resolved_intro_end(resolution, parent, len(body)) is None for parent in path[:-1]):
+        return 0, ''
+    # Include ancestor introductions only where they immediately precede this
+    # first child. The model always receives one exact contiguous source range.
+    for parent in reversed(path[:-1]):
+        first_child = resolution['entries'][parent['ordinal'] + 1]
+        if len(first_child['positions']) != 1 or first_child['positions'][0] != start:
+            break
+        start = parent['positions'][0]
+    if finish - start > MAX_INPUT_CHARS:
+        return 0, ''
+    return start, body[start:finish]
 
 
 def _plan_heading_path(headings, position):
@@ -200,7 +312,8 @@ def semantic_focus_signature(brief: ResearchBrief, page: CapturedPage) -> str:
              'start': start,
              'window_hash': hashlib.sha256(window.encode()).hexdigest(),
              'body_hash': hashlib.sha256(body.encode()).hexdigest(),
-             'verified_headings': _verified_headings(body, page)}
+             'heading_resolution': _heading_resolution(body, page),
+             'billing_service_scope': _billing_service_scope(brief, body, page)}
     return hashlib.sha256(json.dumps(focus, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:24]
 
 
@@ -247,7 +360,8 @@ def _local_context(body: str, start: int, end: int, bounds=None) -> str | None:
 
 def document_condition_context(body, page, start, end):
     """Use captured HTML headings only after verifying their ordered body positions."""
-    headings = _verified_headings(body, page)
+    resolution = _heading_resolution(body, page)
+    headings = resolution['headings']
     ancestors = []
     for position, level, _ in headings:
         if position > start:
@@ -289,6 +403,10 @@ def document_condition_context(body, page, start, end):
     lower, level = next((item for item in ancestors if item[1] >= 2), ancestors[0])
     if plan_path:
         lower, level, _ = plan_path[-1]
+    path = _resolved_heading_path(resolution, start)
+    selected = next((entry for entry in path or [] if entry['positions'][0] == lower), None)
+    if selected is None or _resolved_subtree_end(resolution, selected, len(body)) is None:
+        return None
     upper = next((position for position, other_level, _ in headings if position > start and other_level <= level), len(body))
     if level == 1 and lower == headings[0][0]:
         upper = next((position for position, _, _ in headings if position > start), len(body))
@@ -366,19 +484,16 @@ def _billing_source_blocks(body, start, end, headings=()):
 
 def _billing_condition_context(body, page, start, end):
     """Scope billing rules to their nearest verified service section or local block."""
-    headings = _verified_headings(body, page)
-    ancestors = []
-    for position, level, _ in headings:
-        if position > start:
-            break
-        while ancestors and ancestors[-1][1] >= level:
-            ancestors.pop()
-        ancestors.append((position, level))
+    resolution = _heading_resolution(body, page)
+    headings = resolution['headings']
+    path = _resolved_heading_path(resolution, start)
+    if resolution['entries'] and path is None:
+        return None
+    ancestors = [(entry['positions'][0], entry['level']) for entry in path or []]
     if ancestors:
         lower, level = ancestors[-1]
-        upper = next((position for position, other_level, _ in headings
-                      if position > start and other_level <= level), len(body))
-        if end > upper:
+        upper = _resolved_subtree_end(resolution, path[-1], len(body))
+        if upper is None or end > upper:
             return None
         local = _local_context(body, start, end, (lower, upper))
         # A parent section may introduce many independent services. Only its
@@ -401,9 +516,11 @@ def _billing_condition_context(body, page, start, end):
     conditions = _billing_source_blocks(body, lower, upper, headings)
     # Ancestor introductions apply to their descendant service sections. Never
     # traverse a sibling service's body to recover these source prerequisites.
-    for parent, _ in ancestors[:-1]:
-        intro_end = next((position for position, _, _ in headings if position > parent), lower)
-        conditions.extend(_billing_source_blocks(body, parent, intro_end, headings))
+    for parent in path[:-1] if path else []:
+        intro_end = _resolved_intro_end(resolution, parent, len(body))
+        if intro_end is None:
+            return None
+        conditions.extend(_billing_source_blocks(body, parent['positions'][0], intro_end, headings))
     return (lower, upper), list(dict.fromkeys(conditions))
 
 
@@ -441,6 +558,9 @@ def _semantic_window(brief: ResearchBrief, page: CapturedPage) -> tuple[int, str
     """One bounded original window, selected for permission rules, not UI menus."""
     from packages.research.evidence.operations import required_operations
     body = page.text or page.markdown or page.snippet
+    service_scope = _billing_service_scope(brief, body, page)
+    if service_scope is not None:
+        return service_scope
     if len(_active_questions(brief)) > 1 and len(body) <= MAX_INPUT_CHARS:
         return 0, body
     terms = _question_terms(brief)
@@ -535,6 +655,13 @@ def _restore_table_edges(body: str, window: str, quote: str) -> str:
     return quote
 
 
+def _restore_bullet(body, window, quote):
+    """Restore only a unique omitted decorative bullet, never substantive words."""
+    rows = [line.strip() for line in body.splitlines()
+            if re.fullmatch(r'[-*•]\s+' + re.escape(quote.strip()), line.strip())]
+    return rows[0] if len(rows) == 1 and window.count(rows[0]) == 1 else quote
+
+
 def _table_context(body, start, end):
     """Bind only a contiguous original table header and its adjacent footnotes."""
     from packages.research.evidence.operations import _ROLE
@@ -589,12 +716,15 @@ def semantic_extraction(
         *condition_lines, *alternative_condition_blocks(window), *rule_blocks
     ]))
     condition_gaps = []
+    if _billing_service_scope(brief, body, page) == (0, ''):
+        condition_gaps.append('source_billing_service_scope_unresolved')
     seen = set()
     for fact in facts[:MAX_FACTS] if isinstance(facts, list) and semantic_page_allowed(brief, page) else []:
         quote = fact.get("quote") if isinstance(fact, dict) else None
         if not isinstance(quote, str) or quote in seen or not 18 <= len(quote) <= MAX_CONTEXT_CHARS:
             continue
         quote = _restore_table_edges(body, window, quote)
+        quote = _restore_bullet(body, window, quote)
         if quote in seen or (len(quote) > MAX_QUOTE_CHARS and quote not in rule_blocks):
             continue
         # The model selects text, not a trusted offset. Bind it only to the

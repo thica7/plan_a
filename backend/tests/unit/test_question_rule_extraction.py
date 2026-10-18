@@ -142,7 +142,7 @@ def test_billing_window_keeps_rules_when_late_capabilities_repeat_question_terms
         + "On the Usage plan, members can edit pages; the request viewer is available.\n" * 240
     )
     brief, _, page = rule_source(
-        body, question="Can Usage plan members determine the exact bill from request count?",
+        body, question="Under Usage billing, can Usage plan members determine the exact bill from request count?",
         headings=[(1, "Guide"), (2, "Usage billing"), (2, "Capability catalog")],
     )
     assert len(body) > semantic.MAX_INPUT_CHARS

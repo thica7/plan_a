@@ -262,6 +262,12 @@ def claim_rule_reasons(claim, view, boundaries):
     facts = {f.id: f for f in view.facts}
     allowed = {fid for boundary in boundaries for fid in boundary.allowed_fact_ids}
     reasons = []
+    # This identifies a collection-status assertion, not product entailment.
+    # Product originals cannot certify the server's complete captured/admitted set.
+    if re.search(r'(?:所捕获资料|已提供的证据|captured (?:material|evidence|sources)|provided evidence)'
+                 r'\s*(?:中)?\s*(?:未包含|没有|未包括|does not (?:include|contain)|did not (?:include|contain))'
+                 r'[^。.!?\n]{0,100}(?:定价|计费|价格|pricing|billing|price)', claim.text, re.I):
+        reasons.append('collection_status_requires_server_receipt')
     if not claim.fact_ids or not claim.source_ids:
         reasons.append("missing_claim_evidence")
     selected = [facts.get(fid) for fid in claim.fact_ids]
@@ -294,10 +300,14 @@ def claim_rule_reasons(claim, view, boundaries):
         reasons.extend(claim_temporal_condition_reasons(claim, content))
         from packages.research.evidence.source_conditions import claim_source_condition_reasons
         reasons.extend(claim_source_condition_reasons(claim, content))
-        from packages.research.evidence.source_exceptions import claim_source_exception_reasons
+        from packages.research.evidence.source_exceptions import (
+            claim_source_exception_reasons,
+            verified_exception_binding,
+        )
         reasons.extend(claim_source_exception_reasons(claim, content, available_facts=view.facts))
         observations = {(f.source_id, f.competitor, f.dimension, f.evidence_item_ids, f.quote) for f in known}
-        if len({f.id for f in content}) > 1 or len(observations) > 1:
+        if ((len({f.id for f in content}) > 1 or len(observations) > 1)
+                and not verified_exception_binding(claim, content)):
             reasons.append('feature_claim_multiple_observations')
         for fact in content:
             from packages.research.evidence.operations import operation_observations

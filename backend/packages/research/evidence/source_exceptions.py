@@ -7,6 +7,7 @@ question supplies a source predicate, role or exception.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Mapping
 
@@ -17,7 +18,10 @@ _START = re.compile(
 _AUTH = re.compile(r"\b(?:SSO|single sign.on|trusted devices?)\b|单点登录|受信任设备", re.I)
 _ACCESS = re.compile(r"\baccess\b|\b(?:log|sign)(?:ged|ned)?[ -]?in\b|访问|登录|登入", re.I)
 _COPY = re.compile(r"\bkeep\s+(?:a\s+)?copy\b|保留.{0,5}副本", re.I)
-_NO_SYNC = re.compile(r"\b(?:no longer|not|stop\w*)\s+sync\w*\b|停止同步|不再同步", re.I)
+_NO_SYNC = re.compile(
+    r"\b(?:no longer|not|stop\w*)\s+sync\w*\b|停止同步|不再同步|"
+    r"不再(?:与|和)[^。；]{1,20}同步", re.I
+)
 _RECOVERY = re.compile(r"\baccount recovery\b|账户恢复|账号恢复", re.I)
 _LOGIN_BEFORE = re.compile(
     r"\b(?:log|sign)\s+in\b[^.!?\n]{0,160}\bbefore\b|(?:移除|删除)前[^。；]{0,50}登录|"
@@ -30,13 +34,17 @@ _CLARIFY = re.compile(
     r"请(?:说明|确认|提供|澄清)|(?:哪个|哪种|什么|是否)[^。！]{0,100}[？?]",
     re.I,
 )
+_PROCEDURE = re.compile(
+    r"^\s*To\s+(?:resolve|unshare|remove|delete|restore|share|manage|change|create|open)\b"
+    r"[^\n:]{0,120}:\s*$", re.I
+)
 
 
 def complete_rule_blocks(text, *, max_chars=MAX_RULE_CHARS):
     """Keep a contiguous conditional paragraph/list, including its explanations.
 
-    Headings and blank paragraph boundaries stop the block. A colon without a
-    following branch is incomplete, and an oversized block is never truncated.
+    Headings, paragraphs and a following procedure stop the block. Conditional
+    children remain in the block; oversized or unfinished groups are rejected.
     """
     lines = text.splitlines(keepends=True)
     blocks, offset = [], 0
@@ -47,8 +55,12 @@ def complete_rule_blocks(text, *, max_chars=MAX_RULE_CHARS):
             continue
         end = offset
         if line.rstrip().endswith((":", "：")):
+            indentation = len(line) - len(line.lstrip())
             for following in lines[index + 1 :]:
                 if not following.strip() or re.match(r"^\s*#{1,6}\s", following):
+                    break
+                if (_PROCEDURE.match(following)
+                        and len(following) - len(following.lstrip()) <= indentation):
                     break
                 end += len(following)
         quote = text[start:end].strip()
@@ -57,7 +69,8 @@ def complete_rule_blocks(text, *, max_chars=MAX_RULE_CHARS):
             or max_chars is not None
             and len(quote) > max_chars
             or not re.search(
-                r"\b(?:can|cannot|eliminates?|access|will|works?|unless|except)\b", quote, re.I
+                r"\b(?:can|cannot|eliminates?|access|will|works?|unless|except)\b|"
+                r"\b(?:won|can)['’]t\b", quote, re.I
             )
         ):
             continue
@@ -118,12 +131,20 @@ def source_exception_constraints(fact, *, available_facts=()):
     if fact.dimension != "feature" or fact.field != "evidence_terms":
         return ()
     result = []
+    fact_events = _events(fact.quote)
     texts = list(dict.fromkeys([fact.quote, *_texts(fact.value)]))
     for text in texts:
         for block in complete_rule_blocks(text):
             events = _events(block)
+            if text != fact.quote and not fact_events & events:
+                continue
+            header = re.split(r"[:,：]", block.splitlines()[0], maxsplit=1)[0]
+            denied = re.search(
+                r"^\s*If\s+([^,\n]{1,240}),\s+[^.!?\n]{0,50}"
+                r"(?:won['’]t be able to|cannot|can['’]t)\s+unshare\b", block, re.I
+            )
             if (
-                _AUTH.search(block)
+                _AUTH.search(header)
                 and _ACCESS.search(block)
                 and re.search(r"\bunless\b", block, re.I)
             ):
@@ -136,11 +157,13 @@ def source_exception_constraints(fact, *, available_facts=()):
                 kind = "deleted_link"
             elif re.search(r"\bexcept(?:\s+if)?\s*:", block, re.I):
                 kind = "exception_list"
+            elif denied and ("unshare", "folder") in events:
+                kind = "exception_list"
             else:
                 continue
             branches = (
-                re.findall(r"^\s*[-*]\s+(.+)", block, re.M) if kind == "exception_list" else []
-            )
+                [denied[1]] if denied else re.findall(r"^\s*[-*]\s+(.+)", block, re.M)
+            ) if kind == "exception_list" else []
             row = {"kind": kind, "quote": block, "events": sorted(events), "branches": branches}
             if row not in result:
                 result.append(row)
@@ -224,7 +247,7 @@ def source_exception_links(item, accepted_items):
     ):
         return []
     events = _events(item.quote)
-    result = []
+    result = {}
     for source in accepted_items:
         if (
             source.status != "accepted"
@@ -252,8 +275,15 @@ def source_exception_links(item, accepted_items):
         )
         for row in source_exception_constraints(proxy):
             if events & {tuple(event) for event in row["events"]}:
-                result.append({**row, "evidence_item_id": source.id, **source_scope(source)})
-    return sorted(result, key=lambda row: (row["evidence_item_id"], row["quote"]))
+                receipt = {**row, "evidence_item_id": source.id, **source_scope(source)}
+                # A receipt identifies a complete rule in one full source scope,
+                # not every observation which happened to repeat that rule.
+                identity = canonical_json({key: value for key, value in receipt.items()
+                                           if key != "evidence_item_id"})
+                rank = (source.quote.strip() != row["quote"], source.id)
+                if identity not in result or rank < result[identity][0]:
+                    result[identity] = (rank, receipt)
+    return [result[key][1] for key in sorted(result)]
 
 
 def _asserted(text, pattern):
@@ -313,6 +343,8 @@ def _subjects(text):
 
 def _object_key(text):
     text = re.sub(r"^(?:(?:that|this|the|an?|your|their|shared)\s+)+", "", text, flags=re.I)
+    text = re.sub(r"^(?:该|此|这个|那个)", "", text.strip())
+    text = re.sub(r"的$", "", text)
     return {"文件夹": "folder", "共享文件夹": "folder", "组织": "organization"}.get(
         text.strip().casefold(), text.strip().casefold()
     )
@@ -406,6 +438,41 @@ def _sync_rules(text):
     return rules
 
 
+def _whole_known_auth_source(source):
+    """Recognize only the complete finite authentication group used below.
+
+    Every sentence and branch must be consumed. The optional product entity is
+    bounded to three capitalized name tokens in the account-name position.
+    Unrecognized prose is retained verbatim or left unresolved, never inferred.
+    """
+    header = (
+        r"For (?:member|editor|guest|owner|auditor) accounts that do not have master "
+        r"passwords as a result of SSO(?: with trusted devices)?:"
+    )
+    product = r"(?:(?-i:[A-Z][A-Za-z0-9-]{0,39}(?: [A-Z][A-Za-z0-9-]{0,39}){0,2}) )?"
+    removal = (
+        r"- Removing them from your organization eliminates all access to their "
+        + product + r"account unless they were previously assigned a master password "
+        r"using account recovery and they (?:log|sign) in with that master password "
+        r"at least once before being removed\."
+    )
+    rejoin = (
+        r"These users will not be able to re-join your organization unless the above "
+        r"steps are taken before they are removed from the organization\. If they aren't, "
+        r"each removed user will be required to delete their account and be issued a new "
+        r"invitation to create an account and join your organization\."
+    )
+    revoke = (
+        r"- Revoking access to the organization, but not removing them from the organization, "
+        r"will still fully locked them out of their account until their access to the "
+        r"organization is restored\."
+    )
+    return bool(re.fullmatch(
+        header + " " + removal + "(?: " + rejoin + ")?(?: " + revoke + ")?",
+        " ".join(source.split()), re.I,
+    ))
+
+
 def _covered(text, row):
     kind = row["kind"]
     if kind == "authentication_access":
@@ -416,6 +483,13 @@ def _covered(text, row):
             else ""
         )
         source = row["quote"]
+        if not _whole_known_auth_source(source):
+            # The finite predicate contract cannot prove coverage of additional
+            # source prerequisites. Only the complete original may be retained;
+            # semantic publication review still checks its use in the claim.
+            return True if _asserted(
+                text, r"\s+".join(map(re.escape, source.split()))
+            ) else None
         outcome = (
             r"eliminates?\s+(?:all\s+)?(?:account\s+)?access|"
             r"lose\s+(?:all\s+)?(?:account\s+)?access|"
@@ -467,7 +541,8 @@ def _covered(text, row):
     if kind == "surviving_link":
         return bool(
             re.search(r"\blink\b|链接", text, re.I)
-            and _asserted(text, r"\bstill\b[^.!?]{0,50}\benabled\b|仍然?有效|仍可访问")
+            and _asserted(text, r"\bstill\b[^.!?]{0,50}\benabled\b|仍然?有效|仍可访问|"
+                          r"仍(?:然|将)?(?:保持)?启用")
             and set(map(tuple, row["events"])) <= _events(text)
             and re.search(r"\bleav\w*\b|离开", text, re.I)
         )
@@ -500,6 +575,97 @@ def _branch_covered(text, branch):
     return False
 
 
+def _cross_source_exception_rows(fact, other):
+    """Find specific originals in the caller's qualified current evidence view.
+
+    This relation never transfers a receipt or a capture scope between pages.
+    It requires the same explicit event, actor, object, role and plan context.
+    """
+    if (other.source_id == fact.source_id or other.competitor != fact.competitor
+            or other.dimension != fact.dimension or other.field != fact.field
+            or other.status != "supported" or fact.status != "supported"):
+        return ()
+    scopes = [row.qualifiers.get("source_scope") for row in (fact, other)]
+    if not all(isinstance(scope, dict) and scope.get("captured_page_id")
+               and scope.get("source_url")
+               and (not scope.get("raw_source_id") or scope["raw_source_id"] == row.source_id)
+               for row, scope in zip((fact, other), scopes, strict=True)):
+        return ()
+    if any(scopes[0].get("context", {}).get(key) != scopes[1].get("context", {}).get(key)
+           for key in ("role", "plan")):
+        return ()
+    roles = [
+        {str(operation["role"]).strip().casefold()
+         for operation in scope.get("operations", [])
+         if isinstance(operation, dict) and operation.get("role")}
+        for scope in scopes
+    ]
+    if roles[0] != roles[1]:
+        return ()
+    events = _events(fact.quote)
+    actors = [
+        _subjects(row.quote) | {event[0].removeprefix("remove_")
+                                for event in _events(row.quote) if event[0].startswith("remove_")}
+        for row in (fact, other)
+    ]
+    if actors[0] != actors[1] or not (actors[0] or roles[0]):
+        return ()
+    own_rules = source_exception_constraints(fact)
+    return tuple(row for row in source_exception_constraints(other)
+                 if row not in own_rules and row["quote"] in other.quote
+                 and events & set(map(tuple, row["events"])))
+
+
+def _pair_is_bound(claim, fact, other):
+    return (
+        {fact.id, other.id} <= set(getattr(claim, "fact_ids", ()))
+        and {fact.source_id, other.source_id} <= set(getattr(claim, "source_ids", ()))
+    )
+
+
+def verified_exception_binding(claim, facts):
+    """Allow exactly one general original plus its fully stated specific rule.
+
+    Callers still enforce allowed fact IDs, source qualification and exact claim
+    source IDs. This is only the narrow multiple-observation exception.
+    """
+    if (len(facts) != 2 or set(getattr(claim, "fact_ids", ())) != {f.id for f in facts}
+            or set(getattr(claim, "source_ids", ())) != {f.source_id for f in facts}):
+        return False
+    if not all(_covered(claim.text, row)
+               for fact in facts for row in source_exception_constraints(fact)):
+        return False
+    for fact, other in (facts, tuple(reversed(facts))):
+        rows = _cross_source_exception_rows(fact, other)
+        if rows and all(_covered(claim.text, row) for row in rows):
+            return True
+    return False
+
+
+def source_exception_bindings(facts):
+    """Expose verified candidate IDs; publication still replays both originals."""
+    from packages.research.evidence.snapshot_models import canonical_json
+
+    result = []
+    for fact in facts:
+        for other in facts:
+            rows = _cross_source_exception_rows(fact, other)
+            if not rows:
+                continue
+            pair = {"fact_ids": [fact.id, other.id],
+                    "source_ids": [fact.source_id, other.source_id],
+                    "source_exceptions": list(rows)}
+            identity = hashlib.sha256(canonical_json(pair).encode()).hexdigest()[:20]
+            result.append({"id": "exception-binding-" + identity, **pair})
+    return tuple(sorted(result, key=lambda row: row["id"]))
+
+
+def _constraint_identity(fact, row):
+    from packages.research.evidence.snapshot_models import canonical_json
+
+    return canonical_json([row, fact.source_id, fact.qualifiers.get("source_scope")])
+
+
 def claim_source_exception_reasons(claim, facts, *, available_facts=()):
     reasons = []
     for fact in facts:
@@ -519,6 +685,21 @@ def claim_source_exception_reasons(claim, facts, *, available_facts=()):
             ):
                 if receipt.get("kind") != "authentication_access" or _ACCESS.search(claim.text):
                     reasons.append("source_exception_unresolved")
+        # Equivalent observations can witness the same complete rule. Different
+        # quotes, branches or full source scopes still require their own binding.
+        cross_source = {}
+        for other in available_facts:
+            for row in _cross_source_exception_rows(fact, other):
+                if row["kind"] == "authentication_access" and not _ACCESS.search(claim.text):
+                    continue
+                identity = _constraint_identity(other, row)
+                witnesses = cross_source.setdefault(identity, (row, []))[1]
+                witnesses.append(other)
+        for row, witnesses in cross_source.values():
+            if not any(_pair_is_bound(claim, fact, other) for other in witnesses):
+                reasons.append("source_exception_unresolved")
+            elif row not in constraints:
+                constraints.append(row)
         # Legacy records have no capture receipt. A relevant admitted rule in the
         # same source can reveal unresolved closure, but cannot create a link.
         for other in available_facts:
@@ -593,8 +774,19 @@ def answer_source_exception_reasons(record, claims, *, facts=()):
     from types import SimpleNamespace
 
     originals = [fact for fact in facts if fact.id in selected_ids]
-    if claim_source_exception_reasons(SimpleNamespace(text=text), originals, available_facts=facts):
-        reasons.append("answer_source_exception_unpublished")
+    for published in selected:
+        clauses = [clause for clause in re.split(r"[.!?。！？;；\n]", published["text"])
+                   if clause.strip()]
+        if clauses and all(_CLARIFY.search(clause) for clause in clauses):
+            continue
+        bound_ids = set(published.get("fact_ids", ()))
+        bound = [fact for fact in facts if fact.id in bound_ids]
+        candidate = SimpleNamespace(
+            text=published["text"], fact_ids=tuple(bound_ids),
+            source_ids=tuple(published.get("source_ids", ())),
+        )
+        if claim_source_exception_reasons(candidate, bound, available_facts=facts):
+            reasons.append("answer_source_exception_unpublished")
     for fact in facts:
         if fact.id not in selected_ids:
             continue
@@ -698,7 +890,9 @@ def question_exception_fact_ids(question, facts):
     """Rank original exception observations for recall, without binding sources."""
     events = _events(question)
     broad = bool(re.search(r"取消共享|删掉|\bunshare\b|\bremove\b", question, re.I))
-    related_paths = bool(re.search(r"\b(?:copy|link|access)\b|副本|链接|看到|访问", question, re.I))
+    related_paths = bool(re.search(
+        r"\b(?:copy|link|access)\b|副本|链接|看不到|看到|访问", question, re.I
+    ))
     candidates = {}
     for fact in facts:
         for row in source_exception_constraints(fact):

@@ -98,7 +98,8 @@ def test_nearest_verified_service_section_does_not_mix_sibling_restrictions(sour
     unrelated = '\n'.join(f'Storage tier {index} requires a separate license.' for index in range(13))
     body = 'Billing\nService rules\nStorage service\n' + unrelated + '\nUsage service\n' + quote
     brief, candidate, page, result = extract(source, body, quote, headings=[
-        (1, 'Billing'), (2, 'Service rules'), (3, 'Storage service'), (3, 'Usage service')])
+        (1, 'Billing'), (2, 'Service rules'), (3, 'Storage service'), (3, 'Usage service')],
+        question='What are the Usage service billing rules for requests and CPU time?')
     assert result.fields
     field = next(iter(result.fields.values()))
     assert all('Storage tier' not in term for term in field['evidence_terms'])

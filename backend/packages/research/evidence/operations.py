@@ -649,8 +649,13 @@ def bound_operation_observation(claim, facts, products=()):
     if binding is None or claim.dimension != 'feature':
         return None
     values = binding.model_dump(mode='json')
-    if (claim.fact_ids != (binding.fact_id,) or claim.source_ids != (binding.source_id,)
-            or claim.competitor != binding.competitor or claim.dimension != binding.dimension):
+    if claim.fact_ids != (binding.fact_id,) or claim.source_ids != (binding.source_id,):
+        from packages.research.evidence.source_exceptions import verified_exception_binding
+        originals = [facts[fid] for fid in claim.fact_ids if fid in facts]
+        if (len(claim.fact_ids) != 2 or binding.fact_id not in claim.fact_ids
+                or not verified_exception_binding(claim, originals)):
+            return None
+    if claim.competitor != binding.competitor or claim.dimension != binding.dimension:
         return None
     fact = facts.get(binding.fact_id)
     if fact is None or fact.source_id != binding.source_id or fact.competitor != claim.competitor:

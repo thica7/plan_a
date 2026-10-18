@@ -78,7 +78,7 @@ async def test_second_review_sees_sent_but_unpublished_exception_without_publish
         facts=facts, compact={'evidence_view': {'facts': [{'id': 'f1'}, {'id': 'f2'}]}},
     )
     payloads = [json.loads(call['user'].split('\nJSON:\n')[1]) for call in reviewer.calls]
-    assert {fact['id'] for fact in payloads[0]['facts']} == {'f1'}
+    assert 'facts' not in payloads[0]
     assert {fact['id'] for fact in payloads[1]['facts']} == {'f1', 'f2'}
     assert next(fact['quote'] for fact in payloads[1]['facts'] if fact['id'] == 'f2') == quotes[1]
     assert [claim['id'] for claim in payloads[1]['claims']] == ['limit']

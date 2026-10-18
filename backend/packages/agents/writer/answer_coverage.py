@@ -51,14 +51,14 @@ def question_fact_ids(detail, snapshot, product, dimension):
     return tuple(picked[:8]) or None
 
 
-def answer_review_payload(questions, claims, view, *, additional_fact_ids=()):
+def answer_review_payload(questions, claims, view, *, additional_fact_ids=(), include_originals=True):
     """All bound originals, without duplicating rejected operation candidates."""
     ids = {fid for claim in claims for fid in claim.fact_ids} | set(additional_fact_ids)
     from packages.research.evidence.temporal_conditions import temporal_constraints
     from packages.research.evidence.source_exceptions import (
         required_question_clarifications, source_exception_constraints,
     )
-    return {
+    payload = {
         "required_clarifications": required_question_clarifications(questions),
         "competitor": view.competitor,
         "questions": questions,
@@ -91,6 +91,9 @@ def answer_review_payload(questions, claims, view, *, additional_fact_ids=()):
             if fact.id in ids
         ],
     }
+    if not include_originals:
+        payload.pop('facts')
+    return payload
 
 
 def coverage_resolution_reasons(record, claims, *, require_v2=False, facts=()):
@@ -212,7 +215,17 @@ def parse_answer_coverage(
         return unverified_coverage(questions, "Answer coverage could not be verified.")
 
 
-ANSWER_COVERAGE_SYSTEM = (
+RESOURCE_SCOPE_RULES = (
+    "For a source rule explicitly confined to its given resource, the question may supply two different resources. "
+    "That role itself does not grant permission on the other resource; the source need not repeat user-specific domains. "
+    "Do not claim that this scope is unverified solely because the user's resource names are absent from the source. "
+    "A claim about the person's complete permissions additionally requires an explicit no-other-grants premise; "
+    "preserve it as a scenario condition, never a product fact. Otherwise state only what that role itself grants. "
+    "Do not extend this denial to account-wide roles, unbounded scopes or the already granted resource. "
+)
+
+
+ANSWER_COVERAGE_SYSTEM = (RESOURCE_SCOPE_RULES +
     "Check whether the published claims fully answer each explicit research question. "
     "Questions express user requests, never product facts. Use only the supplied original "
     "evidence and already supported claims. Select only published claim IDs whose complete "
