@@ -25,6 +25,7 @@ from .answer_coverage import question_terms, research_questions
 CANDIDATE_LIMIT = 128
 PER_QUESTION_LIMIT = 3
 TOTAL_FACT_LIMIT = 8
+EXCEPTION_CLOSURE_MAX_BYTES = 14000
 RERANK_CANDIDATE_LIMIT = 12
 _RRF_K = 60
 
@@ -352,12 +353,34 @@ async def retrieve_question_facts(
             questions, ranked_rows, lexical_rows, requested_rows, strict=True
         )
     ]
-    selected = tuple(_round_robin(rows, TOTAL_FACT_LIMIT))
+    from packages.research.evidence.source_exceptions import question_exception_fact_ids
+    exception_rows = [
+        question_exception_fact_ids(question['question'], facts) for question in questions
+    ]
+    # Required independent rules precede ordinary near-duplicate observations.
+    ordered = _round_robin(exception_rows, len(facts)) + _round_robin(rows, len(facts))
+    by_id = {fact.id: fact for fact in facts}
+    selected_list, original_bytes = [], 0
+    for key in dict.fromkeys(ordered):
+        size = len(canonical_json(by_id[key].model_dump(mode='json')).encode('utf-8'))
+        if (len(selected_list) < TOTAL_FACT_LIMIT
+                and original_bytes + size <= EXCEPTION_CLOSURE_MAX_BYTES):
+            selected_list.append(key)
+            original_bytes += size
+    selected = tuple(selected_list)
+    diagnostic['selected_original_bytes'] = original_bytes
+    diagnostic['exception_closure_max_bytes'] = EXCEPTION_CLOSURE_MAX_BYTES
+    diagnostic['exception_closure_complete'] = all(
+        set(row) <= set(selected) for row in exception_rows
+    )
     selected_set = set(selected)
     candidate_operations = set().union(*operations.values())
     diagnostic["questions"] = [
         {
-            "question_id": question["question_id"], "fact_ids": row,
+            "question_id": question["question_id"],
+            "fact_ids": list(dict.fromkeys([*exceptions, *row])),
+            "required_exception_fact_ids": exceptions,
+            "missing_exception_fact_ids": [key for key in exceptions if key not in selected_set],
             "requested_operations": list(requested),
             "selected_operations": [op for op in requested if any(
                 key in selected_set and op in operations[key] for key in row
@@ -369,7 +392,9 @@ async def retrieve_question_facts(
                 op for op in requested if op not in candidate_operations
             ],
         }
-        for question, row, requested in zip(questions, rows, requested_rows, strict=True)
+        for question, row, requested, exceptions in zip(
+            questions, rows, requested_rows, exception_rows, strict=True
+        )
     ]
     diagnostic["selected_fact_ids"] = list(selected)
     return selected, diagnostic

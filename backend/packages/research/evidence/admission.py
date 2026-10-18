@@ -733,7 +733,7 @@ def has_concrete_source_signal(dimension: str, normalized_text: str) -> bool:
                 "developer", "customer", "enterprise", "team", "user", "家庭", "适合", "面向"
             )
         )
-    return bool(HARDWARE_SPEC_RE.search(normalized_text)) or any(
+    return source_rule_text_signal(normalized_text) or bool(HARDWARE_SPEC_RE.search(normalized_text)) or any(
         term in normalized_text for term in (
             "model", "api", "feature", "coding", "reasoning",
             "具备", "支持", "提供", "可更换", "包含", "supports", "provides", "offers",
@@ -834,7 +834,9 @@ def has_dimension_specific_fact(dimension: str, normalized_text: str) -> bool:
                 normalized_text,
             )
         )
-    return bool(HARDWARE_SPEC_RE.search(normalized_text)) or bool(
+    return source_rule_text_signal(normalized_text) or bool(
+        HARDWARE_SPEC_RE.search(normalized_text)
+    ) or bool(
         re.search(
             r"(?:supports|provides|includes|offers|can\s+(?:write|generate|explain|run)|"
             r"context window|context awareness|tool calls?|code completion|"

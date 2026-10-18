@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
+import json
 import os
 from contextlib import contextmanager
 from pathlib import Path
@@ -42,6 +44,41 @@ def diagnostic_environment(output):
             os.environ.pop("KB_RETRIEVAL_MODE", None)
         else:
             os.environ["KB_RETRIEVAL_MODE"] = previous
+
+
+@contextmanager
+def capture_archive(output):
+    """Archive complete pages in this isolated CLI process, preserving return values."""
+    from packages.research import pipeline
+
+    path = output / "pipeline-captures.json"
+    if path.exists():
+        raise FileExistsError("Never replace an existing capture archive")
+    records = []
+    write_redacted_json(path, records)
+    original = pipeline.capture_candidate
+
+    async def capture(candidate, *args, **kwargs):
+        page = await original(candidate, *args, **kwargs)
+        body = page.text or page.markdown or page.snippet
+        row = json.loads(redacted_json({
+            "candidate": candidate.model_dump(mode="json"),
+            "page": page.model_dump(mode="json"),
+            "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+        }))
+        exported = row["page"]
+        exported_body = exported["text"] or exported["markdown"] or exported["snippet"]
+        row["exported_body_sha256"] = hashlib.sha256(exported_body.encode()).hexdigest()
+        row["body_redacted"] = row["body_sha256"] != row["exported_body_sha256"]
+        records.append(row)
+        write_redacted_json(path, records)
+        return page
+
+    pipeline.capture_candidate = capture
+    try:
+        yield records
+    finally:
+        pipeline.capture_candidate = original
 
 
 def prepare_inputs(path: Path, *, input_hash=None, registry_hash=None):
@@ -158,8 +195,9 @@ async def run_live(payloads, manifest, output, *, timeout=600, capture_only=Fals
                                              "verification": verify_registered_capture(case["product"], page)})
                     write_redacted_json(output / "captures.json", captures)
                 else:
-                    async with asyncio.timeout(timeout):
-                        await execute_stages(service, record, payloads)
+                    with capture_archive(output):
+                        async with asyncio.timeout(timeout):
+                            await execute_stages(service, record, payloads)
         except Exception as exc:
             error_type, error_reason = type(exc).__name__, _redact(str(exc))
         finally:

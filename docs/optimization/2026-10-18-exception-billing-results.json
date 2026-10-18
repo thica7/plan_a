@@ -1,0 +1,660 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-18",
+  "phase": "exception_billing_exposed_development_regression",
+  "production_code_sha256": "9d12c3173cdb1df2b313c8a023022f243b2b02c243b52bcd702487ad6e3f2488",
+  "freeze_files_sha256": {
+    "backend/packages/research/evidence/source_exceptions.py": "6e12dd30992fbb6932678b3a359678209b8ee382c94555ad84e860b2f8b1cfed",
+    "backend/packages/research/extraction/billing_rules.py": "a66ae427546940578308b19578e17c39596663621ad956716f9a5d1bb07c082a",
+    "backend/packages/agents/writer/price_answers.py": "fd5020dadd5d6d0deda18be024b663d941f15b31f70772552c4133d54d2dfb69",
+    "backend/scripts/eval_official_writer.py": "f44453f8a0d553ca8652c87f03235968feb64d801c475991fe1ef174d0ac48ba",
+    "backend/tests/unit/test_source_exception_closure.py": "ec84235ef9aaabaa5bb9bb058045d32328a39be87268a55781cd38ee5aa564cd",
+    "backend/tests/unit/test_billing_rule_context.py": "6377e1a43d4d19e848da57740431a1376474bede938948f5be262d3babf728ce",
+    "backend/tests/unit/test_billing_semantic_admission.py": "127a3c81b90110cbb0da4abf1bc9f6d4a5f2e253d02ce7f8741cabf1ac0c8e39",
+    "backend/tests/unit/test_incomplete_quote_answers.py": "7c17b8cbaafad2be6ef5db9316e4324d35a3346bf6682165a5926618c4c9b1fa",
+    "backend/tests/unit/test_diagnostic_capture_archive.py": "c51d2884d5f28b26a95c152f0868ce9f7412146dd6cda0414206f75ca7204950",
+    "backend/tests/unit/test_source_scope_capabilities.py": "40ecd98c8dceed9bacd4f06f369a4f8c5558a39c69e351f6300138fbda7eeea7",
+    "backend/packages/research/evidence/capabilities.py": "b0bc3e8b180acba2a513aa6e4bbdf6c1c0ed1dfd48882b30cafdc9c2405f0dc1",
+    "backend/tests/unit/test_answer_coverage.py": "f77abdf16f386bc1feb0be1ae83e1cb0efc2eb580d4a6d4ba42a781274688141",
+    "backend/tests/unit/test_answer_selection_contract.py": "bc3d6b57dc6be4fdbf54facb8db31307745bc7f93c8b448dc23844f32050b95b",
+    "backend/tests/unit/test_filtered_writer_qa.py": "45dbecc69a0717d1dadb29f6344cb8ea415f20627e8e57105871f7afd0344719",
+    "backend/tests/unit/test_semantic_writer_projection.py": "4f2c9c365a10aaf6cd38a34bc76df09498e0e06059e0dbd596de02884bf900c2",
+    "backend/tests/integration/test_dual_context_agent_alignment.py": "cfb43b0722cf8b129aeadef5ae4b32427277f4995a139fe74db369a80989ed28",
+    "backend/packages/agents/writer/answer_coverage.py": "ae123e2aef9441cbcfe803ba03eb01765925500271168217cbdf48de0484b356",
+    "backend/packages/agents/writer/dimension_writer.py": "79dea5930c429b5793fbc699fe54d1f3a6a814e8718289a06d99d89606c41dd3",
+    "backend/packages/orchestrator/evidence_context.py": "855710a171eda0de22ffef7b54dd37c00522cb5851490fa24bc4c33d39687998",
+    "backend/packages/research/question_evidence.py": "02be0374028f23f4fa2299e52c8255cd9be37f023adbfd0ce3a52fd3e3287610",
+    "backend/packages/research/extraction/semantic.py": "dafdcff140256c6672fedca497dc8b94edb7b6154026312a83ac050f7180e4e5",
+    "backend/packages/research/evidence/admission.py": "4c37a78c54739a35ce69d79e2644fde539e860f236a46795309618ab858511b7",
+    "backend/scripts/eval_live_products.py": "75d47141cdb7c9be3139c6403a94b59c14471241e62d81ad1c29c235d657b3c3",
+    "backend/scripts/export_agent_eval.py": "cbc7e69d355dfe2563119259a211cb37d288722c068396e58849d07ee8af31bc",
+    "backend/tests/unit/test_writer_question_preservation.py": "6f1154719f17faa76040c1fc7082de587c2ea97dcddeb21526bb7e2a98b2d12e",
+    "backend/tests/unit/test_answer_semantic_review.py": "62700685ec6f67d332567b1b9286d76fc8857e9b1b18ab6613502622a63ea3ce",
+    "backend/tests/unit/test_question_rule_extraction.py": "fe3f3fb4b740cdff621ed1f922b40d3b38a96ed18cfb73a88f698084702651f4",
+    "backend/tests/unit/test_export_redaction_boundaries.py": "18c609dba7c11debd1bdf7f5e6663ef2129d7c06ce96aedf8d2106555fa6add2",
+    "backend/packages/agents/writer/answer_resolution.py": "2bcfc45f6ca8fa67ef07d9fbb3c5a5bb2b1012066613996dd5fab706583dbedc",
+    "backend/packages/agents/writer/question_retrieval.py": "70ad3fdd50cb5d7c5d00d6105e41105dd166c7acaed04495a28eefeab39a5420",
+    "backend/packages/research/evidence/normalization.py": "6caa8e67c4a9ac0d6d319c7c5fd129de5ac2f3502c581d10880e5b109de51e45",
+    "backend/packages/research/evidence/source_conditions.py": "8f8883dcf5959d764df984054d44a7c2185fe80c521879a49bd3b858bef77943",
+    "backend/packages/research/evidence/report_claims.py": "c9363ca9f8ba2b0269987b969733d12b44af2941f4c4e1385b3ed08eb440bd46",
+    "backend/packages/business_intel/official_sources.json": "c30b17249671c9c5fcfdfe3eddb7515df562431b2feb0326814af9f93828d5cc",
+    "backend/scripts/eval_answer_official.py": "059e0b5d1c69814cba5e05979aec33434af17cebad85ca38efe261e170ce0241",
+    "backend/tests/unit/test_chinese_conditional_resolution.py": "08448770666fa95e0b268d629fbf4fd81da70c77b18afe70908da3b2a1b6944d",
+    "backend/tests/unit/test_question_operation_selection.py": "e4ca41ecedab8547d5aef7374c9cdf4181e44cfbfc59c1de6ead6d6423e5e424",
+    "backend/tests/unit/test_source_condition_integrity.py": "af0606d8dd9bc15ada4720c8b29b7b3c203c4d02c60804b57cf587e4553de864",
+    "docs/optimization/2026-10-18-independent-answer-evaluation-protocol.md": "18adcf88efd12927ed3e2fb352139ef44b49832461986843871fe626a23198dc",
+    "eval/agent-readiness-holdout-v1-reviewed.jsonl": "d3f36c6f50e530c74110a1eae8bbc7688e018c1235cc192a761864b1a61e58e3",
+    "eval/agent-readiness-holdout-v1-reviewed-manifest.json": "46bb14345d79c5e14eff4777eb7bbdf51f20fd0279bafec30cfef11c151cce1b",
+    "eval/agent-readiness-trajectory-review-v1-reviewed.json": "26f204f961eafef4db8c572f2fb178687bd993a37cf51ef5f2d70326653552db"
+  },
+  "launch_wrapper_sha256": "73d8962db8ee13680869ca3a5f0882c6d3dafffe746a53ccc1c3fd150947df23",
+  "freeze_script_sha256": "5b44930c2e03c8fe8f29ae0a84d9890f0cd8d47db3a580b84ed65c4f4022c269",
+  "reference_dataset_sha256": "d3f36c6f50e530c74110a1eae8bbc7688e018c1235cc192a761864b1a61e58e3",
+  "human_review": {
+    "reference_cases": 8,
+    "trajectory_labels": 3,
+    "reviewed_dataset_unchanged": true,
+    "reference_approval_is_report_acceptance": false,
+    "new_reports_user_accepted": 0,
+    "rewards_assigned": false,
+    "training_ready": false
+  },
+  "verification": {
+    "backend": {
+      "passed": 5537,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 179.48
+    },
+    "first_full_run": {
+      "passed": 5517,
+      "failed": 3,
+      "skipped": 1,
+      "seconds": 179.74,
+      "reason": "source_scope provenance was incorrectly treated as a business condition; original assertions retained"
+    },
+    "before_complete_block_fix_full_run": {
+      "passed": 5533,
+      "skipped": 1,
+      "seconds": 174.06,
+      "replaced_by_final_run": true
+    },
+    "new_anonymous_tests": {
+      "source_exception_closure": 64,
+      "billing_rule_context": 37,
+      "billing_semantic_admission": 40,
+      "incomplete_quote_answers": 32,
+      "diagnostic_capture_archive": 3,
+      "source_scope_capabilities": 1,
+      "total": 177,
+      "included_in_backend_total": true
+    },
+    "spec_quality_unresolved_important_within_implementation_contracts": 0,
+    "review_scope": "Implementation contracts only; real content blockers below remain unresolved.",
+    "frontend": {
+      "changed": false,
+      "rerun_this_phase": false
+    },
+    "openapi": "fresh export byte-identical",
+    "openapi_sha256": "39514142c2f35c753442ae7ec559840757633840cd446315ef53e0b95b3d513e",
+    "changed_python_ruff": "E9,F passed",
+    "diff_check": "passed",
+    "secret_scan": {
+      "scope": "literal current configured credentials in nonignored text sources/docs/eval, built frontend and specified acceptance artifacts; excludes secret env bodies and Git history",
+      "configured_credential_count": 1,
+      "files_scanned": 1343,
+      "actual_secret_hit_paths": [],
+      "tracked_secret_config_paths": [],
+      "status": "pass"
+    }
+  },
+  "live_diagnostics": {
+    "runs": [
+      {
+        "product": "Bitwarden",
+        "run_id": "run-0fd32e4cae18480583a9206c5858b7c3",
+        "case_ids": [
+          "agent-readiness-holdout-v1-001",
+          "agent-readiness-holdout-v1-002"
+        ],
+        "artifact_directory": "data/artifacts/exception-billing-2026-10-18/regression-bitwarden",
+        "status": "execution_complete",
+        "error_type": null,
+        "production_code_sha256": "9d12c3173cdb1df2b313c8a023022f243b2b02c243b52bcd702487ad6e3f2488",
+        "manifest_sha256": "c5b1e9d43edccffa7ecf44a6e4f7a6b3cc45c2310d09d30b9acbbdfba2262fe6",
+        "source_count": 3,
+        "snapshot_facts": 78,
+        "runtime_report_characters": 1444,
+        "saved_report_characters": 1444,
+        "saved_report_sha256": "7c1d02d22e82f4264af74733813636aa1e49ee3629c82a5ba8d9cbb3ca9bbad1",
+        "run_sha256": "7419844a4eb871ccba80506b7c3a687467ba2f76ab26b30d68413aa197bcd274",
+        "summary_sha256": "7cdc46b0391fe3bcd6b752bb2e9a7c2cfa020618b33f9000037772f18f87f401",
+        "body_is_redaction_placeholder": false,
+        "saved_report_matches_saved_run": true,
+        "llm_transport_attempts": 10,
+        "provider_tokens": 37204,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 3
+        },
+        "qa_llm_names": {
+          "dimension_claim_review": 1,
+          "dimension_answer_coverage": 1,
+          "dimension_answer_review": 1
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false
+      },
+      {
+        "product": "1Password",
+        "run_id": "run-60c6cbced8f04a7bad69642bd0fde63d",
+        "case_ids": [
+          "agent-readiness-holdout-v1-003",
+          "agent-readiness-holdout-v1-004"
+        ],
+        "artifact_directory": "data/artifacts/exception-billing-2026-10-18/regression-1password",
+        "status": "execution_complete",
+        "error_type": null,
+        "production_code_sha256": "9d12c3173cdb1df2b313c8a023022f243b2b02c243b52bcd702487ad6e3f2488",
+        "manifest_sha256": "ae46550b50421be7578cdfee207f0ced2aed6b3341a70ef7600bbf61bc5b8b54",
+        "source_count": 1,
+        "snapshot_facts": 21,
+        "runtime_report_characters": 1139,
+        "saved_report_characters": 1139,
+        "saved_report_sha256": "81b574eb891c0e61a385f759088a1194891625b3af768462fa9ba1b9ec11ba19",
+        "run_sha256": "d6ee4f3333e1cc44edd45f6457d43cc5cc923e5704fae6030e4bab7d38bdc756",
+        "summary_sha256": "f9cab2323ef15bbcfe82e8dded22d2cd453c88d9f43ca0b95a1549c615372a6d",
+        "body_is_redaction_placeholder": false,
+        "saved_report_matches_saved_run": true,
+        "llm_transport_attempts": 10,
+        "provider_tokens": 36288,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 0,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 3
+        },
+        "qa_llm_names": {
+          "dimension_claim_review": 1,
+          "dimension_answer_coverage": 1,
+          "dimension_answer_review": 1
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false
+      },
+      {
+        "product": "Dropbox",
+        "run_id": "run-14022dd47cd34466bc1843fd68109fab",
+        "case_ids": [
+          "agent-readiness-holdout-v1-005",
+          "agent-readiness-holdout-v1-006"
+        ],
+        "artifact_directory": "data/artifacts/exception-billing-2026-10-18/regression-dropbox",
+        "status": "execution_complete",
+        "error_type": null,
+        "production_code_sha256": "9d12c3173cdb1df2b313c8a023022f243b2b02c243b52bcd702487ad6e3f2488",
+        "manifest_sha256": "485e9298ef364e834940c232c2cfbb92f8e366cb27e11430ec880412286e2a8f",
+        "source_count": 2,
+        "snapshot_facts": 63,
+        "runtime_report_characters": 1001,
+        "saved_report_characters": 1001,
+        "saved_report_sha256": "4467b1052ea213a4c602cb263b959d96d8b13bb333b4cb8e3f9ad614f6955a8e",
+        "run_sha256": "94fcb6de5078311307161c6f8578efe59538924995348543a5175e1803e19b15",
+        "summary_sha256": "68530ab3e0195d1da019bf5d137f6aea246510d49f111133b537c4c00c0521d6",
+        "body_is_redaction_placeholder": false,
+        "saved_report_matches_saved_run": true,
+        "llm_transport_attempts": 10,
+        "provider_tokens": 38401,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 3
+        },
+        "qa_llm_names": {
+          "dimension_claim_review": 1,
+          "dimension_answer_coverage": 1,
+          "dimension_answer_review": 1
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false
+      },
+      {
+        "product": "Cloudflare",
+        "run_id": "run-0dd53bec47104751bd57da9ed81a1402",
+        "case_ids": [
+          "agent-readiness-holdout-v1-007",
+          "agent-readiness-holdout-v1-008"
+        ],
+        "artifact_directory": "data/artifacts/exception-billing-2026-10-18/regression-cloudflare",
+        "status": "execution_complete",
+        "error_type": null,
+        "production_code_sha256": "9d12c3173cdb1df2b313c8a023022f243b2b02c243b52bcd702487ad6e3f2488",
+        "manifest_sha256": "e0a18a50990687422d45435a14dd8b973a775df0587c1c89db7cc4323bac70ad",
+        "source_count": 1,
+        "snapshot_facts": 45,
+        "runtime_report_characters": 1255,
+        "saved_report_characters": 1255,
+        "saved_report_sha256": "4ffdda0b87ff81d49b639cc198a5bc13da88e5854d37a91f9c45f40c0150bef5",
+        "run_sha256": "87f6bf2b722b4469762710989b03ef2541d72fb5a544a533183c282a28174530",
+        "summary_sha256": "260a69760675ebd0dde36d2865aedc443683299668b77344aab643f7b527e0cb",
+        "body_is_redaction_placeholder": false,
+        "saved_report_matches_saved_run": true,
+        "llm_transport_attempts": 10,
+        "provider_tokens": 39868,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 3
+        },
+        "qa_llm_names": {
+          "dimension_claim_review": 1,
+          "dimension_answer_coverage": 1,
+          "dimension_answer_review": 1
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false
+      }
+    ],
+    "transport_attempts_total": 40,
+    "provider_tokens_total": 151761,
+    "provider_usage_unknown_spans": 0,
+    "once_per_group": true,
+    "max_calls_per_group": 24,
+    "max_tokens_per_group": 80000,
+    "max_output_tokens": 2048,
+    "model_retries": 0,
+    "actual_models": [
+      "deepseek-flash"
+    ],
+    "all_core_stages_actual_llm": true,
+    "canonical_mode": "isolated sparse diagnostic storage",
+    "writer_ranking": "existing local-e5, strict and offline",
+    "external_embedding_calls": 0,
+    "search_calls": 0,
+    "weights_downloaded": 0,
+    "planner_full_graph_acceptance": false,
+    "http_qdrant_temporal_redis_deployment_acceptance": false
+  },
+  "capture_archives": {
+    "completed_captures": 9,
+    "archives": [
+      {
+        "product_group": "bitwarden",
+        "archive_file": "data/artifacts/exception-billing-2026-10-18/regression-bitwarden/pipeline-captures.json",
+        "captures": [
+          {
+            "candidate_id": "source-candidate-69831a789e5de36e5a0b",
+            "capture_id": "captured-page-7542da3f061ee406cdf1",
+            "url": "https://bitwarden.com/help/remove-users/",
+            "status": "ok",
+            "fetch_method": "basic_httpx",
+            "source_material_level": "full_source",
+            "content_hash": "a6fb93d2817cb886",
+            "body_characters": 3142,
+            "heading_count": 4,
+            "body_sha256": "a6fb93d2817cb8863d172b4fa7c3d5f385efa0cc78b39da868a1c9256acd716b",
+            "exported_body_sha256": "a6fb93d2817cb8863d172b4fa7c3d5f385efa0cc78b39da868a1c9256acd716b",
+            "body_redacted": false
+          },
+          {
+            "candidate_id": "source-candidate-b164e03a86491f34ecb4",
+            "capture_id": "captured-page-6cc1d7c60c3e0e140da8",
+            "url": "https://bitwarden.com/help/password-manager-plans/",
+            "status": "ok",
+            "fetch_method": "basic_httpx",
+            "source_material_level": "full_source",
+            "content_hash": "bfd3616bd2bb046b",
+            "body_characters": 7022,
+            "heading_count": 13,
+            "body_sha256": "bfd3616bd2bb046bc61a7543f8a628c74ac9313d8d60c16dd3eae241ecad2fb8",
+            "exported_body_sha256": "bfd3616bd2bb046bc61a7543f8a628c74ac9313d8d60c16dd3eae241ecad2fb8",
+            "body_redacted": false
+          },
+          {
+            "candidate_id": "source-candidate-31c87c50c750c8ad77e1",
+            "capture_id": "captured-page-24942943dcd70c43edf9",
+            "url": "https://bitwarden.com/help/delete-member-accounts/",
+            "status": "ok",
+            "fetch_method": "basic_httpx",
+            "source_material_level": "full_source",
+            "content_hash": "4b369da82acf7931",
+            "body_characters": 1473,
+            "heading_count": 4,
+            "body_sha256": "4b369da82acf793105141386b833e6b4fe034eb05aec4a6d8c771f1b5abb830a",
+            "exported_body_sha256": "be65443112bdf3df2f095233adad13e79a96295ae3b42ebd2bedd811462d02a9",
+            "body_redacted": true
+          }
+        ]
+      },
+      {
+        "product_group": "1password",
+        "archive_file": "data/artifacts/exception-billing-2026-10-18/regression-1password/pipeline-captures.json",
+        "captures": [
+          {
+            "candidate_id": "source-candidate-92ef7a341e254a59eaf1",
+            "capture_id": "captured-page-f71d2aedc2d409404185",
+            "url": "https://support.1password.com/guests/",
+            "status": "ok",
+            "fetch_method": "basic_httpx",
+            "source_material_level": "full_source",
+            "content_hash": "48266990555bee8b",
+            "body_characters": 2133,
+            "heading_count": 7,
+            "body_sha256": "48266990555bee8bc0f00fd5580df551e82f6660e80e3f711d0e6d2847433b92",
+            "exported_body_sha256": "48266990555bee8bc0f00fd5580df551e82f6660e80e3f711d0e6d2847433b92",
+            "body_redacted": false
+          },
+          {
+            "candidate_id": "source-candidate-46e7b6247568b1f54f2f",
+            "capture_id": "captured-page-791bc38d3aad73f4d2a0",
+            "url": "https://1password.com/pricing",
+            "status": "ok",
+            "fetch_method": "basic_httpx",
+            "source_material_level": "full_source",
+            "content_hash": "646f516814bafe92",
+            "body_characters": 2258,
+            "heading_count": 26,
+            "body_sha256": "646f516814bafe92926050e3b5cc37920d98bf7649174beb88700061f8c6f0c8",
+            "exported_body_sha256": "646f516814bafe92926050e3b5cc37920d98bf7649174beb88700061f8c6f0c8",
+            "body_redacted": false
+          }
+        ]
+      },
+      {
+        "product_group": "dropbox",
+        "archive_file": "data/artifacts/exception-billing-2026-10-18/regression-dropbox/pipeline-captures.json",
+        "captures": [
+          {
+            "candidate_id": "source-candidate-a2b525e1b029edefa86a",
+            "capture_id": "captured-page-a4a3e943290f24bc85b0",
+            "url": "https://help.dropbox.com/share/set-file-folder-permissions",
+            "status": "ok",
+            "fetch_method": "webfetch_v2:static",
+            "source_material_level": "full_source",
+            "content_hash": "90c4e0c8bd2928ca",
+            "body_characters": 9144,
+            "heading_count": 19,
+            "body_sha256": "90c4e0c8bd2928caba2460f3f7bc164f6a657176dd5750f237ad164bb1c101ee",
+            "exported_body_sha256": "90c4e0c8bd2928caba2460f3f7bc164f6a657176dd5750f237ad164bb1c101ee",
+            "body_redacted": false
+          },
+          {
+            "candidate_id": "source-candidate-60823611b92f7caed3db",
+            "capture_id": "captured-page-c787caa76524858ae949",
+            "url": "https://help.dropbox.com/share/unshare-folder",
+            "status": "ok",
+            "fetch_method": "webfetch_v2:static",
+            "source_material_level": "full_source",
+            "content_hash": "57b7c03d6c222ac6",
+            "body_characters": 5520,
+            "heading_count": 12,
+            "body_sha256": "57b7c03d6c222ac6e331d05800dfcfb3564e8165ee24103281544697b6b7fac9",
+            "exported_body_sha256": "57b7c03d6c222ac6e331d05800dfcfb3564e8165ee24103281544697b6b7fac9",
+            "body_redacted": false
+          }
+        ]
+      },
+      {
+        "product_group": "cloudflare",
+        "archive_file": "data/artifacts/exception-billing-2026-10-18/regression-cloudflare/pipeline-captures.json",
+        "captures": [
+          {
+            "candidate_id": "source-candidate-4e924570746695583588",
+            "capture_id": "captured-page-ffcab66db4d81556b3ed",
+            "url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+            "status": "ok",
+            "fetch_method": "basic_httpx",
+            "source_material_level": "full_source",
+            "content_hash": "f3919b3168f9f503",
+            "body_characters": 13338,
+            "heading_count": 5,
+            "body_sha256": "f3919b3168f9f50328d5943b6f6d925875aef16b3da61426a87e96613370d18c",
+            "exported_body_sha256": "f3919b3168f9f50328d5943b6f6d925875aef16b3da61426a87e96613370d18c",
+            "body_redacted": false
+          },
+          {
+            "candidate_id": "source-candidate-484dffddae603b05dc06",
+            "capture_id": "captured-page-609467a4aec2a444943d",
+            "url": "https://developers.cloudflare.com/workers/platform/pricing/",
+            "status": "ok",
+            "fetch_method": "basic_httpx",
+            "source_material_level": "full_source",
+            "content_hash": "c1b03d385d3b47d6",
+            "body_characters": 22435,
+            "heading_count": 31,
+            "body_sha256": "c1b03d385d3b47d6f05aa8ca2cca61940bb31843f4f11f6c7aec97ec605f8257",
+            "exported_body_sha256": "c1b03d385d3b47d6f05aa8ca2cca61940bb31843f4f11f6c7aec97ec605f8257",
+            "body_redacted": false
+          }
+        ]
+      }
+    ],
+    "all_exported_body_hashes_verified": true,
+    "body_redacted_count": 1,
+    "unredacted_full_body_replay_count": 8,
+    "redacted_body_limitation": "delete-member-accounts has different original/exported body hashes; do not claim byte-identical original replay for that page."
+  },
+  "independent_content_review": {
+    "review_type": "read-only independent AI review, not user acceptance",
+    "blind_holdout": false,
+    "exposed_development_regression": true,
+    "generalization_accuracy_claimed": false,
+    "body": {
+      "correct": 3,
+      "error": 3,
+      "omitted": 2
+    },
+    "answer_records": {
+      "correct": 3,
+      "omitted": 4,
+      "error": 1
+    },
+    "cases": [
+      {
+        "id": "agent-readiness-holdout-v1-001",
+        "product": "Bitwarden",
+        "body_verdict": "correct",
+        "answer_record_verdict": "correct",
+        "summary": "免费组织人数与collections限制完整，否定结论及引用成立。",
+        "user_accepted": false,
+        "reward": null,
+        "training_ready": false
+      },
+      {
+        "id": "agent-readiness-holdout-v1-002",
+        "product": "Bitwarden",
+        "body_verdict": "error",
+        "answer_record_verdict": "omitted",
+        "summary": "正文仍用另一官方页的一般主密码条件保证移除后可登录，未合并本批remove-users的具体SSO前提；My Items归属未明示，问题记录仍占位。",
+        "user_accepted": false,
+        "reward": null,
+        "training_ready": false
+      },
+      {
+        "id": "agent-readiness-holdout-v1-003",
+        "product": "1Password",
+        "body_verdict": "omitted",
+        "answer_record_verdict": "omitted",
+        "summary": "结论为否，但实际发表主张仅包括邀请和升级角色；单库及无Private限制藏在未发表事实和审核理由中，不能补足答案。",
+        "user_accepted": false,
+        "reward": null,
+        "training_ready": false
+      },
+      {
+        "id": "agent-readiness-holdout-v1-004",
+        "product": "1Password",
+        "body_verdict": "correct",
+        "answer_record_verdict": "correct",
+        "summary": "已具体答复市场、产品组合与套餐、计费周期缺项，不挪其他SKU价格；未取得当前定制报价及本批定价机制证据。",
+        "user_accepted": false,
+        "reward": null,
+        "training_ready": false
+      },
+      {
+        "id": "agent-readiness-holdout-v1-005",
+        "product": "Dropbox",
+        "body_verdict": "correct",
+        "answer_record_verdict": "correct",
+        "summary": "直接Can view仍可下载，未与共享链接混淆。",
+        "user_accepted": false,
+        "reward": null,
+        "training_ready": false
+      },
+      {
+        "id": "agent-readiness-holdout-v1-006",
+        "product": "Dropbox",
+        "body_verdict": "error",
+        "answer_record_verdict": "omitted",
+        "summary": "已发表所有者取消共享条件仍漏两项例外，副本、链接和操作分支没有进入问题回答。",
+        "user_accepted": false,
+        "reward": null,
+        "training_ready": false
+      },
+      {
+        "id": "agent-readiness-holdout-v1-007",
+        "product": "Cloudflare",
+        "body_verdict": "omitted",
+        "answer_record_verdict": "omitted",
+        "summary": "已有特定域名和角色作用域规则，仍过度保守，未给出不能据此跨域的回答。",
+        "user_accepted": false,
+        "reward": null,
+        "training_ready": false
+      },
+      {
+        "id": "agent-readiness-holdout-v1-008",
+        "product": "Cloudflare",
+        "body_verdict": "error",
+        "answer_record_verdict": "error",
+        "summary": "有安全不足答复，但未保留CPU缺项，重复要求确认已给的Paid/Standard；正文把未准入扩大成未捕获且引用角色页。",
+        "user_accepted": false,
+        "reward": null,
+        "training_ready": false
+      }
+    ],
+    "partial_report_content_candidates": 0,
+    "full_scope_complete_reports": 0,
+    "new_reports_user_accepted": 0,
+    "overall_improvement_established": false,
+    "prior_body": {
+      "correct": 4,
+      "error": 2,
+      "omitted": 2
+    },
+    "comparison_is_controlled_ab": false,
+    "review_artifacts": [
+      "data/artifacts/exception-billing-2026-10-18/semantic-review-a.json",
+      "data/artifacts/exception-billing-2026-10-18/semantic-review-b.json"
+    ]
+  },
+  "current_release_blockers": [
+    "Duplicate exception receipts inflate individual SSO facts beyond the 14000-byte retrieval budget; specific exceptions also fail to bind across separately admitted official documents.",
+    "A trailing procedural colon causes the complete Dropbox exception group to be discarded; the two-line fallback is mistaken for a complete one-branch exception.",
+    "Answer coverage still uses unstated facts or review reasons, and can abstain despite sufficient scoped rules.",
+    "Billing window selection favors the wrong service; capture/admission/view absence scopes are conflated.",
+    "Usage quote scope parsing loses declared Paid/Standard and cannot name CPU when its evidence was never admitted."
+  ],
+  "old_artifacts": {
+    "files_unchanged": 98,
+    "directories": [
+      "data/artifacts/conditional-evidence-2026-10-18",
+      "data/artifacts/answer-preservation-2026-10-18"
+    ]
+  },
+  "release_ready": false,
+  "reports_reach_delivery_standard": false,
+  "reward": null,
+  "training_ready": false,
+  "training_performed": false,
+  "docker_executed": false,
+  "postrun_diagnosis": {
+    "cloudflare": {
+      "verified_headings": 0,
+      "captured_heading_entries": 31,
+      "actual_window_start": 9757,
+      "actual_window_characters": 11923,
+      "initial_window_characters": 11729,
+      "target_standard_row_offset": 1013,
+      "target_standard_row_characters": 346,
+      "target_row_sent_to_model": false,
+      "model_selections": 6,
+      "accepted_semantic_fields": 0,
+      "root_causes": [
+        "Four repeated Footnotes body occurrences vs one metadata entry invalidate the entire verified-heading list.",
+        "Rule count breaks a query-term tie in favor of a cross-service window; Standard storage in R2 falsely matches Standard usage mode.",
+        "Whole-window condition budgets, omitted original bullet markers and oversized conditional groups reject the six selected observations."
+      ],
+      "not_caused_by": [
+        "network failure",
+        "model transport failure",
+        "stage budget exhaustion"
+      ],
+      "private_diagnostic": "data/artifacts/exception-billing-2026-10-18/billing-postrun-diagnosis.json",
+      "private_diagnostic_sha256": "0875a64b0d5c7da900c41bb951b45564f2b053f347fc43553fee5ad8a1898d3e"
+    },
+    "exceptions": {
+      "bitwarden": {
+        "complete_sso_fact_bytes": 20055,
+        "wrapped_sso_fact_bytes": 21262,
+        "qualifiers_bytes": 15567,
+        "duplicate_receipts_per_fact": 10,
+        "retrieval_byte_budget": 14000,
+        "complete_sso_facts_missing_from_selection": true,
+        "cross_source_general_claim_is_not_blocked_even_with_complete_snapshot": true
+      },
+      "dropbox": {
+        "document_section": [
+          2251,
+          3635
+        ],
+        "section_contains_all_three_exceptions": true,
+        "complete_group_characters": 1351,
+        "trailing_procedural_lead": "To unshare a folder:",
+        "actual_cause": "complete_rule_blocks discards the whole group because it ends with a colon; fallback keeps only the first exception",
+        "heading_split_was_not_the_cause": true,
+        "rich_fact_bytes": 14788,
+        "rich_fact_over_retrieval_budget": true,
+        "inactive_branch_admitted_but_not_recognized": true,
+        "valid_chinese_copy_and_link_drafts_rejected": true,
+        "additional_causes": [
+          "Cross-action context constraint spill",
+          "Finite Chinese phrasing aliases fail to recognize valid copy, synchronization and active-link statements",
+          "The visibility wording was not consistently recognized as an access-path clarification hint"
+        ]
+      },
+      "private_diagnostic": "data/artifacts/exception-billing-2026-10-18/exception-postrun-diagnosis.json",
+      "private_diagnostic_sha256": "7853d2aa69fbde66d662b83b0f583fd042fdc9cdb8d87e0e766dc1f62f3626d3"
+    }
+  }
+}

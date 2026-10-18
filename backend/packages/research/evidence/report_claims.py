@@ -294,6 +294,8 @@ def claim_rule_reasons(claim, view, boundaries):
         reasons.extend(claim_temporal_condition_reasons(claim, content))
         from packages.research.evidence.source_conditions import claim_source_condition_reasons
         reasons.extend(claim_source_condition_reasons(claim, content))
+        from packages.research.evidence.source_exceptions import claim_source_exception_reasons
+        reasons.extend(claim_source_exception_reasons(claim, content, available_facts=view.facts))
         observations = {(f.source_id, f.competitor, f.dimension, f.evidence_item_ids, f.quote) for f in known}
         if len({f.id for f in content}) > 1 or len(observations) > 1:
             reasons.append('feature_claim_multiple_observations')

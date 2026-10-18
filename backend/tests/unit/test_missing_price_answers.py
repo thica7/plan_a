@@ -183,11 +183,10 @@ def test_matching_price_on_feature_dimension_is_still_checked_in_full_snapshot()
         "Example Product 的 Pro 套餐支持自定义合并规则吗？",
         "Example Product 的 Pro 套餐按月还是按年计费？",
         "Example Product: How does monthly billing work in China?",
-        "Example Product 当前价格是多少？",
         "Example Product 的 Pro 套餐在中国的含税人民币月费是多少？截至 2026-99-99。",
     ],
 )
-def test_features_billing_mechanisms_or_unknown_quote_scope_are_not_auto_answered(question):
+def test_features_billing_mechanisms_and_invalid_dates_are_not_auto_answered(question):
     detail, snapshot, _ = price_case(money=False)
     assert answer(detail, snapshot, question) == {}
 

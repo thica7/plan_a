@@ -58,14 +58,15 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
             from packages.agents.writer.price_answers import server_missing_price_answers
             from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
             price_answers = server_missing_price_answers(record.detail, snapshot, questions, audit.competitor)
-            def answer_invalid(item):
+            def answer_invalid(item, *, require_v2=audit.answer_binding_version == 2,
+                               answer_facts=view.facts):
                 if item.resolution == 'insufficient':
                     original = price_answers.get(item.question_id)
                     return original is None or item != ReportAnswerCoverage(**original)
                 return (item.status != 'answered' or not item.claim_ids
                         or not set(item.claim_ids) <= published_ids
                         or bool(coverage_resolution_reasons(item, published_claims,
-                            require_v2=audit.answer_binding_version == 2)))
+                            require_v2=require_v2, facts=answer_facts)))
             if (any(answer_invalid(item) for item in audit.answer_coverage)
                     or questions and not audit.answer_coverage):
                 reasons.add('answer_coverage_incomplete')

@@ -55,7 +55,11 @@ def answer_review_payload(questions, claims, view, *, additional_fact_ids=()):
     """All bound originals, without duplicating rejected operation candidates."""
     ids = {fid for claim in claims for fid in claim.fact_ids} | set(additional_fact_ids)
     from packages.research.evidence.temporal_conditions import temporal_constraints
+    from packages.research.evidence.source_exceptions import (
+        required_question_clarifications, source_exception_constraints,
+    )
     return {
+        "required_clarifications": required_question_clarifications(questions),
         "competitor": view.competitor,
         "questions": questions,
         "claims": [
@@ -81,6 +85,7 @@ def answer_review_payload(questions, claims, view, *, additional_fact_ids=()):
                 value=fact.value,
                 qualifiers={k: v for k, v in fact.qualifiers.items() if k != "operations"},
                 temporal_constraints=temporal_constraints(fact),
+                source_exceptions=source_exception_constraints(fact, available_facts=view.facts),
             )
             for fact in view.facts
             if fact.id in ids
@@ -88,7 +93,7 @@ def answer_review_payload(questions, claims, view, *, additional_fact_ids=()):
     }
 
 
-def coverage_resolution_reasons(record, claims, *, require_v2=False):
+def coverage_resolution_reasons(record, claims, *, require_v2=False, facts=()):
     """Replay answer guards against the exact published claims, never review reasons."""
     from packages.agents.writer.answer_resolution import resolution_reasons
     from packages.agents.writer.answer_plan_scope import plan_exclusivity_reasons
@@ -120,6 +125,8 @@ def coverage_resolution_reasons(record, claims, *, require_v2=False):
                        if reason != 'answer_body_unresolved')
     reasons.extend(resolution_reasons(record.model_dump(mode="json"), record.question, claims))
     reasons.extend(plan_exclusivity_reasons(record, claims))
+    from packages.research.evidence.source_exceptions import answer_source_exception_reasons
+    reasons.extend(answer_source_exception_reasons(record, claims, facts=facts))
     return tuple(dict.fromkeys(reasons))
 
 
@@ -137,7 +144,9 @@ def selected_claim_texts(claim_ids, claims):
     return texts
 
 
-def parse_answer_coverage(text, questions, supported_claim_ids, *, claims=(), require_v2=False):
+def parse_answer_coverage(
+    text, questions, supported_claim_ids, *, claims=(), require_v2=False, facts=()
+):
     try:
         data = json.loads(text)
         if (
@@ -188,7 +197,7 @@ def parse_answer_coverage(text, questions, supported_claim_ids, *, claims=(), re
                 if (
                     len(record.claim_ids) != len(set(record.claim_ids))
                     or not set(record.claim_ids) <= supported_claim_ids
-                    or coverage_resolution_reasons(record, claims)
+                    or coverage_resolution_reasons(record, claims, facts=facts)
                 ):
                     raise ValueError("coverage cites unpublished claims")
                 result.append(record)

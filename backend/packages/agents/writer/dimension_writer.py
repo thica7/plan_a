@@ -229,6 +229,13 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
     upstream = {key: value for key, value in (upstream_context or {}).items() if key != 'upstream_context_gaps'}
     payload = dict(segment_competitor=selected['segment_competitor'], dimension=selected['dimension'],
                    evidence_view={'facts': []})
+    from packages.research.evidence.source_exceptions import (
+        required_question_clarifications,
+        source_exception_constraints,
+    )
+    clarifications = required_question_clarifications(questions)
+    if clarifications:
+        payload['required_clarifications'] = clarifications
     if upstream_context is not None:
         # Reserve compact diagnostics, then allocate original observations before
         # advisory producer prose. No original condition is shortened to fit it.
@@ -260,6 +267,9 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
                    dimension=fact.dimension, field=fact.field, value=fact.value,
                    qualifiers={key: value for key, value in fact.qualifiers.items() if key != 'operations'}, quote=fact.quote)
         from packages.research.evidence.temporal_conditions import temporal_constraints
+        exception_conditions = source_exception_constraints(fact, available_facts=view.facts)
+        if exception_conditions:
+            row['source_exceptions'] = exception_conditions
         date_conditions = temporal_constraints(fact)
         if date_conditions:
             row['temporal_constraints'] = date_conditions
@@ -536,7 +546,8 @@ class DimensionWriterMixin:
                 self._validate_evidence_use(record, use)
                 self._validate_dimension_upstream(record, compact)
                 coverage = parse_answer_coverage(response, pending, {claim.id for claim in supported},
-                    claims=[claim.model_dump(mode='json') for claim in supported], require_v2=True)
+                    claims=[claim.model_dump(mode='json') for claim in supported],
+                    require_v2=True, facts=view.facts)
                 review_payload = answer_review_payload(pending, supported, view,
                     additional_fact_ids={row['id'] for row in compact.get('evidence_view', {}).get('facts', ())})
                 review_payload['proposed_answers'] = [item.model_dump(mode='json', include={
@@ -557,7 +568,8 @@ class DimensionWriterMixin:
                     self._validate_dimension_upstream(record, compact)
                     coverage = parse_answer_coverage(
                         reviewed, pending, {claim.id for claim in supported},
-                        claims=[claim.model_dump(mode='json') for claim in supported], require_v2=True,
+                        claims=[claim.model_dump(mode='json') for claim in supported],
+                        require_v2=True, facts=view.facts,
                     )
                     if reviewed is None:
                         gaps = tuple(sorted(set(gaps) | {'answer_semantic_review_unavailable'}))

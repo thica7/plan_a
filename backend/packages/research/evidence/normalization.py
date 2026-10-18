@@ -157,6 +157,7 @@ def normalized_feature_fields_from_evidence_items(
 ) -> list[NormalizedFeatureField]:
     from packages.research.evidence.operations import structured_operations
     from packages.research.evidence.source_conditions import source_condition_links
+    from packages.research.evidence.source_exceptions import source_exception_links, source_scope
     evidence_items = list(evidence_items)
     fields: list[NormalizedFeatureField] = []
     for item in evidence_items:
@@ -183,6 +184,13 @@ def normalized_feature_fields_from_evidence_items(
                 confidence=item.confidence,
             )
         )
+        fields[-1].qualifiers["source_scope"] = source_scope(item)
+        exceptions = source_exception_links(item, evidence_items)
+        if exceptions:
+            fields[-1].qualifiers["source_exception_links"] = exceptions
+            fields[-1].qualifiers["source_exception_item_ids"] = sorted({
+                row["evidence_item_id"] for row in exceptions
+            })
         links = source_condition_links(item, evidence_items)
         if links:
             fields[-1].qualifiers['source_condition_links'] = links
