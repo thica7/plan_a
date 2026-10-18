@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -14,8 +15,9 @@ from packages.knowledge.local_models import (
     local_model_strict,
 )
 from packages.knowledge.runtime import call_provider
+from packages.research.evidence.operations import operation_observations, required_operations
 from packages.research.evidence.snapshot import _verify, current_snapshot
-from packages.research.evidence.snapshot_models import FACT_MARKET_POLICY_VERSION
+from packages.research.evidence.snapshot_models import FACT_MARKET_POLICY_VERSION, canonical_json
 from packages.research.evidence.views import _qualification
 
 from .answer_coverage import question_terms, research_questions
@@ -124,6 +126,63 @@ def _fuse(lexical, semantic):
     return sorted(scores, key=lambda fact_id: (-scores[fact_id], fact_id))
 
 
+def _select_operation_facts(
+    row, candidates, requested, operations, quotes, quote_hints, question_hints, observations
+):
+    """Repair operation omissions while retaining selected source condition branches."""
+    selected = row[:PER_QUESTION_LIMIT]
+    requested = set(requested)
+    branches = {
+        key: {
+            canonical_json({
+                name: value for name, value in item.items()
+                if name not in {"fact_id", "source_id", "competitor", "quote", "operation_quote"}
+            })
+            for item in items if item["operation"] in requested
+        }
+        for key, items in observations.items()
+    }
+    protected = {
+        key for key in selected
+        if ("login" in question_hints & quote_hints[key]
+            or re.search(
+                r"\b(?:must|requires?|required|needs?|only|unless|before|without|"
+                r"depending\s+on|depends?\s+on|if|when|after)\b|必须|需要|仅限|前提|除非|只有|仅当|取决于",
+                quotes[key], re.I,
+            ))
+    }
+    while requested:
+        covered = set().union(*(operations[key] for key in selected)) & requested
+        covered_branches = set().union(*(branches[key] for key in selected))
+        missing = requested - covered
+        additions = sorted(
+            (key for key in candidates if key not in selected and operations[key] & missing),
+            key=lambda key: (-len(operations[key] & missing), candidates.index(key)),
+        )
+        changed = False
+        for key in additions:
+            if len(selected) < PER_QUESTION_LIMIT:
+                selected.append(key)
+                changed = True
+                break
+            for index in reversed(range(len(selected))):
+                if selected[index] in protected:
+                    continue
+                retained = set().union(*(
+                    branches[other] for position, other in enumerate(selected)
+                    if position != index
+                ))
+                if covered_branches <= retained | branches[key]:
+                    selected[index] = key
+                    changed = True
+                    break
+            if changed:
+                break
+        if not changed:
+            break
+    return selected
+
+
 async def retrieve_question_facts(
     detail,
     snapshot,
@@ -176,7 +235,9 @@ async def retrieve_question_facts(
         return (), diagnostic
 
     texts = {fact.id: _rank_text(fact) for fact in facts}
+    quotes = {fact.id: fact.quote for fact in facts}
     hints = {fact.id: question_terms(texts[fact.id], product) for fact in facts}
+    quote_hints = {key: question_terms(quote, product) for key, quote in quotes.items()}
     lexical_rows = []
     for question in questions:
         terms = question_terms(question["question"], product)
@@ -273,11 +334,42 @@ async def retrieve_question_facts(
         diagnostic["mode"] = "degraded_lexical"
         ranked_rows = lexical_rows
     _validate_scope(detail, snapshot, product, dimension)
-    rows = [row[:PER_QUESTION_LIMIT] for row in ranked_rows]
+    observations = {
+        fact.id: operation_observations(fact, detail.plan.competitors)
+        for fact in facts if fact.id in pool
+    }
+    operations = {
+        key: {item["operation"] for item in items} for key, items in observations.items()
+    }
+    requested_rows = [required_operations(question["question"]) for question in questions]
+    rows = [
+        _select_operation_facts(
+            row, list(dict.fromkeys([*row, *lexical, *pool_ids])), requested,
+            operations, quotes, quote_hints,
+            question_terms(question["question"], product), observations,
+        )
+        for question, row, lexical, requested in zip(
+            questions, ranked_rows, lexical_rows, requested_rows, strict=True
+        )
+    ]
     selected = tuple(_round_robin(rows, TOTAL_FACT_LIMIT))
+    selected_set = set(selected)
+    candidate_operations = set().union(*operations.values())
     diagnostic["questions"] = [
-        {"question_id": question["question_id"], "fact_ids": row}
-        for question, row in zip(questions, rows, strict=True)
+        {
+            "question_id": question["question_id"], "fact_ids": row,
+            "requested_operations": list(requested),
+            "selected_operations": [op for op in requested if any(
+                key in selected_set and op in operations[key] for key in row
+            )],
+            "missing_operations": [op for op in requested if not any(
+                key in selected_set and op in operations[key] for key in row
+            )],
+            "candidate_missing_operations": [
+                op for op in requested if op not in candidate_operations
+            ],
+        }
+        for question, row, requested in zip(questions, rows, requested_rows, strict=True)
     ]
     diagnostic["selected_fact_ids"] = list(selected)
     return selected, diagnostic

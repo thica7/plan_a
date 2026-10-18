@@ -191,7 +191,9 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.p
 
 ## 验证与交付边界
 
-本轮[引用、金额与 Agentic RL 数据准备](docs/optimization/2026-10-18-agent-readiness-delivery.md)：新回答只选择已审核主张，服务器投影完整正文与逐条引用；live v2 合同与最终 QA 重放防止正文／片段脱节。逐金额区分赠送 credits 与实际采购价，保留套餐、周期及试用限制。新增只读脱敏轨迹导出和 [8 题＋3 条轨迹人审单](docs/optimization/2026-10-18-agent-readiness-human-review.md)。候选标签不等于已审核成功，正确性奖励保持 null，训练关闭；真实报告交付情况与工程测试分别见交付记录。
+本轮[关键证据与条件完整性交付](docs/optimization/2026-10-18-conditional-evidence-delivery.md)：补选遗漏操作时保留角色、套餐和原文前提；同源重复能力保留完整套餐依赖；完整中文必要条件句进入回答识别与 v2 重放。后端 **5227 通过／1 跳过**，OpenAPI 字节一致；前端未变，本轮未重跑。用户已确认[八题参考与三条单题标签](docs/optimization/2026-10-18-conditional-evidence-human-review.md)，四产品各跑一次真实来源阶段诊断，共 **38 调用／133082 token**。四份均有发布阻断，**0/4 完整报告可交付**；已采资料遗漏、否定／澄清／账单问题覆盖不足及 1Password 诊断导出误脱敏仍待修复。独立参考集不是盲测，新报告尚未经用户验收；奖励未赋值，训练关闭。逐题结果及源码身份见[结构化记录](docs/optimization/2026-10-18-conditional-evidence-results.json)。
+
+上一轮[引用、金额与 Agentic RL 数据准备](docs/optimization/2026-10-18-agent-readiness-delivery.md)：新回答只选择已审核主张，服务器投影完整正文与逐条引用；live v2 合同与最终 QA 重放防止正文／片段脱节。逐金额区分赠送 credits 与实际采购价，保留套餐、周期及试用限制。新增只读脱敏轨迹导出和候选构造记录。该轮人审状态保留为历史，当前确认状态见上方新记录；正确性奖励保持 null，训练关闭。
 
 此前[问题缺口驱动补证交付](docs/optimization/2026-10-18-question-gap-delivery.md)：显式问题进入生产 Collector，先重用正文，再按剩余预算定向补证；最多一轮、两次评估，候选证据不等于已回答。补充连续窗口、角色套餐绑定、重复句身份、中文否定与报价日期、套餐排他守卫。后端 **4934 通过 / 1 跳过**、前端 **279 通过**且构建成功。三组首次运行及一次 GitBook 定向重跑共 **40 调用 / 136205 provider token**；最新正文选择八题 **7 正确 / 1 遗漏**，但引用片段、主张绑定、金额分类和 Miro Guest 抓取仍有问题，**0/3 完整报告可交付**。Miro、Basecamp 未用最终版本完整重跑；正文核对不是新用户人审或盲测准确率。
 

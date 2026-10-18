@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "dataset": "agent-readiness-holdout-v1-reviewed",
+  "review_status": "reviewed",
+  "reviewed_by": "project_user",
+  "reviewed_at": "2026-10-18T02:15:30Z",
+  "timestamp_scope": "Time at which the explicit user confirmation was recorded; not a claimed original message timestamp.",
+  "review_confirmation": "认可这8题的边界和修正后的T1–T3标签。允许继续，先修复Miro关键证据漏选、套餐前提遗漏和GitBook中文条件句误判，再跑独立评测，暂时不训练模型。",
+  "review_scope": "Eight reference question boundaries and the corrected T1–T3 question labels; not acceptance of generated reports.",
+  "candidate_file": "eval/agent-readiness-holdout-v1-candidate.jsonl",
+  "candidate_sha256": "7e2642e67513ca854157c4a51f4410bbf28d5f7e7c616f16ec6936046fa96fa1",
+  "candidate_manifest_file": "eval/agent-readiness-holdout-v1-candidate-manifest.json",
+  "candidate_manifest_sha256": "0d378790b48315b5f785b0ce64b3d2419d3afd9cff642f495a5e7a635705d0f9",
+  "reviewed_file": "eval/agent-readiness-holdout-v1-reviewed.jsonl",
+  "reviewed_sha256": "d3f36c6f50e530c74110a1eae8bbc7688e018c1235cc192a761864b1a61e58e3",
+  "cases": 8,
+  "products": 4,
+  "blind_holdout": false,
+  "exposure": "Separately constructed; root and user have read references; implementation workers must not read reference cases before repair freeze.",
+  "reference_answers_sent_to_production_agents": false,
+  "training_ready": false,
+  "model_training_performed": false
+}

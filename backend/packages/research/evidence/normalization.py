@@ -156,6 +156,8 @@ def normalized_feature_fields_from_evidence_items(
     evidence_items: Iterable[EvidenceItem],
 ) -> list[NormalizedFeatureField]:
     from packages.research.evidence.operations import structured_operations
+    from packages.research.evidence.source_conditions import source_condition_links
+    evidence_items = list(evidence_items)
     fields: list[NormalizedFeatureField] = []
     for item in evidence_items:
         if item.status != "accepted" or "feature" not in item.dimension.casefold():
@@ -181,6 +183,9 @@ def normalized_feature_fields_from_evidence_items(
                 confidence=item.confidence,
             )
         )
+        links = source_condition_links(item, evidence_items)
+        if links:
+            fields[-1].qualifiers['source_condition_links'] = links
     return fields
 
 

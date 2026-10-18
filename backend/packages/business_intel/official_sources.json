@@ -146,5 +146,101 @@
         "review_basis": "Exact official documentation identity inspected via primary web browse and successful policy-respecting production fetch_evidence_page/capture_candidate capture; project user authorized official data collection. This is authority review only; candidate answers remain pending human review."
       }
     ]
+  },
+  {
+    "product": "Bitwarden",
+    "aliases": [],
+    "documents": [
+      {
+        "title": "Password Manager Plans | Bitwarden",
+        "url": "https://bitwarden.com/help/password-manager-plans/",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-18T02:15:30Z",
+        "review_basis": "Exact official documents in the eight candidate references, verified against official sources and explicitly approved by the project user on 2026-10-18; authority does not supply product facts."
+      },
+      {
+        "title": "Permanently Remove Access | Bitwarden",
+        "url": "https://bitwarden.com/help/remove-users/",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-18T02:15:30Z",
+        "review_basis": "Exact official documents in the eight candidate references, verified against official sources and explicitly approved by the project user on 2026-10-18; authority does not supply product facts."
+      },
+      {
+        "title": "Delete Member Accounts | Bitwarden",
+        "url": "https://bitwarden.com/help/delete-member-accounts/",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-18T02:15:30Z",
+        "review_basis": "Exact official documents in the eight candidate references, verified against official sources and explicitly approved by the project user on 2026-10-18; authority does not supply product facts."
+      }
+    ]
+  },
+  {
+    "product": "1Password",
+    "aliases": [],
+    "documents": [
+      {
+        "title": "Share with guests in 1Password Families | 1Password Support",
+        "url": "https://support.1password.com/guests/",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-18T02:15:30Z",
+        "review_basis": "Exact official documents in the eight candidate references, verified against official sources and explicitly approved by the project user on 2026-10-18; authority does not supply product facts."
+      },
+      {
+        "title": "1Password Pricing and Plans | 1Password",
+        "url": "https://1password.com/pricing",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-18T02:15:30Z",
+        "review_basis": "Exact official documents in the eight candidate references, verified against official sources and explicitly approved by the project user on 2026-10-18; authority does not supply product facts."
+      }
+    ]
+  },
+  {
+    "product": "Dropbox",
+    "aliases": [],
+    "documents": [
+      {
+        "title": "How to manage Dropbox sharing permissions - Dropbox Help",
+        "url": "https://help.dropbox.com/share/set-file-folder-permissions",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-18T02:15:30Z",
+        "review_basis": "Exact official documents in the eight candidate references, verified against official sources and explicitly approved by the project user on 2026-10-18; authority does not supply product facts."
+      },
+      {
+        "title": "How to unshare files and folders in Dropbox - Dropbox Help",
+        "url": "https://help.dropbox.com/share/unshare-folder",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-18T02:15:30Z",
+        "review_basis": "Exact official documents in the eight candidate references, verified against official sources and explicitly approved by the project user on 2026-10-18; authority does not supply product facts."
+      }
+    ]
+  },
+  {
+    "product": "Cloudflare",
+    "aliases": [],
+    "documents": [
+      {
+        "title": "Account roles · Cloudflare Fundamentals docs",
+        "url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-18T02:15:30Z",
+        "review_basis": "Exact official documents in the eight candidate references, verified against official sources and explicitly approved by the project user on 2026-10-18; authority does not supply product facts."
+      },
+      {
+        "title": "Pricing · Cloudflare Workers docs",
+        "url": "https://developers.cloudflare.com/workers/platform/pricing/",
+        "dimension": "feature",
+        "reviewed_by": "project_user",
+        "reviewed_at": "2026-10-18T02:15:30Z",
+        "review_basis": "Exact official documents in the eight candidate references, verified against official sources and explicitly approved by the project user on 2026-10-18; authority does not supply product facts."
+      }
+    ]
   }
 ]

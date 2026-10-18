@@ -1,0 +1,52 @@
+{
+  "schema_version": 2,
+  "unit": "question_episode",
+  "human_reviewed": 3,
+  "training_ready": false,
+  "annotations": [
+    {
+      "run_id": "run-5157e246b09c4e699cf707a164102db2",
+      "question_id": "question-5d51a946907175ab0e63",
+      "product": "Basecamp",
+      "report_sha256": "e93af067d4f30ee0a19c007c32957889b12b09b496d3d5111571ebfb001c7963",
+      "candidate_outcome": "success",
+      "label_status": "reviewed",
+      "review_source": "project_user",
+      "reason": "单题条件结论正确；按 Basecamp 账户创建日期保留分支并请求确认。不是整条工作流成功，也不自动通过旧引用绑定。",
+      "label_scope": "question_semantic_conclusion",
+      "training_ready": false
+    },
+    {
+      "run_id": "run-a747ef6cdd69465aaa68eae0939bf7da",
+      "question_id": "question-d6009d962fbc28f8e3a1",
+      "product": "GitBook",
+      "report_sha256": "cb45671c5f147341a8cc536ad159930e0a996413ff30fcaa95b725df8827e077",
+      "candidate_outcome": "failure",
+      "label_status": "reviewed",
+      "review_source": "project_user",
+      "reason": "把Chat只归Enterprise并漏掉其他支持套餐；任务完成与QA状态不能替代事实正确性。",
+      "label_scope": "question_semantic_conclusion",
+      "training_ready": false
+    },
+    {
+      "run_id": "run-3ab0d343ec914ac9931eca050bd44ff5",
+      "question_id": "question-76b9f6e0e7d1f68d4f0c",
+      "product": "GitBook",
+      "report_sha256": "874ab9b82f76ec127f6646b40f8c0485f9f066208a36c97b7119b896dc1b3906",
+      "candidate_outcome": "reasonable_abstention",
+      "label_status": "reviewed",
+      "review_source": "project_user",
+      "reason": "没有对应日期、市场、币种、周期与税费的Enterprise报价时明确资料不足，没有用额度金额代替采购价。",
+      "label_scope": "question_semantic_conclusion",
+      "training_ready": false
+    }
+  ],
+  "reviewed_by": "project_user",
+  "reviewed_at": "2026-10-18T02:15:30Z",
+  "review_confirmation": "认可这8题的边界和修正后的T1–T3标签。允许继续，先修复Miro关键证据漏选、套餐前提遗漏和GitBook中文条件句误判，再跑独立评测，暂时不训练模型。",
+  "candidate_file": "eval/agent-readiness-trajectory-review-v1-candidate.json",
+  "candidate_sha256": "e0035fb2dc5ed0a8c9cdb0696fb8eb79151c988073f03682846422e41a7627d4",
+  "review_scope": "Question semantic conclusion only; no workflow-success, source-binding or publication acceptance.",
+  "rewards_assigned": false,
+  "model_training_performed": false
+}

@@ -1,0 +1,444 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-18",
+  "phase": "conditional_evidence_and_independent_answer_diagnostic",
+  "production_code_sha256": "12ba0987b37f22388ae8b83bbb22403ce915f31b60caf1c3ccb5ab4d01b55db8",
+  "freeze_files_sha256": {
+    "backend/packages/agents/writer/answer_resolution.py": "7c2a82376eeba5141617cb6892beb20a3470d7f82318bf86282391f41f6e9563",
+    "backend/packages/agents/writer/question_retrieval.py": "fbc0596368b5974360f3a60d0c4e5d13c92c1c04a9bbd4b139d8d725142527ec",
+    "backend/packages/research/evidence/normalization.py": "49460e3b066baa49fe1811ae64d7963a31f5aa4e26028c713c23283fb118468f",
+    "backend/packages/research/evidence/source_conditions.py": "8f8883dcf5959d764df984054d44a7c2185fe80c521879a49bd3b858bef77943",
+    "backend/packages/research/evidence/report_claims.py": "214c9f226412a8e532a9d475391ab1889806b4381c233728052743f1bafd9f0c",
+    "backend/packages/business_intel/official_sources.json": "c30b17249671c9c5fcfdfe3eddb7515df562431b2feb0326814af9f93828d5cc",
+    "backend/scripts/eval_answer_official.py": "059e0b5d1c69814cba5e05979aec33434af17cebad85ca38efe261e170ce0241",
+    "backend/scripts/eval_official_writer.py": "9d1980c9c0ada70e87eef83fbb26a425b9d816c05181b38e6d99caa0cb7bb1ea",
+    "backend/tests/unit/test_chinese_conditional_resolution.py": "08448770666fa95e0b268d629fbf4fd81da70c77b18afe70908da3b2a1b6944d",
+    "backend/tests/unit/test_question_operation_selection.py": "e4ca41ecedab8547d5aef7374c9cdf4181e44cfbfc59c1de6ead6d6423e5e424",
+    "backend/tests/unit/test_source_condition_integrity.py": "af0606d8dd9bc15ada4720c8b29b7b3c203c4d02c60804b57cf587e4553de864",
+    "docs/optimization/2026-10-18-independent-answer-evaluation-protocol.md": "18adcf88efd12927ed3e2fb352139ef44b49832461986843871fe626a23198dc",
+    "eval/agent-readiness-holdout-v1-reviewed.jsonl": "d3f36c6f50e530c74110a1eae8bbc7688e018c1235cc192a761864b1a61e58e3",
+    "eval/agent-readiness-holdout-v1-reviewed-manifest.json": "46bb14345d79c5e14eff4777eb7bbdf51f20fd0279bafec30cfef11c151cce1b",
+    "eval/agent-readiness-trajectory-review-v1-reviewed.json": "26f204f961eafef4db8c572f2fb178687bd993a37cf51ef5f2d70326653552db"
+  },
+  "human_review": {
+    "reference_cases": 8,
+    "question_trajectory_labels": 3,
+    "reviewed_by": "project_user",
+    "confirmation": "docs/optimization/2026-10-18-conditional-evidence-human-review.md",
+    "reference_approval_is_report_acceptance": false,
+    "historical_candidates_unchanged": true,
+    "T1_scope": "question_semantic_conclusion_only",
+    "rewards_assigned": false,
+    "training_ready": false
+  },
+  "verification": {
+    "backend": {
+      "passed": 5227,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 169.77
+    },
+    "new_anonymous_tests": {
+      "question_operation_selection": 50,
+      "source_condition_integrity": 62,
+      "chinese_conditional_resolution": 72
+    },
+    "frontend": {
+      "changed": false,
+      "rerun_this_phase": false,
+      "previous_phase_tests": 279,
+      "previous_phase_build": "passed"
+    },
+    "openapi": "fresh export byte-identical",
+    "changed_python_ruff": "E9,F passed",
+    "diff_check": "passed",
+    "implementation_contract_spec_and_quality_important_unresolved": 0,
+    "review_scope": "Implementation contracts only; newly observed semantic/report defects remain in semantic_review.",
+    "secret_scan": {
+      "scope": "literal current configured credentials in nonignored text sources/docs/eval, built frontend and specified acceptance artifacts; excludes secret env bodies and Git history",
+      "configured_credential_count": 1,
+      "files_scanned": 1320,
+      "actual_secret_hit_paths": [],
+      "tracked_secret_config_paths": [],
+      "status": "pass"
+    }
+  },
+  "old_evidence_offline_replay": {
+    "miro_eligible": 13,
+    "miro_candidates": 13,
+    "restored_permission_fact_id": "evidence-fact-record-bd70275f67eb2718c59800aaedf58c7c11b96a3ef9715a2e2641edda4229c10c",
+    "miro_guest_originals": 0,
+    "existing_operation_branches_retained": true,
+    "new_normalization_rejects_plan_or_public_scope_omission": true,
+    "original_artifact_files_unchanged": true,
+    "old_reports_regenerated": false,
+    "full_new_miro_gitbook_model_runs": 0,
+    "scope": "Old admitted originals reprojected offline; anonymous Chinese v2 regression; not a new report or model A/B."
+  },
+  "live_diagnostics": {
+    "protocol": "docs/optimization/2026-10-18-independent-answer-evaluation-protocol.md",
+    "runs": [
+      {
+        "product": "1Password",
+        "run_id": "run-8fabc690cda04745b79ac379e12a87ac",
+        "case_ids": [
+          "agent-readiness-holdout-v1-003",
+          "agent-readiness-holdout-v1-004"
+        ],
+        "artifact_directory": "data/artifacts/conditional-evidence-2026-10-18/independent-1password",
+        "production_code_sha256": "12ba0987b37f22388ae8b83bbb22403ce915f31b60caf1c3ccb5ab4d01b55db8",
+        "manifest_sha256": "fdaa1f673f403b3ce9d48fb04bf26f201af6d9066b5a57076603d2e79edabf8e",
+        "source_count": 1,
+        "runtime_report_characters": 996,
+        "saved_report_characters": 17,
+        "saved_report_sha256": "6afed667680665d1f647f7049df9502438a3a3326f5af54625f7088f30848f9d",
+        "llm_transport_attempts": 9,
+        "provider_tokens": 29785,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 2
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false,
+        "deliverable": false,
+        "run_sha256": "24aa50e3010f94a092c81ec6876d8b92d2373a0772896b6a734f6ce8f40d3a2e",
+        "summary_sha256": "96f63f956e807a74be92ad69a0280305aa4e466529c773d2a6ed168322e6cad2"
+      },
+      {
+        "product": "Bitwarden",
+        "run_id": "run-e1da15142cab46b3b74fe74a81a524c0",
+        "case_ids": [
+          "agent-readiness-holdout-v1-001",
+          "agent-readiness-holdout-v1-002"
+        ],
+        "artifact_directory": "data/artifacts/conditional-evidence-2026-10-18/independent-bitwarden",
+        "production_code_sha256": "12ba0987b37f22388ae8b83bbb22403ce915f31b60caf1c3ccb5ab4d01b55db8",
+        "manifest_sha256": "0aad4aa29e8e782b4f632ed28b0ac85b23946bc0f561b94e853993670b0f005f",
+        "source_count": 2,
+        "runtime_report_characters": 1559,
+        "saved_report_characters": 1559,
+        "saved_report_sha256": "22a369604c796cb4c07f1cd9b67eaace573f211f9aecce998f45d5d7334d70cc",
+        "llm_transport_attempts": 9,
+        "provider_tokens": 31855,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 2
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false,
+        "deliverable": false,
+        "run_sha256": "bdda4dec97bb2dbdb4e3dc49f0f0138faf1e1f6ed5537ba89a44756fc3f8a8ca",
+        "summary_sha256": "7ea9f1ef26b938cac82c90c26253d907c1b05cb191adb7e2bf7c998e32ff45f9"
+      },
+      {
+        "product": "Cloudflare",
+        "run_id": "run-0d0b1632c40d4af18d748ab429a58fbe",
+        "case_ids": [
+          "agent-readiness-holdout-v1-007",
+          "agent-readiness-holdout-v1-008"
+        ],
+        "artifact_directory": "data/artifacts/conditional-evidence-2026-10-18/independent-cloudflare",
+        "production_code_sha256": "12ba0987b37f22388ae8b83bbb22403ce915f31b60caf1c3ccb5ab4d01b55db8",
+        "manifest_sha256": "cb42dac908fc30f2d3da97229f41169a172515b5d619e0cc5d0c2868aa154275",
+        "source_count": 1,
+        "runtime_report_characters": 718,
+        "saved_report_characters": 718,
+        "saved_report_sha256": "b155a69c358c063865911b7bf88af067c273743db0e59c5060b04d184c5fc678",
+        "llm_transport_attempts": 10,
+        "provider_tokens": 33751,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 3
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false,
+        "deliverable": false,
+        "run_sha256": "d155cff7d2f37f448a8594d848aa02030eeb9511eea7fa8758e2a5e7622babe6",
+        "summary_sha256": "5c0d3bb5df0648a680585bb7f69dae0968d7b3013f1f8fdde2150fabc82f2b8a"
+      },
+      {
+        "product": "Dropbox",
+        "run_id": "run-e50e1c74a987455481dcdea62efc521d",
+        "case_ids": [
+          "agent-readiness-holdout-v1-005",
+          "agent-readiness-holdout-v1-006"
+        ],
+        "artifact_directory": "data/artifacts/conditional-evidence-2026-10-18/independent-dropbox",
+        "production_code_sha256": "12ba0987b37f22388ae8b83bbb22403ce915f31b60caf1c3ccb5ab4d01b55db8",
+        "manifest_sha256": "2065bb059dec015a773ae1e124160a64aba843272617b065540ee718cd192838",
+        "source_count": 2,
+        "runtime_report_characters": 1128,
+        "saved_report_characters": 1128,
+        "saved_report_sha256": "5a8849b791381d83099d77b3b85745d4726ffe69ca639d218334a778e319fd6b",
+        "llm_transport_attempts": 10,
+        "provider_tokens": 37691,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 3
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false,
+        "deliverable": false,
+        "run_sha256": "fa6e71bbe31849eaddb92d54b8c91ef01eb7ca5eb8e856d7129ec3e48519274e",
+        "summary_sha256": "5470fb94a41eb91a6201f5815767c6e1c9c7b385f43e7582a1a6ec954f0872ca"
+      }
+    ],
+    "calls": 38,
+    "provider_tokens": 133082,
+    "provider_usage_unknown_spans": 0,
+    "model": "deepseek-flash",
+    "provider_bill_usd": null,
+    "external_embedding_calls": 0,
+    "search_calls": 0,
+    "model_retries": 0,
+    "planner_or_full_graph_tested": false,
+    "canonical_index": "sparse diagnostic storage",
+    "writer_question_embedding": "existing frozen local E5",
+    "reranker_used": false,
+    "production_code_unchanged_after_evaluation": true,
+    "reference_answers_sent_to_runtime": false,
+    "blind_holdout": false,
+    "post_evaluation_exposed": true,
+    "repeat_runs": 0
+  },
+  "semantic_review": {
+    "reviewer": "independent_read_only_agent",
+    "user_accepted": false,
+    "reference_review_is_report_review": false,
+    "review_artifact_sha256": {
+      "a": "7cf39b145acb9ad49995ae1ccc2ecca157ce78d042b6ecfaf02013d8f8b1464f",
+      "b": "5a86e3a1e1b03f28467c5930f83982151cfd15fbe61d90e7051c807386f6b632"
+    },
+    "cases": [
+      {
+        "case_id": "agent-readiness-holdout-v1-001",
+        "product": "Bitwarden",
+        "runtime_question_id": "question-cb40c90e4d944bf23275",
+        "runtime_claim_ids": [],
+        "body_verdict": "局部",
+        "body_assessability": "visible",
+        "answer_record_verdict": "遗漏",
+        "answer_record_scope": "Structured coverage record including resolution/conclusion; not a claim that all metadata is rendered as visible prose.",
+        "answer_record_visibility": "visible_report_and_internal_audit",
+        "diagnosis": "人数和collections上限已采，Writer也生成了正确的否定推论；因操作绑定和上下文容量未发表，回答栏仍未核实。Collector把不能满足请求的证据误作缺证。",
+        "reward": {
+          "correctness": null
+        },
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-002",
+        "product": "Bitwarden",
+        "runtime_question_id": "question-63762e09ae5d8faa1071",
+        "runtime_claim_ids": [
+          "claim-d9a0188cad402923f316",
+          "claim-901f8c7c2462299393d2",
+          "claim-261352c9065f65b9c6aa"
+        ],
+        "body_verdict": "局部",
+        "body_assessability": "visible",
+        "answer_record_verdict": "错误",
+        "answer_record_scope": "Structured coverage record including resolution/conclusion; not a claim that all metadata is rendered as visible prose.",
+        "answer_record_visibility": "visible_report_and_internal_audit",
+        "diagnosis": "未澄清Remove/Delete和个人/组织归属，My Items事实选中后未进入有效Writer上下文；回答记录direct/yes且遗漏SSO分支。可见报告并未直接显示“是”，个人库保留和离线缓存等局部信息正确。",
+        "reward": {
+          "correctness": null
+        },
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-003",
+        "product": "1Password",
+        "runtime_question_id": "question-60a7010e0c7ca2ae7058",
+        "runtime_claim_ids": [
+          "claim-945fdde6ed745f0231e4",
+          "claim-5100bc6fd3db26c38ec2"
+        ],
+        "body_verdict": null,
+        "body_assessability": "artifact_redacted",
+        "answer_record_verdict": "正确",
+        "answer_record_scope": "Structured coverage record including resolution/conclusion; not a claim that all metadata is rendered as visible prose.",
+        "answer_record_visibility": "internal_audit_only_report_redacted",
+        "diagnosis": "内部主张及回答覆盖两个子问，来源与引用支持；品牌标题被导出脱敏规则误识别，完整正文不可核验，不能算整份报告成功。",
+        "reward": {
+          "correctness": null
+        },
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-004",
+        "product": "1Password",
+        "runtime_question_id": "question-26d795d67d79bd12e05d",
+        "runtime_claim_ids": [],
+        "body_verdict": null,
+        "body_assessability": "artifact_redacted",
+        "answer_record_verdict": "遗漏",
+        "answer_record_scope": "Structured coverage record including resolution/conclusion; not a claim that all metadata is rendered as visible prose.",
+        "answer_record_visibility": "internal_audit_only_report_redacted",
+        "diagnosis": "未编造金额，但未交付定制报价规则及具体缺失字段。定价页抓取成功而未准入；导出限制使具体拒入原因不可核验。",
+        "reward": {
+          "correctness": null
+        },
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-005",
+        "product": "Dropbox",
+        "runtime_question_id": "question-55e153a4bb828470945e",
+        "runtime_claim_ids": [
+          "claim-9b2aff9d9807c6d26a4f"
+        ],
+        "body_verdict": "正确",
+        "body_assessability": "assessable",
+        "answer_record_verdict": "正确",
+        "answer_record_scope": "Structured coverage record including resolution/conclusion; not a claim that all metadata is rendered as visible prose.",
+        "answer_record_visibility": "visible_report_and_internal_audit",
+        "diagnosis": "直接邀请的Can view权限仍允许下载，两个访问路径没有混为一谈，回答和引用完整。",
+        "reward": {
+          "correctness": null
+        },
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-006",
+        "product": "Dropbox",
+        "runtime_question_id": "question-386ae5074b9e8f4b4fed",
+        "runtime_claim_ids": [
+          "claim-c19194156adbe9c2d932"
+        ],
+        "body_verdict": "局部",
+        "body_assessability": "assessable",
+        "answer_record_verdict": "遗漏",
+        "answer_record_scope": "Structured coverage record including resolution/conclusion; not a claim that all metadata is rendered as visible prose.",
+        "answer_record_visibility": "visible_report_and_internal_audit",
+        "diagnosis": "取消共享、离开共享及撤销链接未澄清，副本/链接证据已采但未利用；绝对删除主张遗漏允许保留副本的条件，回答仍未核实。",
+        "reward": {
+          "correctness": null
+        },
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-007",
+        "product": "Cloudflare",
+        "runtime_question_id": "question-1b7471af0d3dcf4af91c",
+        "runtime_claim_ids": [],
+        "body_verdict": "遗漏",
+        "body_assessability": "assessable",
+        "answer_record_verdict": "遗漏",
+        "answer_record_scope": "Structured coverage record including resolution/conclusion; not a claim that all metadata is rendered as visible prose.",
+        "answer_record_visibility": "visible_report_and_internal_audit",
+        "diagnosis": "完整官方原文含Cache Domain Purge的域名范围规则，相应角色观察未进入normalized_fields和snapshot；仅对10个已准入候选排序，不能归因于embedding召回失败。",
+        "reward": {
+          "correctness": null
+        },
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-008",
+        "product": "Cloudflare",
+        "runtime_question_id": "question-dd9aeefb8be2a32bc5bf",
+        "runtime_claim_ids": [],
+        "body_verdict": "遗漏",
+        "body_assessability": "assessable",
+        "answer_record_verdict": "遗漏",
+        "answer_record_scope": "Structured coverage record including resolution/conclusion; not a claim that all metadata is rendered as visible prose.",
+        "answer_record_visibility": "visible_report_and_internal_audit",
+        "diagnosis": "定价页HTTP200、22435字符，却以missing_accepted_evidence未准入；未说明CPU等缺失字段，不能计为合理不足答复。",
+        "reward": {
+          "correctness": null
+        },
+        "training_ready": false,
+        "user_accepted": false
+      }
+    ],
+    "visible_body_counts": {
+      "局部": 3,
+      "不可核验_脱敏占位": 2,
+      "正确": 1,
+      "遗漏": 2
+    },
+    "answer_record_counts": {
+      "遗漏": 5,
+      "错误": 1,
+      "正确": 2
+    },
+    "answer_record_count_scope": "Includes internal structured coverage for 1Password whose full report is redacted; do not present as eight visibly rendered answers.",
+    "full_deliverable_reports": 0,
+    "reports_reviewed": 4,
+    "internally_sufficient_answer_case_ids": [
+      "agent-readiness-holdout-v1-003",
+      "agent-readiness-holdout-v1-005"
+    ],
+    "generated_reports_human_accepted": 0
+  },
+  "limits": [
+    "Finite source-local English predicate matching and English/Chinese omission checks are not universal NLI.",
+    "Old normalized records restored directly are not backfilled; normal page re-extraction applies the new rule.",
+    "1Password saved report is a redaction placeholder; 996 runtime characters do not prove a saved complete report.",
+    "Fixed official URL stage execution is not Planner discovery, complete Graph, production dense RAG or infrastructure acceptance.",
+    "The references were independently constructed but root/user saw them; this small set is not blind generalization evidence."
+  ],
+  "next_priority": [
+    "Preserve question-focused accepted facts through final Writer context; distinguish negative support from missing evidence.",
+    "Keep operation/ownership/SSO/copy exceptions and clarification requirements in the complete answer record.",
+    "Retain domain-scoped roles and pricing rules during extraction/admission; produce useful CPU/quote insufficiency details.",
+    "Fix diagnostic exporter brand-name false positive while retaining actual-secret redaction; preserve this first-run record.",
+    "Create further independently reviewed cases before using any learned rewards or training."
+  ],
+  "training": {
+    "model_training_performed": false,
+    "parameter_updates": 0,
+    "weight_downloads": 0,
+    "rewards_assigned": false,
+    "correctness_reward": null,
+    "training_ready": false
+  },
+  "deployment": {
+    "docker_run": false,
+    "http_qdrant_tested": false,
+    "temporal_tested": false
+  }
+}

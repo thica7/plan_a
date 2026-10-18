@@ -133,9 +133,9 @@ async def run_live(payloads, manifest, output, *, timeout=600, capture_only=Fals
                 # Questions select scope; they are never input to evidence fields.
                 questions = runtime_questions(payloads)
                 detail = await service.create_run(RunCreateRequest(workspace_id="official-source-acceptance",
-                    project_id=uuid4().hex, topic=" / ".join(products) + " 的角色、编辑及访问权限研究",
+                    project_id=uuid4().hex, topic=" / ".join(products) + " 的功能、权限及计费条件研究",
                     dimensions=["feature"], competitors=products, execution_mode="real",
-                    target_product={"name": products[0], "category": "协作软件"},
+                    target_product={"name": products[0], "category": "产品"},
                     collaboration_mode="ai", output_language="zh-CN", auto_redo_warn_enabled=False,
                     decision_brief={"decision_question": questions}))
                 record = service._runs[detail.id]

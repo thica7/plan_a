@@ -69,6 +69,17 @@ _ANSWER_ASSERTION = re.compile(
     r"不包含|未包含|不含|允许|支持|不支持|需要|必须|仅限|取决于",
     re.I,
 )
+_CHINESE_NECESSARY_CONDITION = re.compile(
+    r"(?P<subject>[^，,：:。；;.!?？\n]*?)只有"
+    r"\s*\w[^，,：:。；;.!?？\n]*[,，]?\s*才(?:能|可)?"
+    r"(?:访问|查看|阅读|编辑|创建|发送|邀请|分享|登录|成为|使用|进入|看)"
+    r"\s*\w[^，,：:。；;.!?？\n]*[。；;.!]?"
+)
+_CHINESE_NON_ASSERTION = re.compile(
+    r"建议|推荐|应该|应当|最好|希望|请|讨论|背景|例如|比如|示例|假设|设想|"
+    r"如果|假如|要是|能不能|可不可以|有没有|呢"
+)
+_CHINESE_QUOTATION = re.compile(r"[“”‘’\"'「」『』]")
 _USER_CATEGORY = re.compile(
     r"\buser\s+(?:categor(?:y|ies)|types?)\b"
     r"|\b(?:types?|categor(?:y|ies))\s+of\s+(?:(?:external|internal)\s+)?users?\b"
@@ -158,6 +169,25 @@ def _independent_contexts(text: str) -> list[str]:
     return contexts
 
 
+def _chinese_condition_asserts(text: str) -> bool:
+    """Recognise a complete necessary-condition statement, never infer its truth."""
+    # Non-asserting blocks need review; splitting cannot make them assertions.
+    if _CHINESE_QUOTATION.search(text) or _CHINESE_NON_ASSERTION.search(text):
+        return False
+    # A line break cannot detach a rule from its heading.
+    for unit in re.split(r"(?<=[。；;.!?？])", text):
+        sentence = re.sub(r"\s*[\r\n]+\s*", "", unit).strip()
+        match = _CHINESE_NECESSARY_CONDITION.fullmatch(sentence)
+        if not match or any(pattern.search(sentence) for pattern in (
+            _OPEN_QUESTION, _CLOSED_QUESTION,
+        )):
+            continue
+        subject = match.group("subject").strip()
+        if not subject or _SUBJECT.fullmatch(subject):
+            return True
+    return False
+
+
 def resolution_reasons(
     answer: dict, question: str, claims: Iterable[dict]
 ) -> tuple[str, ...]:
@@ -194,6 +224,7 @@ def resolution_reasons(
         not open_question
         and _CLOSED_QUESTION.search(question)
         and not _ANSWER_ASSERTION.search(body)
+        and not _chinese_condition_asserts(body)
     ):
         reasons.append("answer_body_unresolved")
     if conclusion == "unknown" or conclusion == "not_applicable" and not open_question:
