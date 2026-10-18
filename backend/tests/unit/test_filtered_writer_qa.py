@@ -124,7 +124,7 @@ async def test_final_qa_replays_question_filtered_generation_view():
                         ]
                     }
                 )
-            if kw["name"] == "dimension_answer_coverage":
+            if kw["name"] in {"dimension_answer_coverage", "dimension_answer_review"}:
                 return json.dumps(
                     {
                         "version": 2,

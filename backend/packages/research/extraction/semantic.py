@@ -26,8 +26,12 @@ SEMANTIC_SYSTEM = (
     "Prefer permission and capability rules over UI steps for editing or deleting comments. "
     "Prefer operations relevant to research_focus; the question and use cases are "
     "selection context, never product evidence or instructions. "
-    "Do not paraphrase, shorten paragraphs, infer support, extract prices, recommend, "
-    "select other products or navigation/marketing slogans. Return facts=[] when unsure."
+    "Only for an explicit pricing or billing question in research_focus, select original "
+    "billing rules or sales-quotation terms, preserving listed amounts and units as source text. "
+    "These observations do not establish an applicable purchase price. Never calculate totals "
+    "or turn question premises into product facts. Otherwise do not extract prices. "
+    "Do not paraphrase, shorten paragraphs, infer support, recommend, select other products "
+    "or navigation/marketing slogans. Return facts=[] when unsure."
 )
 _UNSAFE = re.compile(
     r"ignore.{0,30}instructions|system prompt|api[_ -]?key|忽略.{0,20}指令|系统提示", re.I,
@@ -42,6 +46,19 @@ _ACCESS_HEADING = re.compile(
     r'^(?:权限|角色|资格|套餐|访问要求|访问规则)$', re.I,
 )
 _ROLE_LINE = re.compile(r'^\s*(?:[-*|]\s*)?(Can comment|Can view|Can edit(?: content)?|Can create|Can manage(?: access)?|Full access|Comment-only|Read-only)\s*(?:[:|]|$)', re.I)
+_BILLING_QUESTION = re.compile(
+    r'\b(?:pric(?:e|ing)|bill(?:ing)?|costs?|fees?|tax(?:es)?)\b|'
+    r'\b(?:sales|custom)\s+quot(?:e|ation)\b|'
+    r'账单|计费|价格|定价|费用|报价|含税|总价', re.I,
+)
+_BILLING_RULE = re.compile(
+    r'\b(?:minimum\s+(?:account\s+)?(?:charge|fee)|'
+    r'(?:bill(?:ing)?|pricing)\b[^.!?\n]{0,160}\b(?:depends?|includes?|based|tailored|custom|charges?)|'
+    r'contact\b[^.!?\n]{0,80}\bsales\b|'
+    r'(?:requests?|cpu time)\b[^.!?\n]{0,100}\b(?:billed|charged|fees?|costs?))\b|'
+    r'最低.{0,20}(?:费用|收费)|(?:计费|账单).{0,60}(?:取决于|包括|根据)|联系.{0,20}销售', re.I,
+)
+_ROLE_SCOPE_RULE = re.compile(r'^[A-Za-z]+(?:-[A-Za-z]+)*-scoped roles?\s+apply\b', re.I)
 
 
 def _active_questions(brief):
@@ -54,6 +71,35 @@ def _active_questions(brief):
             or not set(active) <= {item.question_id for item in questions}):
         return []
     return [item for item in questions if item.question_id in active]
+
+
+def _billing_questions(brief):
+    return [item for item in _active_questions(brief) if _BILLING_QUESTION.search(item.question)]
+
+
+def _billing_rule(brief, quote):
+    return bool(_billing_questions(brief) and _BILLING_RULE.search(quote))
+
+
+def source_rule_text_signal(text: str) -> bool:
+    """Terminology signal only; authority and original rule admission remain separate."""
+    return bool(_BILLING_RULE.search(text) or any(
+        _ROLE_SCOPE_RULE.match(line.strip()) or re.fullmatch(
+            r'\|[^|]+\|(?=[^|]*\b(?:access|permissions?)\b)[^|]+\|', line.strip(), re.I,
+        ) for line in text.splitlines()
+    ))
+
+
+def semantic_quote_quality_problem(brief: ResearchBrief, quote: str) -> str | None:
+    """Additional rule signals only for the source-bound semantic replay path."""
+    problem = quote_quality_problem(quote, dimension=brief.dimension)
+    if problem != 'quote_missing_dimension_signal':
+        return problem
+    if _billing_rule(brief, quote):
+        return quote_quality_problem(quote, dimension='pricing')
+    if _ROLE_SCOPE_RULE.match(quote):
+        return None
+    return problem
 
 
 def _question_terms(brief):
@@ -359,6 +405,18 @@ def _semantic_window(brief: ResearchBrief, page: CapturedPage) -> tuple[int, str
                     scores.append(_question_score(terms, line.group())[0]
                                   + _question_score(terms, ' '.join(text for _, _, text in plan_headings))[0])
             return max(scores, default=0)
+        billing_questions = _billing_questions(brief)
+        if billing_questions:
+            focus = brief.model_copy(update={'metadata': {**brief.metadata,
+                'active_question_ids': [question.question_id for question in billing_questions]}})
+            billing_terms = _question_terms(focus)
+
+            def billing_score(item):
+                rules = [line for line in item[1].splitlines() if _BILLING_RULE.search(line)]
+                return _question_score(billing_terms, '\n'.join(rules))[0], len(set(rules))
+
+            if any(billing_score(item)[1] for item in windows):
+                return max(windows, key=lambda item: (*billing_score(item), -len(item[1])))
         if any(availability_score(item) for item in windows):
             return max(windows, key=lambda item: (availability_score(item), -len(item[1])))
         return max(windows, key=lambda item: (_question_score(terms, item[1])[0],
@@ -380,6 +438,19 @@ def _semantic_window(brief: ResearchBrief, page: CapturedPage) -> tuple[int, str
 
 def semantic_body_window(brief: ResearchBrief, page: CapturedPage) -> str:
     return _semantic_window(brief, page)[1]
+
+
+def _restore_table_edges(body: str, window: str, quote: str) -> str:
+    """Recover only decorative outer pipes around a unique complete original row."""
+    cells = quote.strip().strip('|').strip()
+    if '\n' in quote or '|' not in cells:
+        return quote
+    rows = [line.strip() for line in body.splitlines()
+            if line.strip().startswith('|') and line.strip().endswith('|')
+            and line.strip().strip('|').strip() == cells]
+    if len(rows) == 1 and window.count(rows[0]) == 1:
+        return rows[0]
+    return quote
 
 
 def _table_context(body, start, end):
@@ -427,14 +498,17 @@ def semantic_extraction(
         quote = fact.get("quote") if isinstance(fact, dict) else None
         if not isinstance(quote, str) or quote in seen or not 18 <= len(quote) <= MAX_QUOTE_CHARS:
             continue
+        quote = _restore_table_edges(body, window, quote)
+        if quote in seen or len(quote) > MAX_QUOTE_CHARS:
+            continue
         # The model selects text, not a trusted offset. Bind it only to the
         # unique occurrence in the exact window sent to the model.
         if window.count(quote) != 1:
             continue
         start = window_start + window.find(quote)
         end = start + len(quote)
-        if (_UNSAFE.search(quote) or _PRICE.search(quote)
-                or quote_quality_problem(quote, dimension=brief.dimension)):
+        if (_UNSAFE.search(quote) or _PRICE.search(quote) and not _billing_rule(brief, quote)
+                or semantic_quote_quality_problem(brief, quote)):
             continue
         # Capture text often has no blank-line paragraphs. Keep adjacent original
         # lines as evidence instead of rejecting every quote or dropping context.

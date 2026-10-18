@@ -470,7 +470,7 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
                     ]
                 }
             )
-        if kwargs["name"] == "dimension_answer_coverage":
+        if kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}:
             return json.dumps(
                 {
                     "version": 2,
@@ -509,6 +509,7 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
     monkeypatch.setattr(service, "_trace_llm_text", model)
     await service._real_writer_step(record)
     assert calls.count("dimension_answer_coverage") == 1
+    assert calls.count("dimension_answer_review") == 1
     coverage = detail.report_dimension_audits[0].answer_coverage
     assert len(coverage) == 1 and coverage[0].status == ("answered" if complete else "unverified")
     if not complete:

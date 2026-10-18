@@ -278,7 +278,7 @@ async def test_writer_publishes_bound_plan_rules_and_final_qa_rejects_changed_an
         payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
         if kwargs["name"] == "dimension_claim_review":
             return json.dumps({"reviews": [supported_review(claim) for claim in payload["claims"]]})
-        if kwargs["name"] == "dimension_answer_coverage":
+        if kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}:
             answers = [selection(
                 question_id=question["question_id"],
                 claim_ids=[claim["id"] for claim in payload["claims"]],

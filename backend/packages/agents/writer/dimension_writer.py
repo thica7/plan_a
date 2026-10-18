@@ -201,9 +201,12 @@ def bounded_upstream_analysis(payload, source_ids, *, max_bytes=1100):
 def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, requested_operations=(), upstream_context=None, include_non_operations=True, questions=()):
     """Keep complete original observations, not repeated matrix/slot controls."""
     from packages.research.evidence.operations import operation_observations, operation_binding, required_operations
-    if questions:
-        requested_operations = tuple(dict.fromkeys((*requested_operations, *required_operations(
-            ' '.join(q['question'] for q in questions)))))
+    filter_operations = bool(requested_operations)
+    if questions and include_non_operations:
+        requested_operations = required_operations(' '.join(q['question'] for q in questions))
+        # Question retrieval already chose these originals. An operation may
+        # share a question with ownership, quantity or another complete rule.
+        filter_operations = False
     content_fields = {'evidence_terms'} if selected['dimension'] == 'feature' else {'segment', 'role', 'company_size', 'use_case', 'pain_point'}
     facts = [fact for fact in view.facts if fact.id in allowed and fact.field in content_fields]
     if selected['dimension'] != 'feature':
@@ -223,12 +226,6 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
                 -len(row['missing_fields']), -len(encoded(operation_binding(row))))
     action_targets = {fid: {row['operation'] for row in rows}
                       for fid, rows in observations.items()}
-    for hints in question_hints:
-        best_score = max((len(hints & fact_hints[f.id]) for f in facts), default=0)
-        if best_score:
-            requested_operations = tuple(dict.fromkeys((*requested_operations, *(
-                op for f in facts if len(hints & fact_hints[f.id]) == best_score
-                for op in sorted(action_targets[f.id])))))
     upstream = {key: value for key, value in (upstream_context or {}).items() if key != 'upstream_context_gaps'}
     payload = dict(segment_competitor=selected['segment_competitor'], dimension=selected['dimension'],
                    evidence_view={'facts': []})
@@ -249,14 +246,14 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
             max((candidate_priority(r) for r in observations[f.id] if r['operation'] in action_targets[f.id] - covered), default=()),
             len(action_targets[f.id] - covered), -len(encoded(f.value))))
         facts.remove(fact)
-        if (requested_operations and not action_targets[fact.id]
+        if (filter_operations and not action_targets[fact.id]
                 and re.match(r'^\s*(?:click|tap|select|open|press)\b', fact.quote, re.I)):
             continue
         if not include_non_operations and not action_targets[fact.id]:
             continue
         targets = (sorted(action_targets[fact.id] & set(requested_operations))
-                   if requested_operations else sorted(action_targets[fact.id]))
-        if requested_operations and action_targets[fact.id] and not targets:
+                   if filter_operations else sorted(action_targets[fact.id]))
+        if filter_operations and action_targets[fact.id] and not targets:
             omitted = True
             continue
         row = dict(id=fact.id, source_id=fact.source_id, competitor=fact.competitor,
@@ -315,10 +312,10 @@ def operation_claim_selection(claims, view, requested, sent_fact_ids, *, fact_ta
                 selected.append(claim)
             continue
         operation = observation['operation']
-        targets = set(requested) if fact_targets is None else {
-            op for fid in claim.fact_ids for op in fact_targets.get(fid, ())}
+        targets = (set(requested) if fact_targets is None
+                   else set(fact_targets.get(observation['fact_id'], ())))
         identity = claim.operation_binding.observation_id
-        if operation in targets and operation in requested and identity not in covered:
+        if operation in targets and identity not in covered:
             selected.append(claim)
             covered.add(identity)
     return selected
@@ -509,10 +506,14 @@ class DimensionWriterMixin:
 
     async def _dimension_question_coverage(self, record, questions, compact, audited, view, use, gaps):
         from packages.agents.writer.answer_coverage import (
-            ANSWER_COVERAGE_SYSTEM, answer_review_payload, parse_answer_coverage, unverified_coverage,
+            ANSWER_COVERAGE_SYSTEM, ANSWER_REVIEW_SYSTEM, answer_review_payload,
+            parse_answer_coverage, unverified_coverage,
         )
         if not questions:
             return (), gaps, []
+        if len(questions) > 8:
+            return (unverified_coverage(questions, 'Question count exceeds the bounded review capacity.'),
+                    tuple(sorted(set(gaps) | {'question_context_budget_exceeded'})), [])
         from packages.agents.writer.price_answers import server_missing_price_answers
         from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
         live = self._evidence_live_record(record)
@@ -536,6 +537,32 @@ class DimensionWriterMixin:
                 self._validate_dimension_upstream(record, compact)
                 coverage = parse_answer_coverage(response, pending, {claim.id for claim in supported},
                     claims=[claim.model_dump(mode='json') for claim in supported], require_v2=True)
+                review_payload = answer_review_payload(pending, supported, view,
+                    additional_fact_ids={row['id'] for row in compact.get('evidence_view', {}).get('facts', ())})
+                review_payload['proposed_answers'] = [item.model_dump(mode='json', include={
+                    'question_id', 'status', 'claim_ids', 'resolution', 'conclusion', 'missing_fields',
+                }) for item in coverage]
+                review_prompt = compact_prompt_json(review_payload)
+                # A proposal never survives an unavailable or invalid semantic review.
+                coverage = unverified_coverage(pending, 'Answer semantic review was not completed.')
+                if len(review_prompt.encode()) <= use.max_bytes:
+                    sizes.append(len(review_prompt.encode()))
+                    reviewed, gaps = await self._dimension_call_with_gaps(
+                        record, gaps, agent='qa', subagent=f'{view.competitor}/{view.dimension}',
+                        name='dimension_answer_review',
+                        system=ANSWER_REVIEW_SYSTEM + language_instruction(record.detail.output_language),
+                        user='\nJSON:\n' + review_prompt,
+                    )
+                    self._validate_evidence_use(record, use)
+                    self._validate_dimension_upstream(record, compact)
+                    coverage = parse_answer_coverage(
+                        reviewed, pending, {claim.id for claim in supported},
+                        claims=[claim.model_dump(mode='json') for claim in supported], require_v2=True,
+                    )
+                    if reviewed is None:
+                        gaps = tuple(sorted(set(gaps) | {'answer_semantic_review_unavailable'}))
+                else:
+                    gaps = tuple(sorted(set(gaps) | {'answer_review_context_budget_exceeded'}))
             else:
                 coverage = unverified_coverage(pending, 'Complete answer evidence exceeded the review capacity.')
         by_id = {item.question_id: item for item in coverage}
@@ -597,6 +624,9 @@ class DimensionWriterMixin:
                 requested, sent_fact_ids, fact_targets = (), set(), {}
                 from packages.agents.writer.answer_coverage import research_questions
                 questions = research_questions(detail, product, dimension)
+                if len(questions) > 8:
+                    allowed = set()
+                    gaps = tuple(sorted(set(gaps) | {'question_context_budget_exceeded'}))
                 if allowed:
                     if dimension == "pricing":
                         claims = recorded_price_claims(view, boundaries, use.id, detail.output_language)
@@ -633,6 +663,13 @@ class DimensionWriterMixin:
                             "Answer every explicit question using the admitted original facts. Questions are requests, never evidence. "
                             "Prioritize question-resolving role, plan, login and access restrictions before background "
                             "observations such as tools, invitation counts or general descriptions. "
+                            "Allocate observations to every question before repeating background or plan descriptions. "
+                            "When the source distinguishes removal, account deletion, data ownership or access paths, "
+                            "preserve each relevant branch and ask which action or ownership applies if the request "
+                            "is ambiguous. Keep offline, SSO, retained-copy and surviving-link exceptions with their "
+                            "own source rules. A clarification request may accompany that rule without choosing an "
+                            "unprovided action. Publish numeric caps faithfully; answer review compares them with "
+                            "requested quantities, so an unbound derived quantity claim is not needed. "
                             "Retain separate answers for distinct roles, plans, access modes and prerequisite branches, "
                             "A source temporal_constraints exception must qualify the same actor and subject in the claim itself. "
                             "If the question leaves the exception's account/workspace creation date unknown, "
@@ -1028,6 +1065,18 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
                     status = names[answer.status] if zh else answer.status
                     lines.append(f'- {plain(answer.question)} — {status}')
                     if answer.answer and answer.status in {'answered', 'partial'}:
+                        decisions = ({'yes': '结论：是', 'no': '结论：否',
+                                      'depends': '结论：需按条件判断', 'unknown': '结论：尚不能确定',
+                                      'not_applicable': '结论：不适用'} if zh else {
+                            'yes': 'Conclusion: yes', 'no': 'Conclusion: no',
+                            'depends': 'Conclusion: depends', 'unknown': 'Conclusion: unresolved',
+                            'not_applicable': 'Conclusion: not applicable',
+                        })
+                        if answer.resolution == 'clarification':
+                            lines.append('  需要先澄清问题中的条件。' if zh else
+                                         '  Clarification is required before a definite conclusion.')
+                        elif answer.resolution != 'insufficient':
+                            lines.append('  ' + decisions[answer.conclusion])
                         claim_sources = {sid for item in supported if item.claim.id in answer.claim_ids
                                          for sid in item.claim.source_ids}
                         citations = ''.join(f'[source:{sid}]' for sid in sorted(claim_sources))
@@ -1043,6 +1092,8 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
                 names['duplicate_or_off_target_operation_claim'] = '重复或偏离本次操作的观察未发表'
                 names['operation_binding_required'] = '操作观察缺少来源绑定，主张未发布'
                 names['claim_candidate_invalid'] = '个别候选格式或绑定无效，未发表'
+                names['answer_semantic_review_unavailable'] = '回答语义复核未完成'
+                names['answer_review_context_budget_exceeded'] = '完整回答复核资料超出容量'
                 gaps = list(dict.fromkeys(names.get(g, "需要补充同维度证据") if zh else g for g in audit.gaps))
                 lines.extend([("- 本段待核验或缺口：" if zh else "- Unverified or missing: ") + "、".join(map(plain, gaps)), ""])
     if partial and any(

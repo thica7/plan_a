@@ -100,7 +100,7 @@ async def test_parent_prerequisite_survives_collector_admission_snapshot_and_wri
             if fact.get("operation_observations"):
                 claim["observation_id"] = fact["operation_observations"][0]["observation_id"]
             return json.dumps({"claims": [claim]})
-        if kwargs["name"] == "dimension_answer_coverage":
+        if kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}:
             # Transport fixture only; semantic quality is tested with real models separately.
             return json.dumps({"version": 2, "answers": [dict(question_id=q["question_id"], status="answered",
                 claim_ids=[c["id"] for c in payload["claims"]],

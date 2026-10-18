@@ -29,7 +29,11 @@ from packages.research.extraction.price_conditions import (
 from packages.research.extraction.pricing_cards import rendered_price_cards
 from packages.research.extraction.quality import HARDWARE_SPEC_RE, quote_quality_problem
 from packages.research.extraction.feature import extract_generic_capabilities
-from packages.research.extraction.semantic import semantic_extraction
+from packages.research.extraction.semantic import (
+    semantic_extraction,
+    semantic_quote_quality_problem,
+    source_rule_text_signal,
+)
 from packages.research.models import (
     CapturedPage,
     EvidenceItem,
@@ -173,7 +177,11 @@ def _admission_rejection_reasons(
     ):
         reasons.append("field_quote_missing_or_too_short")
     if quote is not None:
-        quote_problem = quote_quality_problem(quote.text, dimension=extraction.dimension)
+        quote_problem = (
+            semantic_quote_quality_problem(brief, quote.text)
+            if extraction.extractor_name in {"bounded_semantic_capabilities", "source_operation_rules"}
+            else quote_quality_problem(quote.text, dimension=extraction.dimension)
+        )
         if quote_problem:
             reasons.append(quote_problem)
     if extraction.extractor_name == "generic_product_capabilities" and page is not None:
@@ -698,7 +706,9 @@ def source_quality_problem(source: RawSource) -> str | None:
         )
     if identity_problem := competitor_identity_problem(source):
         return identity_problem
-    if not dimension_terms_present(source.dimension, normalized):
+    if not dimension_terms_present(source.dimension, normalized) and not (
+        "feature" in source.dimension.casefold() and source_rule_text_signal(normalized)
+    ):
         return (
             f"Source {source.id} does not contain enough {source.dimension} "
             "terminology for this dimension."

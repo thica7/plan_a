@@ -40,15 +40,24 @@ SPLIT_POLICY = {
 }
 # Compliance covers known key families. Also remove unrecognizable credentials
 # in errors/URLs (e.g. api_key=short), before any preview truncation.
+_SECRET_KEY_PATTERN = (
+    r"(?:[A-Za-z0-9_-]*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|"
+    r"password|secret|authorization)|token|key)"
+)
+_SECRET_KEY = re.compile(rf"(?i){_SECRET_KEY_PATTERN}")
+# Quoted keys and '=' are explicit assignments. Bare ':' keys cannot begin
+# with a digit, so numeric product labels in prose retain their surrounding text.
 _SECRET_ASSIGNMENT = re.compile(
-    r"(?i)(?<![A-Za-z0-9_-])(?:[A-Za-z0-9_-]*(?:api[_-]?key|access[_-]?token|"
-    r"refresh[_-]?token|password|secret"
-    r"|authorization)|token|key)[\"']?\s*[:=]\s*(?:(?:bearer|basic)\s+)?"
+    r"(?i)(?<![A-Za-z0-9_-])(?:"
+    rf"(?:\"{_SECRET_KEY_PATTERN}\"|'{_SECRET_KEY_PATTERN}')\s*[:=]|"
+    rf"{_SECRET_KEY_PATTERN}[\"']?\s*=|"
+    rf"(?![0-9]){_SECRET_KEY_PATTERN}[\"']?\s*:)"
+    r"\s*(?:(?:bearer|basic)\s+)?"
     r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s,;&]+)"
 )
 _ASSIGNMENT_COMPONENT = re.compile(r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^&\"'])+")
 _BEARER = re.compile(r"(?i)(?<![A-Za-z0-9_])bearer\s+[^\s,;&]+")
-_URL_CREDENTIALS = re.compile(r"(?i)(https?://)[^/\s?#]+@")
+_URL_CREDENTIALS = re.compile(r'(?i)(https?://)[^/\s?#"\\]+@')
 _CREDENTIAL_FRAGMENT = re.compile(
     r"(?i)(?<![A-Za-z0-9_])(?:sk-|pplx-|gsk_|xai-|AIza|AKIA|"
     r"(?:ak|rk|pk|xoxb|ghp|github_pat|hf|glpat)_)[A-Za-z0-9_-]+"
@@ -88,6 +97,14 @@ _ASCII_PII_PATTERNS = (
 
 class ExportError(ValueError):
     """A safe, fixed diagnostic that never includes a raw record or exception."""
+
+
+def _is_secret_key(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    while (decoded := unquote(value)) != value:
+        value = decoded
+    return _SECRET_KEY.fullmatch(value) is not None
 
 
 def _redact_assignment_component(match: re.Match[str]) -> str:

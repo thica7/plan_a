@@ -753,6 +753,13 @@ class EvidenceContextMixin:
         if fact_ids is None and agent == 'writer' and competitor and dimension:
             from packages.agents.writer.answer_coverage import question_fact_ids
             requested_fact_ids = question_fact_ids(record.detail, snapshot, competitor, dimension)
+        if (agent == 'writer' and competitor and dimension == 'feature'
+                and requested_fact_ids and len(requested_fact_ids) <= 8):
+            from packages.research.question_scope import research_questions
+            if research_questions(record.detail, competitor, dimension):
+                # This local view retains complete question observations before
+                # the Writer independently compacts its model input to 14 KiB.
+                budget = min(32768, budget * 2)
         analysis_allowance = budget if agent in {'comparator', 'reflector'} else 0
         if agent in {"comparator", "reflector"}:
             # A comparison aggregates independently bounded analyst branches.

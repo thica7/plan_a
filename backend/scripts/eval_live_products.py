@@ -25,7 +25,7 @@ from packages.orchestrator.checkpointer import GraphCheckpointer
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.skills.registry import SkillRegistry
-from scripts.export_agent_eval import _redact
+from scripts.export_agent_eval import _is_secret_key, _redact
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -278,7 +278,12 @@ def redacted_json(payload: object, *, indent: int | None = None) -> str:
         if isinstance(value, str):
             return _redact(value)
         if isinstance(value, dict):
-            return {key: redact_values(item) for key, item in value.items()}
+            return {
+                key: "[redacted:secret]"
+                if isinstance(item, str) and _is_secret_key(key)
+                else redact_values(item)
+                for key, item in value.items()
+            }
         if isinstance(value, list):
             return [redact_values(item) for item in value]
         return value

@@ -191,7 +191,9 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.p
 
 ## 验证与交付边界
 
-本轮[关键证据与条件完整性交付](docs/optimization/2026-10-18-conditional-evidence-delivery.md)：补选遗漏操作时保留角色、套餐和原文前提；同源重复能力保留完整套餐依赖；完整中文必要条件句进入回答识别与 v2 重放。后端 **5227 通过／1 跳过**，OpenAPI 字节一致；前端未变，本轮未重跑。用户已确认[八题参考与三条单题标签](docs/optimization/2026-10-18-conditional-evidence-human-review.md)，四产品各跑一次真实来源阶段诊断，共 **38 调用／133082 token**。四份均有发布阻断，**0/4 完整报告可交付**；已采资料遗漏、否定／澄清／账单问题覆盖不足及 1Password 诊断导出误脱敏仍待修复。独立参考集不是盲测，新报告尚未经用户验收；奖励未赋值，训练关闭。逐题结果及源码身份见[结构化记录](docs/optimization/2026-10-18-conditional-evidence-results.json)。
+本轮[事实保留与回答复核交付](docs/optimization/2026-10-18-answer-preservation-delivery.md)：修复问题已选事实进入 Writer 的容量和操作筛选遗漏，增加有界二审及可见结论，补充计费／角色原文路径并修复诊断误脱敏。后端 **5361 通过／1 跳过**，OpenAPI 字节一致；前端未变，未重跑。四产品各一次真实来源阶段开发回归，共 **40 调用／151462 token**；八题正文与回答记录均为 **4 正确、2 错误、2 遗漏**，**0/4 完整报告达到内容交付标准**。Bitwarden、Dropbox 即使 QA blocker=0，仍有条件错误；1Password 正文已恢复可核验，两道计费题尚未给出有效不足答复。关键例外漏选、条件闭合与计费准入仍需处理；这批已曝光，不能作盲测准确率，新报告未获用户验收，训练关闭。身份、逐题核对及局限见[结构化结果](docs/optimization/2026-10-18-answer-preservation-results.json)。
+
+上一轮[关键证据与条件完整性交付](docs/optimization/2026-10-18-conditional-evidence-delivery.md)：后端 5227 通过／1 跳过；四产品 38 调用／133082 token，0/4 完整报告可交付，1Password 原诊断正文误脱敏。保留[原结果](docs/optimization/2026-10-18-conditional-evidence-results.json)及[用户参考确认](docs/optimization/2026-10-18-conditional-evidence-human-review.md)，不改写首轮产物或标签。
 
 上一轮[引用、金额与 Agentic RL 数据准备](docs/optimization/2026-10-18-agent-readiness-delivery.md)：新回答只选择已审核主张，服务器投影完整正文与逐条引用；live v2 合同与最终 QA 重放防止正文／片段脱节。逐金额区分赠送 credits 与实际采购价，保留套餐、周期及试用限制。新增只读脱敏轨迹导出和候选构造记录。该轮人审状态保留为历史，当前确认状态见上方新记录；正确性奖励保持 null，训练关闭。
 

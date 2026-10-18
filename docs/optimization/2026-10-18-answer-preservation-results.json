@@ -1,0 +1,577 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-18",
+  "phase": "answer_preservation_exposed_development_regression",
+  "production_code_sha256": "2e23ab7873175e5eecfc2d5110419ff3d65b0c0bf2c024a2fd0392d99fe101f7",
+  "freeze_files_sha256": {
+    "backend/tests/unit/test_answer_coverage.py": "f77abdf16f386bc1feb0be1ae83e1cb0efc2eb580d4a6d4ba42a781274688141",
+    "backend/tests/unit/test_answer_selection_contract.py": "bc3d6b57dc6be4fdbf54facb8db31307745bc7f93c8b448dc23844f32050b95b",
+    "backend/tests/unit/test_filtered_writer_qa.py": "45dbecc69a0717d1dadb29f6344cb8ea415f20627e8e57105871f7afd0344719",
+    "backend/tests/unit/test_semantic_writer_projection.py": "4f2c9c365a10aaf6cd38a34bc76df09498e0e06059e0dbd596de02884bf900c2",
+    "backend/tests/integration/test_dual_context_agent_alignment.py": "cfb43b0722cf8b129aeadef5ae4b32427277f4995a139fe74db369a80989ed28",
+    "backend/packages/agents/writer/answer_coverage.py": "119cd5889bd455b0dd57e9920baf9a1e58db407798b6d96c718a2b78e110ae37",
+    "backend/packages/agents/writer/dimension_writer.py": "b7a1511100f2251896c52a09266885844f38d51376e64b8251a9f6c2e5c934d5",
+    "backend/packages/orchestrator/evidence_context.py": "855710a171eda0de22ffef7b54dd37c00522cb5851490fa24bc4c33d39687998",
+    "backend/packages/research/question_evidence.py": "02be0374028f23f4fa2299e52c8255cd9be37f023adbfd0ce3a52fd3e3287610",
+    "backend/packages/research/extraction/semantic.py": "4f75242ce5f2b3d4a0032ffc884b2c333a3c4444dd68b66349946bf9417a6ba1",
+    "backend/packages/research/evidence/admission.py": "64ba9d27946709be954684c3c88e0857d0891dcf3e40456fffe0d612745ade94",
+    "backend/scripts/eval_live_products.py": "75d47141cdb7c9be3139c6403a94b59c14471241e62d81ad1c29c235d657b3c3",
+    "backend/scripts/export_agent_eval.py": "cbc7e69d355dfe2563119259a211cb37d288722c068396e58849d07ee8af31bc",
+    "backend/tests/unit/test_writer_question_preservation.py": "6f1154719f17faa76040c1fc7082de587c2ea97dcddeb21526bb7e2a98b2d12e",
+    "backend/tests/unit/test_answer_semantic_review.py": "62700685ec6f67d332567b1b9286d76fc8857e9b1b18ab6613502622a63ea3ce",
+    "backend/tests/unit/test_question_rule_extraction.py": "fe3f3fb4b740cdff621ed1f922b40d3b38a96ed18cfb73a88f698084702651f4",
+    "backend/tests/unit/test_export_redaction_boundaries.py": "18c609dba7c11debd1bdf7f5e6663ef2129d7c06ce96aedf8d2106555fa6add2",
+    "backend/packages/agents/writer/answer_resolution.py": "2bcfc45f6ca8fa67ef07d9fbb3c5a5bb2b1012066613996dd5fab706583dbedc",
+    "backend/packages/agents/writer/question_retrieval.py": "fbc0596368b5974360f3a60d0c4e5d13c92c1c04a9bbd4b139d8d725142527ec",
+    "backend/packages/research/evidence/normalization.py": "49460e3b066baa49fe1811ae64d7963a31f5aa4e26028c713c23283fb118468f",
+    "backend/packages/research/evidence/source_conditions.py": "8f8883dcf5959d764df984054d44a7c2185fe80c521879a49bd3b858bef77943",
+    "backend/packages/research/evidence/report_claims.py": "214c9f226412a8e532a9d475391ab1889806b4381c233728052743f1bafd9f0c",
+    "backend/packages/business_intel/official_sources.json": "c30b17249671c9c5fcfdfe3eddb7515df562431b2feb0326814af9f93828d5cc",
+    "backend/scripts/eval_answer_official.py": "059e0b5d1c69814cba5e05979aec33434af17cebad85ca38efe261e170ce0241",
+    "backend/scripts/eval_official_writer.py": "9d1980c9c0ada70e87eef83fbb26a425b9d816c05181b38e6d99caa0cb7bb1ea",
+    "backend/tests/unit/test_chinese_conditional_resolution.py": "08448770666fa95e0b268d629fbf4fd81da70c77b18afe70908da3b2a1b6944d",
+    "backend/tests/unit/test_question_operation_selection.py": "e4ca41ecedab8547d5aef7374c9cdf4181e44cfbfc59c1de6ead6d6423e5e424",
+    "backend/tests/unit/test_source_condition_integrity.py": "af0606d8dd9bc15ada4720c8b29b7b3c203c4d02c60804b57cf587e4553de864",
+    "docs/optimization/2026-10-18-independent-answer-evaluation-protocol.md": "18adcf88efd12927ed3e2fb352139ef44b49832461986843871fe626a23198dc",
+    "eval/agent-readiness-holdout-v1-reviewed.jsonl": "d3f36c6f50e530c74110a1eae8bbc7688e018c1235cc192a761864b1a61e58e3",
+    "eval/agent-readiness-holdout-v1-reviewed-manifest.json": "46bb14345d79c5e14eff4777eb7bbdf51f20fd0279bafec30cfef11c151cce1b",
+    "eval/agent-readiness-trajectory-review-v1-reviewed.json": "26f204f961eafef4db8c572f2fb178687bd993a37cf51ef5f2d70326653552db"
+  },
+  "human_review": {
+    "reference_cases": 8,
+    "question_trajectory_labels": 3,
+    "reference_confirmation": "docs/optimization/2026-10-18-conditional-evidence-human-review.md",
+    "reference_approval_is_report_acceptance": false,
+    "new_reports_user_accepted": 0,
+    "reviewed_dataset_unchanged": true,
+    "rewards_assigned": false,
+    "training_ready": false
+  },
+  "verification": {
+    "backend": {
+      "passed": 5361,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 176.31
+    },
+    "new_anonymous_tests": {
+      "writer_question_preservation": 18,
+      "answer_semantic_review": 18,
+      "question_rule_extraction": 15,
+      "export_redaction_boundaries": 83
+    },
+    "new_tests_included_in_backend_total": true,
+    "spec_and_quality_unresolved_important": 0,
+    "review_scope": "Implementation contracts; actual report errors below remain release-blocking.",
+    "review_fixes": [
+      "Mixed ownership/operation subquestions in a single question preserve all selected originals.",
+      "Complete finite quantity caps recognized as assertions without providing semantic entailment.",
+      "Second review sees sent-but-unpublished independent facts, but may only select published claim IDs.",
+      "Request-value leakage tests exclude generated IDs, timestamps and hashes."
+    ],
+    "frontend": {
+      "changed": false,
+      "rerun_this_phase": false
+    },
+    "openapi": "fresh export byte-identical",
+    "changed_python_ruff": "E9,F passed",
+    "diff_check": "passed",
+    "secret_scan": {
+      "scope": "literal current configured credentials in nonignored text sources/docs/eval, built frontend and specified acceptance artifacts; excludes secret env bodies and Git history",
+      "configured_credential_count": 1,
+      "files_scanned": 1330,
+      "actual_secret_hit_paths": [],
+      "tracked_secret_config_paths": [],
+      "status": "pass"
+    }
+  },
+  "offline_replay": {
+    "bitwarden_original_groups_before": 5,
+    "bitwarden_original_groups_after": 6,
+    "local_evidence_view_bytes": 17179,
+    "actual_compact_bytes_including_questions": 13450,
+    "omitted": false,
+    "historical_consumption_replay": true,
+    "historical_final_qa_replay": true,
+    "old_artifact_files_unchanged": 47,
+    "new_capacity_is_local_view_not_model_input_growth": true,
+    "actual_compact_input_limit_bytes": 14000,
+    "new_local_writer_view_max_bytes": 32768
+  },
+  "live_diagnostics": {
+    "runs": [
+      {
+        "product": "Bitwarden",
+        "run_id": "run-a7a77b37a10d4fd08d4af4bd4676816b",
+        "case_ids": [
+          "agent-readiness-holdout-v1-001",
+          "agent-readiness-holdout-v1-002"
+        ],
+        "artifact_directory": "data/artifacts/answer-preservation-2026-10-18/regression-bitwarden",
+        "status": "execution_complete",
+        "error_type": null,
+        "production_code_sha256": "2e23ab7873175e5eecfc2d5110419ff3d65b0c0bf2c024a2fd0392d99fe101f7",
+        "manifest_sha256": "677641d959ff02d3c3f77c02bff6181e29b243319d4119b5a21862b1e027ad75",
+        "source_count": 2,
+        "snapshot_facts": 48,
+        "runtime_report_characters": 2822,
+        "saved_report_characters": 2822,
+        "saved_report_sha256": "c23649509c4531763b84d209345e3880b2e2b22127252ba4876be669675c95e8",
+        "run_sha256": "6103ed3dbc72ab3511a7819c699b133cf15e220bc4166fa51dbe80bfb9015d14",
+        "summary_sha256": "7c0e8ea9423485649f0275a26afeb8670d5f2b586154d8699000b67c1980004d",
+        "body_is_redaction_placeholder": false,
+        "saved_report_matches_saved_run": true,
+        "llm_transport_attempts": 10,
+        "provider_tokens": 38608,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 0,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 3
+        },
+        "qa_llm_names": {
+          "dimension_claim_review": 1,
+          "dimension_answer_coverage": 1,
+          "dimension_answer_review": 1
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false
+      },
+      {
+        "product": "1Password",
+        "run_id": "run-307f2b7c65f645c2935f8ca2fb02b910",
+        "case_ids": [
+          "agent-readiness-holdout-v1-003",
+          "agent-readiness-holdout-v1-004"
+        ],
+        "artifact_directory": "data/artifacts/answer-preservation-2026-10-18/regression-1password",
+        "status": "execution_complete",
+        "error_type": null,
+        "production_code_sha256": "2e23ab7873175e5eecfc2d5110419ff3d65b0c0bf2c024a2fd0392d99fe101f7",
+        "manifest_sha256": "ac4329a41e503744800b39e0710cd568462426acc84c7ae28832ef7ab5380a18",
+        "source_count": 1,
+        "snapshot_facts": 21,
+        "runtime_report_characters": 1290,
+        "saved_report_characters": 1290,
+        "saved_report_sha256": "1ce51f8fd6b0816c0aef5038116e0ae3b491907e4be9b25e40970ae4b13af9b7",
+        "run_sha256": "fe080e3336205a12b83e6193ecab358a6dcd2c27c35843e1455049af869c356a",
+        "summary_sha256": "c758aed6c95ad05426293734defc4775d0bde1789e4ae9a6f0a07f9d636f3eb3",
+        "body_is_redaction_placeholder": false,
+        "saved_report_matches_saved_run": true,
+        "llm_transport_attempts": 10,
+        "provider_tokens": 34538,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 3
+        },
+        "qa_llm_names": {
+          "dimension_claim_review": 1,
+          "dimension_answer_coverage": 1,
+          "dimension_answer_review": 1
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false
+      },
+      {
+        "product": "Dropbox",
+        "run_id": "run-9641d62f87cf40e99a1463d852fe6a09",
+        "case_ids": [
+          "agent-readiness-holdout-v1-005",
+          "agent-readiness-holdout-v1-006"
+        ],
+        "artifact_directory": "data/artifacts/answer-preservation-2026-10-18/regression-dropbox",
+        "status": "execution_complete",
+        "error_type": null,
+        "production_code_sha256": "2e23ab7873175e5eecfc2d5110419ff3d65b0c0bf2c024a2fd0392d99fe101f7",
+        "manifest_sha256": "119c31d7b3d42c04b2fc3ab18a1c1e395ca94469232b15c69b1b73e491913b81",
+        "source_count": 2,
+        "snapshot_facts": 63,
+        "runtime_report_characters": 2239,
+        "saved_report_characters": 2239,
+        "saved_report_sha256": "8e61b0cc388278e67738554f89b695b63d4f3ec4affbb420343879d75991d110",
+        "run_sha256": "0a95c837ac081294dff6200341993a7ec1d478a3effb711ca041316dbb571de3",
+        "summary_sha256": "6264dd3b226d84db96639973d78d916812958e55b8afd90e2f626854836e767b",
+        "body_is_redaction_placeholder": false,
+        "saved_report_matches_saved_run": true,
+        "llm_transport_attempts": 10,
+        "provider_tokens": 41071,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 0,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 3
+        },
+        "qa_llm_names": {
+          "dimension_claim_review": 1,
+          "dimension_answer_coverage": 1,
+          "dimension_answer_review": 1
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false
+      },
+      {
+        "product": "Cloudflare",
+        "run_id": "run-533e609b565d49318869e0d3e898090f",
+        "case_ids": [
+          "agent-readiness-holdout-v1-007",
+          "agent-readiness-holdout-v1-008"
+        ],
+        "artifact_directory": "data/artifacts/answer-preservation-2026-10-18/regression-cloudflare",
+        "status": "execution_complete",
+        "error_type": null,
+        "production_code_sha256": "2e23ab7873175e5eecfc2d5110419ff3d65b0c0bf2c024a2fd0392d99fe101f7",
+        "manifest_sha256": "0c63c0c03c6618a039606a85844d08314245b4ca9855994e9551a27d1e2fa603",
+        "source_count": 1,
+        "snapshot_facts": 42,
+        "runtime_report_characters": 1121,
+        "saved_report_characters": 1121,
+        "saved_report_sha256": "6edb2e185f73247b2b984d47cd7e2d14982b0b1e22473d69039a729ed29c6ee1",
+        "run_sha256": "9ac59df0421f595508bd4d3a6f060d6f41af21e403abb7e9f2746e2b442d9aa3",
+        "summary_sha256": "19b04660664ade629dd0d3af68bca87a8a33247e5317b9158db75e4d7f653fac",
+        "body_is_redaction_placeholder": false,
+        "saved_report_matches_saved_run": true,
+        "llm_transport_attempts": 10,
+        "provider_tokens": 37245,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 3
+        },
+        "qa_llm_names": {
+          "dimension_claim_review": 1,
+          "dimension_answer_coverage": 1,
+          "dimension_answer_review": 1
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false
+      }
+    ],
+    "calls": 40,
+    "provider_tokens": 151462,
+    "provider_usage_unknown_spans": 0,
+    "provider_bill_usd": null,
+    "model": "deepseek-flash",
+    "max_calls_per_group": 24,
+    "max_tokens_per_group": 80000,
+    "max_output_tokens": 2048,
+    "model_retries": 0,
+    "runs_per_group": 1,
+    "repeat_runs": 0,
+    "reference_answers_sent_to_runtime": false,
+    "blind_holdout": false,
+    "evaluation_kind": "exposed_development_regression",
+    "production_code_unchanged_after_evaluation": true,
+    "external_embedding_calls": 0,
+    "search_calls": 0,
+    "writer_question_embedding": "existing local E5, offline",
+    "canonical_index": "isolated sparse diagnostic storage",
+    "reranker_used": false,
+    "planner_or_full_graph_tested": false,
+    "collector_scope": "Production research adapter, fixed reviewed URLs, no discovery/search."
+  },
+  "semantic_review": {
+    "reviewer": "independent_read_only_agents",
+    "user_accepted": false,
+    "review_artifact_sha256": {
+      "a": "a5620d670ae07ff31c0c3a68ff89cdb651ace7b48d21caf0068fdb08e9d10532",
+      "b": "f6438877995b77d189bfaa36c6624dadeeb7c145fa09be0941fc449f6be59d5d"
+    },
+    "cases": [
+      {
+        "case_id": "agent-readiness-holdout-v1-001",
+        "product": "Bitwarden",
+        "runtime_question_id": "question-cb40c90e4d944bf23275",
+        "runtime_claim_ids": [
+          "claim-39ba926b259b82e4f79b"
+        ],
+        "body_verdict": "correct",
+        "answer_record_verdict": "correct",
+        "diagnosis": "人数与 collections 上限保留至正文，明确回答不满足3人/3collections。",
+        "source_ids": [
+          "raw-source-71c8aa276f06cd964b39"
+        ],
+        "fact_ids": [
+          "evidence-fact-record-5163a6bbf9315c14c6922bfbe0af6c3aed21f23b4e6a9a730937a9c5121f605b"
+        ],
+        "reward": null,
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-002",
+        "product": "Bitwarden",
+        "runtime_question_id": "question-63762e09ae5d8faa1071",
+        "runtime_claim_ids": [
+          "claim-306e68e641e2dbc1e38e",
+          "claim-b7de5633d5725ad428a3",
+          "claim-d2952d5d27a1a15c7532"
+        ],
+        "body_verdict": "error",
+        "answer_record_verdict": "error",
+        "diagnosis": "My Items、策略条件及离线缓存进入正文，但个人vault访问保证遗漏无主密码SSO恢复及移除前登录条件；另缺Remove/Delete、数据归属澄清、永久删除和普通collection保留分支。",
+        "source_ids": [
+          "raw-source-5523a1e69e77dda70f9f"
+        ],
+        "fact_ids": [
+          "evidence-fact-record-b058e5609e1cfd731bdfb263c4afeb5aa704ad627c9e953774e3fa56d958fd2e",
+          "evidence-fact-record-bf1cad4c465c107e190329a0cb37f42db738f1dd54132a73a6af0b069a612db7",
+          "evidence-fact-record-e499ec8394de03e45842efb39521c2256b5e5ef8c411b1aaf16d36abfef14615"
+        ],
+        "reward": null,
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-003",
+        "product": "1Password",
+        "runtime_question_id": "question-60a7010e0c7ca2ae7058",
+        "runtime_claim_ids": [
+          "claim-64c339b93f4a346abbf0",
+          "claim-84e67f7cd210d3cd0960",
+          "claim-e54d840f3783f9ef6be8"
+        ],
+        "body_verdict": "correct",
+        "answer_record_verdict": "correct",
+        "diagnosis": "两个子问均明确否定，完整正文保存可复核，引用支持。",
+        "source_ids": [
+          "raw-source-44cc94f68d2ecd3d85e7"
+        ],
+        "fact_ids": [
+          "evidence-fact-record-09c12ac99bc1f8e11d43f3e2afc626ab6cc52e1a5ef44508cf0281ec7f3a7c50",
+          "evidence-fact-record-69081babe90ddd05c729e267736e80416d5ef6a8ec1453e9313d6f92e72547be"
+        ],
+        "reward": null,
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-004",
+        "product": "1Password",
+        "runtime_question_id": "question-26d795d67d79bd12e05d",
+        "runtime_claim_ids": [],
+        "body_verdict": "omitted",
+        "answer_record_verdict": "omitted",
+        "diagnosis": "未编造金额，但只留未回答占位，没有完整不足答复或具体缺项。本批采集正文没有销售/定制报价原句，不能借参考答案补成事实。",
+        "source_ids": [],
+        "fact_ids": [],
+        "reward": null,
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-005",
+        "product": "Dropbox",
+        "runtime_question_id": "question-55e153a4bb828470945e",
+        "runtime_claim_ids": [
+          "claim-275c4c9a8a778ed46b79"
+        ],
+        "body_verdict": "correct",
+        "answer_record_verdict": "correct",
+        "diagnosis": "直接邀请Can view仍允许下载，明确回答不能防下载。",
+        "source_ids": [
+          "raw-source-d3ce479cf7fb51b18f58"
+        ],
+        "fact_ids": [
+          "evidence-fact-record-ac47ab43c7df7deaf25528494ef0449a7f91c6725e65ec7eac7df0cf9890ed1e"
+        ],
+        "reward": null,
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-006",
+        "product": "Dropbox",
+        "runtime_question_id": "question-386ae5074b9e8f4b4fed",
+        "runtime_claim_ids": [
+          "claim-01238fb8b34e2cdb563e",
+          "claim-82f39481094e78c9e063"
+        ],
+        "body_verdict": "error",
+        "answer_record_verdict": "error",
+        "diagnosis": "给出conditional/yes和可见“是”，遗漏保留副本、leave/unshare及有效链接路径；模型二审未纠正。",
+        "source_ids": [
+          "raw-source-1d73261a8b2e08b67981"
+        ],
+        "fact_ids": [
+          "evidence-fact-record-3938ffa891ee16697338f45863a5be3bccf8ac8e9d315ff90de78054411d7f9a"
+        ],
+        "reward": null,
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-007",
+        "product": "Cloudflare",
+        "runtime_question_id": "question-1b7471af0d3dcf4af91c",
+        "runtime_claim_ids": [
+          "claim-6e1cad8ccf6109a31738",
+          "claim-a54fa6c440cdaeaef88d",
+          "claim-02b3d8a2eff5463a7934"
+        ],
+        "body_verdict": "correct",
+        "answer_record_verdict": "correct",
+        "diagnosis": "特定域名角色原文进入准入及正文，明确不能仅凭example.com授权清除other.example缓存。",
+        "source_ids": [
+          "raw-source-c71a5d8161af6e06ae53"
+        ],
+        "fact_ids": [
+          "evidence-fact-record-9817d00a34b28a9497e35869a4d386ca9239432d35a024d9bad2a54872714724"
+        ],
+        "reward": null,
+        "training_ready": false,
+        "user_accepted": false
+      },
+      {
+        "case_id": "agent-readiness-holdout-v1-008",
+        "product": "Cloudflare",
+        "runtime_question_id": "question-dd9aeefb8be2a32bc5bf",
+        "runtime_claim_ids": [],
+        "body_verdict": "omitted",
+        "answer_record_verdict": "omitted",
+        "diagnosis": "计费页已抓、模型已选原文，但内部规则/quality及条件范围仍阻碍准入；没有CPU等具体缺项的有效答复。",
+        "source_ids": [],
+        "fact_ids": [],
+        "reward": null,
+        "training_ready": false,
+        "user_accepted": false
+      }
+    ],
+    "visible_body_counts": {
+      "correct": 4,
+      "error": 2,
+      "omitted": 2
+    },
+    "answer_record_counts": {
+      "correct": 4,
+      "error": 2,
+      "omitted": 2
+    },
+    "full_deliverable_reports": 0,
+    "reports_reviewed": 4,
+    "reports": [
+      {
+        "product": "Bitwarden",
+        "content_standard_met": false,
+        "runtime_qa_blockers": 0,
+        "reasons": [
+          "001 完整正确，002 有实质条件错误和关键缺项，未满足两题均完整正确。",
+          "正文 source 标记均可解析，已发布 claim 的 fact 均存在并 allowed；仍不能证明源文完整条件已保留。",
+          "My Items、离线只读缓存与策略条件正确，不能抵消错误访问保证。",
+          "content candidate=false；用户验收始终 false。"
+        ],
+        "user_accepted": false
+      },
+      {
+        "product": "1Password",
+        "content_standard_met": false,
+        "runtime_qa_blockers": 1,
+        "reasons": [
+          "003 完整正确，004 未回答，未满足两题均完整正确。",
+          "五条可见产品主张均有官方 guests 来源支持；未发现虚构报价。",
+          "定价页抓取成功而未形成准入事实，不能将缺引用误说成官网无规则。",
+          "现有 runtime blocker 未解除；content candidate=false；用户验收始终 false。"
+        ],
+        "user_accepted": false
+      },
+      {
+        "product": "Dropbox",
+        "content_standard_met": false,
+        "runtime_qa_blockers": 0,
+        "reasons": [
+          "原产物 reported QA blocker=0，但这不是正确性证明。",
+          "005 的下载否定结论正确；006 的“结论：是”错误且遗漏 keep-copy、leave/link 访问路径和取消共享例外，构成独立内容阻断。",
+          "2 题未全部完整正确，因此不是内容可交付 candidate；user_accepted 始终 false。"
+        ],
+        "user_accepted": false
+      },
+      {
+        "product": "Cloudflare",
+        "content_standard_met": false,
+        "runtime_qa_blockers": 1,
+        "reasons": [
+          "007 保持精确域名授权边界且正确。",
+          "008 无有效可见回答，泛化证据不足提示缺少 CPU/其他用量与已知计费规则，不能算完整合理拒答。",
+          "定价抓取成功但准入/容量处理未完成，canonical 只有角色文档；当前局部报告还有 1 个 QA blocker。",
+          "2 题未全部完整正确，因此不是内容可交付 candidate；user_accepted 始终 false。"
+        ],
+        "user_accepted": false
+      }
+    ],
+    "runtime_zero_blockers_not_sufficient": true,
+    "release_blocked": true,
+    "no_training_labels_promoted": true
+  },
+  "pricing_diagnosis": {
+    "active_billing_question_present": true,
+    "selected_standard_amount_row_rejected_by_billing_regex": true,
+    "selected_cpu_billing_footnote_rejected_by_pricing_quality": true,
+    "minimum_fee_without_headings_window_replay": "13 global conditions exceed cap of 6",
+    "controlled_headings_replay_is_actual_capture": false,
+    "full_rejected_pricing_capture_reconstructable": false,
+    "capture_limit": "22435-character capture length and 11729-character selector window persisted; complete pricing body/headings/full capture hash not available. Do not claim the actual section state was fully replayed.",
+    "onepassword_this_capture_contains_sales_or_custom_quote_sentence": false,
+    "server_missing_price_route_recognized_original_requests": {
+      "1Password": false,
+      "Cloudflare": false
+    }
+  },
+  "limits": [
+    "Model semantic review is not a natural-language entailment proof; it still missed SSO and retained-copy/access-path conditions.",
+    "Finite billing recognition and independent quality vocabularies still reject valid amount tables and CPU footnotes.",
+    "Only fixed official-URL stage execution was tested; no Planner discovery, full Graph or dense production RAG acceptance.",
+    "Existing exposed eight-case development regression is not generalization accuracy or a controlled A/B.",
+    "All four reports are assessable, but none meets the whole-report content standard or has user acceptance.",
+    "The current-price insufficiency route couples intent to fully known quote scope; these two original requests did not trigger it."
+  ],
+  "next_priority": [
+    "Retrieve and bind independent source exceptions before Writer; close all question/action/ownership/SSO/copy branches.",
+    "Require clarification and complete conditional claims before allowing an unconditional conclusion.",
+    "Unify bounded billing-rule admission and quality; preserve table headings, units, relevant footnotes and section-local conditions.",
+    "Separate quote/bill intent recognition from missing market/plan/currency/period/tax/CPU inputs and produce a concise partial answer.",
+    "Persist full rejected captures and their hashes/headings for exact offline replay before another frozen regression."
+  ],
+  "training": {
+    "model_training_performed": false,
+    "parameter_updates": 0,
+    "weight_downloads": 0,
+    "rewards_assigned": false,
+    "correctness_reward": null,
+    "training_ready": false
+  },
+  "deployment": {
+    "docker_run": false,
+    "http_qdrant_tested": false,
+    "temporal_tested": false
+  }
+}

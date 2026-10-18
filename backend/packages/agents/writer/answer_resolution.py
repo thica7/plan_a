@@ -80,6 +80,14 @@ _CHINESE_NON_ASSERTION = re.compile(
     r"如果|假如|要是|能不能|可不可以|有没有|呢"
 )
 _CHINESE_QUOTATION = re.compile(r"[“”‘’\"'「」『』]")
+_QUANTITY_CAP = re.compile(
+    r"[^。.!?？\n]+?\b(?:has\s+a\s+maximum\s+of|includes?\s+up\s+to)"
+    r"\s+\d+(?:\.\d+)?\s+[A-Za-z][A-Za-z -]*[.!]?|"
+    r"[^。.!?？\n]+?(?:最多(?:包含|容纳|包括)?|至多(?:包含|容纳|包括)?|上限为?|不超过)"
+    r"\s*[0-9一二两三四五六七八九十百千]+\s*(?:人|(?:名|位|个|条|次)\s*\w+)[。.!]?",
+    re.I,
+)
+_CAP_NON_ASSERTION = re.compile(r"\b(?:example|recommend\w*|suggest\w*|suppose|whether)\b", re.I)
 _USER_CATEGORY = re.compile(
     r"\buser\s+(?:categor(?:y|ies)|types?)\b"
     r"|\b(?:types?|categor(?:y|ies))\s+of\s+(?:(?:external|internal)\s+)?users?\b"
@@ -188,6 +196,16 @@ def _chinese_condition_asserts(text: str) -> bool:
     return False
 
 
+def _quantity_cap_asserts(text: str) -> bool:
+    """Recognise a complete stated cap; its scope and decision need semantic review."""
+    if (_CHINESE_QUOTATION.search(text) or _CHINESE_NON_ASSERTION.search(text)
+            or _CAP_NON_ASSERTION.search(text)):
+        return False
+    return any(_QUANTITY_CAP.fullmatch(unit.strip())
+               and not _OPEN_QUESTION.search(unit) and not _CLOSED_QUESTION.search(unit)
+               for unit in _SCOPE_UNIT.findall(text))
+
+
 def resolution_reasons(
     answer: dict, question: str, claims: Iterable[dict]
 ) -> tuple[str, ...]:
@@ -225,6 +243,7 @@ def resolution_reasons(
         and _CLOSED_QUESTION.search(question)
         and not _ANSWER_ASSERTION.search(body)
         and not _chinese_condition_asserts(body)
+        and not _quantity_cap_asserts(body)
     ):
         reasons.append("answer_body_unresolved")
     if conclusion == "unknown" or conclusion == "not_applicable" and not open_question:
