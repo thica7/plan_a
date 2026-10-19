@@ -36,13 +36,13 @@ _SUBJECT = re.compile(
 _PREDICATE = re.compile(
     r"\b(?:can(?:not)?|may|must|needs?|requires?|has|have|is|are|access|edit|"
     r"modify|send|view|read|create|invite|share|sign|become)\b"
-    r"|可以|能够|可(?=编辑|查看|访问|创建|发送)|不能|无法|必须|需要|需(?=登录)|"
+    r"|可以|能够|可(?=编辑|查看|访问|创建|发送)|不能|无法|没有|只能|仅能|只可|仅可|必须|需要|需(?=登录)|"
     r"访问|编辑|发送|查看|阅读|创建|邀请|分享|登录|成为|是",
     re.I,
 )
 _SUBJECT_MODAL = re.compile(
     r"\b(?:can(?:not)?|could|may|must|needs?|requires?|has|have|is|are)\b"
-    r"|可以|能够|可(?=编辑|查看|访问|创建|发送)|不能|无法|必须|需要|需(?=登录)|是",
+    r"|可以|能够|可(?=编辑|查看|访问|创建|发送)|不能|无法|没有|只能|仅能|只可|仅可|必须|需要|需(?=登录)|是",
     re.I,
 )
 _RECIPIENT_PREFIX = re.compile(
@@ -66,7 +66,7 @@ _ANSWER_ASSERTION = re.compile(
     r"access|edit|modify|send|view|read|create|invite|share|sign|become)\b"
     r"|\b(?:has|have)\s+access\b|(?:^|[，,。；;]\s*)(?:是|否|能)(?=[，,。；;\s]|$)"
     r"|\bnot\s+included\b|可以|能够|不能|无法|看不到|看不见|不会|不可以|不具备|不允许|"
-    r"不包含|未包含|不含|允许|支持|不支持|需要|必须|仅限|取决于",
+    r"不包含|未包含|不含|没有|只能|仅能|只可|仅可|允许|支持|不支持|需要|必须|仅限|取决于",
     re.I,
 )
 _CHINESE_NECESSARY_CONDITION = re.compile(

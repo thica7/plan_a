@@ -308,7 +308,8 @@ def _asserted(text, pattern):
             return False
         if re.search(
             r"\b(?:does?|did|is|are|was|were|will|would|can|could|has|have)\s+not\b|"
-            r"\b(?:cannot|can't|never|failed|unsuccessful)\b|不允许|不能|并不|未能|失败",
+            r"\b(?:cannot|can't|never|failed|unsuccessful)\b|不允许|不能|并不|未能|失败|"
+            r"(?:不|未|不会|没有|尚未|并未|未曾)\s*$",
             local,
             re.I,
         ):
@@ -494,7 +495,10 @@ def _covered(text, row):
             r"eliminates?\s+(?:all\s+)?(?:account\s+)?access|"
             r"lose\s+(?:all\s+)?(?:account\s+)?access|"
             r"(?:cannot|can't|will not be able to)\s+(?:log|sign)\s+in|"
-            r"失去[^。；]{0,12}访问|无法访问|消除[^。；]{0,12}访问"
+            r"失去[^。；]{0,12}访问|无法访问|消除[^。；]{0,12}访问|"
+            r"消除对(?:其|他们的|这些成员的)\s*"
+            r"(?:(?-i:[A-Z][A-Za-z0-9-]{0,39}(?: [A-Z][A-Za-z0-9-]{0,39}){0,2})\s*)?"
+            r"(?:账户|账号)的(?:所有|全部)访问"
         )
         if (
             _AUTH.search(text)
@@ -896,6 +900,10 @@ def question_exception_fact_ids(question, facts):
     candidates = {}
     for fact in facts:
         for row in source_exception_constraints(fact):
+            if row["kind"] == "authentication_access" and not (
+                _ACCESS.search(question) or _AUTH.search(question)
+            ):
+                continue
             if not (
                 events & {tuple(event) for event in row["events"]}
                 or broad

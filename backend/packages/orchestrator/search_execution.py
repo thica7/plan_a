@@ -43,7 +43,9 @@ class SearchExecutionMixin:
         filters: SearchFilters | None = None,
     ) -> list[SearchResult]:
         started = time.perf_counter()
-        native = self._settings.web_search_provider == "deepseek" and self._search.is_enabled
+        reusable = self._settings.web_search_provider == "deepseek" and self._search.is_enabled
+        standalone_api = reusable and self._settings.deepseek_web_api_enabled
+        native = reusable and not standalone_api
         cache_key = self._search_cache_key(query, max_results, filters)
         metadata = {
             "provider": self._settings.web_search_provider,
@@ -56,13 +58,13 @@ class SearchExecutionMixin:
             context.add_tool_call("web_search", query)
         # Locks are kept for the bounded lifetime of a run, including waiters.
         lock = (
-            record.search_locks.setdefault(cache_key, asyncio.Lock()) if native else asyncio.Lock()
+            record.search_locks.setdefault(cache_key, asyncio.Lock()) if reusable else asyncio.Lock()
         )
         try:
             async with lock:
-                if native and record.detail.evidence_refresh_active:
+                if reusable and record.detail.evidence_refresh_active:
                     record.search_cache.pop(cache_key, None)
-                cached = record.search_cache.get(cache_key) if native else None
+                cached = record.search_cache.get(cache_key) if reusable else None
                 if (
                     cached is not None
                     and time.monotonic() - cached[0] < 300
@@ -87,7 +89,21 @@ class SearchExecutionMixin:
                             metadata["budget_exhausted"] = True
                             return []
                         usage_counter.search_calls += 1
-                    if native:
+                    if standalone_api:
+                        metadata.update(search_cache_hit=False, standalone_web_api=True)
+                        try:
+                            results = await web_search(
+                                self._search, WebSearchRequest(query, max_results, filters)
+                            )
+                        finally:
+                            api_metadata = self._search.consume_last_metadata()
+                            if collector_budget is not None and not api_metadata.get("web_api_requests"):
+                                usage_counter.search_calls -= 1
+                            metadata.update({key: json.dumps(value, ensure_ascii=False)
+                                             if isinstance(value, (list, dict)) else value
+                                             for key, value in api_metadata.items()})
+                        record.search_cache[cache_key] = (time.monotonic(), list(results))
+                    elif native:
                         filter_text = (
                             json.dumps(filters.payload(), ensure_ascii=False) if filters else ""
                         )

@@ -4650,7 +4650,38 @@ class RunService(
             for source in trusted_source_candidates(product, "feature")
         ):
             fetch_options["public_document_browser_retry"] = True
-        result = await fetch_evidence_page(url, **fetch_options)
+        if self._settings.deepseek_web_api_enabled and self._settings.resolved_deepseek_api_key:
+            fetch_options["deepseek_settings"] = self._settings
+        try:
+            result = await fetch_evidence_page(url, **fetch_options)
+        except asyncio.CancelledError as exc:
+            if "deepseek_settings" not in fetch_options:
+                raise
+            api_metadata = getattr(exc, "_deepseek_fetch_metadata", {})
+            attempted = bool(api_metadata.get("web_api_requests"))
+            if advanced_reserved and not attempted:
+                usage.advanced_fetch_attempts -= 1
+            response_observed = api_metadata.get("provider_api_status") is not None
+            cancelled_metadata = {
+                "url": url, "ok": False, "status_code": None,
+                "error": "网页抓取已取消", "failure_reason": "fetch_cancelled",
+                "fetch_method": "deepseek_web_fetch" if attempted else None,
+                "advanced_fetch_attempted": attempted,
+                "web_api_requests": 0, "web_api_successful_responses": 0,
+                "web_api_billable_requests_estimate": 0, "provider_api_status": None,
+                "llm_request_attempts": 0, "llm_tokens_charged": 0, "llm_cost_charged_usd": 0.0,
+                **api_metadata,
+                "web_api_billing_unknown_requests": int(attempted and not response_observed),
+                "web_api_billing_outcome": (
+                    "response_observed_estimate" if response_observed else "unknown" if attempted else "not_requested"
+                ),
+            }
+            self._append_trace_span(
+                record, kind="fetch", agent=agent, subagent=subagent, name="fetch_page",
+                status="error", started=started, input_text=url, output_text="网页抓取已取消",
+                metadata=self._trace_metadata(context, cancelled_metadata),
+            )
+            raise
         if advanced_reserved and not getattr(result, "advanced_fetch_attempted", False):
             usage.advanced_fetch_attempts -= 1
         captured_at = getattr(result, "captured_at", None)
@@ -4668,6 +4699,9 @@ class RunService(
             "cache_hit": getattr(result, "cache_hit", False),
             "capture_observed_at": captured_at.isoformat() if captured_at is not None else None,
         }
+        metadata.update({key: value for key, value in getattr(result, "capture_metadata", {}).items()
+                         if key.startswith(("web_api_", "llm_")) or key in {"billing_basis", "provider_api_status",
+                            "origin_status", "final_url_observed", "capture_upgrade_failure_reason"}})
         span_id = self._append_trace_span(
             record,
             kind="fetch",

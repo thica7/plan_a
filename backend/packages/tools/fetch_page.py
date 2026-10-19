@@ -4,8 +4,10 @@ import asyncio
 import hashlib
 import html
 import re
+from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from io import BytesIO
 from typing import Any
 from urllib.parse import urljoin
@@ -307,8 +309,19 @@ def _capture_html(body: str) -> tuple[str, tuple[tuple[int, str], ...], dict[str
         config=_HTML_TEXT_CONFIG,
     )
     text = (text or '').strip()
-    if not text or 'ambiguous_content_root' in metadata['capture_gaps']:
+    fallback = not text or 'ambiguous_content_root' in metadata['capture_gaps']
+    if fallback:
         text = '\n'.join(part.strip() for part in clone.itertext() if part.strip())
+    disclosure_texts = [record[key] for _, record in disclosures if record['status'] == 'complete'
+                        for key in ('question', 'answer')]
+    disclosure_nodes = [*revealed, *(node for node, record in disclosures
+                                    if node.tag == 'details' and record['status'] == 'complete')]
+    disclosure_paths = {clone.getroottree().getpath(copies[node]) for node in disclosure_nodes}
+    text, heading_records, heading_gap = _capture_heading_positions(
+        clone, text, fallback=fallback, disclosure_texts=disclosure_texts, disclosure_paths=disclosure_paths,
+    )
+    if heading_gap:
+        metadata['capture_gaps'].append(heading_gap)
     protected_quotes = []
     for node, record in disclosures:
         if record['status'] == 'complete':
@@ -320,7 +333,12 @@ def _capture_html(body: str) -> tuple[str, tuple[tuple[int, str], ...], dict[str
         else:
             metadata['capture_gaps'].append(record['reason'])
         metadata['disclosures'].append(record)
-    text = _restore_headings(clone, text)
+    if heading_gap:
+        text = _restore_headings(clone, text)
+    text, anchors = _finish_heading_positions(text, heading_records)
+    metadata['document_heading_anchors'] = anchors
+    if len(anchors) != len(headings):
+        metadata['capture_gaps'].append('heading_identity_not_captured')
     for record in metadata['disclosures']:
         if record['status'] == 'complete':
             record['quote_start'] = text.find(record['quote'])
@@ -332,6 +350,127 @@ def _capture_html(body: str) -> tuple[str, tuple[tuple[int, str], ...], dict[str
     metadata['capture_gaps'] = list(dict.fromkeys(metadata['capture_gaps']))
     metadata['capture_incomplete'] = bool(metadata['capture_gaps'])
     return text, headings, metadata
+
+
+def _capture_heading_positions(root, baseline: str, *, fallback=False, disclosure_texts=(), disclosure_paths=()):
+    """Carry DOM block identities through extraction, without matching title text."""
+    if not root.xpath('.//h1|.//h2|.//h3|.//h4|.//h5|.//h6'):
+        return baseline, [], None
+    marked = deepcopy(root)
+    prefix = 'Cdx' + hashlib.sha256(tostring(root)).hexdigest()[:16] + 'B'
+    while prefix in root.text_content():
+        prefix += 'Z'
+    blocks = [node for node in marked.iterdescendants()
+              if re.fullmatch(r'h[1-6]', node.tag) or node.tag in {'p', 'li', 'blockquote', 'table'}
+              or marked.getroottree().getpath(node) in disclosure_paths]
+    records, tokens = [], []
+    for index, node in enumerate(blocks):
+        token = f'{prefix}{index}Z'
+        tokens.append(token)
+        if re.fullmatch(r'h[1-6]', node.tag) and (title := _collapse_space(node.text_content())):
+            records.append(dict(level=int(node.tag[1]), title=title, token=token,
+                                source_path=marked.getroottree().getpath(node), ordinal=index))
+        cells = node.xpath('.//th|.//td') if node.tag == 'table' else []
+        target = cells[0] if cells else node
+        target.text = token + (target.text or '')
+    # Text outside marked blocks may survive extraction too. It cannot be
+    # crossed when placing an omitted heading at a later retained block.
+    boundary = re.compile(re.escape(prefix) + r'(\d+)Z')
+    block_nodes, unbound, ordinal = set(blocks), [], -1
+    for value in marked.xpath('.//text()'):
+        for match in boundary.finditer(str(value)):
+            ordinal = int(match[1])
+        owner = value.getparent()
+        owner = owner.getparent() if value.is_tail else owner
+        ancestors = [owner, *owner.iterancestors()] if owner is not None else []
+        if (not any(node in block_nodes or node.tag == 'summary' for node in ancestors)
+                and (text := _collapse_space(str(value)))):
+            unbound.append((ordinal, text))
+    extracted = ('\n'.join(part.strip() for part in marked.itertext() if part.strip()) if fallback else
+                 trafilatura_extract(marked, include_comments=False, include_tables=True,
+                                     favor_recall=True, config=_HTML_TEXT_CONFIG) or '').strip()
+    clean = extracted
+    for token in tokens:
+        clean = clean.replace(token, '')
+    if _collapse_space(clean) != _collapse_space(baseline):
+        # Markers can prevent deduplication of explicit disclosure answers.
+        # Permit only additional whole source blocks, within their DOM counts.
+        before, after = [[_collapse_space(line) for line in value.splitlines() if line.strip()]
+                         for value in (baseline, clean)]
+        remaining = Counter(_collapse_space(value) for value in disclosure_texts)
+        for kind, _, _, left, right in SequenceMatcher(None, before, after, autojunk=False).get_opcodes():
+            if kind == 'equal':
+                continue
+            added = after[left:right]
+            if kind != 'insert':
+                return baseline, [], 'heading_markers_changed_capture'
+            while added:
+                count = next((size for size in range(1, len(added) + 1)
+                              if remaining[' '.join(added[:size])] > 0), None)
+                if count is None:
+                    return baseline, [], 'heading_markers_changed_capture'
+                remaining[' '.join(added[:count])] -= 1
+                added = added[count:]
+    emitted = [(index, extracted.find(token)) for index, token in enumerate(tokens) if token in extracted]
+    if (any(extracted.count(tokens[index]) != 1 for index, _ in emitted)
+            or [position for _, position in emitted] != sorted(position for _, position in emitted)):
+        return baseline, [], 'heading_block_identity_ambiguous'
+    insertions = {}
+    for record in records:
+        if record['token'] in extracted:
+            continue
+        following_index, following = next(((index, position) for index, position in emitted
+                                           if index > record['ordinal']), (len(blocks), len(extracted)))
+        if any(record['ordinal'] <= index < following_index and value in _collapse_space(clean)
+               for index, value in unbound):
+            return baseline, [], 'heading_source_boundary_unbound'
+        position = extracted.rfind('\n', 0, following) + 1 if following < len(extracted) else len(extracted)
+        insertions.setdefault(position, []).append(record['token'])
+    for position in sorted(insertions, reverse=True):
+        prefix_line = '\n' if position and extracted[position - 1] != '\n' else ''
+        extracted = extracted[:position] + prefix_line + '\n'.join(insertions[position]) + '\n' + extracted[position:]
+    for record in records:
+        position = extracted.index(record['token'])
+        left = extracted.rfind('\n', 0, position) + 1
+        right = extracted.find('\n', position)
+        right = len(extracted) if right < 0 else right
+        if _collapse_space(extracted[left:right].replace(record['token'], '')) not in {'', record['title']}:
+            return baseline, [], 'heading_line_identity_ambiguous'
+        # A summary must not reuse an identical heading as its question.
+        extracted = extracted[:left] + record['token'] + extracted[right:]
+    heading_tokens = {record['token'] for record in records}
+    for token in tokens:
+        if token not in heading_tokens:
+            extracted = extracted.replace(token, '')
+    return extracted.strip(), records, None
+
+
+def _finish_heading_positions(text, records):
+    """Resolve surviving markers only after disclosure insertion has moved offsets."""
+    anchors, occurrences, adjustment = [], {}, 0
+    valid, previous = True, -1
+    for record in records:
+        token = record['token']
+        position = text.find(token)
+        start = position + adjustment
+        adjustment += len(record['title']) - len(token)
+        valid = valid and text.count(token) == 1 and position > previous
+        previous = position
+        occurrence = occurrences.get(record['title'], 0) + 1
+        occurrences[record['title']] = occurrence
+        anchors.append(dict(level=record['level'], title=record['title'], start=start,
+                            end=start + len(record['title']), occurrence=occurrence,
+                            source_path=record['source_path']))
+    for record in records:
+        text = text.replace(record['token'], record['title'])
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    for anchor in anchors:
+        start, end = anchor['start'], anchor['end']
+        valid = valid and text[start:end] == anchor['title'] and (start == 0 or text[start - 1] == '\n')
+        line_end = text.find('\n', end)
+        valid = valid and not text[end:len(text) if line_end < 0 else line_end].strip()
+        anchor['content_sha256'] = digest
+    return text, anchors if valid else []
 
 
 def _node_visible(node) -> bool:

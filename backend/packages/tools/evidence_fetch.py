@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
+from packages.config import Settings
 from packages.tools.advanced_fetch import AdvancedFetchResult, advanced_fetch_page
 from packages.tools.fetch_page import FetchPageResult, _pricing_controls, fetch_page
 
@@ -46,6 +47,7 @@ async def fetch_evidence_page(
     advanced_quality_threshold: float = 0.55,
     require_price_content: bool = False,
     public_document_browser_retry: bool = False,
+    deepseek_settings: Settings | None = None,
 ) -> EvidenceFetchResult:
     from packages.infrastructure.redis_config import get_redis_runtime, redis_options
 
@@ -57,15 +59,21 @@ async def fetch_evidence_page(
         require_price_content=require_price_content,
         public_document_browser_retry=public_document_browser_retry,
     )
+    # Provider attempts are current-call diagnostics, not reusable capture counters.
+    # Keep this opt-in route out of Redis, including successful basic fallbacks.
+    if (deepseek_settings and deepseek_settings.deepseek_web_api_enabled
+            and deepseek_settings.resolved_deepseek_api_key):
+        return await _fetch_evidence_page(url, **options, deepseek_settings=deepseek_settings)
     config = redis_options()
     if config.cache_enabled:
         from packages.infrastructure.source_cache import cached_fetch
 
         return await cached_fetch(
-            url, lambda: _fetch_evidence_page(url, **options), options=options,
+            url, lambda: _fetch_evidence_page(url, **options, deepseek_settings=deepseek_settings),
+            options=options,
             runtime=get_redis_runtime(), ttl_seconds=config.cache_ttl_seconds,
         )
-    return await _fetch_evidence_page(url, **options)
+    return await _fetch_evidence_page(url, **options, deepseek_settings=deepseek_settings)
 
 
 async def _fetch_evidence_page(
@@ -77,9 +85,12 @@ async def _fetch_evidence_page(
     advanced_quality_threshold: float = .55,
     require_price_content: bool = False,
     public_document_browser_retry: bool = False,
+    deepseek_settings: Settings | None = None,
 ) -> EvidenceFetchResult:
     """Fetch evidence through the fast HTTP path, then webfetch_v2 when quality is weak."""
 
+    provider_enabled = bool(deepseek_settings and deepseek_settings.deepseek_web_api_enabled
+                            and deepseek_settings.resolved_deepseek_api_key)
     basic = await fetch_page(url, timeout_seconds=timeout_seconds)
     if _basic_fetch_is_policy_blocked(basic):
         return _from_basic_fetch(
@@ -89,6 +100,7 @@ async def _fetch_evidence_page(
         )
     retry_public_document = (
         public_document_browser_retry and allow_advanced and basic.status_code == 403
+        and not provider_enabled
     )
     if basic.status_code in {401, 403} and not retry_public_document:
         return _from_basic_fetch(
@@ -119,6 +131,32 @@ async def _fetch_evidence_page(
             fetch_method="basic_httpx_low_quality",
             failure_reason=content_problem or "content_too_short",
         )
+
+    if provider_enabled:
+        from packages.tools.deepseek_fetch import deepseek_fetch_page
+
+        upgraded = await deepseek_fetch_page(
+            url, settings=deepseek_settings, timeout_seconds=timeout_seconds,
+            min_text_chars=min_text_chars,
+        )
+        if upgraded.ok and upgraded.quality_score >= advanced_quality_threshold:
+            captured = _with_price_check(upgraded, require_price_content)
+            return _retain_capture_gaps(captured, basic) if capture_incomplete else captured
+        fallback = _with_price_check(_from_basic_fetch(
+            basic,
+            fetch_method="basic_httpx" if basic_sufficient else "basic_httpx_low_quality",
+            failure_reason=None if basic_sufficient else content_problem or "content_too_short",
+            advanced_fetch_attempted=upgraded.advanced_fetch_attempted,
+        ), require_price_content)
+        # An unsuccessful provider upgrade uses this slot once, with no browser retry.
+        return replace(fallback, capture_metadata={
+            **fallback.capture_metadata,
+            **{key: value for key, value in upgraded.capture_metadata.items()
+               if key.startswith(("web_api_", "llm_")) or key == "billing_basis"},
+            "capture_upgrade_failure_reason": upgraded.failure_reason or "advanced_result_rejected",
+            "capture_upgrade_provider": "deepseek",
+            "capture_upgrade_error": upgraded.error,
+        })
 
     advanced = await advanced_fetch_page(
         url,

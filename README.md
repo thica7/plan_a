@@ -130,10 +130,10 @@ ARK_API_KEY=replace_with_your_key
 ARK_MODEL=deepseek-flash
 LLM_PROVIDER_NAME=deepseek
 WEB_SEARCH_PROVIDER=deepseek
-DEEPSEEK_SEARCH_MODEL=deepseek-flash
+DEEPSEEK_WEB_API_ENABLED=true  # 可选复验模式，默认关闭
 ```
 
-原生搜索可复用官方 DeepSeek 主模型凭据，也可单独设置 `DEEPSEEK_API_KEY`。使用 Perplexity 时改为 `WEB_SEARCH_PROVIDER=perplexity` 并设置 `PPLX_API_KEY`。自动发现竞品需要可用搜索服务；模型返回网址仍需实际抓取和核验。动态页面可选安装 `js-render` 依赖与 Chromium，扫描 PDF 需先 OCR。
+独立 Search／Fetch 可复用官方 DeepSeek 主模型凭据，也可单独设置 `DEEPSEEK_API_KEY`；工具请求和计费请求估计单列，不计作生成 token。`DEEPSEEK_WEB_API_ENABLED` 默认关闭，上例显式开启，修改配置后需重启后端；关闭时保留旧原生搜索与浏览器链，原生模型由 `DEEPSEEK_SEARCH_MODEL` 选择。使用 Perplexity 时改为 `WEB_SEARCH_PROVIDER=perplexity` 并设置 `PPLX_API_KEY`。自动发现竞品需要可用搜索服务，Search 摘要仍需抓取和核验；Fetch 的 API 成功也不保证取得合格原文。动态页面可选安装 `js-render` 依赖与 Chromium，扫描 PDF 需先 OCR。
 
 用 `RUN_LLM_MAX_TOKENS`、调用次数和费用预算限制单次运行；工作区月度额度独立生效。预算不足会明确阻断或回退，不能保证所有阶段都完成模型调用。部署前还需配置 API 授权与持久化存储，默认演示配置不适合直接对外开放。
 
@@ -191,7 +191,9 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.p
 
 ## 验证与交付边界
 
-本轮[Collector逐题交付与同页RAG升级](docs/optimization/2026-10-19-collector-question-delivery.md)：接通真实捕获、提案、准入、来源转换、快照、Agent视图和Writer实际发送诊断；补源结构恢复和已验证空RAG来源升级。新增147项测试，最终后端 **5811通过／1跳过**，变更范围Ruff、diff、OpenAPI及累计审查通过。四组各首次运行共 **30调用／85808 token**；正文 **3正确、0错误、5遗漏**，回答记录 **2正确、0错误、6遗漏**，仍 **0/4可交付**。Dropbox仅得导航壳，下游未执行；1Password FAQ问题文字缺失、Cloudflare重复标题导致空选窗、Bitwarden关键原始事实未选入Writer及回答状态假阳性仍阻断。已记录事实ID无转换丢失不代表语义齐全，正常脱敏可使审计partial。已曝光非盲，未训练，新报告未获用户验收。[结构化结果](docs/optimization/2026-10-19-collector-question-delivery-results.json)。
+本轮[DeepSeek Search／Fetch 与证据消费](docs/optimization/2026-10-19-deepseek-web-delivery.md)：接入可选独立网页工具、通用章节身份、Writer 原句与条件绑定，补取消计量和调用前完整冻结校验。最终后端 **5982通过／1跳过**，新增171项测试，变更范围Ruff、OpenAPI及累计审查通过。四组各首次运行 **22调用／75844 token**；正文 **2正确／1错误／5遗漏**，最终记录 **2正确／6遗漏**。独立审读仅认可Cloudflare两题内容，**系统交付仍0/4**；Bitwarden有遗漏与条件泛化，1Password已抓正文但准入失败，Dropbox工具404，Cloudflare仍有门禁误阻待核对。713份冻结文件在运行期间不变，生产源码及312旧产物不变，9份捕获可核验；提交前仅清理一处测试EOF空行，AST一致。已曝光非盲，未获用户验收，未训练；新路线默认关闭，本机配置未改。[结构化结果](docs/optimization/2026-10-19-deepseek-web-delivery-results.json)。
+
+上一轮[Collector逐题交付与同页RAG升级](docs/optimization/2026-10-19-collector-question-delivery.md)：接通真实捕获、提案、准入、来源转换、快照、Agent视图和Writer实际发送诊断；补源结构恢复和已验证空RAG来源升级。新增147项测试，最终后端 **5811通过／1跳过**，变更范围Ruff、diff、OpenAPI及累计审查通过。四组各首次运行共 **30调用／85808 token**；正文 **3正确、0错误、5遗漏**，回答记录 **2正确、0错误、6遗漏**，仍 **0/4可交付**。Dropbox仅得导航壳，下游未执行；1Password FAQ问题文字缺失、Cloudflare重复标题导致空选窗、Bitwarden关键原始事实未选入Writer及回答状态假阳性仍阻断。已记录事实ID无转换丢失不代表语义齐全，正常脱敏可使审计partial。已曝光非盲，未训练，新报告未获用户验收。[结构化结果](docs/optimization/2026-10-19-collector-question-delivery-results.json)。
 
 上一轮[完整证据与答案发表恢复](docs/optimization/2026-10-18-evidence-recovery-delivery.md)：修复完整例外收据、跨页双绑定、服务选窗、Writer 原句投影及有限计费范围校验；新增127项匿名测试，最终后端 **5664通过／1跳过**，变更范围 Ruff、diff、OpenAPI 对比通过（全库另有四项既存 unused import）。四组各一次 **40调用／148957 token**；独立实读正文 **3正确、1错误、4遗漏**，回答记录 **2正确、6遗漏**，**0/4报告达标**。访客限制和域范围题已交付，中文数量结论误拒、下载规则丢失、价格行／FAQ漏提取及错误缺证声明仍阻断；不能宣称整体改善。运行前后690份冻结文件保持不变；旧147产物与参考标签未改。新报告未获用户验收，训练关闭。[结构化结果](docs/optimization/2026-10-18-evidence-recovery-results.json)。
 

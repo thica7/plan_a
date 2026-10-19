@@ -23,6 +23,17 @@ def question_terms(text, product):
     terms = set(concepts) | {word.casefold() for word in literals}
     if re.search(r"登录|\bsign(?:ed)?[ -]?in\b|\blog(?:ged)?[ -]?in\b", text, re.I):
         terms.add("login")
+    # Writer-local recall expansion does not change the persisted lexical index.
+    for concept, pattern in {
+        "deletion": r"删掉|删除|\bdelet(?:e[ds]?|ing|ion)\b",
+        "retention": r"留下|留存|保留|\b(?:retain\w*|remain\w*|keep|kept)\b",
+        "credentials": r"密码|凭据|\b(?:passwords?|credentials?)\b",
+        "ownership": r"归属|所有权|个人(?:保险库|项目)|组织(?:拥有|数据)|"
+                     r"\b(?:ownership|owns?|personally[- ]owned|organization[- ]owned)\b",
+        "offboarding": r"离职|移除成员|\bremov\w*\b",
+    }.items():
+        if re.search(pattern, text, re.I):
+            terms.add(concept)
     return terms
 
 
@@ -197,17 +208,17 @@ def parse_answer_coverage(
                     )
                 else:
                     record = ReportAnswerCoverage(**row, question=question["question"])
-                if (
-                    len(record.claim_ids) != len(set(record.claim_ids))
-                    or not set(record.claim_ids) <= supported_claim_ids
-                    or coverage_resolution_reasons(record, claims, facts=facts)
-                ):
+                if (len(record.claim_ids) != len(set(record.claim_ids))
+                        or not set(record.claim_ids) <= supported_claim_ids):
                     raise ValueError("coverage cites unpublished claims")
+                reasons = coverage_resolution_reasons(record, claims, facts=facts)
+                if reasons:
+                    raise ValueError("coverage guard rejected: " + ",".join(reasons))
                 result.append(record)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as error:
                 result.extend(
                     unverified_coverage(
-                        [question], "Answer coverage response was missing or invalid."
+                        [question], ("Answer coverage response was missing or invalid: " + str(error))[:800]
                     )
                 )
         return tuple(result)

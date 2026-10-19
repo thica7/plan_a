@@ -38,6 +38,7 @@ _CURRENCIES = {
 }
 _MONTHLY = r"月费|月付|按月|每月|月度|本月|这个月|\bmonthly\b|\bper month\b|\ba month\b"
 _ANNUAL = r"年费|年付|按年|每年|年度|\bannual(?:ly)?\b|\byearly\b|\bper year\b"
+_PURCHASE = r'购买|采购|订购|买|\b(?:buy|purchase)\b'
 _TAX_INCLUDED = r"含税|税后|tax[- ]inclusive|tax included|including tax|with tax|gross price"
 _TAX_EXCLUDED = r"不含税|未含税|未税|税前|tax[- ]exclusive|tax excluded|excluding tax|before tax"
 _EN_AMOUNT_OBJECT = r'(?:price|costs?|fees?|quote|bill|invoice|amount|total)'
@@ -75,6 +76,10 @@ def _plan(text, product):
         if label in text:
             names.append(name)
     unique = {name.casefold(): name for name in names}
+    if not unique:
+        products = _purchase_products(text)
+        if products:
+            return " + ".join(products)
     return next(iter(unique.values())) if len(unique) == 1 else None
 
 
@@ -83,6 +88,18 @@ _BILLING_SCOPE_LABELS = {
     'usage_model': r'\busage models?\b|用量模式',
 }
 _BILLING_NAME = r'[A-Z][A-Za-z0-9_+-]*(?:\s+[A-Z][A-Za-z0-9_+-]*){0,4}'
+
+
+def _purchase_products(text):
+    """Preserve explicitly requested names without asserting a marketed SKU."""
+    purchase = re.search(_PURCHASE, text, re.I)
+    if not purchase:
+        return []
+    match = re.match(
+        r'\s*[“"]?(' + _BILLING_NAME + r'(?:\s*(?:和|及|与|、|\+|(?i:and))\s*'
+        + _BILLING_NAME + r')*)[”"]?', text[purchase.end():],
+    )
+    return re.split(r'\s*(?:和|及|与|、|\+|\band\b)\s*', match[1], flags=re.I) if match else []
 
 
 def _billing_name_matches(text):
@@ -171,6 +188,23 @@ def _request(detail, question, product, *, source_facts=()):
     context.update(_source_matched_request_scope(text, source_facts))
     if tax:
         context["tax_scope"] = tax
+    products = _purchase_products(re.sub(re.escape(product), ' ', text, flags=re.I))
+    if products:
+        context['requested_products'] = products
+    if re.search(_PURCHASE, text, re.I):
+        duration = re.search(r'(?<![\d-])(一|两|[1-9]\d{0,2})\s*(年|个月|years?|months?)'
+                             r'(?!\s*\d+\s*月)', text, re.I)
+        if duration:
+            count = {'一': 1, '两': 2}.get(duration[1])
+            if count is None:
+                count = int(duration[1])
+            context['duration_months'] = count * (12 if duration[2].casefold() in {'年', 'year', 'years'} else 1)
+    employees = re.search(r'(\d+)\s*(?:名|位|个)?\s*(?:员工|employees?)', text, re.I)
+    if employees:
+        context['employee_count'] = int(employees[1])
+    billable_seats = re.search(r'(?:实际)?付费席位\s*(?:为|是|[:：])?\s*(\d+)', text)
+    if billable_seats:
+        context['billable_seats'] = int(billable_seats[1])
     return market, as_of, context
 
 
@@ -418,10 +452,17 @@ def _incomplete_quote_answer(question, snapshot, market, as_of, context, views):
         "billing_interval": "计费周期", "tax_scope": "税费口径",
         "cpu_usage": "CPU 总用量",
         "usage_inputs": "完整用量明细及其他计费项目",
+        "sku_scope": "适用 SKU／合同及实际购买范围",
+        "billable_seats": "实际付费席位数量",
     }
     missing = {key for key in ("currency", "plan", "billing_interval") if key not in context}
     if not market:
         missing.add("market")
+    if context.get('requested_products'):
+        if not re.search(r'套餐|方案|\bplans?\b|\btiers?\b', question['question'], re.I):
+            missing.add('sku_scope')
+        if 'employee_count' in context and 'billable_seats' not in context:
+            missing.add('billable_seats')
     is_bill = bool(re.search(r"账单|\b(?:bill|invoice)\b", question['question'], re.I))
     if is_bill:
         missing.add("usage_inputs")
@@ -431,11 +472,27 @@ def _incomplete_quote_answer(question, snapshot, market, as_of, context, views):
     if not missing:
         return None
     fields = "、".join(labels[key] for key in labels if key in missing)
+    known = []
+    if context.get('plan'):
+        known.append('购买范围 ' + context['plan'])
+    if 'duration_months' in context:
+        known.append(f"购买期限 {context['duration_months']}个月")
+    if 'billable_seats' in context:
+        known.append(f"实际付费席位 {context['billable_seats']}个")
+    if 'currency' in context:
+        known.append('报价币种 ' + {'CNY': '人民币', 'USD': '美元'}.get(context['currency'], context['currency']))
+    if 'tax_scope' in context:
+        known.append('含税' if context['tax_scope'] == 'tax_included' else '不含税')
+    known_text = '已给请求条件：' + '、'.join(known) + '。' if known else ''
+    cpu_text = '已准入计费规则包含 CPU 时间计费。' if 'cpu_usage' in missing else ''
+    targeted = ('cpu_usage' in missing or context.get('plan') and 'sku_scope' not in missing
+                and missing <= {'market', 'tax_scope', 'usage_inputs'})
     return {
         "question_id": question["question_id"], "question": question["question"],
-        "status": "answered", "resolution": "insufficient", "conclusion": "unknown",
-        "answer": f"本次请求及已准入资料不足以核实准确的{'完整账单' if is_bill else '当前报价'}。"
-                  f"请先确认：{fields}；补齐后再核验截至 {as_of.isoformat()} 的适用金额。",
+        "status": "answered" if targeted else "partial", "resolution": "insufficient", "conclusion": "unknown",
+        "answer": known_text + cpu_text
+                  + f"本次请求及已准入资料不足以核实准确的{'完整账单' if is_bill else '当前报价'}。"
+                  + f"请先确认：{fields}；补齐适用的定价资料和输入后，再核验截至 {as_of.isoformat()} 的适用金额。",
         "claim_ids": (), "evidence_spans": (), "missing_fields": tuple(sorted(missing)),
         "reason": f"server_missing_quote_inputs;as_of={as_of.isoformat()}",
         "basis_snapshot_id": snapshot.id,
@@ -505,7 +562,7 @@ def server_missing_price_answers(detail, snapshot, questions, product) -> dict[s
             "resolution": "insufficient",
             "conclusion": "unknown",
             "answer": f"本次已准入资料不足以核实截至 {as_of.isoformat()}、{scope}的当前报价，"
-            "因此无法给出该口径的准确金额。",
+            "因此无法给出该口径的准确金额。请提供适用的当前单价、计费单位与税费依据后，再核验金额。",
             "claim_ids": (),
             "evidence_spans": (),
             "missing_fields": tuple(sorted(missing)),

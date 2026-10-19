@@ -184,6 +184,40 @@ def _select_operation_facts(
     return selected
 
 
+def _data_rule_branches(quote):
+    """Recall original lifecycle branches, never infer a retention conclusion."""
+    patterns = {
+        "organization_ownership": r"\borganizations?\s+own\b|\borganization[- ]owned\b|"
+                                  r"\bcentraliz\w*\s+ownership\b|组织(?:拥有|所有)",
+        "personal_ownership": r"\bpersonally[- ]owned\b|\bpersonal\s+vault\b|"
+                              r"\bindividually[- ]owned\b|\bowned\s+by\s+(?:the\s+)?individual\b|"
+                              r"\bpersonal\s+items?\b|个人(?:保险库|项目)|个人所有",
+        "ownership_transition": r"\bcentraliz\w*\s+(?:organization\s+)?ownership\b|"
+                                r"\bmove\b[^.!?\n]{0,100}\borganization[- ]owned\b|集中所有权",
+        "account_deletion": r"\bdeleting\b[^.!?\n]{0,160}\b(?:vault\s+)?data\b|"
+                            r"(?:删除|删掉)[^。；]{0,60}数据",
+    }
+    return {branch for branch, pattern in patterns.items() if re.search(pattern, quote, re.I)}
+
+
+def _lifecycle_core(question, candidates, quotes, product):
+    terms = question_terms(question, product)
+    if not ({"deletion", "offboarding"} & terms
+            and {"credentials", "retention", "ownership"} & terms):
+        return []
+    branches = {key: _data_rule_branches(quotes[key]) for key in candidates}
+    remaining = [key for key in candidates if branches[key]]
+    selected, covered = [], set()
+    while remaining:
+        key = min(remaining, key=lambda key: (
+            -len(branches[key] - covered), -len(branches[key]), len(quotes[key]), candidates.index(key),
+        ))
+        selected.append(key)
+        covered.update(branches[key])
+        remaining.remove(key)
+    return selected
+
+
 async def retrieve_question_facts(
     detail,
     snapshot,
@@ -353,12 +387,31 @@ async def retrieve_question_facts(
             questions, ranked_rows, lexical_rows, requested_rows, strict=True
         )
     ]
-    from packages.research.evidence.source_exceptions import question_exception_fact_ids
+    from packages.research.evidence.source_exceptions import (
+        question_exception_fact_ids, source_exception_constraints,
+    )
+    auth_only = {
+        fact.id for fact in facts if not _data_rule_branches(fact.quote)
+        and any(rule['kind'] == 'authentication_access'
+                for rule in source_exception_constraints(fact))
+    }
+    rows = [
+        [key for key in row if key not in auth_only or re.search(
+            r'\b(?:access|login|authentication|SSO|sign[ -]?in|log[ -]?in)\b|访问|登录|认证|单点',
+            question['question'], re.I,
+        )]
+        for question, row in zip(questions, rows, strict=True)
+    ]
     exception_rows = [
         question_exception_fact_ids(question['question'], facts) for question in questions
     ]
-    # Required independent rules precede ordinary near-duplicate observations.
-    ordered = _round_robin(exception_rows, len(facts)) + _round_robin(rows, len(facts))
+    core_rows = [
+        _lifecycle_core(question['question'], list(dict.fromkeys([*row, *pool_ids])), quotes, product)
+        for question, row in zip(questions, ranked_rows, strict=True)
+    ]
+    # Question core branches and their related exceptions precede plan background.
+    ordered = (_round_robin(core_rows, len(facts))
+               + _round_robin(exception_rows, len(facts)) + _round_robin(rows, len(facts)))
     by_id = {fact.id: fact for fact in facts}
     selected_list, original_bytes = [], 0
     for key in dict.fromkeys(ordered):
@@ -374,13 +427,19 @@ async def retrieve_question_facts(
         set(row) <= set(selected) for row in exception_rows
     )
     selected_set = set(selected)
+    original_keys = {
+        fact.id: (fact.quote, fact.value_json, fact.qualifiers_json) for fact in facts
+    }
+    sent_originals = {original_keys[key] for key in selected}
     candidate_operations = set().union(*operations.values())
     diagnostic["questions"] = [
         {
             "question_id": question["question_id"],
-            "fact_ids": list(dict.fromkeys([*exceptions, *row])),
+            "fact_ids": list(dict.fromkeys([*core, *exceptions, *row])),
             "required_exception_fact_ids": exceptions,
             "missing_exception_fact_ids": [key for key in exceptions if key not in selected_set],
+            "core_fact_ids": core,
+            "missing_core_fact_ids": [key for key in core if original_keys[key] not in sent_originals],
             "requested_operations": list(requested),
             "selected_operations": [op for op in requested if any(
                 key in selected_set and op in operations[key] for key in row
@@ -392,8 +451,8 @@ async def retrieve_question_facts(
                 op for op in requested if op not in candidate_operations
             ],
         }
-        for question, row, requested, exceptions in zip(
-            questions, rows, requested_rows, exception_rows, strict=True
+        for question, row, requested, exceptions, core in zip(
+            questions, rows, requested_rows, exception_rows, core_rows, strict=True
         )
     ]
     diagnostic["selected_fact_ids"] = list(selected)

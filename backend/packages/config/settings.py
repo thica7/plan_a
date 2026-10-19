@@ -111,6 +111,7 @@ class Settings:
     pplx_base_url: str = "https://api.perplexity.ai"
     web_search_provider: str = "perplexity"
     deepseek_api_key: str | None = None
+    deepseek_web_api_enabled: bool = False
     deepseek_search_model: str = "deepseek-flash"
     deepseek_search_max_tokens: int = 1024
     deepseek_search_max_uses: int = 1
@@ -194,7 +195,7 @@ class Settings:
     @property
     def has_web_search_credentials(self) -> bool:
         if self.web_search_provider == "deepseek":
-            return bool(self.resolved_deepseek_api_key and self.deepseek_search_model)
+            return bool(self.resolved_deepseek_api_key and (self.deepseek_web_api_enabled or self.deepseek_search_model))
         return self.web_search_provider == "perplexity" and bool(self.pplx_api_key)
 
     @property
@@ -259,6 +260,7 @@ def get_settings() -> Settings:
         pplx_base_url=os.getenv("PPLX_BASE_URL", "https://api.perplexity.ai").rstrip("/"),
         web_search_provider=os.getenv("WEB_SEARCH_PROVIDER", "perplexity").strip().lower(),
         deepseek_api_key=os.getenv("DEEPSEEK_API_KEY") or None,
+        deepseek_web_api_enabled=_env_bool("DEEPSEEK_WEB_API_ENABLED", False),
         deepseek_search_model=os.getenv("DEEPSEEK_SEARCH_MODEL", "deepseek-flash").strip(),
         deepseek_search_max_tokens=_env_int(
             "DEEPSEEK_SEARCH_MAX_TOKENS", 1024, minimum=256, maximum=4096),

@@ -26,9 +26,10 @@ def test_unknown_total_quote_scope_still_receives_concrete_clarification():
     question = ('Example Product：我们有 240 名员工，准备购买整个安全平台一年。'
                 '请仅凭公开定价页给出精确的人民币含税总价。')
     row = answer(detail, snapshot, question)['q-price']
-    assert row['status'] == 'answered' and row['resolution'] == 'insufficient'
+    assert row['status'] == 'partial' and row['resolution'] == 'insufficient'
     assert {'market', 'plan', 'billing_interval'} <= set(row['missing_fields'])
     assert '240' not in row['answer']  # A requirement never becomes an observed price input.
+    assert '12个月' in row['answer']
     assert '确认' in row['answer'] and '当前报价' in row['answer']
     assert row['basis_snapshot_id'] == snapshot.id
 

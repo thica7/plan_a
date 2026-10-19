@@ -674,6 +674,8 @@ class DimensionWriterMixin:
                         detail.report_answer_boundaries.append(boundary)
                 allowed = {fid for b in boundaries for fid in b.allowed_fact_ids}
                 gaps = tuple(sorted({g.reason for g in view.gaps} | {f for b in boundaries for f in (*b.missing_fields, *b.clarification_fields)}))
+                if any(row.get('missing_core_fact_ids') for row in retrieval.get('questions', ())):
+                    gaps = tuple(sorted(set(gaps) | {'question_core_context_budget_exceeded'}))
                 claims, reviews, sizes, compact = [], [], [], {}
                 writer_context_bytes = 0
                 requested, sent_fact_ids, fact_targets = (), set(), {}
@@ -690,12 +692,18 @@ class DimensionWriterMixin:
                         question_bytes = len(encoded({'questions': questions}).encode()) + 16 if questions else 0
                         operations = (tuple(sorted(operation_targets)) if operation_targets else required_operations(
                             detail.topic, detail.plan.target_product.use_cases if detail.plan.target_product else ()))
+                        upstream_context = self._dimension_upstream_context(record, view)
+                        if 'question_core_context_budget_exceeded' in gaps:
+                            upstream_context['upstream_context_gaps'] = [
+                                *upstream_context.get('upstream_context_gaps', ()),
+                                'question_core_context_budget_exceeded',
+                            ]
                         compact, omitted = compact_dimension_context(
                             selected, view, allowed,
                             max_bytes=max(0, min(14000, use.max_bytes) - question_bytes),
                             requested_operations=operations if dimension == 'feature' else (),
                             questions=questions,
-                            upstream_context=self._dimension_upstream_context(record, view),
+                            upstream_context=upstream_context,
                             include_non_operations=not bool(operation_targets))
                         requested = tuple(compact.get('requested_operations', ()))
                         sent_fact_ids = {fact['id'] for fact in compact['evidence_view']['facts']}

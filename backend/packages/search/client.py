@@ -17,6 +17,10 @@ class SearchClient(Protocol):
 
 def create_search_client(settings: Settings) -> SearchClient:
     if settings.web_search_provider == "deepseek":
+        if settings.deepseek_web_api_enabled:
+            from packages.search.deepseek_web_client import DeepSeekWebSearchClient
+
+            return DeepSeekWebSearchClient(settings)
         from packages.search.deepseek_client import DeepSeekSearchClient
 
         return DeepSeekSearchClient(settings)

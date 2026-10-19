@@ -155,6 +155,12 @@ def _heading_resolution(body, page):
             r'(?m)^' + re.escape(item[1].strip()) + r'[ \t]*$', body)]
         entries.append({'ordinal': index, 'level': item[0], 'title': item[1],
                         'positions': positions})
+    if 'document_heading_anchors' in page.metadata:
+        html_capture = (type(page.metadata.get('capture_structure_version')) is int
+                        and page.metadata['capture_structure_version'] == 1
+                        and page.metadata.get('content_root') in {'main', 'article', 'body', 'html'})
+        return _anchored_heading_resolution(body, entries, page.metadata['document_heading_anchors'],
+                                            html_capture=html_capture)
     present = [entry for entry in entries if entry['positions']]
     previous = -1
     for entry in present:
@@ -177,6 +183,72 @@ def _heading_resolution(body, page):
     valid = all(len(entry['positions']) == 1 for entry in present)
     headings = [(entry['positions'][0], entry['level'], entry['title']) for entry in present] if valid else []
     return {'valid': valid, 'entries': entries, 'headings': headings}
+
+
+def _anchored_heading_resolution(body, entries, anchors, *, html_capture=False):
+    """Validate complete source-bound identities; invalid anchors never use legacy search."""
+    invalid = {'valid': False, 'entries': entries, 'headings': []}
+    if not isinstance(anchors, (list, tuple)) or len(anchors) != len(entries):
+        return invalid
+    if html_capture and not entries:
+        # HTML code and plain text do not mint Markdown headings.
+        return {'valid': True, 'entries': [], 'headings': []}
+    digest = hashlib.sha256(body.encode()).hexdigest()
+    occurrences, paths, observed, previous = {}, set(), [], -1
+    for entry, anchor in zip(entries, anchors, strict=True):
+        if not isinstance(anchor, dict):
+            return invalid
+        start, end = anchor.get('start'), anchor.get('end')
+        title, level = anchor.get('title'), anchor.get('level')
+        if (type(start) is not int or type(end) is not int or not 0 <= start < end <= len(body)
+                or type(level) is not int or level != entry['level'] or title != entry['title']
+                or anchor.get('content_sha256') != digest or body[start:end] != title):
+            return invalid
+        occurrence = occurrences.get(title, 0) + 1
+        if type(anchor.get('occurrence')) is not int or anchor['occurrence'] != occurrence:
+            return invalid
+        occurrences[title] = occurrence
+        line_start = body.rfind('\n', 0, start) + 1
+        line_end = body.find('\n', end)
+        line_end = len(body) if line_end < 0 else line_end
+        prefix, suffix = body[line_start:start], body[end:line_end]
+        suffix_pattern = r'(?:[ \t]+#+)?[ \t]*\r?' if prefix else r'[ \t]*\r?'
+        if (line_start <= previous or (prefix and not re.fullmatch('#' * level + r'[ \t]+', prefix))
+                or not re.fullmatch(suffix_pattern, suffix)):
+            return invalid
+        path = anchor.get('source_path')
+        if path is not None:
+            if not isinstance(path, str) or not path or path in paths or prefix:
+                return invalid
+            paths.add(path)
+        observed.append((level, title, start, end))
+        entry.update(positions=[line_start], occurrence=occurrence, anchor_start=start, anchor_end=end,
+                     source_path=path)
+        previous = line_start
+    if (paths or html_capture) and len(paths) != len(entries):
+        return invalid
+    # A Markdown prefix is structural only outside a matching fenced block.
+    markdown, fence, offset = [], None, 0
+    for line in body.splitlines(keepends=True):
+        fenced = re.match(r'^ {0,3}(`{3,}|~{3,})', line)
+        if fenced:
+            marker = fenced.group(1)
+            if fence is None:
+                fence = marker[0], len(marker)
+            elif marker[0] == fence[0] and len(marker) >= fence[1] and not line[fenced.end():].strip():
+                fence = None
+        elif fence is None:
+            match = re.fullmatch(r'(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*\r?\n?', line)
+            if match:
+                markdown.append((len(match[1]), match[2], offset + match.start(2), offset + match.end(2)))
+        offset += len(line)
+    if not paths and observed != markdown:
+        return invalid
+    for index, entry in enumerate(entries):
+        entry['interval'] = [entries[index - 1]['anchor_end'] if index else 0,
+                             entries[index + 1]['positions'][0] if index + 1 < len(entries) else len(body)]
+    return {'valid': True, 'entries': entries,
+            'headings': [(entry['positions'][0], entry['level'], entry['title']) for entry in entries]}
 
 
 def _verified_headings(body, page):
@@ -560,6 +632,9 @@ def _semantic_window(brief: ResearchBrief, page: CapturedPage) -> tuple[int, str
     """One bounded original window, selected for permission rules, not UI menus."""
     from packages.research.evidence.operations import required_operations
     body = page.text or page.markdown or page.snippet
+    if ('document_heading_anchors' in page.metadata
+            and not _heading_resolution(body, page)['valid']):
+        return 0, ''
     service_scope = _billing_service_scope(brief, body, page)
     if service_scope is not None:
         return service_scope

@@ -62,12 +62,14 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                                answer_facts=view.facts):
                 if item.resolution == 'insufficient':
                     original = price_answers.get(item.question_id)
-                    return original is None or item != ReportAnswerCoverage(**original)
+                    return (item.status != 'answered' or original is None
+                            or item != ReportAnswerCoverage(**original))
                 return (item.status != 'answered' or not item.claim_ids
                         or not set(item.claim_ids) <= published_ids
                         or bool(coverage_resolution_reasons(item, published_claims,
                             require_v2=require_v2, facts=answer_facts)))
-            if (any(answer_invalid(item) for item in audit.answer_coverage)
+            if ('question_core_context_budget_exceeded' in audit.gaps
+                    or any(answer_invalid(item) for item in audit.answer_coverage)
                     or questions and not audit.answer_coverage):
                 reasons.add('answer_coverage_incomplete')
             if any(item.answer and item.status in {'answered', 'partial'}
