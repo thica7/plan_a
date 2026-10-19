@@ -293,7 +293,7 @@ class AnalystAgentMixin:
         competitor: str,
         context: SubagentContext,
         dimension_sources: list[dict[str, Any]],
-        *, evidence_json: str = "",
+        *, evidence_json: str = "", evidence_view=None, evidence_use=None, question_packets=(),
     ) -> dict[str, Any] | None:
         detail = record.detail
         observations: list[dict[str, object]] = []
@@ -302,8 +302,8 @@ class AnalystAgentMixin:
         qa_feedback = self._qa_feedback_for_branch(detail, "analyst", dimension, competitor)
         max_turns = self._analyst_task_max_turns(detail.plan, dimension, competitor)
         for turn in range(1, max_turns + 1):
-            payload = await self._trace_llm_json(
-                record,
+            payload = await self._trace_question_llm_json(
+                record, evidence_view=evidence_view, evidence_use=evidence_use, question_packets=question_packets,
                 agent="analyst",
                 subagent=context.subagent,
                 name=f"{dimension}_{self._issue_id_fragment(competitor)}_analyst_react_turn_{turn}",
@@ -427,7 +427,7 @@ class AnalystAgentMixin:
         detail = record.detail
         await self._ensure_analysis_evidence(record)
         self._finish_delivery_phase(record, 'collector', f'{competitor}/{dimension}')
-        view, use = self._begin_evidence_use(
+        view, use, question_packets = await self._begin_question_evidence_use(
             record, agent="analyst", competitor=competitor, dimension=dimension
         )
         if expected_snapshot_id is not None and view.snapshot_id != expected_snapshot_id:
@@ -570,7 +570,7 @@ class AnalystAgentMixin:
                     competitor,
                     context,
                     dimension_sources,
-                    evidence_json=view.to_prompt_json(),
+                    evidence_json=view.to_prompt_json(), evidence_view=view, evidence_use=use, question_packets=question_packets,
                 )
                 if payload is not None:
                     payload, fallback_reason = self._ensure_structured_payload_has_claims(
@@ -656,8 +656,8 @@ class AnalystAgentMixin:
         try:
             if react_payload.get('budget_rejected'):
                 raise react_payload.pop('budget_rejected')
-            payload = await self._trace_llm_json(
-                    record,
+            payload = await self._trace_question_llm_json(
+                    record, evidence_view=view, evidence_use=use, question_packets=question_packets,
                     agent="analyst",
                     subagent=branch_id,
                     name=f"{dimension}_{self._issue_id_fragment(competitor)}_analyst",

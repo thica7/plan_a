@@ -7425,7 +7425,7 @@ export interface components {
             /** Basis Snapshot Id */
             basis_snapshot_id?: string | null;
             /** Binding Version */
-            binding_version?: 2 | null;
+            binding_version?: (2 | 3) | null;
         };
         /** ReportApprovalSignalRequest */
         ReportApprovalSignalRequest: {
@@ -7631,7 +7631,11 @@ export interface components {
              */
             answer_coverage: components["schemas"]["ReportAnswerCoverage"][];
             /** Answer Binding Version */
-            answer_binding_version?: 2 | null;
+            answer_binding_version?: (2 | 3) | null;
+            /** Claim Review Version */
+            claim_review_version?: 3 | null;
+            /** Upstream Dependencies */
+            upstream_dependencies?: components["schemas"]["EvidenceArtifactDependency"][] | null;
         };
         /** ReportLayer */
         ReportLayer: {

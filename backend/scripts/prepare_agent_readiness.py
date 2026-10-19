@@ -178,8 +178,8 @@ def prepare_readiness(artifact_dirs, *, workspace, annotations=()):
                     consumption_id=_text(audit.get('consumption_id')),
                     reported_coverage_status=_text(answer.get('status')),
                     claim_ids=[_text(value) for value in answer.get('claim_ids', [])],
-                    answer_binding_version=2 if audit.get('answer_binding_version') == 2 else None,
-                    coverage_binding_version=2 if answer.get('binding_version') == 2 else None,
+                    answer_binding_version=audit.get('answer_binding_version') if type(audit.get('answer_binding_version')) is int and audit.get('answer_binding_version') in (2, 3) else None,
+                    coverage_binding_version=answer.get('binding_version') if type(answer.get('binding_version')) is int and answer.get('binding_version') in (2, 3) else None,
                     resolution=_text(answer.get('resolution')), conclusion=_text(answer.get('conclusion')),
                     published_answer=_text(answer.get('answer')),
                     text_omissions=[field for field, raw in (

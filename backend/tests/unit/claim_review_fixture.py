@@ -26,3 +26,20 @@ def sent_source_span_id(row, text=None):
             if text is None or text == support or text in support:
                 return candidate['span_id']
     raise AssertionError('No sent complete source span supports the fixture text')
+
+
+def question_plan_response(payload, atoms):
+    """Explicit current transport fixture; legacy no-question drafts keep their shape."""
+    import json
+    from packages.research.evidence.source_exceptions import required_question_clarifications
+    required = {row['question_id']: row['missing_fields']
+                for row in required_question_clarifications(payload.get('questions', []))}
+    if not payload.get('questions'):
+        return json.dumps({'claims': atoms})
+    return json.dumps({'question_plans': [dict(question_id=q['question_id'], atoms=atoms,
+        missing_fields=required.get(q['question_id'], [])) for q in payload['questions']]})
+
+
+def expand_prompt_payload(payload):
+    from packages.research.question_delivery import _expand_text_refs
+    return _expand_text_refs(payload)

@@ -82,7 +82,7 @@ class ReflectorAgentMixin:
     async def _real_reflector_step(self, record: RunRecord) -> None:
         detail = record.detail
         await self._ensure_analysis_evidence(record)
-        view, use = self._begin_evidence_use(record, agent="reflector")
+        view, use, question_packets = await self._begin_question_evidence_use(record, agent="reflector")
         projected, dependency_gaps = self._project_evidence_detail(record, [view])
         coverage = self._producer_coverage_digest(record, view,
             max_bytes=max(0, use.max_bytes - len(view.to_prompt_json().encode("utf-8"))))
@@ -97,6 +97,20 @@ class ReflectorAgentMixin:
                 cells=[ComparisonCell(**cell, value="") for cell in coverage["cells"]])
         context_omissions = [gap for gap in dependency_gaps if gap.startswith("Analysis context omitted:")]
         dependency_gaps = [gap for gap in dependency_gaps if gap not in context_omissions]
+        question_context_gaps, question_unverified_gaps = [], []
+        for packet in self._question_packet_prompt(record, question_packets, view.facts):
+            for question in packet['questions']:
+                if not question['evidence_gaps']:
+                    continue
+                context_omitted = question['evidence_gap'] == 'context_budget_exceeded'
+                finding = (
+                    f"Question {'context omitted' if context_omitted else 'evidence unverified'}: "
+                    f"{packet['competitor']} / {packet['dimension']} / {question['question_id']}; "
+                    + ', '.join(question['evidence_gaps'])
+                    + f"; missing_core_fact_ids={question['missing_core_fact_ids']}; "
+                    f"missing_exception_fact_ids={question['missing_exception_fact_ids']}."
+                )
+                (question_context_gaps if context_omitted else question_unverified_gaps).append(finding)
         baseline = self._analysis_artifacts_hash(detail)
         detail.current_node = "reflector"
         self._consume_queued_agent_messages(
@@ -110,8 +124,8 @@ class ReflectorAgentMixin:
         from packages.schema.decision_brief import decision_brief_prompt_context
         delivery_scope = _question_delivery_scope(detail)
         try:
-            payload = await self._trace_llm_json(
-                record,
+            payload = await self._trace_question_llm_json(
+                record, evidence_view=view, evidence_use=use, question_packets=question_packets,
                 agent="reflector",
                 subagent=None,
                 name="coverage_reflection",
@@ -123,6 +137,13 @@ class ReflectorAgentMixin:
                     "Assessment status and gap_count retain unresolved comparison limitations; do not infer a winner. "
                     "Assess coverage against the decision brief and delivery_scope. Explicit single-product "
                     "questions do not require additional competitors or an exhaustive feature comparison. "
+                    "Question evidence packets bind each question to complete originals in Evidence View JSON. "
+                    "Review each actual question against its supplied rules and all prerequisites. "
+                    "A published limit or access scope can answer a requested quantity or domain without "
+                    "repeating the user value; a logical negative need not be stated a second time verbatim. "
+                    "Do not require the source to repeat the question. Missing packet originals are context "
+                    "omissions, not proof that all collected sources lack the rule. Unknown findings, "
+                    "unavailable sources and genuinely missing rules still require review and blocking as needed. "
                     "Still report missing evidence for the actual questions and unsupported conclusions. "
                     "Treat comparison-matrix cells with source_ids across every competitor and "
                     "dimension as side-by-side comparison coverage; only report "
@@ -166,6 +187,8 @@ class ReflectorAgentMixin:
         coverage_gaps = [
             *self._string_list(payload.get("coverage_gaps")),
             *dependency_gaps,
+            *question_context_gaps,
+            *question_unverified_gaps,
             *(
                 f"Evidence gap: {gap.reason} ({gap.source_id or gap.fact_id or 'coverage'})"
                 for gap in view.gaps if gap.reason != "context_budget_exceeded"
@@ -198,10 +221,17 @@ class ReflectorAgentMixin:
         if coverage_capacity_omitted and gate_status == "pass":
             # Incomplete context raises the minimum status; it never lowers a block.
             gate_status = "warn"
+        if question_unverified_gaps:
+            gate_status = 'block'
+            blocking_gaps = self._unique_strings([*blocking_gaps, *question_unverified_gaps])[:5]
         writer_constraints = self._reflection_writer_constraints(
             gate_status=gate_status,
             blocking_gaps=blocking_gaps,
-            llm_constraints=[*self._string_list(payload.get("writer_constraints")),
+            llm_constraints=[
+                *(["Keep affected question answers unverified until the original context is restored: "
+                   + ' '.join(question_context_gaps)
+                   + " Do not infer that all collected sources lack the rule."] if question_context_gaps else []),
+                *self._string_list(payload.get("writer_constraints")),
                 *(["Some collected original facts were omitted from this view; preserve producer limitations."]
                   if context_omissions else []),
                 *(["Producer coverage exceeds context capacity; coverage review remains incomplete."]

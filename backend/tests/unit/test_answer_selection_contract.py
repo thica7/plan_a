@@ -2,6 +2,8 @@
 
 import json
 
+from claim_review_fixture import expand_prompt_payload, question_plan_response
+
 import pytest
 
 from packages.agents.writer.answer_coverage import (
@@ -129,7 +131,7 @@ def test_selection_does_not_trim_the_selected_claim_count(count, expected):
     assert len(result.claim_ids) == (count if expected == "answered" else 0)
 
 
-@pytest.mark.parametrize("version", [True, 2.0, "2", 1, 3])
+@pytest.mark.parametrize("version", [True, 2.0, 3.0, "2", "3", 1, 999])
 def test_selection_requires_the_exact_supported_integer_version(version):
     result = parse([selection()], [{"id": "c1", "text": "Guests can access documents."}], version=version)[0]
     assert result.status == "unverified"
@@ -275,7 +277,7 @@ async def test_writer_publishes_bound_plan_rules_and_final_qa_rejects_changed_an
     writes = []
 
     async def model(record, **kwargs):
-        payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+        payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
         if kwargs["name"] == "dimension_claim_review":
             return json.dumps({"reviews": [supported_review(claim) for claim in payload["claims"]]})
         if kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}:
@@ -290,7 +292,7 @@ async def test_writer_publishes_bound_plan_rules_and_final_qa_rejects_changed_an
                         {"claim_id": claim["id"], "quote": claim["text"]} for claim in payload["claims"]
                     ]
                 return json.dumps({"answers": answers})
-            return json.dumps({"version": 2, "answers": answers})
+            return json.dumps({"version": 3, "answers": answers})
         assert kwargs["name"] == "dimension_claim_writer"
         writes.append(kwargs["system"])
         drafts = []
@@ -302,13 +304,13 @@ async def test_writer_publishes_bound_plan_rules_and_final_qa_rejects_changed_an
                 "dimension": "feature", "fact_ids": [fact["id"]],
                 "source_ids": [fact["source_id"]], "observation_id": candidate["observation_id"],
             })
-        return json.dumps({"claims": drafts})
+        return question_plan_response(payload, drafts)
 
     monkeypatch.setattr(service, "_trace_llm_text", model)
     await service._real_writer_step(record)
     audit = detail.report_dimension_audits[0]
     audit = type(audit).model_validate_json(audit.model_dump_json())
-    assert audit.answer_binding_version == 2
+    assert audit.answer_binding_version == 3
     assert {item.claim.text for item in audit.claims if item.status == "supported"} == set(quotes), (
         audit.gaps, [(item.status, item.rule_reasons) for item in audit.claims],
     )
@@ -317,7 +319,7 @@ async def test_writer_publishes_bound_plan_rules_and_final_qa_rejects_changed_an
     if coverage_mode == "legacy":
         assert coverage.status == "unverified" and not coverage.claim_ids
         return
-    assert coverage.status == "answered" and coverage.binding_version == 2
+    assert coverage.status == "answered" and coverage.binding_version == 3
     assert set(coverage.answer.splitlines()) == set(quotes)
     assert writes and "Prioritize question-resolving role, plan, login and access restrictions" in writes[0]
     assert "Write edit and comment permission rules as separate claims" in writes[0]
@@ -332,3 +334,11 @@ async def test_writer_publishes_bound_plan_rules_and_final_qa_rejects_changed_an
     detail.report_md = render_dimension_report(detail, detail.report_dimension_audits, snapshot=snapshot)
     issues = audit_dimension_claims(service, record, snapshot, producer_verified=True)
     assert any(issue.metadata.get("claim_audit_reason") == "answer_coverage_incomplete" for issue in issues)
+
+
+def test_v3_is_legal_for_new_selection_but_require_v2_keeps_its_old_meaning():
+    claims = [{'id': 'c1', 'text': 'Guests can access documents.'}]
+    assert parse([selection()], claims, version=3)[0].binding_version == 3
+    result = parse_answer_coverage(json.dumps({'version': 3, 'answers': [selection()]}),
+        [QUESTION], {'c1'}, claims=claims, require_v2=True)[0]
+    assert result.status == 'unverified'

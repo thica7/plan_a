@@ -39,7 +39,7 @@ async def test_missing_quote_is_an_explicit_answer_without_a_fabricated_price_cl
     await service._real_writer_step(record)
     audit = detail.report_dimension_audits[0]
     answer = audit.answer_coverage[0]
-    assert answer.status == 'answered' and answer.resolution == 'insufficient'
+    assert answer.status == 'partial' and answer.resolution == 'insufficient'
     assert answer.claim_ids == answer.evidence_spans == ()
     assert not audit.claims
     assert answer.answer in detail.report_md

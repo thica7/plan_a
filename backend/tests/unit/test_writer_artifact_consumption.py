@@ -71,6 +71,12 @@ async def test_actual_dimension_writer_consumes_only_valid_upstream_artifacts(mo
     await service._writer_dimension_report(record, 20)
     assert len(inputs) == 1
     payload = inputs[0]
+    audit = record.detail.report_dimension_audits[0]
+    assert audit.upstream_dependencies is not None
+    assert {edge.kind for edge in audit.upstream_dependencies} == {
+        kind for kind, key in [('analyst', 'upstream_analysis'), ('comparator', 'comparison_assessment'),
+                              ('reflector', 'reflection_constraints')] if payload.get(key)}
+    assert all(edge in record.detail.evidence_artifact_dependencies for edge in audit.upstream_dependencies)
     for kind, key in [('analyst', 'upstream_analysis'), ('comparator', 'comparison_assessment'), ('reflector', 'reflection_constraints')]:
         assert bool(payload.get(key)) == (stale not in {kind, 'snapshot'})
     assert len(json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode()) <= 8192
@@ -78,6 +84,22 @@ async def test_actual_dimension_writer_consumes_only_valid_upstream_artifacts(mo
         assert 'membership condition' in json.dumps(payload['upstream_analysis'])
         assert 'Different source-bound roles.' in json.dumps(payload['comparison_assessment'])
         assert 'Preserve membership prerequisites.' in json.dumps(payload['reflection_constraints'])
+
+
+@pytest.mark.asyncio
+async def test_writer_with_unavailable_transport_records_no_advisory_use(monkeypatch):
+    from packages.llm.errors import LLMExecutionLimitError
+
+    service, record = writer_fixture(monkeypatch)
+    record_upstream(service, record)
+    async def unavailable(*, system, user):
+        assert 'upstream_analysis' in user
+        raise LLMExecutionLimitError('No paid request admitted.')
+    monkeypatch.setattr(service._llm, 'complete_text', unavailable)
+    await service._writer_dimension_report(record, 20)
+    audit = record.detail.report_dimension_audits[0]
+    assert audit.upstream_dependencies == ()
+    assert audit.model_dump(mode='json')['upstream_dependencies'] == []
 
 
 def test_bound_operations_project_translations_without_verb_matching():

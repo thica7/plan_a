@@ -76,6 +76,13 @@ def load_cases(path: Path, *, expected_sha256=None, mode="candidate-diagnostic")
     return cases
 
 
+def _excerpt_slot(product: str, dimension: str, source: dict) -> str:
+    """A byte-observation identity; questions and reference labels never participate."""
+    identity = json.dumps([product, dimension, source["url"], source["excerpt"]],
+                          ensure_ascii=False, separators=(",", ":")).encode()
+    return "fixed-excerpt-" + digest(identity)[:24]
+
+
 def map_excerpt(case: dict, source: dict) -> dict:
     """Map bytes only. Numeric quality/confidence are fixture metadata, not model judgments."""
     quote, product = source["excerpt"], case["product"]
@@ -97,6 +104,7 @@ def map_excerpt(case: dict, source: dict) -> dict:
     items = admit_evidence_items([extraction], captured_pages=[capture],
                                  candidates=[candidate], brief=brief)
     row = {"kind": "feature", "competitor": product, "dimension": "feature",
+           "slot": _excerpt_slot(product, "feature", source),
            "evidence_terms": [quote], "evidence_quote": quote,
            "evidence_item_ids": [item.id for item in items], "source_url": source["url"]}
     raw = RawSource(id=compute_raw_source_id(source_type="manual_note", competitor=product,
@@ -122,6 +130,7 @@ def validate_mapping(mapped: dict) -> None:
         ("brief", "candidate", "capture", "extraction", "raw_source", "source"))
     quote = extraction.quotes[0]
     expected_row = {"kind": "feature", "competitor": brief.competitor, "dimension": brief.dimension,
+        "slot": _excerpt_slot(brief.competitor, brief.dimension, source),
         "evidence_terms": [source["excerpt"]], "evidence_quote": source["excerpt"],
         "evidence_item_ids": [item.id for item in mapped["items"]], "source_url": source["url"]}
     expected_rows = [expected_row] if mapped["items"] and all(

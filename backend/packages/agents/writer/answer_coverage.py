@@ -108,23 +108,86 @@ def answer_review_payload(questions, claims, view, *, additional_fact_ids=(), in
     return payload
 
 
-def coverage_resolution_reasons(record, claims, *, require_v2=False, facts=()):
+CLARIFICATION_FIELDS = {
+    'actual_action': ('具体操作', 'actual action'),
+    'data_ownership': ('数据归属', 'data ownership'),
+    'retained_copy': ('是否保留副本', 'retained copy choice'),
+    'access_path': ('访问路径', 'access path'),
+}
+
+
+def selection_answer(record, claims):
+    """Reconstruct only complete published atoms and finite server questions."""
+    texts = selected_claim_texts(record.claim_ids, claims)
+    answer = "\n".join(texts)
+    if record.binding_version == 3:
+        fields = record.missing_fields
+        if len(fields) != len(set(fields)) or set(fields) - CLARIFICATION_FIELDS.keys():
+            raise ValueError('unknown or duplicate clarification fields')
+        if record.resolution == 'clarification':
+            from packages.research.evidence.source_exceptions import _missing_question_inputs
+            required = _missing_question_inputs(record.question)
+            if (record.status != 'partial' or record.conclusion != 'depends' or not texts
+                    or not required or set(fields) != set(required)):
+                raise ValueError('incomplete clarification selection')
+            zh = bool(re.search(r'[\u4e00-\u9fff]', record.question))
+            labels = [CLARIFICATION_FIELDS[key][0 if zh else 1]
+                      for key in CLARIFICATION_FIELDS if key in fields]
+            answer += ('\n请确认' + '、'.join(labels) + '？' if zh else
+                       '\nPlease confirm ' + ', '.join(labels) + '?')
+        elif fields:
+            raise ValueError('only clarification may request input fields')
+    if len(answer) > 1200:
+        raise ValueError('complete answer exceeds capacity')
+    return answer, tuple(zip(record.claim_ids, texts))
+
+
+def selection_binding_reasons(record, claims, *, required_binding_version=None):
+    reasons = []
+    if record.binding_version is not None and (type(record.binding_version) is not int
+                                               or record.binding_version not in (2, 3)):
+        reasons.append('answer_selection_version_required')
+    if required_binding_version is not None and record.binding_version != required_binding_version:
+        reasons.append('answer_selection_version_required')
+    if record.binding_version in (2, 3):
+        try:
+            answer, spans = selection_answer(record, claims)
+            if (record.answer != answer or tuple((s.claim_id, s.quote) for s in record.evidence_spans) != spans):
+                raise ValueError('answer selection changed')
+        except (TypeError, ValueError):
+            reasons.append('answer_selection_binding_invalid')
+    return reasons
+
+
+def saved_coverage_reason(record):
+    """Finite provenance description, with no model-authored product facts."""
+    zh = bool(re.search(r'[\u4e00-\u9fff]', record.question))
+    statuses = {'answered': ('已回答', 'answered'), 'partial': ('部分回答', 'partially answered'),
+                'unanswered': ('未回答', 'unanswered'), 'unverified': ('尚未核实', 'unverified')}
+    resolutions = {'direct': ('直接回答', 'direct answer'), 'conditional': ('按条件判断', 'conditional answer'),
+                   'clarification': ('需澄清', 'clarification required'),
+                   'insufficient': ('资料不足', 'insufficient evidence'), 'unresolved': ('结论待核实', 'unresolved')}
+    index = 0 if zh else 1
+    status = statuses[record.status][index]
+    resolution = resolutions[record.resolution][index]
+    labels = [CLARIFICATION_FIELDS[key][index] for key in CLARIFICATION_FIELDS if key in record.missing_fields]
+    if zh:
+        reason = f'依据{len(record.claim_ids)}条已发表主张；{status}，{resolution}'
+        return reason + ('；待确认：' + '、'.join(labels) if labels else '') + '。'
+    reason = f'Based on {len(record.claim_ids)} published claims; {status}; {resolution}'
+    return reason + ('; inputs to confirm: ' + ', '.join(labels) if labels else '') + '.'
+
+
+def coverage_resolution_reasons(record, claims, *, require_v2=False, required_binding_version=None, facts=()):
     """Replay answer guards against the exact published claims, never review reasons."""
     from packages.agents.writer.answer_resolution import resolution_reasons
     from packages.agents.writer.answer_plan_scope import plan_exclusivity_reasons
 
-    reasons = []
-    if require_v2 and record.binding_version != 2:
-        reasons.append("answer_selection_version_required")
-    if record.binding_version == 2:
-        try:
-            texts = selected_claim_texts(record.claim_ids, claims)
-            if (record.answer != "\n".join(texts)
-                    or [(span.claim_id, span.quote) for span in record.evidence_spans]
-                    != list(zip(record.claim_ids, texts))):
-                raise ValueError("answer selection changed")
-        except (TypeError, ValueError):
-            reasons.append("answer_selection_binding_invalid")
+    if require_v2:
+        required_binding_version = 2
+    reasons = selection_binding_reasons(record, claims, required_binding_version=required_binding_version)
+    if record.binding_version == 3 and record.reason != saved_coverage_reason(record):
+        reasons.append('answer_reason_changed')
     if record.status in {"answered", "partial"}:
         if (not record.answer.strip() or record.resolution == "unresolved"
                 or not record.claim_ids or record.resolution == "insufficient"
@@ -152,9 +215,9 @@ def is_qualified_partial_clarification(record, claims, *, facts=(), report_md=No
     Callers supply only published supported claims from the original view.
     """
     if (record.status != 'partial' or record.resolution != 'clarification'
-            or record.binding_version != 2 or record.conclusion != 'depends'):
+            or record.binding_version not in (2, 3) or record.conclusion != 'depends'):
         return False
-    if coverage_resolution_reasons(record, claims, require_v2=True, facts=facts):
+    if coverage_resolution_reasons(record, claims, required_binding_version=record.binding_version, facts=facts):
         return False
     from packages.research.evidence.source_exceptions import _CLARIFY, _missing_question_inputs
     from packages.research.evidence.source_spans import projected_source_facts
@@ -169,11 +232,16 @@ def is_qualified_partial_clarification(record, claims, *, facts=(), report_md=No
             claim = ReportClaim.model_validate(row)
         except ValueError:
             return False
-        if not claim.source_span_bindings:
-            return False
-        bound = [fact for fact in facts if fact.id in claim.fact_ids]
-        _, reasons = projected_source_facts(claim, bound)
-        if reasons:
+        if claim.source_span_bindings:
+            bound = [fact for fact in facts if fact.id in claim.fact_ids]
+            _, reasons = projected_source_facts(claim, bound)
+            if reasons:
+                return False
+        elif record.binding_version == 3 and claim.operation_binding is not None:
+            from packages.research.evidence.operations import bound_operation_observation
+            if bound_operation_observation(claim, {fact.id: fact for fact in facts}) is None:
+                return False
+        else:
             return False
         has_rule |= any(part.strip() and not _CLARIFY.match(part.strip())
                         for part in re.split(r'[.!?。！？;；\n]', claim.text))
@@ -201,7 +269,7 @@ def selected_claim_texts(claim_ids, claims):
 
 
 def parse_answer_coverage(
-    text, questions, supported_claim_ids, *, claims=(), require_v2=False, facts=()
+    text, questions, supported_claim_ids, *, claims=(), require_v2=False, required_binding_version=None, facts=()
 ):
     try:
         data = json.loads(text)
@@ -212,9 +280,12 @@ def parse_answer_coverage(
         ):
             raise ValueError("invalid coverage response")
         selection = "version" in data
-        if require_v2 and not selection:
+        if require_v2:
+            required_binding_version = 2
+        if required_binding_version is not None and not selection:
             raise ValueError("live answers require claim selection")
-        if selection and (type(data["version"]) is not int or data["version"] != 2):
+        if selection and (type(data["version"]) is not int or data["version"] not in (2, 3)
+                          or required_binding_version is not None and data["version"] != required_binding_version):
             raise ValueError("unsupported coverage response version")
         rows = data["answers"]
         counts = Counter(row.get("question_id") for row in rows if isinstance(row, dict))
@@ -243,16 +314,20 @@ def parse_answer_coverage(
                         raise ValueError("coverage cites unpublished claims")
                     texts = selected_claim_texts(row["claim_ids"], claims)
                     record = ReportAnswerCoverage(
-                        **row, question=question["question"], binding_version=2,
+                        **row, question=question["question"], binding_version=data["version"],
                         answer="\n".join(texts),
                         evidence_spans=[{"claim_id": claim_id, "quote": quote}
                                         for claim_id, quote in zip(row["claim_ids"], texts)],
                     )
+                    answer, _ = selection_answer(record, claims)
+                    record = record.model_copy(update={'answer': answer})
                 else:
                     record = ReportAnswerCoverage(**row, question=question["question"])
                 if (len(record.claim_ids) != len(set(record.claim_ids))
                         or not set(record.claim_ids) <= supported_claim_ids):
                     raise ValueError("coverage cites unpublished claims")
+                if record.binding_version == 3:
+                    record = record.model_copy(update={'reason': saved_coverage_reason(record)})
                 reasons = coverage_resolution_reasons(record, claims, facts=facts)
                 if reasons:
                     raise ValueError("coverage guard rejected: " + ",".join(reasons))
@@ -300,7 +375,9 @@ ANSWER_COVERAGE_SYSTEM = (RESOURCE_SCOPE_RULES +
     "Do not demand that a published cap repeat the user's exact number. This does not permit "
     "inventing a price, tax, exchange rate, invoice total or missing billing input. "
     "If the action, data ownership or access path is ambiguous across the supplied rules, "
-    "select published branches and an actual request for clarification, not a direct yes. "
+    "select published source rules and list every required clarification field ID. "
+    "For partial+clarification+depends the server appends fixed questions for actual_action, "
+    "data_ownership, retained_copy and access_path. Never put clarification prose into a fact atom. "
     "For questions with multiple clauses, yes must hold for all clauses; mixed or unknown "
     "outcomes cannot be described as an unconditional affirmative. "
     "A permission_option prerequisite limits only its listed operations; do not apply edit/comment "
@@ -311,11 +388,13 @@ ANSWER_COVERAGE_SYSTEM = (RESOURCE_SCOPE_RULES +
     "Never treat missing evidence as no capability. "
     "The selected claim text must explicitly address the requested object and role, never substitute a folder "
     "permission for a private-message permission. Preserve each original account/workspace date "
-    "exception. If an unknown input controls the conclusion, the selected claim must preserve "
-    "the source-bound branches and ask for that input; reason cannot replace this answer. "
+    "exception. If an unknown input controls the conclusion, select the complete source-bound branches "
+    "and list every required finite clarification field so the server asks for those inputs. "
+    "Unknown dates outside those fields remain unverified unless the conditional rule itself answers the request. "
+    "Reason cannot replace the visible answer or its fixed clarification questions. "
     "Select no more than 8 IDs; their complete texts joined by newlines must fit 1200 characters. "
     "Never shorten or omit conditions to fit. "
-    'Return JSON only: {"version":2,"answers":[{"question_id":"copy input ID",'
+    'Return JSON only: {"version":3,"answers":[{"question_id":"copy input ID",'
     '"status":"answered|partial|unanswered|unverified","claim_ids":["supported claim ID"],'
     '"resolution":"direct|conditional|clarification|unresolved",'
     '"conclusion":"yes|no|depends|unknown|not_applicable",'

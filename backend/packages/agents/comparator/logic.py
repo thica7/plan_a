@@ -68,7 +68,7 @@ class ComparatorAgentMixin:
     async def _real_comparator_step(self, record: RunRecord) -> None:
         detail = record.detail
         await self._ensure_analysis_evidence(record)
-        view, use = self._begin_evidence_use(record, agent="comparator")
+        view, use, question_packets = await self._begin_question_evidence_use(record, agent="comparator")
         projected, dependency_gaps = self._project_evidence_detail(record, [view])
         baseline = self._analysis_artifacts_hash(detail)
         detail.current_node = "comparator"
@@ -84,7 +84,7 @@ class ComparatorAgentMixin:
             record,
             timeout_seconds=timeout_seconds,
             evidence_view=view, evidence_detail=projected,
-            context_max_bytes=use.max_bytes,
+            context_max_bytes=use.max_bytes, evidence_use=use, question_packets=question_packets,
         )
         if fallback.get("used"):
             payload = self._deterministic_comparator_payload(timeout_seconds)
@@ -302,7 +302,7 @@ class ComparatorAgentMixin:
         *,
         timeout_seconds: float,
         evidence_view=None, evidence_detail=None,
-        context_max_bytes=None,
+        context_max_bytes=None, evidence_use=None, question_packets=(),
     ) -> tuple[dict[str, object], dict[str, object]]:
         detail = evidence_detail or record.detail
         from packages.research.evidence.projection import analysis_fact_refs
@@ -320,8 +320,8 @@ class ComparatorAgentMixin:
         for attempt in range(1, COMPARATOR_LLM_MAX_ATTEMPTS + 1):
             try:
                 payload = await asyncio.wait_for(
-                    self._trace_llm_json(
-                        record,
+                    self._trace_question_llm_json(
+                        record, evidence_view=evidence_view, evidence_use=evidence_use, question_packets=question_packets,
                         agent="comparator",
                         subagent=None,
                         name="comparison_matrix",

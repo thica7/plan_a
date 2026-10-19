@@ -26255,7 +26255,10 @@
             "anyOf": [
               {
                 "type": "integer",
-                "const": 2
+                "enum": [
+                  2,
+                  3
+                ]
               },
               {
                 "type": "null"
@@ -26706,13 +26709,42 @@
             "anyOf": [
               {
                 "type": "integer",
-                "const": 2
+                "enum": [
+                  2,
+                  3
+                ]
               },
               {
                 "type": "null"
               }
             ],
             "title": "Answer Binding Version"
+          },
+          "claim_review_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "const": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Review Version"
+          },
+          "upstream_dependencies": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EvidenceArtifactDependency"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Dependencies"
           }
         },
         "additionalProperties": false,

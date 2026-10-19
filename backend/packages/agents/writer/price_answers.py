@@ -485,11 +485,9 @@ def _incomplete_quote_answer(question, snapshot, market, as_of, context, views):
         known.append('含税' if context['tax_scope'] == 'tax_included' else '不含税')
     known_text = '已给请求条件：' + '、'.join(known) + '。' if known else ''
     cpu_text = '已准入计费规则包含 CPU 时间计费。' if 'cpu_usage' in missing else ''
-    targeted = ('cpu_usage' in missing or context.get('plan') and 'sku_scope' not in missing
-                and missing <= {'market', 'tax_scope', 'usage_inputs'})
     return {
         "question_id": question["question_id"], "question": question["question"],
-        "status": "answered" if targeted else "partial", "resolution": "insufficient", "conclusion": "unknown",
+        "status": "partial", "resolution": "insufficient", "conclusion": "unknown",
         "answer": known_text + cpu_text
                   + f"本次请求及已准入资料不足以核实准确的{'完整账单' if is_bill else '当前报价'}。"
                   + f"请先确认：{fields}；补齐适用的定价资料和输入后，再核验截至 {as_of.isoformat()} 的适用金额。",
@@ -558,7 +556,7 @@ def server_missing_price_answers(detail, snapshot, questions, product) -> dict[s
         result[question["question_id"]] = {
             "question_id": question["question_id"],
             "question": question["question"],
-            "status": "answered",
+            "status": "partial",
             "resolution": "insufficient",
             "conclusion": "unknown",
             "answer": f"本次已准入资料不足以核实截至 {as_of.isoformat()}、{scope}的当前报价，"

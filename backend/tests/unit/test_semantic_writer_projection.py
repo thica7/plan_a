@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from claim_review_fixture import supported_review
+from claim_review_fixture import expand_prompt_payload, question_plan_response, supported_review
 from pydantic import HttpUrl, TypeAdapter
 from test_question_retrieval import research_case
 
@@ -47,8 +47,13 @@ async def test_protected_writer_projects_new_semantic_source_and_replays_its_pro
         assert live_detail is detail and live_snapshot.id == snapshot.id
         assert (competitor, dimension) == (product, 'feature')
         retrieval_calls.append((live_snapshot.id, target.id))
-        return (target.id,), {'mode': 'hybrid', 'ranking_only': True,
-                             'selected_fact_ids': [target.id], 'snapshot_id': snapshot.id}
+        from packages.research.question_scope import research_questions
+        return (target.id,), {'mode': 'hybrid', 'ranking_only': True, 'eligible_count': 3,
+            'selected_fact_ids': [target.id], 'snapshot_id': snapshot.id,
+            'questions': [dict(question_id=q['question_id'], fact_ids=[target.id],
+                core_fact_ids=[target.id], required_exception_fact_ids=[],
+                missing_core_fact_ids=[], missing_exception_fact_ids=[], minimum_evidence_missing=False)
+                for q in research_questions(live_detail, competitor, dimension)]}
 
     monkeypatch.setattr('packages.agents.writer.question_retrieval.retrieve_question_facts', semantic_ids)
     service = RunService(SkillRegistry.from_default_path(), Settings(demo_mode=True),
@@ -66,17 +71,17 @@ async def test_protected_writer_projects_new_semantic_source_and_replays_its_pro
     monkeypatch.setattr(service, '_write_report_draft', capture_draft)
 
     async def response(record, **kwargs):
-        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        payload = expand_prompt_payload(json.loads(kwargs['user'].split('\nJSON:\n', 1)[1]))
         if kwargs['name'] == 'dimension_claim_writer':
             rows = payload['evidence_view']['facts']
             writer_fact_ids.extend(row['id'] for row in rows)
             row = next(row for row in rows if row['id'] == target.id)
-            return json.dumps({'claims': [dict(text=login, kind='fact', competitor=product,
-                dimension='feature', fact_ids=[row['id']], source_ids=[row['source_id']])]})
+            return question_plan_response(payload, [dict(text=login, kind='fact', competitor=product,
+                dimension='feature', fact_ids=[row['id']], source_ids=[row['source_id']])])
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(c) for c in payload['claims']]})
         if kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}:
-            return json.dumps({'version': 2, 'answers': [dict(question_id=q['question_id'], status='answered',
+            return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'], status='answered',
                 resolution='direct', conclusion='yes',
                 claim_ids=[c['id'] for c in payload['claims']],
                 missing_fields=[], reason='The published sign-in rule answers the question.')

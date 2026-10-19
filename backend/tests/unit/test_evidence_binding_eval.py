@@ -148,8 +148,9 @@ def test_excerpt_mapping_is_verbatim_without_semantic_labels():
     row = mapped["raw_source"].metadata["normalized_fields"][0]
     quote = payload["sources"][0]["excerpt"]
     assert row["evidence_terms"] == [quote] and row["evidence_quote"] == quote
-    assert set(row) <= {
+    assert set(row) == {
         "kind",
+        "slot",
         "competitor",
         "dimension",
         "evidence_terms",
@@ -274,7 +275,9 @@ def test_native_downstream_diagnostic_writes_real_artifacts_without_search(monke
         async def complete_text(self, **kwargs):
             current_llm_execution.get().reserve_transport()
             prompts.append(json.dumps(kwargs))
-            return '{"claims":[]}'
+            from claim_review_fixture import expand_prompt_payload, question_plan_response
+            payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
+            return question_plan_response(payload, [])
 
     production_service = module.RunService
 
@@ -325,7 +328,13 @@ def test_native_downstream_diagnostic_writes_real_artifacts_without_search(monke
         "comparator",
         "reflector",
     }
-    assert result["downstream_observations"]["llm_transport_by_agent"]["writer"] == 0
+    writer_spans = [span for span in raw["trace_spans"] if span["kind"] == "llm" and span["agent"] == "writer"
+                    and (span["metadata"].get("llm_transport_attempts", 0) or 0) > 0]
+    writer_attempts = sum(span["metadata"]["llm_transport_attempts"] for span in writer_spans)
+    assert writer_spans and writer_attempts > 0
+    assert result["downstream_observations"]["llm_transport_by_agent"]["writer"] == writer_attempts
+    assert result["downstream_observations"]["reviewed_claim_count"] == 0
+    assert result["downstream_observations"]["llm_transport_by_agent"]["collector"] == 0
     assert any(
         event["message"].startswith("QA completed")
         for event in json.loads((output / "events.json").read_text())
@@ -375,3 +384,67 @@ def test_canonical_ingestion_failure_preserves_blocked_artifacts(monkeypatch, tm
     assert result["error_reason"] == "unit canonical storage unavailable"
     assert result["llm_transport_attempts"] == 0
     assert (tmp_path / "unavailable/summary.json").is_file()
+
+
+def anonymous_excerpt_mapping(module, *, excerpt='Guests can edit documents after signing in.',
+                              url='https://example.test/permissions', question='Can Guests edit documents?',
+                              source_id='anonymous-source'):
+    case = {'product': 'Example Product', 'question': question}
+    source = dict(id=source_id, title='Original permission rule', url=url, excerpt=excerpt,
+                  verified_at='2026-10-16T12:00:00Z', source_role='source')
+    return module.map_excerpt(case, source)
+
+
+def test_excerpt_slots_follow_original_source_and_excerpt_identity_only():
+    module = runner()
+    first = anonymous_excerpt_mapping(module)
+    same = anonymous_excerpt_mapping(module, question='A different user question?', source_id='alias-source')
+    changed_excerpt = anonymous_excerpt_mapping(module, excerpt='Guests can comment on documents after signing in.')
+    changed_source = anonymous_excerpt_mapping(module, url='https://example.test/another-rule')
+    rows = [item['raw_source'].metadata['normalized_fields'][0] for item in [first, same, changed_excerpt, changed_source]]
+    assert isinstance(rows[0]['slot'], str) and rows[0]['slot']
+    assert rows[0]['slot'] == rows[1]['slot']
+    assert len({rows[0]['slot'], rows[2]['slot'], rows[3]['slot']}) == 3
+    assert all(row['evidence_terms'] == [item['source']['excerpt']]
+               for row, item in zip(rows, [first, same, changed_excerpt, changed_source]))
+    for item in [first, same, changed_excerpt, changed_source]:
+        module.validate_mapping(item)
+
+
+@pytest.mark.parametrize('slot', ['foreign-slot', None])
+def test_excerpt_mapping_validator_recomputes_slot_instead_of_trusting_foreign_slot(slot):
+    module = runner()
+    mapped = anonymous_excerpt_mapping(module)
+    mapped['raw_source'].metadata['normalized_fields'][0]['slot'] = slot
+    with pytest.raises(ValueError, match='binding'):
+        module.validate_mapping(mapped)
+
+
+def test_independent_excerpt_slots_keep_real_same_slot_conflicts_excluded():
+    from test_question_retrieval import research_case, replace_snapshot
+    from packages.agents.writer.question_retrieval import _eligible_facts
+    from packages.research.evidence.snapshot import _conflicts
+    from packages.research.evidence.snapshot_models import canonical_json
+
+    module = runner()
+    texts = ['Guests can edit documents after signing in.',
+             'Guests can only view documents after accepting the invitation.']
+    mapped = [anonymous_excerpt_mapping(module, excerpt=text) for text in texts]
+    assert all(item['raw_source'].metadata['normalized_fields'] for item in mapped), [
+        [row.rejection_reason for row in item['items']] for item in mapped]
+    slots = [item['raw_source'].metadata['normalized_fields'][0]['slot'] for item in mapped]
+    detail, snapshot = research_case(texts, question='Example Product: Can Guests edit documents?')
+    originals = [row for row in snapshot.facts if row.field == 'evidence_terms']
+    independent = tuple(row.model_copy(update={'qualifiers_json': canonical_json({'slot': slot})})
+                        for row, slot in zip(originals, slots))
+    conflicts = _conflicts(independent)
+    assert not conflicts
+    independent_snapshot = replace_snapshot(detail, snapshot, facts=independent, conflicts=conflicts)
+    assert {row.id for row in _eligible_facts(independent_snapshot, 'Example Product', 'feature')} == {
+        row.id for row in independent}
+    same_slot = tuple(row.model_copy(update={'qualifiers_json': canonical_json({'slot': slots[0]})})
+                      for row in independent)
+    conflicts = _conflicts(same_slot)
+    assert conflicts and set(conflicts[0].fact_ids) == {row.id for row in same_slot}
+    conflicting_snapshot = replace_snapshot(detail, independent_snapshot, facts=same_slot, conflicts=conflicts)
+    assert not _eligible_facts(conflicting_snapshot, 'Example Product', 'feature')

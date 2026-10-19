@@ -86,7 +86,7 @@ def test_feature_only_material_generates_explicit_snapshot_bound_missing_price_a
     result = answer(detail, snapshot)
     row = result["q-price"]
     assert row["question_id"] == "q-price" and row["question"] == QUESTION
-    assert row["status"] == "answered"
+    assert row["status"] == "partial"
     assert row["resolution"] == "insufficient" and row["conclusion"] == "unknown"
     assert row["claim_ids"] == row["evidence_spans"] == ()
     assert "本次已准入资料不足以核实" in row["answer"]

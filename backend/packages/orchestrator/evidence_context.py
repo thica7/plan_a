@@ -380,7 +380,59 @@ class EvidenceContextMixin:
             payload["dimension_audits"] = [item.model_dump(mode="json") for item in detail.report_dimension_audits]
         return payload
 
+    @staticmethod
+    def _validate_question_selection_receipt(detail, snapshot, use):
+        """Replay persisted selection identity without consuming the credential."""
+        from packages.orchestrator.question_packets import validate_selection_receipt
+
+        selections = []
+        for span in detail.trace_spans:
+            if span.name != 'question_evidence_selection':
+                continue
+            selection = json.loads(span.full_output)
+            if not isinstance(selection, dict):
+                raise EvidenceUseRejectedError('question selection must be an object')
+            if selection.get('consumption_id') == use.id:
+                selections.append(selection)
+                validate_selection_receipt(detail, snapshot, selection['receipt'], use)
+        if use.id.startswith('question-evidence-use-') and len(selections) != 1:
+            raise EvidenceUseRejectedError('question packet selection missing or ambiguous')
+
+    def _final_qa_artifact_replays(self, detail, snapshot, dependency, payload):
+        """Read-only replay of one current producer and its exact evidence view."""
+        if (not dependency.consumption_ids
+                or dependency.payload_hash != self._evidence_artifact_hash(payload)
+                or dependency.upstream_hash != self._artifact_upstream_hash(detail, dependency.kind)):
+            return False
+        identity = (detail.id, detail.workspace_id, detail.project_id)
+        if (detail.evidence_inputs_dirty or snapshot.phase != 'analysis'
+                or snapshot.fact_market_policy_version != FACT_MARKET_POLICY_VERSION
+                or (snapshot.run_id, snapshot.workspace_id, snapshot.project_id) != identity):
+            return False
+        for use_id in dependency.consumption_ids:
+            use = next((item for item in detail.evidence_consumptions if item.id == use_id), None)
+            if (use is None or use.status not in {'validated', 'reused'}
+                    or use.agent != dependency.kind
+                    or (use.run_id, use.workspace_id, use.project_id) != identity
+                    or use.snapshot_id != snapshot.id or use.snapshot_version != snapshot.version
+                    or dependency.competitor is not None and use.competitor != dependency.competitor
+                    or dependency.dimension is not None and use.dimension != dependency.dimension
+                    or use.view_max_bytes is not None and not 0 < use.view_max_bytes <= use.max_bytes):
+                return False
+            try:
+                self._validate_question_selection_receipt(detail, snapshot, use)
+                view = select_evidence_view(snapshot, agent=use.agent, competitor=use.competitor,
+                    dimension=use.dimension, source_ids=use.requested_source_ids,
+                    fact_ids=use.requested_fact_ids, max_bytes=use.view_max_bytes or use.max_bytes)
+            except (ValueError, KeyError, TypeError):
+                return False
+            if (view.dependency_hash != use.dependency_hash or view.source_ids != use.source_ids
+                    or view.fact_ids != use.fact_ids):
+                return False
+        return True
+
     def _final_qa_producer_verified(self, record, snapshot):
+        record = self._evidence_live_record(record)
         dependency = next(
             (
                 item
@@ -393,37 +445,33 @@ class EvidenceContextMixin:
         # without a proven producer is persisted as an empty consumption list.
         if dependency is None:
             return not record.detail.report_answer_boundaries
-        if (
-            not dependency.consumption_ids
-            or dependency.payload_hash
-            != self._evidence_artifact_hash(self._writer_evidence_artifact_payload(record.detail))
-        ):
+        detail = record.detail
+        if not self._final_qa_artifact_replays(
+                detail, snapshot, dependency, self._writer_evidence_artifact_payload(detail)):
             return False
-        if dependency.upstream_hash != self._artifact_upstream_hash(record.detail, "writer"):
-            return False
-        for use_id in dependency.consumption_ids:
-            use = next(
-                (item for item in record.detail.evidence_consumptions if item.id == use_id), None
-            )
-            if use is None or use.status not in {"validated", "reused"}:
-                return False
-            view = select_evidence_view(
-                snapshot,
-                agent="writer",
-                competitor=use.competitor,
-                dimension=use.dimension,
-                source_ids=use.requested_source_ids,
-                fact_ids=use.requested_fact_ids,
-                max_bytes=use.view_max_bytes or use.max_bytes,
-            )
-            if (
-                view.dependency_hash != use.dependency_hash
-                or view.source_ids != use.source_ids
-                or view.fact_ids != use.fact_ids
-                or use.snapshot_id != snapshot.id
-                or use.snapshot_version != snapshot.version
-            ):
-                return False
+        # These are only the direct advisory markers retained in the actual
+        # Writer input. Missing legacy fields do not invent historical edges.
+        for audit in detail.report_dimension_audits:
+            seen = set()
+            for upstream in audit.upstream_dependencies or ():
+                key = (upstream.kind, upstream.competitor, upstream.dimension)
+                if key in seen:
+                    return False
+                seen.add(key)
+                if upstream.kind == 'analyst' and key[1:] == (audit.competitor, audit.dimension):
+                    payload = self._analyst_evidence_artifact_payload(detail, *key[1:])
+                elif upstream.kind == 'comparator' and key[1:] == (None, None):
+                    payload = self._comparator_evidence_artifact_payload(detail)
+                elif upstream.kind == 'reflector' and key[1:] == (None, None) and detail.reflections:
+                    payload = detail.reflections[-1].model_dump(mode='json')
+                else:
+                    return False
+                current = [item for item in detail.evidence_artifact_dependencies
+                           if (item.kind, item.competitor, item.dimension) == key]
+                if len(current) != 1 or current[0] != upstream:
+                    return False
+                if not self._final_qa_artifact_replays(detail, snapshot, upstream, payload):
+                    return False
         return True
 
     def _final_qa_snapshot(self, record):
@@ -790,6 +838,131 @@ class EvidenceContextMixin:
             raise EvidenceUseRejectedError("evidence market policy requires accepted resealing")
         return snapshot
 
+    async def _begin_question_evidence_use(self, record, *, agent, competitor=None, dimension=None):
+        from packages.orchestrator.question_packets import (
+            prepare_packets, prompt_packets, receipt_hash, selected_packet_ids, selection_receipt,
+        )
+        record = self._evidence_live_record(record)
+        snapshot = self._current_evidence_snapshot(record)
+        try:
+            packets = await prepare_packets(record.detail, snapshot, competitor, dimension)
+        except ValueError as error:
+            raise EvidenceUseRejectedError(str(error)) from error
+        if not packets:
+            view, use = self._begin_evidence_use(record, agent=agent, competitor=competitor, dimension=dimension)
+            return view, use, []
+        if self._current_evidence_snapshot(record).id != snapshot.id:
+            raise EvidenceUseRejectedError('Question retrieval snapshot changed')
+        # Reserve metadata inside the existing stage budget, including omission IDs.
+        reserve = max(len(canonical_json(prompt_packets(packets, snapshot, facts)).encode())
+                      for facts in (snapshot.facts, ())) + 256
+        view, use = self._begin_evidence_use(record, agent=agent, competitor=competitor,
+            dimension=dimension, fact_ids=selected_packet_ids(packets), context_reserve_bytes=reserve,
+            question_scopes={(packet['competitor'], packet['dimension']) for packet in packets})
+        previous_id = use.id
+        receipt = selection_receipt(record.detail, packets, use.requested_fact_ids)
+        use = use.model_copy(update={'id': 'question-' + previous_id + '-' + receipt_hash(receipt)})
+        record.detail.evidence_consumptions = [use if item.id == previous_id else item
+                                               for item in record.detail.evidence_consumptions]
+        self._trace_local_tool(record, agent=agent, subagent=f'{competitor}/{dimension}',
+            name='question_evidence_selection', input_text=canonical_json({'snapshot_id': snapshot.id}),
+            output_text=canonical_json({'consumption_id': use.id, 'packets': packets, 'receipt': receipt,
+                'requested_fact_ids': use.requested_fact_ids,
+                'view_gaps': [gap.model_dump(mode='json') for gap in view.gaps],
+                'view': prompt_packets(packets, snapshot, view.facts), 'dispatch_status': 'unverified'}),
+            metadata={'consumption_id': use.id, 'snapshot_id': snapshot.id})
+        return view, use, packets
+
+    def _question_packet_prompt(self, record, packets, facts):
+        from packages.orchestrator.question_packets import prompt_packets, validate_packets
+        live = self._evidence_live_record(record)
+        snapshot = self._current_evidence_snapshot(live)
+        try:
+            validate_packets(live.detail, snapshot, packets)
+        except ValueError as error:
+            raise EvidenceUseRejectedError(str(error)) from error
+        return prompt_packets(packets, snapshot, facts)
+
+    def _record_question_dispatch(self, record, view, use, packets, kwargs, span_start):
+        if not packets:
+            return
+        from packages.orchestrator.question_packets import reconcile_packet_originals
+        from packages.research.question_delivery import _expand_text_refs
+        live = self._evidence_live_record(record)
+        user = kwargs['user']
+        full_input = kwargs['system'] + '\n\n' + user
+        if kwargs.get('schema_hint') is not None:
+            full_input += '\n\nSchema: ' + kwargs['schema_hint']
+        spans = [span for span in live.detail.trace_spans[span_start:] if span.kind == 'llm'
+                 and span.agent == kwargs['agent'] and span.name == kwargs['name']
+                 and span.subagent == kwargs.get('subagent') and span.full_input == full_input]
+        stored = next((item for item in live.detail.evidence_consumptions if item.id == use.id), use)
+        facts = ()
+        if view.to_prompt_json() in user:
+            facts = view.facts
+        elif kwargs['name'] == 'dimension_claim_writer':
+            try:
+                facts = _expand_text_refs(json.loads(user.split('\nJSON:\n', 1)[1]))['evidence_view']['facts']
+            except (ValueError, KeyError, IndexError, TypeError):
+                pass
+        snapshot = self._current_evidence_snapshot(live)
+        span = spans[0] if len(spans) == 1 else None
+        attempts = span.metadata.get('llm_transport_attempts') if span else None
+        verified = (span is not None and type(attempts) is int and attempts > 0
+                    and stored.status in {'validated', 'reused'}
+                    and stored.validated_snapshot_id == view.snapshot_id)
+        dispatched = verified and span.status == 'ok'
+        prepared = [reconcile_packet_originals(packet, snapshot, facts) for packet in packets]
+        question_views = self._question_packet_prompt(record, packets, facts)
+        actual = prepared
+        dispatch_cause = None
+        if not dispatched:
+            # Unknown transport is not evidence of capacity loss. Keep only
+            # independently known selection/view gaps alongside that unknown.
+            dispatch_cause = ('context_budget_exceeded' if len(user.encode()) > use.max_bytes
+                              else 'dispatch_unverified')
+            cause_gap = 'question_' + dispatch_cause
+            actual = []
+            for replay, packet_view in zip(prepared, question_views, strict=True):
+                rows = [dict(row, minimum_evidence_missing=True, dispatch_cause=dispatch_cause,
+                             evidence_gap=dispatch_cause,
+                             evidence_gaps=sorted(set(row['evidence_gaps']) | {cause_gap}))
+                        for row in replay['questions']]
+                actual.append(dict(replay, sent_fact_ids=[], questions=rows,
+                                   gaps=sorted({gap for row in rows for gap in row['evidence_gaps']})))
+                for question, row in zip(packet_view['questions'], rows, strict=True):
+                    question.update(row)
+                    question['fact_ids'] = []
+        observation = dict(consumption_id=use.id, packet_ids=[packet['packet_id'] for packet in packets],
+            snapshot_id=view.snapshot_id, span_id=span.id if span else None,
+            full_input_sha256=hashlib.sha256(full_input.encode()).hexdigest(),
+            status=('dispatch_succeeded' if span.status == 'ok' else 'dispatch_failed') if verified else 'unverified',
+            content_status=('partial' if any(item['gaps'] for item in actual) else 'complete')
+                if dispatched else 'unverified',
+            transport_attempts=attempts, dispatch_cause=dispatch_cause, prepared=prepared, actual=actual,
+            view_gaps=[gap.model_dump(mode='json') for gap in view.gaps],
+            question_views=question_views)
+        self._trace_local_tool(record, agent=use.agent, subagent=kwargs.get('subagent'),
+            name='question_evidence_dispatch', input_text=canonical_json({'consumption_id': use.id}),
+            output_text=canonical_json(observation), metadata={'snapshot_id': view.snapshot_id,
+                'consumption_id': use.id, 'model_span_id': observation['span_id']})
+
+    async def _trace_question_llm_json(self, record, *, evidence_view=None, evidence_use=None,
+                                      question_packets=(), **kwargs):
+        if not question_packets:
+            return await self._trace_llm_json(record, **kwargs)
+        self._validate_evidence_use(record, evidence_use)
+        prompt = self._question_packet_prompt(record, question_packets, evidence_view.facts)
+        kwargs['user'] = 'Question evidence packets JSON: ' + canonical_json(prompt) + '\n' + kwargs['user']
+        start = len(self._evidence_live_record(record).detail.trace_spans)
+        try:
+            if len(kwargs['user'].encode()) > evidence_use.max_bytes:
+                from packages.llm.errors import LLMExecutionLimitError
+                raise LLMExecutionLimitError('question_context_budget_exceeded')
+            return await self._trace_llm_json(record, **kwargs)
+        finally:
+            self._record_question_dispatch(record, evidence_view, evidence_use, question_packets, kwargs, start)
+
     def _begin_evidence_use(
         self,
         record: RunRecord,
@@ -799,6 +972,8 @@ class EvidenceContextMixin:
         dimension: str | None = None,
         source_ids: Iterable[str] | None = None,
         fact_ids: Iterable[str] | None = None,
+        context_reserve_bytes: int = 0,
+        question_scopes=None,
     ) -> tuple[StageEvidenceView, EvidenceConsumption]:
         record = self._evidence_live_record(record)
         if record.detail.evidence_inputs_dirty:
@@ -855,8 +1030,14 @@ class EvidenceContextMixin:
                     producer_facts.update(fact_id for use in branch_uses for fact_id in use.fact_ids)
             budget = min(98304, sum(min(32768, budget * 2) if dimension in {'feature', 'pricing'} else budget
                                    for _, dimension in scopes) or budget)
-            if scopes:
+            if scopes and fact_ids is None:
                 requested_fact_ids = tuple(sorted(producer_facts))
+            elif scopes and question_scopes:
+                # Question selection changes only its own scope. Preserve the
+                # legacy verified producers for dimensions without questions.
+                unqueried = {fact.id for fact in snapshot.facts if fact.id in producer_facts
+                             and (fact.competitor, fact.dimension) not in question_scopes}
+                requested_fact_ids = tuple(dict.fromkeys([*requested_fact_ids, *sorted(unqueried)]))
         requested_ids = tuple(sorted(set(source_ids))) if source_ids is not None else None
         if agent in {"qa", "collect_qa", "analyst_qa"} and requested_ids is not None and len(requested_ids) == 1:
             # Checkpoint and final citation audits send no model tokens.
@@ -873,6 +1054,12 @@ class EvidenceContextMixin:
             # Keep whole observations and their omission records within a core
             # stage's conservative envelope; never trim a quote or a condition.
             budget = min(budget, {'analyst': 12000, 'comparator': 20000, 'reflector': 18000}[agent])
+        # Oversized question metadata cannot consume the structural view itself.
+        # The dispatch guard records the unsent originals rather than raising
+        # a serialization error or increasing this stage's original allowance.
+        view_budget = budget - context_reserve_bytes
+        if view_budget < min(1024, budget):
+            view_budget = budget
         view = select_evidence_view(
             snapshot,
             agent=agent,
@@ -880,7 +1067,7 @@ class EvidenceContextMixin:
             dimension=dimension,
             source_ids=requested_ids,
             fact_ids=requested_fact_ids,
-            max_bytes=budget,
+            max_bytes=view_budget,
         )
         use = EvidenceConsumption(
             id=f"evidence-use-{uuid4().hex}",
@@ -898,7 +1085,7 @@ class EvidenceContextMixin:
             requested_fact_ids=requested_fact_ids,
             fact_ids=view.fact_ids,
             max_bytes=min(98304, budget + analysis_allowance) if analysis_allowance else budget,
-            view_max_bytes=budget if analysis_allowance else None,
+            view_max_bytes=view_budget if analysis_allowance or context_reserve_bytes else None,
             estimated_bytes=view.estimated_bytes,
             estimated_tokens=view.estimated_tokens,
             created_at=datetime.now(UTC),
@@ -928,6 +1115,7 @@ class EvidenceContextMixin:
             if stored.status == "rejected":
                 raise EvidenceUseRejectedError("evidence credential was already rejected")
             snapshot = self._current_evidence_snapshot(record)
+            self._validate_question_selection_receipt(record.detail, snapshot, use)
             if (
                 use.agent in {"analyst", "analyst_qa", "comparator", "reflector", "writer", "qa"}
                 and snapshot.phase != "analysis"
@@ -949,7 +1137,7 @@ class EvidenceContextMixin:
             )
             if current.dependency_hash != use.dependency_hash:
                 raise EvidenceUseRejectedError("evidence dependencies changed or became invalid")
-        except ValueError as error:
+        except (ValueError, KeyError, TypeError) as error:
             updated = stored.model_copy(update={"status": "rejected"})
             record.detail.evidence_consumptions = [
                 updated if item.id == use.id else item

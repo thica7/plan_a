@@ -3,6 +3,8 @@
 import json
 from datetime import UTC, datetime
 
+from claim_review_fixture import expand_prompt_payload, question_plan_response
+
 import pytest
 from claim_review_fixture import sent_source_span_id, supported_review
 from pydantic import HttpUrl, TypeAdapter
@@ -167,18 +169,18 @@ async def test_real_writer_prompt_keeps_lifecycle_originals_and_final_qa_retains
     prompts = []
 
     async def model(record, **kwargs):
-        payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+        payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
         if kwargs["name"] == "dimension_claim_writer":
             prompts.append(payload)
             originals = payload["evidence_view"]["facts"]
             assert set(CORE) <= {fact["quote"] for fact in originals}
-            return json.dumps({"claims": [dict(text=fact["quote"], kind="fact",
+            return question_plan_response(payload, [dict(text=fact["quote"], kind="fact",
                 competitor="Example Product", dimension="feature", fact_ids=[fact["id"]],
-                source_ids=[fact["source_id"]]) for fact in originals if fact["quote"] in CORE]})
+                source_ids=[fact["source_id"]]) for fact in originals if fact["quote"] in CORE])
         if kwargs["name"] == "dimension_claim_review":
             return json.dumps({"reviews": [supported_review(claim) for claim in payload["claims"]]})
         assert kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}
-        return json.dumps({"version": 2, "answers": [dict(question_id=q["question_id"],
+        return json.dumps({"version": 3, "answers": [dict(question_id=q["question_id"],
             status="unverified", resolution="unresolved", conclusion="unknown", claim_ids=[],
             missing_fields=["actual_action", "data_ownership"],
             reason="The action and ownership need clarification before concluding retention.")
@@ -215,16 +217,16 @@ async def test_chinese_answer_flows_through_writer_review_saved_record_and_final
 
     async def model(record, **kwargs):
         calls.append(kwargs["name"])
-        payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+        payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
         if kwargs["name"] == "dimension_claim_writer":
             fact = payload["evidence_view"]["facts"][0]
             assert fact["quote"] == text
-            return json.dumps({"claims": [dict(text=text, kind="fact", competitor="Example Product",
-                dimension="feature", fact_ids=[fact["id"]], source_ids=[fact["source_id"]])]})
+            return question_plan_response(payload, [dict(text=text, kind="fact", competitor="Example Product",
+                dimension="feature", fact_ids=[fact["id"]], source_ids=[fact["source_id"]])])
         if kwargs["name"] == "dimension_claim_review":
             return json.dumps({"reviews": [supported_review(claim) for claim in payload["claims"]]})
         assert kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}
-        return json.dumps({"version": 2, "answers": [dict(question_id=q["question_id"],
+        return json.dumps({"version": 3, "answers": [dict(question_id=q["question_id"],
             status="answered", resolution="direct", conclusion="no", missing_fields=[],
             claim_ids=[claim["id"] for claim in payload["claims"]], reason="The restriction answers both clauses.")
             for q in payload["questions"]]})
@@ -235,7 +237,7 @@ async def test_chinese_answer_flows_through_writer_review_saved_record_and_final
     saved = type(audit).model_validate_json(audit.model_dump_json())
     result = saved.answer_coverage[0]
     assert result.status == "answered" and result.conclusion == "no", result.reason
-    assert result.binding_version == 2 and result.answer == text
+    assert result.binding_version == 3 and result.answer == text
     assert {"dimension_answer_coverage", "dimension_answer_review"} <= set(calls)
     snapshot = current_snapshot(detail)
     assert service._final_qa_producer_verified(record, snapshot)
@@ -324,7 +326,7 @@ async def test_role_background_and_bill_original_reach_real_writer_and_replay_cp
     prompts = []
 
     async def model(record, **kwargs):
-        payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+        payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
         if kwargs["name"] == "dimension_claim_writer":
             prompts.append(payload)
             rows = payload["evidence_view"]["facts"]
@@ -343,13 +345,13 @@ async def test_role_background_and_bill_original_reach_real_writer_and_replay_cp
             assert bill["qualifiers"]["table_context"] == table
             assert set([quote, *conditions, *table]) <= set(bill["value"])
             fact = next(row for row in rows if row["quote"] == guest)
-            return json.dumps({"claims": [dict(text=guest, kind="fact", competitor="Example Product",
-                dimension="feature", fact_ids=[fact["id"]], source_ids=[fact["source_id"]])]})
+            return question_plan_response(payload, [dict(text=guest, kind="fact", competitor="Example Product",
+                dimension="feature", fact_ids=[fact["id"]], source_ids=[fact["source_id"]])])
         if kwargs["name"] == "dimension_claim_review":
             return json.dumps({"reviews": [supported_review(claim) for claim in payload["claims"]]})
         assert kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}
         assert len(payload["questions"]) == 1  # The other answer is an exact local snapshot replay.
-        return json.dumps({"version": 2, "answers": [dict(question_id=q["question_id"],
+        return json.dumps({"version": 3, "answers": [dict(question_id=q["question_id"],
             status="answered", resolution="direct", conclusion="no", missing_fields=[],
             claim_ids=[claim["id"] for claim in payload["claims"]], reason="The complete restriction answers this request.")
             for q in payload["questions"]]})
@@ -360,7 +362,7 @@ async def test_role_background_and_bill_original_reach_real_writer_and_replay_cp
     audit = detail.report_dimension_audits[0]
     audit = type(audit).model_validate_json(audit.model_dump_json())
     answers = audit.answer_coverage
-    assert [row.status for row in answers] == ["answered", "answered"]
+    assert [row.status for row in answers] == ["answered", "partial"]
     assert answers[1].resolution == "insufficient" and "cpu_usage" in answers[1].missing_fields
     assert "CPU 总用量" in answers[1].answer and "完整用量" in answers[1].answer
     use = next(use for use in detail.evidence_consumptions if use.id == audit.consumption_id)
@@ -409,7 +411,7 @@ async def test_four_independent_lifecycle_originals_share_total_writer_budget(mo
 
     async def model(_record, **kwargs):
         assert kwargs['name'] == 'dimension_claim_writer'
-        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        payload = expand_prompt_payload(json.loads(kwargs['user'].split('\nJSON:\n', 1)[1]))
         prompts.append(payload)
         quotes = {fact['quote'] for fact in payload['evidence_view']['facts']}
         if budget == 14000:
@@ -417,7 +419,7 @@ async def test_four_independent_lifecycle_originals_share_total_writer_budget(mo
         else:
             assert 'question_core_context_budget_exceeded' in payload['upstream_context_gaps']
             assert not set(core) <= quotes
-        return json.dumps({'claims': []})
+        return question_plan_response(payload, [])
 
     monkeypatch.setattr(service, '_trace_llm_text', model)
     await service._real_writer_step(record)
@@ -477,6 +479,10 @@ async def test_writer_persists_given_paid_seats_without_facts_and_replays_partia
     assert row.basis_snapshot_id == snapshot.id and not snapshot.facts
     assert not row.claim_ids and not row.evidence_spans
     issues = audit_dimension_claims(service, record, snapshot, producer_verified=True)
+    assert not issues
+    forged = row.model_copy(update={'status': 'answered'})
+    detail.report_dimension_audits = [saved.model_copy(update={'answer_coverage': (forged,)})]
+    issues = audit_dimension_claims(service, record, snapshot, producer_verified=True)
     assert any(issue.metadata.get('claim_audit_reason') == 'answer_coverage_incomplete' for issue in issues)
 
 
@@ -522,17 +528,17 @@ async def test_only_complete_identical_sent_originals_close_redundant_core_ids(m
 
     async def model(_record, **kwargs):
         calls.append(kwargs['name'])
-        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        payload = expand_prompt_payload(json.loads(kwargs['user'].split('\nJSON:\n', 1)[1]))
         if kwargs['name'] == 'dimension_claim_writer':
             fact = payload['evidence_view']['facts'][0]
             assert fact['quote'] == quote
-            return json.dumps({'claims': [dict(text=conclusion, kind='fact', competitor='Example Product',
+            return question_plan_response(payload, [dict(text=conclusion, kind='fact', competitor='Example Product',
                 dimension='feature', fact_ids=[fact['id']], source_ids=[fact['source_id']],
-                source_span_ids=[sent_source_span_id(fact, conclusion)])]})
+                source_span_ids=[sent_source_span_id(fact, conclusion)])])
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(claim) for claim in payload['claims']]})
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}
-        return json.dumps({'version': 2, 'answers': [dict(question_id=q['question_id'], status='answered',
+        return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'], status='answered',
             resolution='direct', conclusion='no', claim_ids=[claim['id'] for claim in payload['claims']],
             missing_fields=[], reason='The complete original records the account deletion outcome.')
             for q in payload['questions']]})
@@ -545,7 +551,7 @@ async def test_only_complete_identical_sent_originals_close_redundant_core_ids(m
     saved = type(audit).model_validate_json(audit.model_dump_json())
     detail.report_dimension_audits = [saved]
     assert saved.answer_coverage[0].status == 'answered'
-    assert saved.answer_coverage[0].binding_version == 2
+    assert saved.answer_coverage[0].binding_version == 3
     issues = audit_dimension_claims(service, record, current_snapshot(detail), producer_verified=True)
     if different_condition:
         assert 'question_core_context_budget_exceeded' in saved.gaps
@@ -592,7 +598,7 @@ async def test_fourth_different_lifecycle_condition_reaches_prompt_or_retains_ca
 
     async def model(_record, **kwargs):
         calls.append(kwargs['name'])
-        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        payload = expand_prompt_payload(json.loads(kwargs['user'].split('\nJSON:\n', 1)[1]))
         if kwargs['name'] == 'dimension_claim_writer':
             rows = payload['evidence_view']['facts']
             if budget == 14000:
@@ -605,9 +611,9 @@ async def test_fourth_different_lifecycle_condition_reaches_prompt_or_retains_ca
                 assert 'question_core_context_budget_exceeded' in payload['upstream_context_gaps']
                 fact = next(row for row in rows if row['quote'] in core)
                 text = conclusion
-            return json.dumps({'claims': [dict(text=text, kind='fact', competitor='Example Product',
+            return question_plan_response(payload, [dict(text=text, kind='fact', competitor='Example Product',
                 dimension='feature', fact_ids=[fact['id']], source_ids=[fact['source_id']],
-                source_span_ids=[sent_source_span_id(fact, text)])]})
+                source_span_ids=[sent_source_span_id(fact, text)])])
         if kwargs['name'] == 'dimension_claim_review':
             if budget == 14000:
                 text = payload['claims'][0]['text']
@@ -616,7 +622,7 @@ async def test_fourth_different_lifecycle_condition_reaches_prompt_or_retains_ca
                 assert payload['claims'][0]['text'] == hold
             return json.dumps({'reviews': [supported_review(claim) for claim in payload['claims']]})
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}
-        return json.dumps({'version': 2, 'answers': [dict(question_id=q['question_id'], status='answered',
+        return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'], status='answered',
             resolution='conditional' if budget == 14000 else 'direct',
             conclusion='depends' if budget == 14000 else 'no',
             claim_ids=[claim['id'] for claim in payload['claims']], missing_fields=[],
@@ -631,7 +637,7 @@ async def test_fourth_different_lifecycle_condition_reaches_prompt_or_retains_ca
     saved = type(audit).model_validate_json(audit.model_dump_json())
     detail.report_dimension_audits = [saved]
     answer = saved.answer_coverage[0]
-    assert answer.status == 'answered' and answer.binding_version == 2
+    assert answer.status == 'answered' and answer.binding_version == 3
     assert hold_id in diagnostic['questions'][0]['core_fact_ids']
     issues = audit_dimension_claims(service, record, current_snapshot(detail), producer_verified=True)
     if budget == 14000:

@@ -2,6 +2,8 @@ import json
 from claim_review_fixture import sent_source_span_id
 from types import SimpleNamespace
 
+from claim_review_fixture import expand_prompt_payload, question_plan_response, supported_review
+
 import pytest
 
 from packages.agents.writer.dimension_writer import compact_dimension_context
@@ -457,16 +459,12 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
 
     async def model(record, **kwargs):
         calls.append(kwargs["name"])
-        payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+        payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
         if kwargs["name"] == "dimension_claim_review":
             return json.dumps(
                 {
                     "reviews": [
-                        {
-                            "claim_id": claim["id"],
-                            "verdict": "supported",
-                            "reason": "A supported atomic statement.",
-                        }
+                        supported_review(claim)
                         for claim in payload["claims"]
                     ]
                 }
@@ -474,7 +472,7 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
         if kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}:
             return json.dumps(
                 {
-                    "version": 2,
+                    "version": 3,
                     "answers": [
                         {
                             "question_id": q["question_id"],
@@ -490,9 +488,7 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
                 }
             )
         row = payload["evidence_view"]["facts"][0]
-        return json.dumps(
-            {
-                "claims": [
+        return question_plan_response(payload, [
                     {
                         "text": "Members must sign in before accessing their own documents."
                         if complete
@@ -504,9 +500,7 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
                         "source_ids": [row["source_id"]],
                         "source_span_ids": [sent_source_span_id(row)],
                     }
-                ]
-            }
-        )
+                ])
 
     monkeypatch.setattr(service, "_trace_llm_text", model)
     await service._real_writer_step(record)

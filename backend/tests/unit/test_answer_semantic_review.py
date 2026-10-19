@@ -10,8 +10,8 @@ from packages.research.evidence.report_claims import ReportClaim
 QUESTION = {"question_id": "q", "question": "Can three people use the Basic workspace?"}
 
 
-def selected(*, conclusion="yes", status="answered", ids=None, resolution="direct"):
-    return json.dumps({"version": 2, "answers": [{
+def selected(*, conclusion="yes", status="answered", ids=None, resolution="direct", version=2):
+    return json.dumps({"version": version, "answers": [{
         "question_id": "q", "status": status, "claim_ids": ["limit"] if ids is None else ids,
         "resolution": resolution, "conclusion": conclusion, "missing_fields": [],
         "reason": "Check the published limit against the requested group.",
@@ -45,6 +45,8 @@ async def check(monkeypatch, responses, *, facts=(), compact=None):
     monkeypatch.setattr(
         "packages.agents.writer.price_answers.server_missing_price_answers", lambda *args: {}
     )
+    responses = [json.dumps(dict(json.loads(value), version=3)) if isinstance(value, str) and value.startswith('{')
+                 else value for value in responses]
     reviewer = Reviewer(responses)
     claim = ReportClaim(id="limit", text="Only two people can use a Basic workspace.",
                         competitor="Example", dimension="feature", kind="fact",
@@ -99,7 +101,7 @@ async def test_reviewer_corrects_a_proposed_yes_using_only_published_limits(monk
     second = json.loads(reviewer.calls[1]['user'].split('\nJSON:\n')[1])
     assert second['proposed_answers'][0]['conclusion'] == 'yes'
     assert second['claims'][0]['text'] == answers[0].answer
-    assert 'reason' not in second['proposed_answers'][0]
+    assert second['proposed_answers'][0]['proposed_reason'] == 'Check the published limit against the requested group.'
 
 
 @pytest.mark.asyncio

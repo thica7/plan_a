@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections import Counter
 from typing import Literal
@@ -14,6 +16,7 @@ from packages.research.evidence.operation_claim_checks import (
 )
 from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
 from packages.research.evidence.source_spans import ReportSourceSpanBinding
+from packages.research.evidence.snapshot_models import EvidenceArtifactDependency
 
 
 class ReportConditionGroup(BaseModel):
@@ -123,7 +126,16 @@ class ReportDimensionAudit(BaseModel):
     gaps: tuple[str, ...] = ()
     review_context_bytes: tuple[int, ...] = ()
     answer_coverage: tuple[ReportAnswerCoverage, ...] = ()
-    answer_binding_version: Literal[2] | None = None
+    answer_binding_version: Literal[2, 3] | None = None
+    claim_review_version: Literal[3] | None = None
+    upstream_dependencies: tuple[EvidenceArtifactDependency, ...] | None = None
+
+    @field_validator('answer_binding_version', 'claim_review_version', mode='before')
+    @classmethod
+    def exact_audit_version(cls, value):
+        if value is not None and type(value) is not int:
+            raise ValueError('audit version must be an exact integer')
+        return value
 
     @model_serializer(mode='wrap')
     def serialize_legacy_audit(self, handler):
@@ -132,6 +144,10 @@ class ReportDimensionAudit(BaseModel):
             values.pop('answer_coverage', None)
         if self.answer_binding_version is None:
             values.pop('answer_binding_version', None)
+        if self.claim_review_version is None:
+            values.pop('claim_review_version', None)
+        if self.upstream_dependencies is None:
+            values.pop('upstream_dependencies', None)
         return values
 
 
@@ -395,7 +411,46 @@ def claim_rule_reasons(claim, view, boundaries, *, available_facts=None):
     return tuple(reasons)
 
 
-def audit_report_claims(claims, reviews, view, boundaries, *, available_facts=None):
+def current_feature_binding_reasons(claim):
+    """Replay the current feature transport gate, independent of semantic verdicts."""
+    if claim.dimension != 'feature' or claim.operation_binding is not None:
+        return ()
+    if not claim.source_span_bindings:
+        return ('source_span_binding_required',)
+    from packages.research.evidence.operations import required_operations
+    if required_operations(claim.text):
+        return ('operation_binding_required',)
+    return ()
+
+
+def required_claim_checks(claim):
+    """Bind whole-assertion judgments to this exact atom and its selected support."""
+    support = ([claim.operation_binding.model_dump(mode='json')] if claim.operation_binding else
+               [span.model_dump(mode='json') for span in claim.source_span_bindings])
+    return [dict(check_id='claim-check-' + hashlib.sha256(json.dumps(
+        [claim.id, claim.text, claim.fact_ids, claim.source_ids, support, kind], sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:24],
+        kind=kind, claim_span=claim.text)
+        for kind in ('full_assertion_support', 'atomicity')]
+
+
+def claim_review_reasons(claim, review):
+    expected = {row['check_id'] for row in required_claim_checks(claim)}
+    checks = [row for row in review.checks if row.check_id in expected]
+    reasons = []
+    identifiers = [row.check_id for row in checks]
+    if set(identifiers) != expected or len(identifiers) != len(expected):
+        reasons.append('claim_checks_incomplete')
+    if any(row.verdict != 'supported' for row in checks):
+        reasons.append('claim_check_not_supported')
+    if any(row.claim_span != claim.text for row in checks):
+        reasons.append('claim_check_span_invalid')
+    operations = {row['check_id'] for row in required_operation_checks(claim.operation_binding)}
+    if any(row.check_id not in expected | operations for row in review.checks):
+        reasons.append('claim_check_unknown')
+    return reasons
+
+
+def audit_report_claims(claims, reviews, view, boundaries, *, available_facts=None, review_version=None):
     parsed = [ClaimReview.model_validate(r) for r in reviews]
     counts = Counter(r.claim_id for r in parsed)
     claim_counts = Counter(c.id for c in claims)
@@ -403,9 +458,17 @@ def audit_report_claims(claims, reviews, view, boundaries, *, available_facts=No
     result = []
     for claim in claims:
         rules = list(claim_rule_reasons(claim, view, boundaries, available_facts=available_facts))
+        if review_version == 3:
+            rules.extend(current_feature_binding_reasons(claim))
         review = by_id.get(claim.id)
         if review is not None:
-            rules.extend(operation_review_reasons(claim, review))
+            operation_review = review
+            if review_version == 3:
+                rules.extend(claim_review_reasons(claim, review))
+                atom_ids = {row['check_id'] for row in required_claim_checks(claim)}
+                operation_review = review.model_copy(update={'checks': tuple(
+                    row for row in review.checks if row.check_id not in atom_ids)})
+            rules.extend(operation_review_reasons(claim, operation_review))
         if claim_counts[claim.id] != 1:
             rules.append("duplicate_claim_id")
         if counts[claim.id] != 1:

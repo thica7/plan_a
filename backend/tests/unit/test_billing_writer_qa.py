@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from claim_review_fixture import sent_source_span_id, supported_review
+from claim_review_fixture import question_plan_response, sent_source_span_id, supported_review
 from test_billing_components import CPU, MINIMUM, RATE
 from test_question_reflection_scope import COMPARISON_GAPS
 from test_writer_question_delivery import service_for
@@ -104,12 +104,12 @@ async def test_actual_writer_final_evidence_and_qa_replay_component_bindings(mon
                 claims.append(dict(text=text, kind='fact', competitor='ExampleCompute', dimension='feature',
                     fact_ids=[row['id']], source_ids=[row['source_id']],
                     source_span_ids=[sent_source_span_id(row)]))
-            return json.dumps({'claims': claims})
+            return question_plan_response(payload, claims)
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(row,
                 'Anonymous offline transport fixture, not a semantic accuracy verdict.') for row in payload['claims']]})
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}
-        return json.dumps({'version': 2, 'answers': [dict(question_id=q['question_id'], status='answered',
+        return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'], status='answered',
             claim_ids=[next(c['id'] for c in payload['claims']
                             if ('minimum' in c['text']) == ('minimum' in q['question']))],
             resolution='direct', conclusion='yes', missing_fields=[],
@@ -167,8 +167,22 @@ async def test_real_reflector_receives_brief_scope_and_server_rechecks_its_block
     if expanded_request:
         assert '"mode": "comparison"' in prompts[0]
         assert detail.reflections[-1].gate_status == 'block'
-        assert detail.reflections[-1].blocking_gaps == COMPARISON_GAPS
+        actual = detail.reflections[-1].blocking_gaps
+        assert actual[:len(COMPARISON_GAPS)] == COMPARISON_GAPS
+        extras = actual[len(COMPARISON_GAPS):]
+        from packages.research.question_scope import research_questions
+        expected = research_questions(detail, 'ExampleCompute', 'feature')
+        assert extras == [
+            f"Question evidence unverified: ExampleCompute / feature / {row['question_id']}; "
+            'question_no_relevant_original; missing_core_fact_ids=[]; missing_exception_fact_ids=[].'
+            for row in expected]
         assert any(i.severity == 'blocker' for i in service._build_reflector_qa_issues(detail))
     else:
         assert 'single_product_questions' in prompts[0]
-        assert detail.reflections[-1].gate_status != 'block'
+        assert detail.reflections[-1].gate_status == 'block'
+        from packages.research.question_scope import research_questions
+        role_question = next(row for row in research_questions(detail, 'ExampleCompute', 'feature')
+                             if 'clear another domain' in row['question'])
+        assert detail.reflections[-1].blocking_gaps == [
+            f"Question evidence unverified: ExampleCompute / feature / {role_question['question_id']}; "
+            'question_no_relevant_original; missing_core_fact_ids=[]; missing_exception_fact_ids=[].']

@@ -7,7 +7,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from claim_review_fixture import supported_review
+from claim_review_fixture import expand_prompt_payload, question_plan_response, supported_review
 
 from packages.agents.writer.repair import WriterRepairPlan
 from packages.config import Settings
@@ -206,18 +206,23 @@ async def test_real_rag_entry_admission_snapshot_and_downstream_consumers_share_
     async def replay_text(_record, **kwargs):
         service.inputs.append(kwargs)
         if kwargs["name"] == "dimension_claim_writer":
-            payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+            payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
             fact = next(fact for fact in payload["evidence_view"]["facts"] if fact["field"] == "evidence_terms")
             claim = {"text": quote, "kind": "fact", "competitor": product,
                 "dimension": "feature", "fact_ids": [fact["id"]], "source_ids": [source_id]}
             if fact.get("operation_observations"):
                 claim["observation_id"] = fact["operation_observations"][0]["observation_id"]
-            return json.dumps({"claims": [claim]})
+            return question_plan_response(payload, [claim])
         if kwargs["name"] == "dimension_claim_review":
-            payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+            payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
             return json.dumps({"reviews": [supported_review(claim,
                 "Offline replay quote matches every condition.") for claim in payload["claims"]]})
-        return f"## Findings\n{quote} [source:{source_id}]"
+        assert kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}
+        payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
+        return json.dumps({"version": 3, "answers": [dict(question_id=q["question_id"], status="answered",
+            claim_ids=[claim["id"] for claim in payload["claims"]], resolution="conditional", conclusion="depends",
+            missing_fields=[], reason="The published offline rule preserves its synchronization condition.")
+            for q in payload["questions"]]})
 
     monkeypatch.setattr(service, "_trace_llm_json", replay_json)
     monkeypatch.setattr(service, "_trace_llm_text", replay_text)

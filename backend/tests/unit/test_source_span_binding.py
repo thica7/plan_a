@@ -4,6 +4,8 @@ import importlib
 import json
 from types import SimpleNamespace
 
+from claim_review_fixture import expand_prompt_payload, question_plan_response, sent_source_span_id
+
 import pytest
 from test_literal_non_operation import candidates, draft, fact
 from test_question_retrieval import research_case
@@ -12,6 +14,7 @@ from test_source_exception_closure import ACCESS, AUTH, facts, item
 from packages.agents.writer.dimension_writer import parse_claim_drafts, review_payload
 from packages.agents.writer.question_retrieval import retrieve_question_facts
 from packages.research.evidence.report_claims import audit_report_claims, claim_rule_reasons
+from packages.schema.decision_brief import safe_decision_brief_text
 from packages.research.evidence.snapshot_models import canonical_json
 
 
@@ -199,11 +202,12 @@ async def test_real_writer_transport_reviews_and_persists_chinese_rule_and_clari
     seal_snapshot(detail, phase='analysis', canonical_documents={})
     service, record = service_for(detail)
     calls = []
-    text = ('个人保险库中的条目归个人用户所有；成员被移出组织后保留其个人保险库中的全部条目。'
-            '请确认具体操作、数据归属、是否保留副本以及访问路径？')
+    ownership_text = '个人保险库中的条目归个人用户所有。'
+    text = '成员被移出组织后保留其个人保险库中的全部条目。'
+    answer_text = ownership_text + '\n' + text + '\n请确认具体操作、数据归属、是否保留副本、访问路径？'
 
     async def model(record, **kwargs):
-        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        payload = expand_prompt_payload(json.loads(kwargs['user'].split('\nJSON:\n', 1)[1]))
         def resolve(value):
             if isinstance(value, dict):
                 if set(value) == {'text_ref'}:
@@ -217,17 +221,17 @@ async def test_real_writer_transport_reviews_and_persists_chinese_rule_and_clari
         if kwargs['name'] == 'dimension_claim_writer':
             source = payload['evidence_view']['facts'][0]
             assert source['source_span_candidates']
-            return json.dumps({'claims': [dict(text=text, kind='fact', competitor='Example Product',
+            return question_plan_response(payload, [dict(text=atom, kind='fact', competitor='Example Product',
                 dimension='feature', fact_ids=[source['id']], source_ids=[source['source_id']],
-                source_span_ids=[source['source_span_candidates'][0]['span_id']])]})
+                source_span_ids=[sent_source_span_id(source)]) for atom in (ownership_text, text)])
         if kwargs['name'] == 'dimension_claim_review':
             assert payload['claims'][0]['source_span_bindings'][0]['quote'] == original
             return json.dumps({'reviews': [supported_review(row) for row in payload['claims']]})
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}
         assert payload['claims'][0]['source_span_bindings']
-        return json.dumps({'version': 2, 'answers': [dict(question_id=q['question_id'], status='partial',
-            claim_ids=[payload['claims'][0]['id']], resolution='clarification', conclusion='depends',
-            missing_fields=['actual_action', 'data_ownership'], reason='The action and ownership need confirmation.')
+        return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'], status='partial',
+            claim_ids=[claim['id'] for claim in payload['claims']], resolution='clarification', conclusion='depends',
+            missing_fields=['actual_action', 'data_ownership', 'retained_copy', 'access_path'], reason='The action and ownership need confirmation.')
             for q in payload['questions']]})
 
     monkeypatch.setattr(service, '_trace_llm_text', model)
@@ -243,10 +247,11 @@ async def test_real_writer_transport_reviews_and_persists_chinese_rule_and_clari
         monkeypatch.setattr(question_retrieval, 'retrieve_question_facts', lexical)
     await service._real_writer_step(record)
     audit = detail.report_dimension_audits[0]
-    assert audit.claims[0].status == 'supported', audit.claims[0]
+    assert len(audit.claims) == 2 and all(row.status == 'supported' for row in audit.claims), audit.claims
+    assert {row.claim.text for row in audit.claims} == {ownership_text, text}
     assert audit.answer_coverage[0].status == 'partial', audit.answer_coverage[0].reason
-    assert audit.answer_coverage[0].answer == text
-    assert text in detail.report_md
+    assert audit.answer_coverage[0].answer == answer_text
+    assert safe_decision_brief_text(answer_text) in detail.report_md
     assert type(audit).model_validate_json(audit.model_dump_json()) == audit
     assert any(name == 'dimension_answer_review' for name, _ in calls)
     if qa_mutation == 'actual_core':
@@ -267,18 +272,19 @@ async def test_real_writer_transport_reviews_and_persists_chinese_rule_and_clari
     elif qa_mutation == 'missing_v2':
         coverage = coverage.model_copy(update={'binding_version': None})
     elif qa_mutation == 'missing_rule':
-        clarification = text.split('。', 1)[1]
+        clarification = answer_text.split('\n')[-1]
         audited_claim = audited_claim.model_copy(update={'claim': audited_claim.claim.model_copy(
             update={'text': clarification})})
-        coverage = coverage.model_copy(update={'answer': clarification, 'evidence_spans': (
+        coverage = coverage.model_copy(update={'answer': clarification, 'claim_ids': (audited_claim.claim.id,), 'evidence_spans': (
             coverage.evidence_spans[0].model_copy(update={'quote': clarification}),)})
-        detail.report_md = detail.report_md.replace(text, clarification)
+        detail.report_md = detail.report_md.replace(safe_decision_brief_text(answer_text), clarification)
     elif qa_mutation == 'ordinary_partial':
         coverage = coverage.model_copy(update={'resolution': 'conditional'})
     elif qa_mutation == 'body':
-        detail.report_md = detail.report_md.replace(text, '请稍后补充资料。')
+        detail.report_md = detail.report_md.replace(safe_decision_brief_text(answer_text), '请稍后补充资料。')
     gaps = audit.gaps + (('question_core_context_budget_exceeded',) if qa_mutation == 'core_gap' else ())
-    detail.report_dimension_audits = [audit.model_copy(update={'claims': (audited_claim,),
+    changed_claims = (audited_claim,) if qa_mutation == 'missing_rule' else (audited_claim, *audit.claims[1:])
+    detail.report_dimension_audits = [audit.model_copy(update={'claims': changed_claims,
         'answer_coverage': (coverage,), 'gaps': gaps})]
     # Rebind the deliberately changed producer so these negatives exercise the
     # final rule replay, rather than succeeding solely on stale artifact hashes.
@@ -502,14 +508,14 @@ async def test_required_exception_budget_gap_blocks_a_qualified_clarification_in
         payload = expand_text_refs(json.loads(kwargs['user'].split('\nJSON:\n', 1)[1]))
         if kwargs['name'] == 'dimension_claim_writer':
             row = next(row for row in payload['evidence_view']['facts'] if COPY in row['quote'])
-            text = row['quote'] + 'Please confirm actual action, data ownership, retained copy choice and access path?'
-            return json.dumps({'claims': [dict(text=text, kind='fact', competitor='Example Product',
+            text = row['quote']
+            return question_plan_response(payload, [dict(text=text, kind='fact', competitor='Example Product',
                 dimension='feature', fact_ids=[row['id']], source_ids=[row['source_id']],
-                source_span_ids=[sent_source_span_id(row)])]})
+                source_span_ids=[sent_source_span_id(row)])])
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(row) for row in payload['claims']]})
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}
-        return json.dumps({'version': 2, 'answers': [dict(question_id=q['question_id'], status='partial',
+        return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'], status='partial',
             claim_ids=[payload['claims'][0]['id']], resolution='clarification', conclusion='depends',
             missing_fields=['actual_action', 'data_ownership', 'retained_copy', 'access_path'],
             reason='The source rule still requires input clarification.') for q in payload['questions']]})

@@ -773,7 +773,12 @@ def answer_source_exception_reasons(record, claims, *, facts=()):
     reasons = []
     missing = _missing_question_inputs(question)
     ambiguous = bool(missing)
-    clarified = _clarified_fields(text)
+    clarification_text = text
+    if getattr(record, 'binding_version', None) == 3:
+        from packages.agents.writer.answer_coverage import selection_binding_reasons
+        if not selection_binding_reasons(record, claims, required_binding_version=3):
+            clarification_text = record.answer
+    clarified = _clarified_fields(clarification_text)
     if ambiguous and not set(missing) <= clarified:
         reasons.append("answer_source_action_clarification_missing")
     if ambiguous and record.conclusion == "yes":
@@ -824,8 +829,19 @@ def answer_source_exception_reasons(record, claims, *, facts=()):
         # A partial clarification can publish a reviewed, precisely bound
         # lifecycle rule without pretending that every unspecified action is
         # resolved. Legacy/unbound prose still needs explicit source branches.
+        operation_rule_ids = set()
+        if getattr(record, 'binding_version', None) == 3:
+            from packages.research.evidence.report_claims import ReportClaim
+            from packages.research.evidence.operations import bound_operation_observation
+            for published in selected:
+                try:
+                    candidate = ReportClaim.model_validate(published)
+                    if bound_operation_observation(candidate, {fact.id: fact for fact in facts}) is not None:
+                        operation_rule_ids.add(candidate.id)
+                except ValueError:
+                    continue
         bound_rule = (record.status == 'partial' and any(
-            published.get('source_span_bindings')
+            (published.get('source_span_bindings') or published['id'] in operation_rule_ids)
             and any(not _CLARIFY.search(clause) and clause.strip()
                     for clause in re.split(r'[.!?。！？;；\n]', published['text']))
             for published in selected))

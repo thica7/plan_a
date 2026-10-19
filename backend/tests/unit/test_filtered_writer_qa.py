@@ -1,6 +1,8 @@
 """Real Writer/QA replay with fixed model transport, not a semantic accuracy test."""
 
 import json
+from claim_review_fixture import expand_prompt_payload, question_plan_response, supported_review
+
 import pytest
 from unittest.mock import patch
 from pydantic import HttpUrl, TypeAdapter
@@ -93,13 +95,11 @@ async def test_final_qa_replays_question_filtered_generation_view():
         service._runs[d.id] = record
 
         async def response(record, **kw):
-            payload = json.loads(kw["user"].split("\nJSON:\n", 1)[1])
+            payload = expand_prompt_payload(json.loads(kw["user"].split("\nJSON:\n", 1)[1]))
             if kw["name"] == "dimension_claim_writer":
                 rows = payload["evidence_view"]["facts"]
                 row = next(r for r in rows if r["id"] == loginfact.id)
-                return json.dumps(
-                    {
-                        "claims": [
+                return question_plan_response(payload, [
                             dict(
                                 text=login,
                                 kind="fact",
@@ -108,18 +108,12 @@ async def test_final_qa_replays_question_filtered_generation_view():
                                 fact_ids=[row["id"]],
                                 source_ids=[row["source_id"]],
                             )
-                        ]
-                    }
-                )
+                        ])
             if kw["name"] == "dimension_claim_review":
                 return json.dumps(
                     {
                         "reviews": [
-                            dict(
-                                claim_id=c["id"],
-                                verdict="supported",
-                                reason="Exact standalone login assertion.",
-                            )
+                            supported_review(c)
                             for c in payload["claims"]
                         ]
                     }
@@ -127,7 +121,7 @@ async def test_final_qa_replays_question_filtered_generation_view():
             if kw["name"] in {"dimension_answer_coverage", "dimension_answer_review"}:
                 return json.dumps(
                     {
-                        "version": 2,
+                        "version": 3,
                         "answers": [
                             dict(
                                 question_id=q["question_id"],

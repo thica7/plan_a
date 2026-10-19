@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer
 
 
 class AnswerEvidenceSpan(BaseModel):
@@ -26,7 +26,14 @@ class ReportAnswerCoverage(BaseModel):
     evidence_spans: tuple[AnswerEvidenceSpan, ...] = Field(default=(), max_length=8)
     missing_fields: tuple[str, ...] = Field(default=(), max_length=16)
     basis_snapshot_id: str | None = Field(default=None, max_length=120)
-    binding_version: Literal[2] | None = None
+    binding_version: Literal[2, 3] | None = None
+
+    @field_validator('binding_version', mode='before')
+    @classmethod
+    def exact_binding_version(cls, value):
+        if value is not None and (type(value) is not int or value not in (2, 3)):
+            raise ValueError('unsupported exact integer answer binding version')
+        return value
 
     @model_serializer(mode="wrap")
     def serialize_legacy_defaults(self, handler):

@@ -5,7 +5,7 @@ import json
 import socket
 
 import pytest
-from claim_review_fixture import supported_review
+from claim_review_fixture import expand_prompt_payload, question_plan_response, supported_review
 from test_agent_evidence_alignment import InputReplay
 
 from packages.agents import SubagentContext
@@ -90,7 +90,7 @@ async def test_parent_prerequisite_survives_collector_admission_snapshot_and_wri
 
     async def replay_text(_record, **kwargs):
         service.inputs.append(kwargs)
-        payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+        payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
         if kwargs["name"] == "dimension_claim_writer":
             facts = payload["evidence_view"]["facts"]
             fact = next(f for f in facts if f["field"] == "evidence_terms"
@@ -99,10 +99,10 @@ async def test_parent_prerequisite_survives_collector_admission_snapshot_and_wri
                          fact_ids=[fact["id"]], source_ids=[source_id])
             if fact.get("operation_observations"):
                 claim["observation_id"] = fact["operation_observations"][0]["observation_id"]
-            return json.dumps({"claims": [claim]})
+            return question_plan_response(payload, [claim])
         if kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}:
             # Transport fixture only; semantic quality is tested with real models separately.
-            return json.dumps({"version": 2, "answers": [dict(question_id=q["question_id"], status="answered",
+            return json.dumps({"version": 3, "answers": [dict(question_id=q["question_id"], status="answered",
                 claim_ids=[c["id"] for c in payload["claims"]],
                 resolution="conditional", conclusion="depends", missing_fields=[],
                 reason="Replay retains offline editing and its owner prerequisite.")
