@@ -134,13 +134,16 @@ def build_answer_boundaries(detail, view) -> list[AnswerBoundary]:
     return boundaries
 
 
-def _issue(service, snapshot, reason, path, *, boundary=None, source_ids=(), fact_ids=()):
+def _issue(service, snapshot, reason, path, *, boundary=None, source_ids=(), fact_ids=(), mention_position=None):
     requirement = boundary.requirement if boundary else None
     problem = (
         f"Answer boundary violation: {reason}. Rewrite this claim using allowed facts, "
         "or state the missing evidence and ask for clarification."
     )
-    issue_hash = service._evidence_artifact_hash([snapshot.id, reason, path, source_ids, fact_ids])
+    identity = [snapshot.id, reason, path, source_ids, fact_ids]
+    if mention_position is not None:
+        identity.append(mention_position)
+    issue_hash = service._evidence_artifact_hash(identity)
     return QCIssue(
         id=f"qa-answer-{issue_hash[:24]}",
         severity="blocker",
@@ -210,9 +213,13 @@ def _money_pattern(facts):
     )
 
 
-def _amount_issues(service, snapshot, text, path, boundaries, facts, cited, pattern):
-    from packages.research.evidence.monetary import monetary_mentions, source_credit_allowances
+def _amount_issues(service, snapshot, text, path, boundaries, facts, cited, pattern, *, claims=None):
+    from packages.research.evidence.monetary import (
+        monetary_mentions, source_credit_allowances, source_monetary_components,
+    )
     from packages.research.evidence.report_claims import recorded_price_scope_assertion
+    from packages.research.evidence.source_spans import projected_source_facts
+    from packages.schema.decision_brief import safe_decision_brief_text
     content = text.replace("页面采集标价（不代表适用报价）：", "").replace(
         "Captured page price (not an applicable quote): ", "")
     recorded_label = ("页面采集标价（不代表适用报价）：" in text
@@ -221,22 +228,39 @@ def _amount_issues(service, snapshot, text, path, boundaries, facts, cited, patt
     candidates = [boundary for boundary in boundaries if set(boundary.view_source_ids) & cited
                   and (boundary.requirement.intent != "recorded_price" or recorded_label)]
     local_allowed = {fact_id for boundary in candidates for fact_id in boundary.allowed_fact_ids}
-    supported_money = {
-        _money_value(facts[fact_id])
-        for fact_id in local_allowed
-        if facts[fact_id].source_id in cited
-    }
-    allowance_bindings = {
-        mention.binding
-        for fact_id in local_allowed
-        if facts[fact_id].source_id in cited
-        for mention in source_credit_allowances(facts[fact_id], pattern)
-    }
     issues = []
     for mention in monetary_mentions(text, pattern):
-        supported = (mention.binding in allowance_bindings
-                     if mention.kind == 'credit_allowance'
-                     else (mention.amount, mention.currency) in supported_money)
+        support, components = [], []
+        if claims is None:
+            # Legacy structured money and credit audits retain their contract.
+            support = [facts[fid] for fid in local_allowed if facts[fid].source_id in cited]
+        else:
+            for claim in claims:
+                rendered = safe_decision_brief_text(claim.text)
+                if not any(match.start() <= mention.start and mention.end <= match.end()
+                           for match in re.finditer(re.escape(rendered), text)):
+                    continue
+                originals = [facts[fid] for fid in claim.fact_ids if fid in local_allowed
+                             and facts[fid].source_id in cited & set(claim.source_ids)]
+                if len(originals) != len(claim.fact_ids):
+                    continue
+                projected, reasons = projected_source_facts(claim, originals)
+                if reasons:
+                    continue
+                support.extend(projected)
+                if claim.source_span_bindings:
+                    components.extend(projected)
+        supported_money = {_money_value(fact) for fact in support}
+        allowance_bindings = {item.binding for fact in support
+                              for item in source_credit_allowances(fact, pattern)}
+        component_bindings = {item.binding for fact in components
+                              for item in source_monetary_components(fact, pattern)}
+        if mention.kind in {'usage_rate', 'monthly_minimum'}:
+            supported = mention.binding in component_bindings
+        elif mention.kind == 'credit_allowance':
+            supported = mention.binding in allowance_bindings
+        else:
+            supported = (mention.amount, mention.currency) in supported_money
         if not supported:
             issue = _issue(
                 service,
@@ -245,10 +269,14 @@ def _amount_issues(service, snapshot, text, path, boundaries, facts, cited, patt
                 path,
                 boundary=candidates[0] if candidates else None,
                 source_ids=tuple(sorted(cited)),
+                mention_position=(mention.start, mention.end),
             )
             issue.metadata.update(amount=str(mention.amount), currency=mention.currency,
                                   amount_kind=mention.kind, plan=mention.plan,
-                                  period=mention.period)
+                                  period=mention.period, mention_start=mention.start, mention_end=mention.end,
+                                  meter=mention.meter, denominator=str(mention.denominator)
+                                  if mention.denominator is not None else None,
+                                  account_scope=mention.account_scope)
             issues.append(issue)
     return issues
 
@@ -369,6 +397,10 @@ def audit_answer_boundaries(service, record, snapshot, *, producer_verified, ali
         if (audit.consumption_id, audit.competitor, audit.dimension) in bound_scopes
         for answer in audit.answer_coverage
     }
+    published_claims = [item.claim for audit in record.detail.report_dimension_audits
+                        if (audit.consumption_id, audit.competitor, audit.dimension) in bound_scopes
+                        for item in audit.claims if item.status == 'supported']
+    claim_scope = published_claims if record.detail.report_dimension_audits else None
     for line_number, text in _assertion_spans(record.detail.report_md, request_lines=request_lines):
         cited = {resolve_source_token(token, aliases) for token in source_tokens(text)} - {None}
         issues.extend(
@@ -381,6 +413,7 @@ def audit_answer_boundaries(service, record, snapshot, *, producer_verified, ali
                 facts,
                 cited,
                 money_pattern,
+                claims=claim_scope,
             )
         )
     for card in report_answer_claim_cards(record.detail):
@@ -404,6 +437,7 @@ def audit_answer_boundaries(service, record, snapshot, *, producer_verified, ali
                 facts,
                 cited,
                 money_pattern,
+                claims=claim_scope,
             )
         )
         declared = card.metadata.get("fact_ids")

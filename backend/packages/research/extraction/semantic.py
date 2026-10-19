@@ -48,7 +48,7 @@ _UNSAFE = re.compile(
 )
 _PRICE = re.compile(r"\b(?:usd|eur|cny)\b|[$€¥]\s*\d|\d+\s*(?:美元|元/月|/month)", re.I)
 _AVAILABILITY = re.compile(r'\b(?:is|are)\s+(?:not\s+)?(?:only\s+)?(?:available|supported|unsupported|included)\b|:\s*(?:not\s+)?included\b|\bincluded in\b', re.I)
-_CONDITION = re.compile(r"available (?:on|with|to)|requires?\b|\bneeds?\b|\bonly\b|\blimited to\b|\brestrict(?:ed|s|ions?)?\b|\bsubscribers?\b|\bmust\b|paid (?:plans?|workspaces?|users?)|not available|not included|included in|unsupported|not supported|\bcannot\b|\bcan't\b|仅限|需要|适用于|不支持|无法|限制", re.I)
+_CONDITION = re.compile(r"available (?:on|with|to)|requires?\b|\bneeds?\b|\bonly\b|\blimited to\b|\brestrict(?:ed|s|ions?)?\b|\bsubscribers?\b|\bmust\b|\b(?:have|has) to\b|paid (?:plans?|workspaces?|users?)|not available|not included|included in|unsupported|not supported|\bcannot\b|\bcan't\b|\b(?:do(?:es)? not|(?:do|does)n['’]t)\b|仅限|需要|适用于|不支持|无法|限制", re.I)
 _ACCESS_CONDITION = re.compile(r'\b(?:plans?|seats?|subscribers?|access|permissions?|locking|enterprise)\b|套餐|席位|权限|访问|锁定', re.I)
 _ACCESS_HEADING = re.compile(
     r'^(?:(?:doc|document|page|workspace)\s+)?(?:permissions?|roles?|access(?:\s+(?:requirements?|rules?|restrictions?|levels?))?|'
@@ -144,6 +144,11 @@ def _heading_resolution(body, page):
     """Constrain all original line candidates in metadata order, retaining unknowns."""
     source_headings = page.metadata.get('document_headings', [])
     entries = []
+    provider_markdown = page.metadata.get('document_structure_format') == 'provider_markdown_v1'
+    if 'document_structure_format' in page.metadata and (
+            not provider_markdown or any(key not in page.metadata for key in
+                                        ('document_headings', 'document_heading_anchors'))):
+        return {'valid': False, 'entries': entries, 'headings': []}
     if not isinstance(source_headings, (list, tuple)):
         return {'valid': False, 'entries': entries, 'headings': []}
     for index, item in enumerate(source_headings):
@@ -156,11 +161,14 @@ def _heading_resolution(body, page):
         entries.append({'ordinal': index, 'level': item[0], 'title': item[1],
                         'positions': positions})
     if 'document_heading_anchors' in page.metadata:
+        if provider_markdown and any(key in page.metadata for key in ('capture_structure_version', 'content_root')):
+            return {'valid': False, 'entries': entries, 'headings': []}
         html_capture = (type(page.metadata.get('capture_structure_version')) is int
                         and page.metadata['capture_structure_version'] == 1
                         and page.metadata.get('content_root') in {'main', 'article', 'body', 'html'})
         return _anchored_heading_resolution(body, entries, page.metadata['document_heading_anchors'],
-                                            html_capture=html_capture)
+                                            html_capture=html_capture,
+                                            provider_markdown=provider_markdown)
     present = [entry for entry in entries if entry['positions']]
     previous = -1
     for entry in present:
@@ -185,9 +193,11 @@ def _heading_resolution(body, page):
     return {'valid': valid, 'entries': entries, 'headings': headings}
 
 
-def _anchored_heading_resolution(body, entries, anchors, *, html_capture=False):
+def _anchored_heading_resolution(body, entries, anchors, *, html_capture=False, provider_markdown=False):
     """Validate complete source-bound identities; invalid anchors never use legacy search."""
     invalid = {'valid': False, 'entries': entries, 'headings': []}
+    if html_capture and provider_markdown:
+        return invalid
     if not isinstance(anchors, (list, tuple)) or len(anchors) != len(entries):
         return invalid
     if html_capture and not entries:
@@ -197,6 +207,8 @@ def _anchored_heading_resolution(body, entries, anchors, *, html_capture=False):
     occurrences, paths, observed, previous = {}, set(), [], -1
     for entry, anchor in zip(entries, anchors, strict=True):
         if not isinstance(anchor, dict):
+            return invalid
+        if provider_markdown and ('source_path' in anchor or 'representation' not in anchor):
             return invalid
         start, end = anchor.get('start'), anchor.get('end')
         title, level = anchor.get('title'), anchor.get('level')
@@ -212,8 +224,16 @@ def _anchored_heading_resolution(body, entries, anchors, *, html_capture=False):
         line_end = body.find('\n', end)
         line_end = len(body) if line_end < 0 else line_end
         prefix, suffix = body[line_start:start], body[end:line_end]
+        representation = anchor.get('representation', 'markdown')
+        if (not isinstance(representation, str)
+                or representation not in {'markdown', 'escaped_markdown'}):
+            return invalid
+        if representation == 'escaped_markdown' and not provider_markdown:
+            return invalid
+        marker = r'\\#' * level if representation == 'escaped_markdown' else '#' * level
         suffix_pattern = r'(?:[ \t]+#+)?[ \t]*\r?' if prefix else r'[ \t]*\r?'
-        if (line_start <= previous or (prefix and not re.fullmatch('#' * level + r'[ \t]+', prefix))
+        if (line_start <= previous or (prefix and not re.fullmatch(marker + r'[ \t]+', prefix))
+                or representation == 'escaped_markdown' and not prefix
                 or not re.fullmatch(suffix_pattern, suffix)):
             return invalid
         path = anchor.get('source_path')
@@ -230,17 +250,20 @@ def _anchored_heading_resolution(body, entries, anchors, *, html_capture=False):
     # A Markdown prefix is structural only outside a matching fenced block.
     markdown, fence, offset = [], None, 0
     for line in body.splitlines(keepends=True):
-        fenced = re.match(r'^ {0,3}(`{3,}|~{3,})', line)
+        fenced = re.match(r'^ {0,3}(`{3,}|~{3,}|(?:\\`){3,}|(?:\\~){3,})'
+                          if provider_markdown else r'^ {0,3}(`{3,}|~{3,})', line)
         if fenced:
-            marker = fenced.group(1)
+            marker = fenced.group(1).replace('\\', '')
             if fence is None:
                 fence = marker[0], len(marker)
             elif marker[0] == fence[0] and len(marker) >= fence[1] and not line[fenced.end():].strip():
                 fence = None
         elif fence is None:
-            match = re.fullmatch(r'(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*\r?\n?', line)
+            match = re.fullmatch(r'(#{1,6}|(?:\\#){1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*\r?\n?'
+                                 if provider_markdown else r'(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*\r?\n?', line)
             if match:
-                markdown.append((len(match[1]), match[2], offset + match.start(2), offset + match.end(2)))
+                markdown.append((len(match[1].replace('\\', '')), match[2],
+                                 offset + match.start(2), offset + match.end(2)))
         offset += len(line)
     if not paths and observed != markdown:
         return invalid
@@ -433,7 +456,7 @@ def _local_context(body: str, start: int, end: int, bounds=None) -> str | None:
 
 
 def document_condition_context(body, page, start, end):
-    """Use captured HTML headings only after verifying their ordered body positions."""
+    """Bind current sections and ancestor introductions to verified source positions."""
     resolution = _heading_resolution(body, page)
     headings = resolution['headings']
     ancestors = []
@@ -474,18 +497,20 @@ def document_condition_context(body, page, start, end):
         actions = condition_operations(line)
         access_rule = re.search(r'\b(?:must|require[ds]?|only)\b[^.;\n]*\baccess\s+(?:(?:the|a|shared)\s+)*(?:boards?|pages?|documents?|docs?|items?|content)\b', line, re.I)
         return bool(actions & quote_actions or access_rule and quote_actions & {'read', 'comment', 'edit'})
-    lower, level = next((item for item in ancestors if item[1] >= 2), ancestors[0])
-    if plan_path:
-        lower, level, _ = plan_path[-1]
+    lower, _ = ancestors[-1]
     path = _resolved_heading_path(resolution, start)
     selected = next((entry for entry in path or [] if entry['positions'][0] == lower), None)
     if selected is None or _resolved_subtree_end(resolution, selected, len(body)) is None:
         return None
-    upper = next((position for position, other_level, _ in headings if position > start and other_level <= level), len(body))
-    if level == 1 and lower == headings[0][0]:
-        upper = next((position for position, _, _ in headings if position > start), len(body))
+    upper = next((position for position, _, _ in headings if position > start), len(body))
     if end > upper:
         return None
+    parent_introductions = []
+    for parent in (path or [])[:-1]:
+        finish = _resolved_intro_end(resolution, parent, len(body))
+        if finish is None:
+            return None
+        parent_introductions.append((parent['positions'][0], finish))
     first_section = next((position for position, level, _ in headings
                           if level >= 2 or position != headings[0][0]), len(body))
     access_introductions, parents = [], []
@@ -503,11 +528,8 @@ def document_condition_context(body, page, start, end):
     local = _local_context(body, start, end, (lower, upper))
     local_start = body.find(local, max(0, lower)) if local is not None else start
     local_end = local_start + len(local) if local is not None else end
-    # Broad guide sections contain many unrelated procedural and role limits.
-    # Keep local restrictions, section introductions and global licensing rules.
-    intro_end = next((position for position, child_level, _ in headings
-                      if lower < position < upper and child_level > level), lower)
-    broad_section = upper - lower > MAX_CONTEXT_CHARS
+    # Verified boundaries keep sibling procedures separate. Conditions in the
+    # current section remain complete even beyond the model's local window.
     named_role = _ROLE_LINE.match(body[body.rfind('\n',0,start)+1:body.find('\n',end) if body.find('\n',end)>=0 else len(body)])
     conditions = []
     offset = 0
@@ -517,7 +539,9 @@ def document_condition_context(body, page, start, end):
                       or role_definition[1].casefold() != named_role[1].casefold())
         if _CONDITION.search(line) and not other_role and (offset < first_section
                                        or local_start <= offset < local_end
-                                       or lower <= offset < (intro_end if broad_section else upper)
+                                       or lower <= offset < upper
+                                       or any(begin <= offset < finish
+                                              for begin, finish in parent_introductions)
                                        or any(begin <= offset < finish
                                               for begin, finish in access_introductions)
                                        or same_role_requirement(line, offset)):
@@ -528,6 +552,10 @@ def document_condition_context(body, page, start, end):
     # A source's own plan headings are conditions, including previously unseen
     # plan names. Their scope comes from verified heading positions, not questions.
     conditions.extend(heading for _, _, heading in plan_path)
+    for begin, finish in [*parent_introductions, (lower, upper), *access_introductions]:
+        # A permission introduction or exception list is one original block;
+        # its branches and explanation cannot be reduced to keyword lines.
+        conditions.extend(complete_rule_blocks(body[begin:finish], max_chars=None))
     for begin, finish in access_introductions:
         conditions.extend(alternative_condition_blocks(body[begin:finish]))
     return (lower, upper), list(dict.fromkeys(conditions))
@@ -632,7 +660,7 @@ def _semantic_window(brief: ResearchBrief, page: CapturedPage) -> tuple[int, str
     """One bounded original window, selected for permission rules, not UI menus."""
     from packages.research.evidence.operations import required_operations
     body = page.text or page.markdown or page.snippet
-    if ('document_heading_anchors' in page.metadata
+    if (any(key in page.metadata for key in ('document_heading_anchors', 'document_structure_format'))
             and not _heading_resolution(body, page)['valid']):
         return 0, ''
     service_scope = _billing_service_scope(brief, body, page)
@@ -882,7 +910,8 @@ def semantic_extraction(
             ]))
             section = ((lower, upper_start + len(last)), fact_conditions)
         condition_limits = [
-            MAX_CONTEXT_CHARS if alternative_condition_blocks(line) or line in rule_blocks
+            MAX_CONTEXT_CHARS if (alternative_condition_blocks(line) or line in rule_blocks
+                                  or line in complete_rule_blocks(line))
             else 800 if section else 420 for line in fact_conditions
         ]
         if (len(fact_conditions) > (12 if section else 6)

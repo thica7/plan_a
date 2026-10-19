@@ -7579,6 +7579,8 @@ export interface components {
             /** Source Ids */
             source_ids: string[];
             operation_binding?: components["schemas"]["ReportOperationBinding"] | null;
+            /** Source Span Bindings */
+            source_span_bindings?: components["schemas"]["ReportSourceSpanBinding"][];
         };
         /** ReportConditionGroup */
         ReportConditionGroup: {
@@ -7781,6 +7783,25 @@ export interface components {
             skipped?: components["schemas"]["HistoricalReportSkip"][];
             /** Refresh Required */
             refresh_required?: components["schemas"]["HistoricalSourceLineage"][];
+        };
+        /** ReportSourceSpanBinding */
+        ReportSourceSpanBinding: {
+            /** Span Id */
+            span_id: string;
+            /** Fact Id */
+            fact_id: string;
+            /** Source Id */
+            source_id: string;
+            /** Fact Hash */
+            fact_hash: string;
+            /** Source Path */
+            source_path: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Quote */
+            quote: string;
         };
         /** ReportVersionDiff */
         ReportVersionDiff: {

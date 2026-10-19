@@ -19,6 +19,65 @@ if TYPE_CHECKING:
 QA_CONFIDENCE_OUTLIER_THRESHOLD = 0.7
 
 
+def _question_delivery_scope(detail):
+    """Recognize a narrow explicit delivery; ambiguity retains comparison gates."""
+    from packages.research.question_scope import research_questions
+    plan = detail.plan
+    brief = plan.decision_brief
+    result = {'mode': 'comparison', 'requires_comparison': True}
+    if len(plan.competitors) != 1 or brief is None or not brief.decision_question.strip():
+        return result
+    product = plan.competitors[0].strip().casefold()
+    if plan.target_product and plan.target_product.name.strip().casefold() != product:
+        return result
+    intent = ' '.join([detail.topic, plan.topic, *brief.model_dump().values(),
+                      *(plan.target_product.use_cases if plan.target_product else [])])
+    if re.search(r'\b(?:compar\w*|rank\w*|versus|vs|PM|better|worse|superior|inferior|outperform\w*)\b|'
+                 r'\b(?:more|less)\b.{0,40}\bthan\b|side.by.side|all\s+features|'
+                 r'(?:full|complete)\s+(?:analysis|research|report|feature)|'
+                 r'竞品|比较|对比|排名|全功能|全维度|(?:完整|全面).{0,8}(?:分析|研究|报告)', intent, re.I):
+        return result
+    if any(req.intent == 'price_comparison' for req in plan.answer_requirements):
+        return result
+    questions = [q for dimension in plan.dimensions
+                 for q in research_questions(detail, plan.competitors[0], dimension)]
+    if not questions or any(not re.search(r'[?？]|是否|能否|如何|哪些|什么|怎样', q['question'])
+                            for q in questions):
+        return result
+    return {'mode': 'single_product_questions', 'requires_comparison': False,
+            'question_ids': [q['question_id'] for q in questions]}
+
+
+def _comparison_gap_inapplicable(detail, finding):
+    """Only explicit comparison coverage limitations can be outside question scope.
+
+    Current selected product cells must still be present and cited. Question
+    evidence/answers are checked independently by the existing final claim QA.
+    Unknown reasons and unsupported conclusions retain their original gate.
+    """
+    if _question_delivery_scope(detail)['requires_comparison'] or detail.comparison_matrix is None:
+        return False
+    cells = {(cell.competitor.casefold(), cell.dimension.casefold()): cell
+             for cell in detail.comparison_matrix.cells}
+    if any((cell := cells.get((product.casefold(), dimension.casefold()))) is None or not cell.source_ids
+           for product in detail.plan.competitors for dimension in detail.plan.dimensions):
+        return False
+    text = finding.casefold()
+    if re.search(r'\b(?:question|answer|claim|conclusion|citation|unknown|unverified)\b|'
+                 r'问题|未回答|结论|错引|未知', text):
+        return False
+    # A closed structural grammar keeps mixed findings conservative: appending
+    # a missing rule or other unknown clause makes the entire finding applicable.
+    structural_reasons = (
+        r'feature\s+dimension\s+(?:is\s+marked|assessment\s+status\s+is)\s+'
+        r'insufficient_evidence\s*\(gap_count\s*=\s*\d+\),?\s*blocking\s+'
+        r'(?:a\s+)?(?:validated|confident)\s+feature\s+comparison\.?',
+        r'(?:no|missing)\s+(?:multi|cross)[- ]competitor\s+(?:[a-z]+\s+)?matrix'
+        r'(?:\s+exists)?(?:[.;]\s*cross[- ]competitor\s+comparison\s+cannot\s+be\s+produced)?\.?',
+    )
+    return any(re.fullmatch(pattern, text.strip()) for pattern in structural_reasons)
+
+
 class ReflectorAgentMixin:
     async def _real_reflector_step(self, record: RunRecord) -> None:
         detail = record.detail
@@ -48,6 +107,8 @@ class ReflectorAgentMixin:
         )
         await self.emit(detail.id, "node_started", "reflector", None, "Calling reflector.")
         fallback: dict[str, object] = {"used": False, "deterministic_fallback": False}
+        from packages.schema.decision_brief import decision_brief_prompt_context
+        delivery_scope = _question_delivery_scope(detail)
         try:
             payload = await self._trace_llm_json(
                 record,
@@ -60,6 +121,9 @@ class ReflectorAgentMixin:
                     "not original fact text. omitted_fact_count and context_budget_exceeded mean collected "
                     "material was not sent in this small view; never turn them into collection or matrix gaps. "
                     "Assessment status and gap_count retain unresolved comparison limitations; do not infer a winner. "
+                    "Assess coverage against the decision brief and delivery_scope. Explicit single-product "
+                    "questions do not require additional competitors or an exhaustive feature comparison. "
+                    "Still report missing evidence for the actual questions and unsupported conclusions. "
                     "Treat comparison-matrix cells with source_ids across every competitor and "
                     "dimension as side-by-side comparison coverage; only report "
                     "cross_competitor_gaps when the matrix lacks cells, source_ids, or aligned "
@@ -67,7 +131,9 @@ class ReflectorAgentMixin:
                     f"QA confidence threshold {QA_CONFIDENCE_OUTLIER_THRESHOLD:.2f}."
                 ),
                 user=(
-                    f"Competitors: {', '.join(detail.plan.competitors)}\n"
+                    decision_brief_prompt_context(detail.plan.decision_brief)
+                    + f"Delivery scope: {json.dumps(delivery_scope, ensure_ascii=False)}\n"
+                    + f"Competitors: {', '.join(detail.plan.competitors)}\n"
                     f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
                     f"Comparison Matrix JSON: "
                     f"{matrix_json}\n"
@@ -221,6 +287,13 @@ class ReflectorAgentMixin:
         llm_blocking_gaps: list[str],
         producer_coverage=None,
     ) -> tuple[Literal["pass", "warn", "block"], list[str]]:
+        original_llm_gaps = llm_blocking_gaps
+        llm_blocking_gaps = [gap for gap in llm_blocking_gaps if not _comparison_gap_inapplicable(detail, gap)]
+        coverage_gaps = [gap for gap in coverage_gaps if not _comparison_gap_inapplicable(detail, gap)]
+        cross_competitor_gaps = [gap for gap in cross_competitor_gaps
+                                 if not _comparison_gap_inapplicable(detail, gap)]
+        if llm_gate_status == 'block' and original_llm_gaps and not llm_blocking_gaps:
+            llm_gate_status = 'warn'
         blocking_gaps: list[str] = []
         if producer_coverage is not None:
             blocking_gaps.extend(self._coverage_metadata_blockers(producer_coverage))
@@ -393,6 +466,8 @@ class ReflectorAgentMixin:
         for group_name, findings, target_agent, field_path in groups:
             for index, finding in enumerate(findings[:5], start=1):
                 if not finding.strip():
+                    continue
+                if _comparison_gap_inapplicable(detail, finding):
                     continue
                 if group_name == "confidence" and self._confidence_outlier_is_below_threshold(
                     detail, finding

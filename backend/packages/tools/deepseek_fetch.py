@@ -99,6 +99,7 @@ async def deepseek_fetch_page(
     anchors = _markdown_heading_anchors(body, digest)
     metadata.update(
         content_sha256=digest, captured_at=captured.isoformat(),
+        document_structure_format="provider_markdown_v1",
         document_headings=[(item["level"], item["title"]) for item in anchors],
         document_heading_anchors=anchors,
         provider_retrieval_receipt={
@@ -155,22 +156,23 @@ def _markdown_heading_anchors(body: str, digest: str) -> list[dict]:
     fence = None
     offset = 0
     for line in body.splitlines(keepends=True):
-        fenced = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+        fenced = re.match(r"^ {0,3}(`{3,}|~{3,}|(?:\\`){3,}|(?:\\~){3,})", line)
         if fenced:
-            marker = fenced.group(1)
+            marker = fenced.group(1).replace("\\", "")
             if fence is None:
                 fence = (marker[0], len(marker))
             elif (marker[0] == fence[0] and len(marker) >= fence[1]
                   and not line[fenced.end():].strip()):
                 fence = None
         elif fence is None:
-            match = re.fullmatch(r"(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*\r?\n?", line)
+            match = re.fullmatch(r"(#{1,6}|(?:\\#){1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*\r?\n?", line)
             if match:
                 title = match.group(2)
                 occurrence = occurrences.get(title, 0) + 1
                 occurrences[title] = occurrence
-                anchors.append(dict(level=len(match.group(1)), title=title,
+                anchors.append(dict(level=len(match.group(1).replace("\\", "")), title=title,
                     start=offset + match.start(2), end=offset + match.end(2),
-                    occurrence=occurrence, content_sha256=digest))
+                    occurrence=occurrence, content_sha256=digest,
+                    representation="escaped_markdown" if match.group(1).startswith("\\") else "markdown"))
         offset += len(line)
     return anchors

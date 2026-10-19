@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
@@ -141,7 +142,7 @@ async def _fetch_evidence_page(
         )
         if upgraded.ok and upgraded.quality_score >= advanced_quality_threshold:
             captured = _with_price_check(upgraded, require_price_content)
-            return _retain_capture_gaps(captured, basic) if capture_incomplete else captured
+            return _retain_capture_gaps(captured, basic)
         fallback = _with_price_check(_from_basic_fetch(
             basic,
             fetch_method="basic_httpx" if basic_sufficient else "basic_httpx_low_quality",
@@ -205,6 +206,25 @@ async def _fetch_evidence_page(
 def _retain_capture_gaps(result: EvidenceFetchResult, basic: FetchPageResult) -> EvidenceFetchResult:
     """A browser's long text cannot erase a known unresolved source structure."""
     metadata = dict(result.capture_metadata)
+    if (result.fetch_method == 'deepseek_web_fetch'
+            and metadata.get('document_structure_format') == 'provider_markdown_v1'):
+        # DOM identities belong to the earlier representation. Missing answers
+        # remain gaps, but their old paths/quotes never become current facts.
+        metadata['previous_capture_diagnostics'] = deepcopy(basic.capture_metadata)
+        html_structure_gaps = {'html_parse_failed', 'ambiguous_content_root', 'hidden_content_root'}
+        gaps = [gap for gap in basic.capture_metadata.get('capture_gaps', [])
+                if not gap.startswith('heading_') and gap not in html_structure_gaps]
+        gaps.extend(item.get('reason', 'capture_incomplete')
+                    for item in basic.capture_metadata.get('disclosures', [])
+                    if item.get('status') != 'complete')
+        if any(item.get('status') == 'complete'
+               and (not isinstance(item.get('quote'), str) or not item['quote']
+                    or item['quote'] not in result.text)
+               for item in basic.capture_metadata.get('disclosures', [])):
+            gaps.append('previous_disclosure_not_captured')
+        metadata['capture_gaps'] = list(dict.fromkeys([*metadata.get('capture_gaps', []), *gaps]))
+        metadata['capture_incomplete'] = bool(metadata['capture_gaps'])
+        return replace(result, capture_metadata=metadata)
     completed = {_disclosure_identity(item) for item in metadata.get('disclosures', [])
                  if item.get('status') == 'complete' and _disclosure_identity(item) is not None}
     unresolved = [item for item in basic.capture_metadata.get('disclosures', [])

@@ -38,7 +38,10 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                           if b.requirement.competitor == audit.competitor and b.requirement.dimension == audit.dimension
                           and set(b.view_fact_ids) == set(use.fact_ids) and set(b.view_source_ids) == set(use.source_ids)]
             published = [c for c in audit.claims if c.status == "supported"]
-            replayed = audit_report_claims([c.claim for c in published], [c.review for c in published if c.review], view, boundaries)
+            from packages.agents.writer.question_retrieval import _eligible_facts
+            discovery = _eligible_facts(snapshot, audit.competitor, audit.dimension) if audit.dimension == 'feature' else view.facts
+            replayed = audit_report_claims([c.claim for c in published], [c.review for c in published if c.review],
+                view, boundaries, available_facts=discovery)
             if any(c.status != "supported" for c in replayed):
                 reasons.add("claim_review_replay_failed")
             for item in published:
@@ -47,7 +50,9 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                     reasons.add("published_claim_missing_or_changed")
             if any(size > use.max_bytes for size in audit.review_context_bytes):
                 reasons.add("claim_review_context_exceeded")
-            from packages.agents.writer.answer_coverage import coverage_resolution_reasons, research_questions
+            from packages.agents.writer.answer_coverage import (
+                coverage_resolution_reasons, is_qualified_partial_clarification, research_questions,
+            )
             questions = research_questions(record.detail, audit.competitor, audit.dimension)
             expected = {item['question_id']: item['question'] for item in questions}
             actual = {item.question_id: item.question for item in audit.answer_coverage}
@@ -64,11 +69,13 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                     original = price_answers.get(item.question_id)
                     return (item.status != 'answered' or original is None
                             or item != ReportAnswerCoverage(**original))
-                return (item.status != 'answered' or not item.claim_ids
+                qualified_clarification = require_v2 and is_qualified_partial_clarification(
+                    item, published_claims, facts=answer_facts, report_md=record.detail.report_md)
+                return ((item.status != 'answered' and not qualified_clarification) or not item.claim_ids
                         or not set(item.claim_ids) <= published_ids
                         or bool(coverage_resolution_reasons(item, published_claims,
                             require_v2=require_v2, facts=answer_facts)))
-            if ('question_core_context_budget_exceeded' in audit.gaps
+            if ({'question_core_context_budget_exceeded', 'question_exception_context_budget_exceeded'} & set(audit.gaps)
                     or any(answer_invalid(item) for item in audit.answer_coverage)
                     or questions and not audit.answer_coverage):
                 reasons.add('answer_coverage_incomplete')

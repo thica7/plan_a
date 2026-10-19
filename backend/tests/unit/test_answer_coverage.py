@@ -1,4 +1,5 @@
 import json
+from claim_review_fixture import sent_source_span_id
 from types import SimpleNamespace
 
 import pytest
@@ -501,6 +502,7 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
                         "dimension": "feature",
                         "fact_ids": [row["id"]],
                         "source_ids": [row["source_id"]],
+                        "source_span_ids": [sent_source_span_id(row)],
                     }
                 ]
             }

@@ -4,7 +4,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from claim_review_fixture import supported_review
+from claim_review_fixture import sent_source_span_id, supported_review
 from test_exception_recovery import ACCESS, AUTH, scoped_pair
 from test_literal_non_operation import candidates, draft, fact
 from test_missing_price_answers import answer, price_case
@@ -328,6 +328,9 @@ async def test_real_writer_claim_review_answer_and_final_qa_replay_the_same_orig
                 if path == 'pair_operation':
                     row['observation_id'] = next(candidate['observation_id'] for f in sent
                         for candidate in f.get('operation_observations', []) if candidate['operation'] == 'edit')
+            if path != 'pair_operation':
+                by_id = {f['id']: f for f in sent}
+                row['source_span_ids'] = [sent_source_span_id(by_id[fid]) for fid in row['fact_ids']]
             return json.dumps({'claims': [row]})
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(c) for c in payload['claims']]})

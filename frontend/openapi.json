@@ -26585,6 +26585,14 @@
                 "type": "null"
               }
             ]
+          },
+          "source_span_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/ReportSourceSpanBinding"
+            },
+            "type": "array",
+            "maxItems": 2,
+            "title": "Source Span Bindings"
           }
         },
         "additionalProperties": false,
@@ -27106,6 +27114,58 @@
         "additionalProperties": false,
         "type": "object",
         "title": "ReportReuseContext"
+      },
+      "ReportSourceSpanBinding": {
+        "properties": {
+          "span_id": {
+            "type": "string",
+            "title": "Span Id"
+          },
+          "fact_id": {
+            "type": "string",
+            "title": "Fact Id"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "fact_hash": {
+            "type": "string",
+            "title": "Fact Hash"
+          },
+          "source_path": {
+            "type": "string",
+            "title": "Source Path"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "End"
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Quote"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "span_id",
+          "fact_id",
+          "source_id",
+          "fact_hash",
+          "source_path",
+          "start",
+          "end",
+          "quote"
+        ],
+        "title": "ReportSourceSpanBinding"
       },
       "ReportVersionDiff": {
         "properties": {

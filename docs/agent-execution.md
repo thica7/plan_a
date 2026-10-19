@@ -2,7 +2,9 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-当前真实验证见[Search／Fetch与证据消费](optimization/2026-10-19-deepseek-web-delivery.md)：后端5982通过／1跳过，四组各一次22调用／75844token。正文2正确／1错误／5遗漏，记录2正确／6遗漏；Cloudflare限定两题内容合格，系统仍0/4交付。Bitwarden、Cloudflare各核心下游实际执行且三模块状态为llm，1Password／Dropbox在采集处阻断。9份捕获完整可核验。默认关闭的新路线只在隔离CLI启用，Planner发现、全Graph及生产稠密RAG未在本轮验收；未训练。
+当前真实验证见[逐题证据交付修复](optimization/2026-10-20-question-delivery-repair.md)：后端6151通过／1跳过，四组各首次30调用／116410token。正文5正确／3遗漏，记录4正确／1错误／3遗漏；Cloudflare两题及全部发表绑定合格，系统仍0/4交付。三组核心阶段真实调用，Dropbox无正文未调用生成模型。实际Reflector视图与Writer仍未逐题对齐；两条额外主张只有半句绑定。不是Planner/全Graph/生产稠密RAG验收，未训练。
+
+上一轮真实验证见[Search／Fetch与证据消费](optimization/2026-10-19-deepseek-web-delivery.md)：后端5982通过／1跳过，四组各一次22调用／75844token。正文2正确／1错误／5遗漏，记录2正确／6遗漏；Cloudflare限定两题内容合格，系统仍0/4交付。Bitwarden、Cloudflare各核心下游实际执行且三模块状态为llm，1Password／Dropbox在采集处阻断。9份捕获完整可核验。默认关闭的新路线只在隔离CLI启用，Planner发现、全Graph及生产稠密RAG未在本轮验收；未训练。
 
 上一轮真实验证见[Collector逐题交付](optimization/2026-10-19-collector-question-delivery.md)：后端5811通过/1跳过；四组30次真实调用，正文3正确/5遗漏、记录2正确/6遗漏，0/4完整报告可交付。三组核心下游Agent实际执行，Dropbox采集阻断未调用下游。合同已接线不代表全召回或语义合格；抓取、选窗、Writer原始选证及最终回答状态仍有明确缺口。
 
@@ -45,6 +47,8 @@ planner → planner_hitl
 
 完整规则收据现在按同源身份和全部分支去重，后续 `To unshare...` 操作引导不会吞掉前面的 except 列表。兼容当前官方页面之间的一般规则与具体例外可生成 `source_exception_bindings` 候选；只有完整双方 fact/source 已发送且条件均重放时，才可有限豁免多事实限制。认证规则采用完整有限语法，未知余文拒绝；收据文字不能代替完整 origin。
 
+当前 provider 正文采用 `provider_markdown_v1` 明确标识 Markdown 或转义 Markdown，标题与条件保持原始坐标/哈希；不伪造 DOM 或源站状态。条件窗口使用已验证父级和局部完整规则，旧 HTML 结构只作历史诊断，缺失 FAQ 继续保留缺口。
+
 #### 逐题交付合同
 
 [`question_delivery.py`](../backend/packages/research/question_delivery.py) 在真实 Collector 存储出口生成 `question_delivery_v1`，区分抓取、提案、原文验证、准入、来源转换和快照封存。每个问题保留原问、实际提取批次及事实关联；失败、超容量、未转换或未存储均保留原因。请求条件不成为事实，模型自报完成不能关闭机械缺口。
@@ -86,6 +90,8 @@ planner → planner_hitl
 
 ### Analyst：按产品与维度分析
 
+本轮真实调用已执行，但其视图仍可能遗漏问题关键事实；不能以完成调用或消费收据证明已覆盖每题。下一步须与 Writer 使用同一逐题核心证据包，保留条件和例外。
+
 - **入口**：[`analysts/logic.py`](../backend/packages/agents/analysts/logic.py) 的产品×维度分支。
 - **输入**：当前已准入分析快照中，符合产品与维度范围的 `EvidenceView`。
 - **执行**：抽取与比较结构化事实，保留原始金额、数量、单位、角色、套餐、操作对象及访问前提；根据预算选择有界分析路径。记录使用了哪些来源与事实。
@@ -102,6 +108,8 @@ planner → planner_hitl
 
 ### Reflector：检查矛盾与分析缺口
 
+真实入口现在传入 `DecisionBrief` 与内部交付范围，服务端仅排除闭合语法中明确不适用的比较要求。完整分析、相对优劣、不同目标产品、多产品、混合题内缺证和未知问题继续阻断。本轮仍存在局部未见即判全部缺证、看到限制却要求额外否定原句的问题，尚未达语义验收。
+
 - **入口**：[`reflector/logic.py`](../backend/packages/agents/reflector/logic.py)。
 - **输入**：共享证据视图、有效分析与比较结果。
 - **执行**：检查矛盾、来源薄弱、范围遗漏及待核验建议，为写作提供边界。
@@ -109,6 +117,8 @@ planner → planner_hitl
 - **边界**：反思不是新增一手证据，不能用推断填补缺失的能力或报价；回退状态单独记录。
 
 ### Writer：把有效分析写入报告
+
+逐题选择在8条/14000 bytes中先保核心事实和必要例外；阶段视图与最终compact用同一函数核验完整quote/value/qualifiers，只有元数据不算送达。模型从实际发送候选选择 `source_span_ids`，服务器生成可重放的 `source_span_bindings`；父事实只施加限制。合格澄清可局部交付，缺核心事实/例外仍硬阻断。真实审读发现复合句仍可能只绑定半句，操作型陈述也未完全解决；不能将新绑定字段等同完整支持。
 
 - **入口**：[`writer/runner.py`](../backend/packages/agents/writer/runner.py)；分维度写作见 [`dimension_writer.py`](../backend/packages/agents/writer/dimension_writer.py)。
 - **输入**：有效 Analyst、Comparator、Reflector 产物及准入证据包。
@@ -138,6 +148,8 @@ planner → planner_hitl
 完整中文“只有……才能访问……”可作为闭合问句的必要条件断言；新增识别路径对完整主张块检查引号、示例、建议及未完成句，不从审核理由补答案。主体、对象、套餐、完整主张和 v2 引用重放仍须分别通过。
 
 ### QA：审核与重做决策
+
+有限原文金额组件只从已发表、已允许的精确span重放，分别核对费率与账户最低费的套餐、币种、单位、周期及收费对象，多个金额保持各自诊断。未知推导/额外收费范围仍阻断。本轮真实CF没有发表金额，不能据零金额问题宣称真实费率验收通过；保存reason与不足答复状态也须独立核对。
 
 - **入口**：[`qa/logic.py`](../backend/packages/agents/qa/logic.py)，引用对齐见 [`evidence_alignment.py`](../backend/packages/agents/qa/evidence_alignment.py)。
 - **输入**：阶段资料、当前证据快照、结构化分析、矩阵、报告与已有审核记录。

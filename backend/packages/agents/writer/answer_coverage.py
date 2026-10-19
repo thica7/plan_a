@@ -84,6 +84,7 @@ def answer_review_payload(questions, claims, view, *, additional_fact_ids=(), in
                     "fact_ids",
                     "source_ids",
                     "operation_binding",
+                    "source_span_bindings",
                 },
             )
             for claim in claims
@@ -142,6 +143,47 @@ def coverage_resolution_reasons(record, claims, *, require_v2=False, facts=()):
     from packages.research.evidence.source_exceptions import answer_source_exception_reasons
     reasons.extend(answer_source_exception_reasons(record, claims, facts=facts))
     return tuple(dict.fromkeys(reasons))
+
+
+def is_qualified_partial_clarification(record, claims, *, facts=(), report_md=None):
+    """A reviewed source rule plus complete input clarification is a local delivery.
+
+    This never upgrades partial to answered or waives any source/answer guard.
+    Callers supply only published supported claims from the original view.
+    """
+    if (record.status != 'partial' or record.resolution != 'clarification'
+            or record.binding_version != 2 or record.conclusion != 'depends'):
+        return False
+    if coverage_resolution_reasons(record, claims, require_v2=True, facts=facts):
+        return False
+    from packages.research.evidence.source_exceptions import _CLARIFY, _missing_question_inputs
+    from packages.research.evidence.source_spans import projected_source_facts
+    from packages.research.evidence.report_claims import ReportClaim
+    import re
+    if not _missing_question_inputs(record.question):
+        return False
+    selected = [claim for claim in claims if claim['id'] in record.claim_ids]
+    has_rule = False
+    for row in selected:
+        try:
+            claim = ReportClaim.model_validate(row)
+        except ValueError:
+            return False
+        if not claim.source_span_bindings:
+            return False
+        bound = [fact for fact in facts if fact.id in claim.fact_ids]
+        _, reasons = projected_source_facts(claim, bound)
+        if reasons:
+            return False
+        has_rule |= any(part.strip() and not _CLARIFY.match(part.strip())
+                        for part in re.split(r'[.!?。！？;；\n]', claim.text))
+    if not selected or not has_rule:
+        return False
+    if report_md is not None:
+        from packages.schema.decision_brief import safe_decision_brief_text
+        if safe_decision_brief_text(record.answer) not in report_md:
+            return False
+    return True
 
 
 def selected_claim_texts(claim_ids, claims):

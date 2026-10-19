@@ -13,6 +13,7 @@ from packages.research.evidence.operation_claim_checks import (
     operation_condition_reasons, operation_review_reasons,
 )
 from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
+from packages.research.evidence.source_spans import ReportSourceSpanBinding
 
 
 class ReportConditionGroup(BaseModel):
@@ -64,12 +65,15 @@ class ReportClaim(BaseModel):
     fact_ids: tuple[str, ...]
     source_ids: tuple[str, ...]
     operation_binding: ReportOperationBinding | None = None
+    source_span_bindings: tuple[ReportSourceSpanBinding, ...] = Field(default_factory=tuple, max_length=2)
 
     @model_serializer(mode="wrap")
     def serialize_legacy_claim(self, handler):
         values = handler(self)
         if self.operation_binding is None:
             values.pop('operation_binding', None)
+        if not self.source_span_bindings:
+            values.pop('source_span_bindings', None)
         return values
 
     @field_validator("text")
@@ -258,7 +262,7 @@ def _claim_operation_effects(text, bound):
     return effects
 
 
-def claim_rule_reasons(claim, view, boundaries):
+def claim_rule_reasons(claim, view, boundaries, *, available_facts=None):
     facts = {f.id: f for f in view.facts}
     allowed = {fid for boundary in boundaries for fid in boundary.allowed_fact_ids}
     reasons = []
@@ -304,10 +308,31 @@ def claim_rule_reasons(claim, view, boundaries):
             claim_source_exception_reasons,
             verified_exception_binding,
         )
-        reasons.extend(claim_source_exception_reasons(claim, content, available_facts=view.facts))
+        from packages.research.evidence.source_spans import projected_source_facts
+        projected, span_reasons = projected_source_facts(claim, content)
+        reasons.extend(span_reasons)
+        # Parent context continues to limit a bound member; it never supports
+        # an extra assertion outside that member.
+        discovery = view.facts if available_facts is None else available_facts
+        reasons.extend(claim_source_exception_reasons(claim, content, available_facts=discovery))
+        if not span_reasons and claim.source_span_bindings:
+            reasons.extend(claim_temporal_condition_reasons(claim, projected))
+            reasons.extend(claim_source_condition_reasons(claim, projected))
+            reasons.extend(claim_source_exception_reasons(claim, projected, available_facts=discovery,
+                support_quotes=tuple(f.quote for f in projected)))
+            from packages.research.evidence.source_exceptions import _ACCESS, _CLARIFY, _asserted, _events
+            support = ' '.join(f.quote for f in projected)
+            # A source span cannot acquire a new event or access assertion from
+            # an unrelated parent value, even if a model returns supported.
+            assertion_text = ' '.join(part for part in re.split(r'[.!?。！？;；\n]', claim.text)
+                                      if part.strip() and not _CLARIFY.match(part.strip()))
+            if (_events(assertion_text) - _events(support)
+                    or _asserted(assertion_text, _ACCESS.pattern) and not _ACCESS.search(support)):
+                reasons.append('source_span_assertion_outside_support')
+        exception_facts = projected if claim.source_span_bindings and not span_reasons else content
         observations = {(f.source_id, f.competitor, f.dimension, f.evidence_item_ids, f.quote) for f in known}
         if ((len({f.id for f in content}) > 1 or len(observations) > 1)
-                and not verified_exception_binding(claim, content)):
+                and not verified_exception_binding(claim, exception_facts)):
             reasons.append('feature_claim_multiple_observations')
         for fact in content:
             from packages.research.evidence.operations import operation_observations
@@ -370,14 +395,14 @@ def claim_rule_reasons(claim, view, boundaries):
     return tuple(reasons)
 
 
-def audit_report_claims(claims, reviews, view, boundaries):
+def audit_report_claims(claims, reviews, view, boundaries, *, available_facts=None):
     parsed = [ClaimReview.model_validate(r) for r in reviews]
     counts = Counter(r.claim_id for r in parsed)
     claim_counts = Counter(c.id for c in claims)
     by_id = {r.claim_id: r for r in parsed}
     result = []
     for claim in claims:
-        rules = list(claim_rule_reasons(claim, view, boundaries))
+        rules = list(claim_rule_reasons(claim, view, boundaries, available_facts=available_facts))
         review = by_id.get(claim.id)
         if review is not None:
             rules.extend(operation_review_reasons(claim, review))

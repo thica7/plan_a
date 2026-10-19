@@ -1,7 +1,7 @@
 """Source-local monetary meaning for prose, without creating price facts.
 
-This intentionally accepts a small explicit allowance grammar. Ambiguous text
-stays unknown and cannot acquire the allowance exception to the price audit.
+This intentionally accepts small explicit allowance, rate and minimum grammars.
+Ambiguous text stays unknown and cannot acquire an exception to the price audit.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ _CONDITIONAL = re.compile(
 
 @dataclass(frozen=True)
 class MonetaryMention:
-    kind: Literal['credit_allowance', 'purchase_price', 'unknown']
+    kind: Literal['credit_allowance', 'purchase_price', 'usage_rate', 'monthly_minimum', 'unknown']
     amount: Decimal
     currency: str
     start: int
@@ -57,11 +57,115 @@ class MonetaryMention:
     credit_unit: str | None = None
     source_path: str = ''
     quote: str = ''
+    meter: str | None = None
+    denominator: Decimal | None = None
+    account_scope: str | None = None
 
     @property
     def binding(self):
         return (self.kind, self.amount, self.currency, self.plan, self.period,
-                self.grant_action, self.credit_unit)
+                self.grant_action, self.credit_unit, self.meter, self.denominator,
+                self.account_scope)
+
+
+_COMPONENT_PLAN = re.compile(
+    r'^\s*(?:The\s+)?(?P<plan>[A-Za-z][A-Za-z0-9_+\-]*'
+    r'(?:\s+(?!(?:plan|tier)\b)[A-Za-z][A-Za-z0-9_+\-]*){0,4})\s*'
+    r'(?:\bplan\b|\btier\b|套餐)', re.I)
+_DENOMINATOR = re.compile(
+    r'\bper\s+(?:additional\s+)?(?:(?P<number>\d+(?:,\d{3})*(?:\.\d+)?)\s*)?'
+    r'(?P<scale>million|thousand)?\s*(?P<unit>CPU\s+milliseconds?|requests?)\b|'
+    r'每\s*(?P<zh_number>\d+(?:\.\d+)?)\s*(?P<zh_scale>万|百万)?\s*'
+    r'(?P<zh_unit>CPU\s*毫秒|次?请求)', re.I)
+_COMPONENT_EXTRA_SCOPE = re.compile(
+    r'\b(?:tax|taxes|including\s+tax|actual|complete\s+(?:bill|total)|China|regional)\b|'
+    r'\b(?:final|exact|total)\b[^.;\n]{0,40}\b(?:bill|invoice|amount|cost|charge|payment|price|total)\b|'
+    r'含税|未税|税费|实际|完整.{0,8}(?:账单|总额)|(?:准确|精确|最终).{0,8}(?:账单|总额)|中国|地区', re.I)
+
+
+def _account_minimum_clause(clause, pattern):
+    """Prove the whole account-charge clause, including both sides of the amount.
+
+    Unknown extra scope cannot become an account fee merely by mentioning an
+    account. The closed forms deliberately do not interpret resource names.
+    """
+    subject = _COMPONENT_PLAN.match(clause)
+    if subject is None:
+        return False
+    body = clause[subject.end():]
+    amount = pattern.search(body)
+    if amount is None:
+        return False
+    prefix = ' '.join(body[:amount.start()].split()).casefold()
+    tail = ' '.join(body[amount.end():].split())
+    if prefix == 'has a minimum charge of':
+        return bool(re.fullmatch(r'(?:[A-Z]{3}\s+)?per month for an account', tail, re.I))
+    if prefix in {'账户每月最低费用为', '帐户每月最低费用为'}:
+        return bool(re.fullmatch(r'(?:[A-Z]{3})?', tail, re.I))
+    return False
+
+
+def _component_mention(text, match, base, pattern):
+    """Recognize only explicit, local rate/minimum grammar; other bases stay unknown."""
+    start = max((m.end() for m in _SENTENCE_BREAK.finditer(text, 0, match.start())), default=0)
+    start = max(start, text.rfind('\n', 0, match.start()) + 1)
+    stop = next(_SENTENCE_BREAK.finditer(text, match.end()), None)
+    end = stop.start() if stop else len(text)
+    line_end = text.find('\n', match.end())
+    if line_end >= 0:
+        end = min(end, line_end)
+    clause = text[start:end]
+    plan = None
+    if '|' in clause:
+        # A table amount uses only its own cell. A header outside the selected
+        # support member cannot supply an absent meter or denominator.
+        cells = list(re.finditer(r'[^|]+', clause))
+        own = next((cell for cell in cells if cell.start() <= match.start() - start < cell.end()), None)
+        label = cells[0].group().strip() if cells else ''
+        if own is None or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_+\- ]{0,60}', label):
+            return base
+        plan, clause = label.casefold(), own.group()
+    else:
+        clause = re.sub(r'^\s*[-*•]\s+', '', clause)
+        subject = _COMPONENT_PLAN.match(clause)
+        if subject:
+            plan = ' '.join(subject['plan'].casefold().split())
+    if (not plan or base.amount < 0 or _COMPONENT_EXTRA_SCOPE.search(clause)
+            or _CONDITIONAL.search(clause) or len(list(pattern.finditer(clause))) != 1):
+        return base
+    explicit_currency = re.match(r'\s+([A-Z]{3})\b', text[match.end():end])
+    if explicit_currency and explicit_currency[1] not in {base.currency, 'CPU'}:
+        return base
+    periods = {('monthly' if re.search(r'month|/mo\b|每月', m.group(), re.I) else 'annual')
+               for m in _PERIOD.finditer(clause)}
+    if len(periods) != 1:
+        return base
+    period = next(iter(periods))
+    if re.search(r'\bminimum\s+charge\b|每月最低|月最低', clause, re.I):
+        if period == 'monthly' and _account_minimum_clause(clause, pattern):
+            return replace(base, kind='monthly_minimum', plan=plan, period=period, account_scope='account')
+        return base
+    if not re.search(r'\b(?:costs?|charges?|billed|rates?)\b|费率|收费', clause, re.I):
+        if '|' not in text or not re.search(r'\+\s*[$€£¥￥]', clause):
+            return base
+    denominators = list(_DENOMINATOR.finditer(clause))
+    if len(denominators) != 1:
+        return base
+    denominator = denominators[0]
+    unit = denominator['unit'] or denominator['zh_unit']
+    meter = 'cpu_milliseconds' if re.search(r'CPU', unit, re.I) else 'requests'
+    if ((meter == 'requests' and re.search(r'\bCPU\b', clause, re.I))
+            or (meter == 'cpu_milliseconds' and re.search(r'\brequests?\b|请求', clause, re.I))):
+        return base
+    number = denominator['number'] or denominator['zh_number'] or '1'
+    scale = denominator['scale'] or denominator['zh_scale']
+    quantity = Decimal(number.replace(',', '')) * {
+        None: 1, 'million': 1000000, 'thousand': 1000, '万': 10000, '百万': 1000000,
+    }[scale.casefold() if scale else None]
+    if quantity <= 0:
+        return base
+    return replace(base, kind='usage_rate', plan=plan, period=period,
+                   meter=meter, denominator=quantity)
 
 
 def _plan_before_grant(prefix, pattern):
@@ -112,6 +216,10 @@ def monetary_mentions(text, pattern) -> tuple[MonetaryMention, ...]:
         if _UNSAFE.search(text) or _CONDITIONAL.search(sentence):
             result.append(base)
             continue
+        component = _component_mention(text, match, base, pattern)
+        if component.kind != 'unknown':
+            result.append(component)
+            continue
         prefix = text[start:match.start()]
         previous = list(pattern.finditer(prefix))
         local_prefix = prefix[previous[-1].end():] if previous else prefix
@@ -138,6 +246,14 @@ def monetary_mentions(text, pattern) -> tuple[MonetaryMention, ...]:
         result.append(replace(base, kind='credit_allowance', plan=plan,
                               period=next(iter(periods)), grant_action=action, credit_unit=unit))
     return tuple(result)
+
+
+def source_monetary_components(fact, pattern):
+    """The caller passes only a replayed, exact published support span."""
+    if fact.field != 'evidence_terms' or fact.status != 'supported' or not fact.evidence_item_ids:
+        return ()
+    return tuple(mention for mention in monetary_mentions(fact.quote, pattern)
+                 if mention.kind in {'usage_rate', 'monthly_minimum'})
 
 
 def source_credit_allowances(fact, pattern) -> tuple[MonetaryMention, ...]:

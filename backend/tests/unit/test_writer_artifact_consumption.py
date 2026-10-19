@@ -3,7 +3,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from claim_review_fixture import supported_review
+from claim_review_fixture import sent_source_span_id, supported_review
 from pydantic import HttpUrl, TypeAdapter
 from test_capability_alignment import fact
 from test_stage_evidence_views import FixedTime, distributed_detail
@@ -406,7 +406,8 @@ async def test_generic_non_operation_fact_can_publish_without_an_operation_ident
         assert not any(f.get('operation_observations') for f in payload['evidence_view']['facts'])
         assert 'For facts without operation candidates, omit observation_id' in system
         original = payload['evidence_view']['facts'][0]
-        return json.dumps({'claims': [dict(text='电池容量为 5000 mAh。', kind='fact', competitor=original['competitor'], dimension='feature', fact_ids=[original['id']], source_ids=[original['source_id']])]})
+        return json.dumps({'claims': [dict(text='电池容量为 5000 mAh。', kind='fact', competitor=original['competitor'], dimension='feature', fact_ids=[original['id']], source_ids=[original['source_id']],
+            source_span_ids=[sent_source_span_id(original)])]})
     monkeypatch.setattr(service._llm, 'complete_text', complete_text)
     await service._real_writer_step(record)
     assert len(inputs) == 2
@@ -441,6 +442,8 @@ async def test_operation_repair_keeps_audited_non_operation_fact_and_rechecks_in
                          fact_ids=[original['id']], source_ids=[original['source_id']])
             if candidates:
                 claim['observation_id'] = candidates[0]['observation_id']
+            else:
+                claim['source_span_ids'] = [sent_source_span_id(original)]
             claims.append(claim)
         return json.dumps({'claims': claims})
     monkeypatch.setattr(service._llm, 'complete_text', complete_text)

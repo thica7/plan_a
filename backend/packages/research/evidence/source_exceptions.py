@@ -670,7 +670,7 @@ def _constraint_identity(fact, row):
     return canonical_json([row, fact.source_id, fact.qualifiers.get("source_scope")])
 
 
-def claim_source_exception_reasons(claim, facts, *, available_facts=()):
+def claim_source_exception_reasons(claim, facts, *, available_facts=(), support_quotes=None):
     reasons = []
     for fact in facts:
         constraints = list(source_exception_constraints(fact, available_facts=available_facts))
@@ -745,6 +745,10 @@ def claim_source_exception_reasons(claim, facts, *, available_facts=()):
                 r"unshar|取消共享", claim.text, re.I
             ):
                 continue
+            if support_quotes is not None and not any(row['quote'] in quote for quote in support_quotes):
+                # Discovery may reveal a missing exception, but only an actual
+                # bound support member may substantiate its asserted conditions.
+                reasons.append('source_exception_unresolved')
             covered = _covered(claim.text, row)
             if not covered:
                 reasons.append(
@@ -785,11 +789,17 @@ def answer_source_exception_reasons(record, claims, *, facts=()):
             continue
         bound_ids = set(published.get("fact_ids", ()))
         bound = [fact for fact in facts if fact.id in bound_ids]
+        from packages.research.evidence.source_spans import ReportSourceSpanBinding
         candidate = SimpleNamespace(
             text=published["text"], fact_ids=tuple(bound_ids),
             source_ids=tuple(published.get("source_ids", ())),
+            source_span_bindings=tuple(ReportSourceSpanBinding.model_validate(row)
+                                       for row in published.get('source_span_bindings', ())),
         )
-        if claim_source_exception_reasons(candidate, bound, available_facts=facts):
+        from packages.research.evidence.source_spans import projected_source_facts
+        support, span_reasons = projected_source_facts(candidate, bound)
+        if span_reasons or claim_source_exception_reasons(candidate, support, available_facts=facts,
+                support_quotes=tuple(f.quote for f in support) if candidate.source_span_bindings else None):
             reasons.append("answer_source_exception_unpublished")
     for fact in facts:
         if fact.id not in selected_ids:
@@ -811,7 +821,15 @@ def answer_source_exception_reasons(record, claims, *, facts=()):
             for fact in branch_facts
             for row in source_exception_constraints(fact, available_facts=facts)
         ]
-        if not branches or not all(_covered(text, row) for row in branches):
+        # A partial clarification can publish a reviewed, precisely bound
+        # lifecycle rule without pretending that every unspecified action is
+        # resolved. Legacy/unbound prose still needs explicit source branches.
+        bound_rule = (record.status == 'partial' and any(
+            published.get('source_span_bindings')
+            and any(not _CLARIFY.search(clause) and clause.strip()
+                    for clause in re.split(r'[.!?。！？;；\n]', published['text']))
+            for published in selected))
+        if (not branches and not bound_rule) or not all(_covered(text, row) for row in branches):
             reasons.append("answer_source_branches_unpublished")
         if record.resolution != "clarification" or record.conclusion != "depends":
             reasons.append("answer_source_exception_unresolved")

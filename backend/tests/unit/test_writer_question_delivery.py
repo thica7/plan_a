@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from claim_review_fixture import supported_review
+from claim_review_fixture import sent_source_span_id, supported_review
 from pydantic import HttpUrl, TypeAdapter
 from test_missing_price_answers import answer, price_case
 from test_question_retrieval import replace_snapshot, research_case
@@ -490,7 +490,7 @@ async def test_only_complete_identical_sent_originals_close_redundant_core_ids(m
     rule = ("Organizations own all collections. Personally-owned items remain in a member's personal vault. "
             'Administrators centralize organization ownership when selected items are transferred from a member. '
             + conclusion + ' ')
-    quote = rule + 'Background policy details. ' * 80
+    quote = rule + '\n\n' + 'Background policy details. ' * 80
     extra = ' Account deletion is delayed for 30 days when a legal hold is active.'
     quotes = [quote, quote, quote + extra if different_condition else quote]
     question = 'Example Product：把自己的账户永久删掉后，之前保存的密码还会留下吗？'
@@ -509,7 +509,9 @@ async def test_only_complete_identical_sent_originals_close_redundant_core_ids(m
         detail, snapshot, 'Example Product', 'feature', mode='lexical')
     originals = {fact.id: fact for fact in snapshot.facts if fact.field == 'evidence_terms'}
     missing = diagnostic['questions'][0]['missing_core_fact_ids']
-    assert len(selected) == 2 and diagnostic['selected_original_bytes'] <= 14000
+    # Exact equivalent originals consume one slot; a different condition still needs its own.
+    assert len(selected) == (2 if different_condition else 1)
+    assert diagnostic['selected_original_bytes'] <= 14000
     if different_condition:
         assert missing and all(extra in originals[key].quote for key in missing)
         assert all(extra not in originals[key].quote for key in selected)
@@ -525,7 +527,8 @@ async def test_only_complete_identical_sent_originals_close_redundant_core_ids(m
             fact = payload['evidence_view']['facts'][0]
             assert fact['quote'] == quote
             return json.dumps({'claims': [dict(text=conclusion, kind='fact', competitor='Example Product',
-                dimension='feature', fact_ids=[fact['id']], source_ids=[fact['source_id']])]})
+                dimension='feature', fact_ids=[fact['id']], source_ids=[fact['source_id']],
+                source_span_ids=[sent_source_span_id(fact, conclusion)])]})
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(claim) for claim in payload['claims']]})
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}
@@ -603,7 +606,8 @@ async def test_fourth_different_lifecycle_condition_reaches_prompt_or_retains_ca
                 fact = next(row for row in rows if row['quote'] in core)
                 text = conclusion
             return json.dumps({'claims': [dict(text=text, kind='fact', competitor='Example Product',
-                dimension='feature', fact_ids=[fact['id']], source_ids=[fact['source_id']])]})
+                dimension='feature', fact_ids=[fact['id']], source_ids=[fact['source_id']],
+                source_span_ids=[sent_source_span_id(fact, text)])]})
         if kwargs['name'] == 'dimension_claim_review':
             if budget == 14000:
                 text = payload['claims'][0]['text']

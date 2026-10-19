@@ -17,7 +17,7 @@ from packages.knowledge.local_models import (
 from packages.knowledge.runtime import call_provider
 from packages.research.evidence.operations import operation_observations, required_operations
 from packages.research.evidence.snapshot import _verify, current_snapshot
-from packages.research.evidence.snapshot_models import FACT_MARKET_POLICY_VERSION, canonical_json
+from packages.research.evidence.snapshot_models import EvidenceFact, FACT_MARKET_POLICY_VERSION, canonical_json
 from packages.research.evidence.views import _qualification
 
 from .answer_coverage import question_terms, research_questions
@@ -41,6 +41,66 @@ def _round_robin(rows, limit):
                 if len(result) >= limit:
                     return result
     return result
+
+
+def _reconcile_question_originals(retrieval, originals, sent_facts):
+    """Replay complete required originals against a stage view or actual request.
+
+    Strict original equivalence can close a diagnostic obligation. It never
+    adds an unseen fact ID to the verified sent/citable set.
+    """
+    by_id = {fact.id: fact for fact in originals}
+    verified = {}
+    for sent in sent_facts:
+        if isinstance(sent, EvidenceFact):
+            fact = by_id.get(sent.id)
+            if fact is None or sent != fact:
+                continue
+        elif isinstance(sent, dict):
+            fact = by_id.get(sent.get('id'))
+            identity = ('source_id', 'competitor', 'dimension', 'field')
+            if (fact is None or not {'quote', 'value', 'qualifiers'} <= set(sent)
+                    or any(sent.get(key) != getattr(fact, key) for key in identity)
+                    or sent['quote'] != fact.quote):
+                continue
+            try:
+                # Compact carries operations as separate observations; every
+                # other parent qualifier and the whole value must remain exact.
+                qualifiers = {key: value for key, value in fact.qualifiers.items() if key != 'operations'}
+                if (canonical_json(sent['value']) != fact.value_json
+                        or canonical_json(sent['qualifiers']) != canonical_json(qualifiers)):
+                    continue
+            except (TypeError, ValueError):
+                continue
+        else:
+            continue
+        verified[fact.id] = fact
+    original_keys = {key: (fact.quote, fact.value_json, fact.qualifiers_json)
+                     for key, fact in by_id.items()}
+    sent_originals = {original_keys[key] for key in verified}
+    requirements = (
+        ('core_fact_ids', 'missing_core_fact_ids', 'question_core_context_budget_exceeded'),
+        ('required_exception_fact_ids', 'missing_exception_fact_ids', 'question_exception_context_budget_exceeded'),
+    )
+    gaps, questions = set(), []
+    for row in retrieval.get('questions', ()):
+        result = {'question_id': row['question_id']}
+        for required_key, missing_key, gap in requirements:
+            required = dict.fromkeys([*row.get(required_key, ()), *row.get(missing_key, ())])
+            missing = [key for key in required if key not in original_keys
+                       or original_keys[key] not in sent_originals]
+            result[missing_key] = missing
+            if missing:
+                gaps.add(gap)
+        candidates = row.get('fact_ids', ())
+        minimum_missing = (not any(key in original_keys and original_keys[key] in sent_originals
+                                   for key in candidates) if candidates
+                           else row.get('minimum_evidence_missing', False))
+        result['minimum_evidence_missing'] = minimum_missing
+        if minimum_missing:
+            gaps.add('question_core_context_budget_exceeded')
+        questions.append(result)
+    return {'sent_fact_ids': list(verified), 'questions': questions, 'gaps': sorted(gaps)}
 
 
 def _validate_scope(detail, snapshot, product, dimension):
@@ -242,6 +302,9 @@ async def retrieve_question_facts(
     diagnostic = {
         "mode": mode,
         "ranking_only": True,
+        "exception_closure_scope": "question_selection_only",
+        "exception_closure_status": "not_evaluated",
+        "published_claim_closure_status": "not_evaluated",
         "workspace_id": snapshot.workspace_id,
         "project_id": snapshot.project_id,
         "snapshot_id": snapshot.id,
@@ -279,7 +342,8 @@ async def retrieve_question_facts(
         scores = {fact.id: len(terms & hints[fact.id]) for fact in facts}
         lexical_rows.append(
             sorted(
-                (key for key, score in scores.items() if score), key=lambda key: (-scores[key], key)
+                (key for key, score in scores.items() if score),
+                key=lambda key: (-scores[key], -len(terms & quote_hints[key]), key)
             )
         )
     pool_ids = _round_robin([*lexical_rows, [fact.id for fact in facts]], CANDIDATE_LIMIT)
@@ -409,22 +473,52 @@ async def retrieve_question_facts(
         _lifecycle_core(question['question'], list(dict.fromkeys([*row, *pool_ids])), quotes, product)
         for question, row in zip(questions, ranked_rows, strict=True)
     ]
-    # Question core branches and their related exceptions precede plan background.
+    # Reserve one whole original per question before additional branches compete.
+    # Distinct conditions remain distinct even within the same coarse branch.
+    by_id = {fact.id: fact for fact in facts}
+    original_keys = {fact.id: (fact.quote, fact.value_json, fact.qualifiers_json) for fact in facts}
+    sizes = {key: len(canonical_json(fact.model_dump(mode='json')).encode('utf-8'))
+             for key, fact in by_id.items()}
+    question_rows = [list(dict.fromkeys([*core, *exceptions, *row]))
+                     for core, exceptions, row in zip(core_rows, exception_rows, rows, strict=True)]
+    selected_list, original_bytes, sent_keys = [], 0, set()
+
+    def add(key):
+        nonlocal original_bytes
+        if original_keys[key] in sent_keys:
+            return True
+        if (len(selected_list) >= TOTAL_FACT_LIMIT
+                or original_bytes + sizes[key] > EXCEPTION_CLOSURE_MAX_BYTES):
+            return False
+        selected_list.append(key)
+        sent_keys.add(original_keys[key])
+        original_bytes += sizes[key]
+        return True
+
+    for index, row in enumerate(question_rows):
+        if row and original_keys[row[0]] in sent_keys:
+            continue
+        later = [other for other in question_rows[index + 1:]
+                 if other and original_keys[other[0]] not in sent_keys]
+        reserve = sum(min(sizes[key] for key in other) for other in later)
+        choice = next((key for key in row
+                       if original_bytes + sizes[key] + reserve <= EXCEPTION_CLOSURE_MAX_BYTES
+                       and len(selected_list) + 1 + len(later) <= TOTAL_FACT_LIMIT), None)
+        if choice is not None:
+            add(choice)
     ordered = (_round_robin(core_rows, len(facts))
                + _round_robin(exception_rows, len(facts)) + _round_robin(rows, len(facts)))
-    by_id = {fact.id: fact for fact in facts}
-    selected_list, original_bytes = [], 0
     for key in dict.fromkeys(ordered):
-        size = len(canonical_json(by_id[key].model_dump(mode='json')).encode('utf-8'))
-        if (len(selected_list) < TOTAL_FACT_LIMIT
-                and original_bytes + size <= EXCEPTION_CLOSURE_MAX_BYTES):
-            selected_list.append(key)
-            original_bytes += size
+        add(key)
     selected = tuple(selected_list)
     diagnostic['selected_original_bytes'] = original_bytes
     diagnostic['exception_closure_max_bytes'] = EXCEPTION_CLOSURE_MAX_BYTES
     diagnostic['exception_closure_complete'] = all(
         set(row) <= set(selected) for row in exception_rows
+    )
+    diagnostic['exception_closure_status'] = (
+        'not_identified' if not any(exception_rows)
+        else 'complete' if diagnostic['exception_closure_complete'] else 'incomplete'
     )
     selected_set = set(selected)
     original_keys = {
@@ -436,6 +530,16 @@ async def retrieve_question_facts(
         {
             "question_id": question["question_id"],
             "fact_ids": list(dict.fromkeys([*core, *exceptions, *row])),
+            "selected_fact_ids": [key for key in dict.fromkeys([*core, *exceptions, *row])
+                                  if key in selected_set],
+            "redundant_core_fact_ids": [key for key in core if key not in selected_set
+                                        and original_keys[key] in sent_originals],
+            "minimum_evidence_missing": not any(original_keys[key] in sent_originals
+                                                 for key in [*core, *exceptions, *row]),
+            "minimum_evidence_gap": (None if any(original_keys[key] in sent_originals
+                                                  for key in [*core, *exceptions, *row])
+                                     else "context_budget_exceeded" if core or exceptions or row
+                                     else "no_relevant_original"),
             "required_exception_fact_ids": exceptions,
             "missing_exception_fact_ids": [key for key in exceptions if key not in selected_set],
             "core_fact_ids": core,
