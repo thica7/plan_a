@@ -219,7 +219,8 @@ async def test_real_writer_review_save_and_final_qa_replay_atomic_clarification(
     monkeypatch.setattr('packages.agents.writer.question_retrieval.get_local_provider_from_env', lambda *_: None)
     await service._real_writer_step(record)
     assert [name for name, _ in calls] == ['dimension_claim_writer', 'dimension_claim_review',
-        'dimension_answer_coverage', 'dimension_answer_review']
+        'dimension_claim_review', 'dimension_answer_coverage', 'dimension_answer_review']
+    assert all(len(payload['claims']) == 1 for name, payload in calls if name == 'dimension_claim_review')
     audit = detail.report_dimension_audits[0]
     assert audit.claim_review_version == audit.answer_binding_version == 3
     assert len(audit.claims) == 2 and all(row.status == 'supported' for row in audit.claims)

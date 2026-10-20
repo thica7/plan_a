@@ -44,8 +44,8 @@ flowchart TD
 | Analyst | 按产品与维度生成结构化分析、条件和引用 | 当前快照的逐题证据包，记录实际发送与遗漏 |
 | Comparator | 比较同一操作、对象及角色/套餐/访问前提 | 同身份逐题选择及有效 Analyst 产物；预算不足保留缺口 |
 | Reflector | 检查矛盾、薄弱结论和待补资料 | 区分实际上下文省略与真正缺证，保留未知和矛盾 |
-| Writer | 按维度写作、独立价格段、事实原子与逐条引用审核 | 逐题计划、完整原文绑定及独立澄清，缺证保留局部结论 |
-| QA | 采集/分析/最终审核与重做路由 | 核对来源、主张和引用，保留阻断及警告 |
+| Writer | 按维度写作、独立价格段、逐条窄支持审核与正式结论 | 原子绑定、完整条件；请求歧义生成固定澄清，其他问题仍保留缺口 |
+| QA | 采集/分析/最终审核与重做路由 | 重放主张支持范围和完整回答记录，保留真实来源及预算阻断 |
 
 详细入口、输入输出、Prompt、回退和重做规则见 [Agent 执行说明](docs/agent-execution.md)。
 
@@ -191,7 +191,9 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.p
 
 ## 验证与交付边界
 
-本轮[逐题证据包与原子回答复验](docs/optimization/2026-10-20-agent-question-packets.md)：统一 Analyst／Comparator／Reflector／Writer 逐题入口，新增 v3 原子计划、独立澄清、确定性 reason 及最终收据／实际直接依赖回放。后端 **6308通过／1跳过**，变更范围Ruff、API兼容、构建和累计审查通过。四组各首次 **30调用／123676 token**；正文与保存记录均 **3正确／0错误／5遗漏**，发表观察 **5/6完整绑定**。局部内容 **1/4**，内容与绑定同时 **0/4**，系统 **0/4交付、8阻断**；BW离职澄清与上限结论遗漏、1Password复合句半绑、CF范围误判、Dropbox正文抓取及Writer派送遥测不一致仍待修。725冻结文件、五个helper与1181旧文件未改，9份捕获可核验。已曝光非盲、非受控A/B，未证明质量或token效率改善，未获用户验收、未训练。[结构化结果](docs/optimization/2026-10-20-agent-question-packets-results.json)。
+本轮[完整引用支持与回答投影](docs/optimization/2026-10-20-bound-answer-projection.md)：v3 按单条主张隔离窄引用支持及最终重放，修复 Bitwarden 上限结论、增加不夹带产品事实的固定离职澄清。最终后端 **6452通过／1跳过**，较基线新增144项；变更范围Ruff、API／旧TS、构建和独立累计审查通过。四组各首次 **38调用／129433 token**；正文与保存记录均 **5正确／0错误／3遗漏**，发表主张 **5/7完整绑定**。局部内容 **2/4**，内容与绑定同时 **0/4**，系统仍 **0/4交付、6阻断**。BW额外共享动作超出窄span、1Password将“可以”强化为“必须”、CF有规则仍漏答、Dropbox抓取失败及真实核心上下文遗漏尚未解决。730冻结文件、5个helper、1332旧文件及9份捕获可核验；当前仍degraded_lexical。已曝光非盲、非受控A/B，非全Graph／生产稠密RAG验收；新报告未获用户验收，未训练。[结构化结果](docs/optimization/2026-10-20-bound-answer-projection-results.json)。
+
+上一轮[逐题证据包与原子回答复验](docs/optimization/2026-10-20-agent-question-packets.md)：统一 Analyst／Comparator／Reflector／Writer 逐题入口，新增 v3 原子计划、独立澄清、确定性 reason 及最终收据／实际直接依赖回放。后端 **6308通过／1跳过**，变更范围Ruff、API兼容、构建和累计审查通过。四组各首次 **30调用／123676 token**；正文与保存记录均 **3正确／0错误／5遗漏**，发表观察 **5/6完整绑定**。局部内容 **1/4**，内容与绑定同时 **0/4**，系统 **0/4交付、8阻断**；BW离职澄清与上限结论遗漏、1Password复合句半绑、CF范围误判、Dropbox正文抓取及Writer派送遥测不一致仍待修。725冻结文件、五个helper与1181旧文件未改，9份捕获可核验。已曝光非盲、非受控A/B，未证明质量或token效率改善，未获用户验收、未训练。[结构化结果](docs/optimization/2026-10-20-agent-question-packets-results.json)。
 
 上一轮[逐题证据交付修复与四产品复验](docs/optimization/2026-10-20-question-delivery-repair.md)：最终后端 **6151通过／1跳过**，新增169项测试；变更范围Ruff、API兼容、前端构建与累计审查通过。四组各首次 **30调用／116410 token**；正文 **5正确／0错误／3遗漏**，保存记录 **4正确／1错误／3遗漏**。Cloudflare两题与全部发表引用满足局部内容标准，但**系统仍0/4交付**；Bitwarden离职题遗漏、Dropbox抓取404、两条额外主张绑定不全及Reflector局部选证/误判仍待修。721份冻结文件、helper及1090旧文件未改；9份捕获哈希可核验。已曝光非盲，非受控A/B，新报告未获用户验收，未训练。[结构化结果](docs/optimization/2026-10-20-question-delivery-repair-results.json)。
 

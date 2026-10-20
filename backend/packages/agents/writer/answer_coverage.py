@@ -118,6 +118,12 @@ CLARIFICATION_FIELDS = {
 
 def selection_answer(record, claims):
     """Reconstruct only complete published atoms and finite server questions."""
+    if record.binding_version == 3 and record.resolution == 'clarification' and not record.claim_ids:
+        from packages.agents.writer.request_clarification import server_clarification_answer
+        original = server_clarification_answer({'question_id': record.question_id, 'question': record.question})
+        if original is None or record != original:
+            raise ValueError('invalid server clarification record')
+        return original.answer, ()
     texts = selected_claim_texts(record.claim_ids, claims)
     answer = "\n".join(texts)
     if record.binding_version == 3:
@@ -161,6 +167,11 @@ def selection_binding_reasons(record, claims, *, required_binding_version=None):
 
 def saved_coverage_reason(record):
     """Finite provenance description, with no model-authored product facts."""
+    if record.binding_version == 3 and record.resolution == 'clarification' and not record.claim_ids:
+        from packages.agents.writer.request_clarification import server_clarification_answer
+        original = server_clarification_answer({'question_id': record.question_id, 'question': record.question})
+        if original is not None:
+            return original.reason
     zh = bool(re.search(r'[\u4e00-\u9fff]', record.question))
     statuses = {'answered': ('已回答', 'answered'), 'partial': ('部分回答', 'partially answered'),
                 'unanswered': ('未回答', 'unanswered'), 'unverified': ('尚未核实', 'unverified')}
@@ -186,6 +197,10 @@ def coverage_resolution_reasons(record, claims, *, require_v2=False, required_bi
     if require_v2:
         required_binding_version = 2
     reasons = selection_binding_reasons(record, claims, required_binding_version=required_binding_version)
+    if record.binding_version == 3 and record.resolution == 'clarification' and not record.claim_ids:
+        # This finite record has no product assertion. Exact reconstruction
+        # above replaces source-rule requirements only for this local delivery.
+        return tuple(reasons)
     if record.binding_version == 3 and record.reason != saved_coverage_reason(record):
         reasons.append('answer_reason_changed')
     if record.status in {"answered", "partial"}:
@@ -205,6 +220,11 @@ def coverage_resolution_reasons(record, claims, *, require_v2=False, required_bi
     reasons.extend(plan_exclusivity_reasons(record, claims))
     from packages.research.evidence.source_exceptions import answer_source_exception_reasons
     reasons.extend(answer_source_exception_reasons(record, claims, facts=facts))
+    if record.binding_version == 3 and record.resolution == 'clarification' and record.claim_ids:
+        from packages.agents.writer.request_clarification import clarification_rule_relevant
+        if any(not clarification_rule_relevant(record.question, row['text'])
+               for row in claims if row['id'] in record.claim_ids):
+            reasons.append('answer_clarification_rule_irrelevant')
     return tuple(dict.fromkeys(reasons))
 
 
@@ -219,6 +239,11 @@ def is_qualified_partial_clarification(record, claims, *, facts=(), report_md=No
         return False
     if coverage_resolution_reasons(record, claims, required_binding_version=record.binding_version, facts=facts):
         return False
+    if record.binding_version == 3 and not record.claim_ids:
+        if report_md is None:
+            return True
+        from packages.schema.decision_brief import safe_decision_brief_text
+        return safe_decision_brief_text(record.answer) in report_md
     from packages.research.evidence.source_exceptions import _CLARIFY, _missing_question_inputs
     from packages.research.evidence.source_spans import projected_source_facts
     from packages.research.evidence.report_claims import ReportClaim
@@ -312,6 +337,8 @@ def parse_answer_coverage(
                         raise ValueError("invalid claim selection row")
                     if not set(row["claim_ids"]) <= supported_claim_ids:
                         raise ValueError("coverage cites unpublished claims")
+                    if data['version'] == 3 and row['resolution'] == 'clarification' and not row['claim_ids']:
+                        raise ValueError('empty clarification is server generated only')
                     texts = selected_claim_texts(row["claim_ids"], claims)
                     record = ReportAnswerCoverage(
                         **row, question=question["question"], binding_version=data["version"],

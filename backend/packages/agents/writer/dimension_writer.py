@@ -221,24 +221,60 @@ def parse_question_claim_plans(text, questions, candidates, sent_fact_ids, consu
 
 def review_payload(claims, view, *, review_version=None):
     ids = {fid for c in claims for fid in c.fact_ids}
-    observations = {(f.source_id, f.competitor, f.dimension, f.evidence_item_ids, f.quote)
-                    for f in view.facts if f.id in ids}
-    facts, quotes = [], {}
-    for fact in view.facts:
-        # A price fact already carries its plan, unit and billing qualifiers.
-        # Repeating uncited tier/model metadata quadruples the review payload.
-        if fact.id not in ids and (fact.dimension == 'pricing' or fact.field != 'evidence_terms'):
-            continue
-        if (fact.source_id, fact.competitor, fact.dimension, fact.evidence_item_ids, fact.quote) not in observations:
-            continue
-        key = (fact.source_id, fact.quote)
-        quote_id = f"q{len(quotes)}" if key not in quotes else quotes[key]
-        quotes[key] = quote_id
-        facts.append(dict(id=fact.id, source_id=fact.source_id, competitor=fact.competitor,
-                          dimension=fact.dimension, field=fact.field, value=fact.value,
-                          qualifiers=fact.qualifiers, quote_ref=quote_id))
+    facts, quotes, constraints = [], {}, []
+    if review_version == 3:
+        from packages.research.evidence.temporal_conditions import temporal_constraints
+        from packages.research.evidence.source_exceptions import source_exception_constraints
+        for fact in view.facts:
+            if fact.id not in ids:
+                continue
+            selected = list(dict.fromkeys(quote for claim in claims if fact.id in claim.fact_ids
+                for quote in ([claim.operation_binding.operation_quote] if claim.operation_binding else
+                              [span.quote for span in claim.source_span_bindings if span.fact_id == fact.id])))
+            if fact.dimension != 'feature':
+                # Captured amounts keep their exact value and billing qualifiers.
+                selected = [fact.quote]
+            quote_ids = []
+            for quote in selected:
+                key = (fact.source_id, quote)
+                quote_id = quotes.setdefault(key, f"q{len(quotes)}")
+                quote_ids.append(quote_id)
+            facts.append(dict(id=fact.id, source_id=fact.source_id, competitor=fact.competitor,
+                dimension=fact.dimension, field=fact.field,
+                value=selected if fact.dimension == 'feature' else fact.value,
+                qualifiers={} if fact.dimension == 'feature' else fact.qualifiers,
+                quote_refs=quote_ids))
+            if fact.dimension == 'feature':
+                # Reconstruct only known restriction receipts. Raw parent value,
+                # operation rows and arbitrary quote-bearing qualifiers are not
+                # a second support pool. Deterministic guards still see the full
+                # originals in claim_rule_reasons at generation and final replay.
+                constraints.append(dict(fact_id=fact.id,
+                    qualifiers={key: fact.qualifiers[key] for key in ('source_condition_links',)
+                                if key in fact.qualifiers},
+                    temporal_conditions=list(temporal_constraints(fact)),
+                    source_exceptions=list(source_exception_constraints(fact, available_facts=view.facts))))
+    else:
+        observations = {(f.source_id, f.competitor, f.dimension, f.evidence_item_ids, f.quote)
+                        for f in view.facts if f.id in ids}
+        for fact in view.facts:
+            # A price fact already carries its plan, unit and billing qualifiers.
+            # Repeating uncited tier/model metadata quadruples the review payload.
+            if fact.id not in ids and (fact.dimension == 'pricing' or fact.field != 'evidence_terms'):
+                continue
+            if (fact.source_id, fact.competitor, fact.dimension, fact.evidence_item_ids, fact.quote) not in observations:
+                continue
+            key = (fact.source_id, fact.quote)
+            quote_id = f"q{len(quotes)}" if key not in quotes else quotes[key]
+            quotes[key] = quote_id
+            facts.append(dict(id=fact.id, source_id=fact.source_id, competitor=fact.competitor,
+                              dimension=fact.dimension, field=fact.field, value=fact.value,
+                              qualifiers=fact.qualifiers, quote_ref=quote_id))
     from packages.research.evidence.report_claims import required_claim_checks, required_operation_checks
+    from packages.research.evidence.operation_claim_checks import operation_review_support
     payload = dict(claims=[{**c.model_dump(mode="json"),
+        **({'operation_binding': operation_review_support(c.operation_binding)[0]}
+           if review_version == 3 and c.operation_binding else {}),
         'required_checks': [*required_operation_checks(c.operation_binding),
             *(required_claim_checks(c) if review_version == 3 else [])],
         **({'support_quotes': [c.operation_binding.operation_quote] if c.operation_binding else
@@ -257,13 +293,17 @@ def review_payload(claims, view, *, review_version=None):
     if bindings:
         payload['document_product_bindings'] = bindings
     if review_version == 3:
+        payload['constraint_context'] = constraints
         payload['atom_review_policy'] = ('Support comes only from the selected support_quotes and operation conditions. '
             'Parent facts are restriction/counterexample context, never support for sibling assertions. '
             'full_assertion_support checks every word of the whole atom; atomicity requires one predicate with its '
             'complete AND/OR prerequisites and exceptions. Both checks must quote the entire claim text. '
             'For captured price amounts, the exact bound price fact value and qualifiers support only that recorded amount. '
             'Reject compound assertions, clarification questions and extra operations without their own observation.')
-    if any(c.source_span_bindings for c in claims):
+    if review_version == 3:
+        payload['support_policy'] = ('Only this claim selected support_quotes and complete operation conditions support assertions; '
+            'constraint_context and parent facts only constrain them, never support added predicates.')
+    elif any(c.source_span_bindings for c in claims):
         payload['support_policy'] = 'Only source_span_bindings support assertions; parent facts only constrain them.'
     return payload
 
@@ -739,8 +779,15 @@ class DimensionWriterMixin:
         live = self._evidence_live_record(record)
         snapshot = self._current_evidence_snapshot(live)
         price_answers = server_missing_price_answers(live.detail, snapshot, questions, view.competitor)
-        pending = [question for question in questions if question['question_id'] not in price_answers]
         supported = [item.claim for item in audited if item.status == 'supported']
+        from packages.agents.writer.request_clarification import has_lifecycle_rule, server_clarification_answer
+        published = [claim.model_dump(mode='json') for claim in supported]
+        clarification_candidates = {q['question_id']: answer for q in questions
+            if q['question_id'] not in price_answers and (answer := server_clarification_answer(q)) is not None}
+        clarification_answers = {q['question_id']: clarification_candidates[q['question_id']] for q in questions
+            if q['question_id'] in clarification_candidates and not has_lifecycle_rule(q['question'], published)}
+        pending = [q for q in questions if q['question_id'] not in price_answers
+                   and q['question_id'] not in clarification_answers]
         coverage = unverified_coverage(pending, 'No supported answer claims are available.')
         sizes = []
         if pending and supported:
@@ -802,10 +849,16 @@ class DimensionWriterMixin:
                 coverage = unverified_coverage(pending, 'Complete answer evidence exceeded the review capacity.')
         by_id = {item.question_id: item for item in coverage}
         by_id.update({qid: ReportAnswerCoverage(**row) for qid, row in price_answers.items()})
+        by_id.update(clarification_answers)
+        # An incomplete source proposal cannot suppress a request-only question.
+        # Preserve actual source/context gaps while using the finite local result.
+        for qid, answer in clarification_candidates.items():
+            current = by_id[qid]
+            if current.status != 'answered' and not is_qualified_partial_clarification(current, published, facts=view.facts):
+                by_id[qid] = answer
         coverage = tuple(by_id[question['question_id']] for question in questions)
         if price_answers:
             gaps = tuple(sorted(set(gaps) | {'current_price_unverified'}))
-        published = [claim.model_dump(mode='json') for claim in supported]
         if any(item.status != 'answered' and not is_qualified_partial_clarification(
                 item, published, facts=view.facts) for item in coverage):
             gaps = tuple(sorted(set(gaps) | {'answer_coverage_incomplete'}))
@@ -1061,7 +1114,11 @@ class DimensionWriterMixin:
                             else:
                                 gaps = tuple(sorted(set(gaps) | {"claim_review_context_budget_exceeded"}))
                             continue
-                        batch = candidate
+                        if questions:
+                            batches.append([claim])
+                            batch = []
+                        else:
+                            batch = candidate
                     if batch:
                         batches.append(batch)
                     for batch in batches:
@@ -1069,7 +1126,10 @@ class DimensionWriterMixin:
                         sizes.append(len(payload.encode()))
                         response, gaps = await self._dimension_call_with_gaps(record, gaps, agent="qa", subagent=f"{product}/{dimension}",
                             name="dimension_claim_review", system=RESOURCE_SCOPE_RULES +
-                            "Audit each atomic claim against ONLY its bound original quotes, values and qualifiers. "
+                            ("Audit this single atomic claim against ONLY its selected support_quotes, exact source_span_bindings "
+                             "or operation_quote and complete source-local operation conditions. constraint_context only restricts "
+                             "assertions; it never supports a sibling predicate. " if questions else
+                             "Audit each atomic claim against ONLY its bound original quotes, values and qualifiers. ") +
                             "Resolve every {text_ref: id} through text_sets before auditing any quote, value, "
                             "operation binding or nested condition group. These exact references share full "
                             "original strings without dropping alternatives, prerequisites or their grouping. "
@@ -1098,9 +1158,10 @@ class DimensionWriterMixin:
                             "The parent fact quote/value and qualifiers supply restrictions and exception context only; "
                             "they cannot support an added assertion outside the selected span. Reject cross-paragraph expansion, "
                             "wrong role/object, negation reversals, missing AND/OR, timing or authentication conditions. "
-                            "Clarification requests are outside factual atoms and are checked in answer coverage, never as source assertions. "
-                            "Without source_span_bindings audit the original quote and complete source conditions; "
-                            "value context cannot add a new factual assertion absent from the bound quote. "
+                            "Clarification requests are outside factual atoms and are checked in answer coverage, never as source assertions. " +
+                            ("An operation binding has no fallback to the wider parent original quote/value. " if questions else
+                             "Without source_span_bindings audit the original quote and complete source conditions; "
+                             "value context cannot add a new factual assertion absent from the bound quote. ") +
                             "operation_binding is server-validated identity, never proof that claim text is supported. "
                             "Verify the text asserts exactly that operation, object, actor role, effect and every prerequisite; "
                             "reject a valid binding whose prose asserts a different operation, actor or object, "
@@ -1114,7 +1175,7 @@ class DimensionWriterMixin:
                             "unknown market, tax or interval cannot be inferred. A source directory market is classification, "
                             "not proof that a capability applies in that market or all regions. "
                             "Inferences must be conditional and "
-                            "cannot establish a recommendation. If unclear use uncertain. Do not rewrite claims.",
+                            "cannot establish a recommendation. If unclear use uncertain. Keep each reason within 800 characters. Do not rewrite claims.",
                             user="\nJSON:\n" + payload)
                         self._validate_evidence_use(record, use)
                         self._validate_dimension_upstream(record, compact)

@@ -63,6 +63,8 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
             from packages.agents.writer.price_answers import server_missing_price_answers
             from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
             price_answers = server_missing_price_answers(record.detail, snapshot, questions, audit.competitor)
+            from packages.agents.writer.request_clarification import server_clarification_answer
+            clarification_answers = {q['question_id']: server_clarification_answer(q) for q in questions}
             if audit.answer_binding_version == 3 and audit.claim_review_version != 3:
                 reasons.add('claim_review_version_required')
             def answer_invalid(item, *, required_version=audit.answer_binding_version,
@@ -73,6 +75,11 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                             or item != ReportAnswerCoverage(**original))
                 if item.binding_version in (2, 3) and item.binding_version != required_version:
                     return True
+                if item.binding_version == 3 and item.resolution == 'clarification' and not item.claim_ids:
+                    original = clarification_answers.get(item.question_id)
+                    return (required_version != 3 or original is None or item != original
+                            or not is_qualified_partial_clarification(item, published_claims,
+                                facts=answer_facts, report_md=record.detail.report_md))
                 qualified_clarification = required_version in (2, 3) and is_qualified_partial_clarification(
                     item, published_claims, facts=answer_facts, report_md=record.detail.report_md)
                 return ((item.status != 'answered' and not qualified_clarification) or not item.claim_ids

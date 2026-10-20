@@ -1,0 +1,1493 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-20",
+  "stage": "bound_claim_support_and_answer_projection",
+  "baseline_commit": "ef53a35eade14f664404aedb3f5eb02769e4fe6a",
+  "status": "engineering_gates_passed_report_delivery_failed",
+  "evaluation_kind": "exposed_development_regression",
+  "blind_holdout": false,
+  "controlled_ab": false,
+  "new_user_acceptance": false,
+  "agent_judgment": true,
+  "training_performed": false,
+  "training_ready": false,
+  "reward": null,
+  "scope": {
+    "products": 4,
+    "questions": 8,
+    "dimension": "feature",
+    "fixed_official_urls": true,
+    "first_attempt_per_group": true,
+    "model_retries": 0,
+    "max_calls_per_group": 24,
+    "max_tokens_per_group": 80000,
+    "max_output_tokens": 2048,
+    "reference_answers_sent_to_runtime": false,
+    "actual_model_alias": "deepseek-flash",
+    "independent_1017_version_proof": false,
+    "retrieval_mode": "degraded_lexical",
+    "planner_accepted": false,
+    "full_graph_accepted": false,
+    "production_dense_rag_accepted": false,
+    "full_pm_report_accepted": false
+  },
+  "engineering": {
+    "backend": {
+      "passed": 6452,
+      "skipped": 1,
+      "warnings": 212,
+      "new_vs_baseline": 144,
+      "log": "verification/offline/plan_a_v33_backend_v4.log"
+    },
+    "earlier_full_run": {
+      "passed": 6438,
+      "failed": 9,
+      "skipped": 1,
+      "log": "verification/offline/plan_a_v33_backend_final.log",
+      "preserved": true
+    },
+    "changed_scope_ruff_E9_F": "pass",
+    "preexisting_full_tree_F401": 4,
+    "api_schema_unchanged": true,
+    "generated_types_legacy_assignment_compiles": true,
+    "frontend_build": "pass",
+    "frontend_tests_rerun": false,
+    "independent_spec_quality_and_cumulative_review": "pass",
+    "launch_preflight_scenarios": 8,
+    "preflight_model_calls": 0
+  },
+  "totals": {
+    "body_correct": 5,
+    "body_error": 0,
+    "body_omission": 3,
+    "saved_correct": 5,
+    "saved_error": 0,
+    "saved_omission": 3,
+    "published_claims": 7,
+    "fully_bound_claims": 5,
+    "single_fact_predicate_claims": 3,
+    "atomic_and_fully_bound_claims": 2,
+    "content_qualified_products": 2,
+    "binding_qualified_products": 1,
+    "content_and_binding_qualified_products": 0,
+    "content_binding_and_atomicity_qualified_products": 0,
+    "system_deliverable_products": 0,
+    "qa_blockers": 6,
+    "core_agent_transport_attempts": 38,
+    "actual_amount_positive_questions": 0
+  },
+  "provider_usage": {
+    "llm_transport_attempts": 38,
+    "known_provider_tokens": 129433,
+    "unknown_usage_spans": 0,
+    "fetch_requests": 5,
+    "search_requests": 0,
+    "fetch_successful_responses": 3,
+    "web_billable_requests_estimate": 3,
+    "web_billing_unknown_requests": 0,
+    "billing_basis": "successful_provider_requests_estimate_not_invoice",
+    "currency_cost_computed": false
+  },
+  "groups": [
+    {
+      "product": "Bitwarden",
+      "run_id": "run-9468929126294ff0b5b13dbfbb72073f",
+      "body_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-001",
+          "question_id": "question-cb40c90e4d944bf23275",
+          "question": "我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？",
+          "agent_judgment": "correct",
+          "reason": "结论明确为否；这两名用户包含创建者，最多两个 collections 同时保留。2026 年新建账户与 Free organization 是请求条件，来源无需复述用户的 3 人／3 库。正文未引入其他套餐能力。",
+          "reported_status": "answered",
+          "answer_text": "Free organization 用于与另外一名用户安全共享数据，Free organization 为这两名用户提供 Password Manager 的全部核心功能，并支持在最多两个 collections 中安全共享数据。",
+          "conclusion_rendered": "no",
+          "actual_amount_positive": false
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-002",
+          "question_id": "question-63762e09ae5d8faa1071",
+          "question": "我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？",
+          "agent_judgment": "correct",
+          "reason": "完整询问具体操作（移除成员或永久删除账户／数据）和数据归属（个人或组织），没有给出统一保留／删除、登录或恢复保证。属于 v3 当前问题的纯澄清；无需为问句编造引用。未发表 My Items／My vault 或 SSO 规则，不能用澄清证明这些源规则已派送或缺口已解决。",
+          "reported_status": "partial",
+          "answer_text": "请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？",
+          "conclusion_rendered": "depends",
+          "actual_amount_positive": false
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-001",
+          "question_id": "question-cb40c90e4d944bf23275",
+          "agent_judgment": "correct",
+          "reason": "结论明确为否；这两名用户包含创建者，最多两个 collections 同时保留。2026 年新建账户与 Free organization 是请求条件，来源无需复述用户的 3 人／3 库。正文未引入其他套餐能力。",
+          "record": {
+            "question_id": "question-cb40c90e4d944bf23275",
+            "question": "Bitwarden: 我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？",
+            "status": "answered",
+            "claim_ids": [
+              "claim-0de7a39e168ca65279be"
+            ],
+            "reason": "依据1条已发表主张；已回答，直接回答。",
+            "answer": "Free organization 用于与另外一名用户安全共享数据，Free organization 为这两名用户提供 Password Manager 的全部核心功能，并支持在最多两个 collections 中安全共享数据。",
+            "resolution": "direct",
+            "conclusion": "no",
+            "evidence_spans": [
+              {
+                "claim_id": "claim-0de7a39e168ca65279be",
+                "quote": "Free organization 用于与另外一名用户安全共享数据，Free organization 为这两名用户提供 Password Manager 的全部核心功能，并支持在最多两个 collections 中安全共享数据。"
+              }
+            ],
+            "binding_version": 3
+          },
+          "conclusion_field_present": true,
+          "effective_conclusion": "no",
+          "answer_spans_match_published_claims": true,
+          "actual_amount_positive": false,
+          "claim_ids_all_published": true
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-002",
+          "question_id": "question-63762e09ae5d8faa1071",
+          "agent_judgment": "correct",
+          "reason": "完整询问具体操作（移除成员或永久删除账户／数据）和数据归属（个人或组织），没有给出统一保留／删除、登录或恢复保证。属于 v3 当前问题的纯澄清；无需为问句编造引用。未发表 My Items／My vault 或 SSO 规则，不能用澄清证明这些源规则已派送或缺口已解决。",
+          "record": {
+            "question_id": "question-63762e09ae5d8faa1071",
+            "question": "Bitwarden: 我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？",
+            "status": "partial",
+            "claim_ids": [],
+            "reason": "当前请求缺少具体输入；请先确认以下问题。",
+            "answer": "请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？",
+            "resolution": "clarification",
+            "conclusion": "depends",
+            "missing_fields": [
+              "actual_action",
+              "data_ownership"
+            ],
+            "binding_version": 3
+          },
+          "conclusion_field_present": true,
+          "effective_conclusion": "depends",
+          "answer_spans_match_published_claims": true,
+          "actual_amount_positive": false,
+          "claim_ids_all_published": true,
+          "server_pure_clarification_replay": {
+            "current_question_exact": true,
+            "status": "partial",
+            "resolution": "clarification",
+            "conclusion": "depends",
+            "binding_version": 3,
+            "claim_ids_empty": true,
+            "evidence_spans_empty_by_absence": true,
+            "basis_snapshot_absent": true,
+            "fixed_reason_exact": true,
+            "fixed_answer_exact": true,
+            "eligible_missing_fields": [
+              "actual_action",
+              "data_ownership"
+            ],
+            "does_not_resolve_missing_source_rules": true
+          }
+        }
+      ],
+      "published_claims": [
+        {
+          "claim_id": "claim-0de7a39e168ca65279be",
+          "text": "Free organization 用于与另外一名用户安全共享数据，Free organization 为这两名用户提供 Password Manager 的全部核心功能，并支持在最多两个 collections 中安全共享数据。",
+          "fully_bound": false,
+          "single_fact_predicate": false,
+          "agent_judgment": "incomplete_binding",
+          "assertions": [
+            {
+              "text": "Free organization 用于与另外一名用户安全共享数据",
+              "bound": false,
+              "reason": "实际所选 value/0[99:226] 从 Free organizations offer both users 开始；share with one other user 的独立动作／参与对象断言位于前一句 value/0[0:98]，该句既未选 span，也未选 operation_binding。不能借父完整 quote 补绑定。both users 可支持两人功能范围，不能代替完整的另一个用户共享动作绑定。"
+            },
+            {
+              "text": "为这两名用户提供 Password Manager 全部核心功能",
+              "bound": true,
+              "reason": "所选句直接出现 both users all the core features of Password Manager。"
+            },
+            {
+              "text": "最多两个 collections 的安全共享",
+              "bound": true,
+              "reason": "所选句直接出现 secure data sharing in up to two collections。"
+            }
+          ],
+          "issue": "整句合并共享动作、核心功能和 collection 配额；首个动作没有本条窄引用支持。产品规则本身可从父完整源核实，但本轮完整绑定不合格。",
+          "source_ids": [
+            "raw-source-476cdfef80ec06d6a285"
+          ],
+          "fact_ids": [
+            "evidence-fact-record-62ac074648c1998b66457f7d540bd18dbe34f07d8ca67f505b3b39969e22154a"
+          ],
+          "source_span_bindings": [
+            {
+              "span_id": "source-span-539d5b83198662ed19057fd7",
+              "fact_id": "evidence-fact-record-62ac074648c1998b66457f7d540bd18dbe34f07d8ca67f505b3b39969e22154a",
+              "source_id": "raw-source-476cdfef80ec06d6a285",
+              "fact_hash": "772c614120b19939e871c63ed2e3b62d721aa4c1b053d86c2a77de862c540f9c",
+              "source_path": "value/0",
+              "start": 99,
+              "end": 226,
+              "quote": "Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections."
+            }
+          ],
+          "operation_binding": null
+        },
+        {
+          "claim_id": "claim-62a92243131faf918344",
+          "text": "任何计划的用户都可以成为一个 Free organization 的所有者。",
+          "fully_bound": true,
+          "single_fact_predicate": true,
+          "agent_judgment": "fully_bound",
+          "assertions": [
+            {
+              "text": "任何计划的用户可拥有一个 Free organization",
+              "bound": true,
+              "reason": "与所选 Any user of any plan can be the owner of one Free organization 完整一致。"
+            }
+          ],
+          "issue": null,
+          "source_ids": [
+            "raw-source-476cdfef80ec06d6a285"
+          ],
+          "fact_ids": [
+            "evidence-fact-record-62ac074648c1998b66457f7d540bd18dbe34f07d8ca67f505b3b39969e22154a"
+          ],
+          "source_span_bindings": [
+            {
+              "span_id": "source-span-2f8dfd8e6ee7251bd81dde03",
+              "fact_id": "evidence-fact-record-62ac074648c1998b66457f7d540bd18dbe34f07d8ca67f505b3b39969e22154a",
+              "source_id": "raw-source-476cdfef80ec06d6a285",
+              "fact_hash": "772c614120b19939e871c63ed2e3b62d721aa4c1b053d86c2a77de862c540f9c",
+              "source_path": "value/0",
+              "start": 227,
+              "end": 290,
+              "quote": "Any user of any plan can be the owner of one Free organization."
+            }
+          ],
+          "operation_binding": null
+        }
+      ],
+      "content_qualified": true,
+      "binding_qualified": false,
+      "atomicity_qualified": false,
+      "content_and_binding_qualified": false,
+      "remaining_issues": [
+        "主张 claim-0de7…存在整句窄绑定遗漏及多谓词。",
+        "离职题纯澄清完成当前所需询问，但当前 Writer fullinput 未包含永久删除全数据和完整移除账户规则两个核心事实；不清除该源规则缺口。",
+        "捕获的无主密码 SSO／trusted devices 恢复与预先登录例外未进入实际 Writer 输入；最终未作登录保证，因此不把未发表例外算答案错误。",
+        "collector 一次 semantic extract 因 semantic_page_budget_exhausted（page_limit=2）跳过。",
+        "保留 2 个系统 QA blocker，局部两题正确不构成系统交付。"
+      ],
+      "system": {
+        "status": "execution_complete",
+        "pipeline_terminal": false,
+        "mechanical_pass": false,
+        "deliverable": false,
+        "publication_status": "not_attempted",
+        "system_deliverable": false,
+        "qa_blocker_count": 2,
+        "qa_blockers": [
+          {
+            "id": "qa-claim-838a99a7b083444650b7",
+            "severity": "blocker",
+            "detected_by": "citation",
+            "target_agent": "writer",
+            "target_subagent": "feature",
+            "target_competitor": "Bitwarden",
+            "field_path": "report.dimension_audits.0",
+            "problem": "主张引用审核失败：answer_coverage_incomplete。请重新生成该产品和维度的报告内容。",
+            "redo_scope": {
+              "kind": "writer_only",
+              "target_subagent": null,
+              "target_competitor": null,
+              "target_competitors": [],
+              "rationale": "phantom citation only"
+            },
+            "self_found": false,
+            "metadata": {
+              "claim_audit_reason": "answer_coverage_incomplete",
+              "snapshot_id": "evidence-snapshot-423ec4d28995f098347246656969ea22f5db94b5111620ad8fbe6eebcc013634",
+              "unpublishable_evidence": true
+            }
+          },
+          {
+            "id": "qc-issue-5f2fc245a79e2219",
+            "severity": "blocker",
+            "detected_by": "reflector",
+            "target_agent": "comparator",
+            "target_subagent": "feature",
+            "target_competitor": null,
+            "field_path": "reflections[-1].blocking_gaps[0]",
+            "problem": "Missing comparison cell for Bitwarden / feature.",
+            "redo_scope": {
+              "kind": "comparator",
+              "target_subagent": "feature",
+              "target_competitor": null,
+              "target_competitors": [],
+              "rationale": "Missing comparison cell for Bitwarden / feature."
+            },
+            "self_found": true,
+            "metadata": {}
+          }
+        ],
+        "error_type": null,
+        "error_reason": null
+      },
+      "execution": {
+        "product": "Bitwarden",
+        "run_id": "run-9468929126294ff0b5b13dbfbb72073f",
+        "case_ids": [
+          "agent-readiness-holdout-v1-001",
+          "agent-readiness-holdout-v1-002"
+        ],
+        "artifact_directory": "data/artifacts/answer-projection-2026-10-20/regression-bitwarden",
+        "status": "execution_complete",
+        "error_type": null,
+        "production_code_sha256": "eb63ba121c70e9638dd4bc586e1d899b61520c1b7a302fa5c15f0d0fa7732ea8",
+        "manifest_sha256": "2af02f5fb89ef774a0c700c6e21c883c480ad6a5138c75288952f27e617c3d14",
+        "source_count": 3,
+        "snapshot_facts": 69,
+        "runtime_report_characters": 947,
+        "saved_report_characters": 947,
+        "saved_report_sha256": "5c166f85c6303eb342727eba39f9b6a9370a596570a1b349d8b519b97604aea8",
+        "run_sha256": "78d125958fa5de7f5fc6577068fa76eeb9426a3a51614ab7508bb3c9fcf06818",
+        "summary_sha256": "f54b82eae75b55efb9a73bc78797eded16ac742cc91bdf4b54f2e0dba66bd942",
+        "body_is_redaction_placeholder": false,
+        "saved_report_matches_saved_run": true,
+        "llm_transport_attempts": 12,
+        "provider_tokens": 40672,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 2,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 5
+        },
+        "qa_llm_names": {
+          "dimension_claim_review": 3,
+          "dimension_answer_coverage": 1,
+          "dimension_answer_review": 1
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false,
+        "deepseek_web_api_enabled": true,
+        "module_executions": [
+          {
+            "agent": "analyst",
+            "subagent": "feature::Bitwarden",
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "reason": ""
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          {
+            "agent": "comparator",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false,
+              "attempts": 1,
+              "max_attempts": 3
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          {
+            "agent": "reflector",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false
+            },
+            "reason": null,
+            "has_structured_output": true
+          }
+        ],
+        "module_status_counts": {
+          "llm": 3
+        },
+        "llm_phases": {
+          "collector:Bitwarden/feature": {
+            "span_count": 3,
+            "transport_attempts": 3,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 3
+            }
+          },
+          "analyst:Bitwarden/feature": {
+            "span_count": 1,
+            "transport_attempts": 1,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 1
+            }
+          },
+          "comparator:run": {
+            "span_count": 1,
+            "transport_attempts": 1,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 1
+            }
+          },
+          "reflector:run": {
+            "span_count": 1,
+            "transport_attempts": 1,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 1
+            }
+          },
+          "writer:Bitwarden/feature": {
+            "span_count": 1,
+            "transport_attempts": 1,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 1
+            }
+          },
+          "qa:Bitwarden/feature": {
+            "span_count": 5,
+            "transport_attempts": 5,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 5
+            }
+          }
+        },
+        "partial_report_generated": false,
+        "web_api_requests": 1,
+        "web_api_successful_responses": 1,
+        "web_api_billable_requests_estimate": 1,
+        "web_api_billing_unknown_requests": 0,
+        "web_api_billing_basis": "provider_success_request_estimate_not_invoice",
+        "fetch_methods": {
+          "basic_httpx": 2,
+          "deepseek_web_fetch": 1
+        },
+        "tool_requests_by_kind": {
+          "fetch": 1,
+          "search": 0
+        }
+      }
+    },
+    {
+      "product": "1Password",
+      "run_id": "run-99bd02d88c654baaa588a43c8f9b3096",
+      "body_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-003",
+          "question_id": "question-60a7010e0c7ca2ae7058",
+          "question": "在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？",
+          "agent_judgment": "correct",
+          "reason": "正文明确结论为否，同时回答 Families guest 不能同时访问两个保险库、没有自己的 Private vault；没有重复询问题目已给出的接受邀请与确认。没有将单一保险库说成永远不能换库。保存 conclusion=no 是正式结论。",
+          "reported_status": "answered",
+          "answer_text": "访客没有自己的 Private vault，只能访问由你选定的单一共享保险库。\n若要让访客拥有自己的 Private vault 并访问多个共享保险库，需将其从访客升级为家庭成员。",
+          "conclusion_rendered": "no",
+          "actual_amount_positive": false
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-004",
+          "question_id": "question-26d795d67d79bd12e05d",
+          "question": "我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。",
+          "agent_judgment": "correct",
+          "reason": "仅判具体缺价的合理不足：保留 Unified Access、12 个月、人民币及含税，列出适用市场、计费周期、SKU／合同／购买范围及实际付费席位等核价缺口，没有编造单价、汇率、税率或总价。员工数不自动等于合同付费席位，购买期限不自动等于账单周期。当前 snapshot 只有 guest 来源，不能编造 Unified Access 定制报价或声称已拿销售报价。本题不计实际金额正例，也不表示公开定价方式已解决。",
+          "reported_status": "partial",
+          "answer_text": "已给请求条件：购买范围 Unified Access、购买期限 12个月、报价币种 人民币、含税。本次请求及已准入资料不足以核实准确的当前报价。请先确认：适用市场／地区、计费周期、适用 SKU／合同及实际购买范围、实际付费席位数量；补齐适用的定价资料和输入后，再核验截至 2026-10-20 的适用金额。",
+          "conclusion_rendered": null,
+          "actual_amount_positive": false
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-003",
+          "question_id": "question-60a7010e0c7ca2ae7058",
+          "agent_judgment": "correct",
+          "reason": "正文明确结论为否，同时回答 Families guest 不能同时访问两个保险库、没有自己的 Private vault；没有重复询问题目已给出的接受邀请与确认。没有将单一保险库说成永远不能换库。保存 conclusion=no 是正式结论。",
+          "record": {
+            "question_id": "question-60a7010e0c7ca2ae7058",
+            "question": "1Password: 在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？",
+            "status": "answered",
+            "claim_ids": [
+              "claim-928d4f56f907792f73ac",
+              "claim-33158e619887adf73a9a"
+            ],
+            "reason": "依据2条已发表主张；已回答，直接回答。",
+            "answer": "访客没有自己的 Private vault，只能访问由你选定的单一共享保险库。\n若要让访客拥有自己的 Private vault 并访问多个共享保险库，需将其从访客升级为家庭成员。",
+            "resolution": "direct",
+            "conclusion": "no",
+            "evidence_spans": [
+              {
+                "claim_id": "claim-928d4f56f907792f73ac",
+                "quote": "访客没有自己的 Private vault，只能访问由你选定的单一共享保险库。"
+              },
+              {
+                "claim_id": "claim-33158e619887adf73a9a",
+                "quote": "若要让访客拥有自己的 Private vault 并访问多个共享保险库，需将其从访客升级为家庭成员。"
+              }
+            ],
+            "binding_version": 3
+          },
+          "conclusion_field_present": true,
+          "effective_conclusion": "no",
+          "answer_spans_match_published_claims": true,
+          "actual_amount_positive": false,
+          "claim_ids_all_published": true
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-004",
+          "question_id": "question-26d795d67d79bd12e05d",
+          "agent_judgment": "correct",
+          "reason": "仅判具体缺价的合理不足：保留 Unified Access、12 个月、人民币及含税，列出适用市场、计费周期、SKU／合同／购买范围及实际付费席位等核价缺口，没有编造单价、汇率、税率或总价。员工数不自动等于合同付费席位，购买期限不自动等于账单周期。当前 snapshot 只有 guest 来源，不能编造 Unified Access 定制报价或声称已拿销售报价。本题不计实际金额正例，也不表示公开定价方式已解决。",
+          "record": {
+            "question_id": "question-26d795d67d79bd12e05d",
+            "question": "1Password: 我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。",
+            "status": "partial",
+            "claim_ids": [],
+            "reason": "server_missing_quote_inputs;as_of=2026-10-20",
+            "answer": "已给请求条件：购买范围 Unified Access、购买期限 12个月、报价币种 人民币、含税。本次请求及已准入资料不足以核实准确的当前报价。请先确认：适用市场／地区、计费周期、适用 SKU／合同及实际购买范围、实际付费席位数量；补齐适用的定价资料和输入后，再核验截至 2026-10-20 的适用金额。",
+            "resolution": "insufficient",
+            "missing_fields": [
+              "billable_seats",
+              "billing_interval",
+              "market",
+              "sku_scope"
+            ],
+            "basis_snapshot_id": "evidence-snapshot-21e96170be631aeb1257d082e3ae16a75534defba36ee32b71ce0b8835d97834"
+          },
+          "conclusion_field_present": false,
+          "effective_conclusion": "unknown",
+          "answer_spans_match_published_claims": true,
+          "actual_amount_positive": false,
+          "claim_ids_all_published": true,
+          "snapshot_insufficiency_replay": {
+            "status": "partial",
+            "resolution": "insufficient",
+            "conclusion_effective": "unknown",
+            "raw_conclusion_absent": true,
+            "basis_snapshot_matches_current": true,
+            "missing_fields": [
+              "billable_seats",
+              "billing_interval",
+              "market",
+              "sku_scope"
+            ],
+            "claim_ids": [],
+            "reason_matches_as_of": true,
+            "no_actual_amount": true,
+            "not_claimed_sales_quote": true
+          }
+        }
+      ],
+      "published_claims": [
+        {
+          "claim_id": "claim-928d4f56f907792f73ac",
+          "text": "访客没有自己的 Private vault，只能访问由你选定的单一共享保险库。",
+          "fully_bound": true,
+          "single_fact_predicate": false,
+          "agent_judgment": "fully_bound",
+          "assertions": [
+            {
+              "text": "访客没有自己的 Private vault",
+              "bound": true,
+              "reason": "所选引文直接否定 own private vaults。"
+            },
+            {
+              "text": "只能访问由你选定的单一保险库",
+              "bound": true,
+              "reason": "所选引文直接限定 only access to a single vault, which you choose；当前来源及问题限定 Families guest。"
+            }
+          ],
+          "issue": "两项权限限制均完整受同一所选引用支持，但这是两个可分别核验的谓词，原子性仍应拆分。",
+          "source_ids": [
+            "raw-source-d14e1c9530112ba42840"
+          ],
+          "fact_ids": [
+            "evidence-fact-record-e6ec67d86fadd1027a9fe5334d02f53ce38251ed0e83903d38ed9a95bfd8e71a"
+          ],
+          "source_span_bindings": [
+            {
+              "span_id": "source-span-3cbee3b0f579fd4173c8f974",
+              "fact_id": "evidence-fact-record-e6ec67d86fadd1027a9fe5334d02f53ce38251ed0e83903d38ed9a95bfd8e71a",
+              "source_id": "raw-source-d14e1c9530112ba42840",
+              "fact_hash": "4e48d1c72183a2cccba15136644809109e2aa2dc479c5238ff399cf82c67e403",
+              "source_path": "quote",
+              "start": 0,
+              "end": 182,
+              "quote": "Guest accounts are ideal for sharing information with people on a limited basis\\. They don’t have their own private vaults and only have access to a single vault\\, which you choose\\."
+            }
+          ],
+          "operation_binding": null
+        },
+        {
+          "claim_id": "claim-33158e619887adf73a9a",
+          "text": "若要让访客拥有自己的 Private vault 并访问多个共享保险库，需将其从访客升级为家庭成员。",
+          "fully_bound": false,
+          "single_fact_predicate": true,
+          "agent_judgment": "modal_overstatement",
+          "assertions": [
+            {
+              "text": "若要 Private vault 及多个共享库，需从 guest 升级为 family member",
+              "bound": false,
+              "reason": "所选完整句为 If you want ... you can promote ...，支持可通过升级达到该目标；正文需将其升级把可用路径强化为必要操作。所选句本身不陈述唯一／必须路径，不能借另一条 guest 限制主张补出必要性。保留 can／可以升级即可忠实表达该句。"
+            }
+          ],
+          "issue": "把可行操作写成必需操作，强于本条绑定引文的模态；这不改变 Q3 已给出的两项否定结论，但额外发表主张不算完整绑定。",
+          "source_ids": [
+            "raw-source-d14e1c9530112ba42840"
+          ],
+          "fact_ids": [
+            "evidence-fact-record-4c5cb771b65dfe7357b2efeccfe984fdf7c04537973cf76325a9522696bff642"
+          ],
+          "source_span_bindings": [
+            {
+              "span_id": "source-span-ffb7f618ac0ac4429ef78d10",
+              "fact_id": "evidence-fact-record-4c5cb771b65dfe7357b2efeccfe984fdf7c04537973cf76325a9522696bff642",
+              "source_id": "raw-source-d14e1c9530112ba42840",
+              "fact_hash": "60114e41783b13eae0b48bc9ba7c9d446fcac266bf207949294cff172f92eaea",
+              "source_path": "quote",
+              "start": 0,
+              "end": 185,
+              "quote": "If you want to give a guest more access to your account\\, including their own Private vault and access to more than one shared vault\\, you can promote them from guest to family member\\."
+            }
+          ],
+          "operation_binding": null
+        }
+      ],
+      "content_qualified": true,
+      "binding_qualified": false,
+      "atomicity_qualified": false,
+      "content_and_binding_qualified": false,
+      "remaining_issues": [
+        "额外升级主张将 can 强化为需；guest 访问两项限制合并为非单一谓词。",
+        "snapshot 未接受公开定价页；具体缺价拒答合格，不证明 Unified Access 的公开定价方式／定制销售流程或实际报价已获得。",
+        "保留 2 个系统 QA blocker。"
+      ],
+      "system": {
+        "status": "execution_complete",
+        "pipeline_terminal": false,
+        "mechanical_pass": false,
+        "deliverable": false,
+        "publication_status": "not_attempted",
+        "system_deliverable": false,
+        "qa_blocker_count": 2,
+        "qa_blockers": [
+          {
+            "id": "qc-issue-f74fb7ba4b4dae22",
+            "severity": "blocker",
+            "detected_by": "reflector",
+            "target_agent": "collector",
+            "target_subagent": null,
+            "target_competitor": null,
+            "field_path": "reflections[-1].blocking_gaps[0]",
+            "problem": "Q2 pricing question is unsupported by any collected source; no public pricing page evidence exists for Unified Access or RMB tax-inclusive totals.",
+            "redo_scope": {
+              "kind": "full",
+              "target_subagent": null,
+              "target_competitor": null,
+              "target_competitors": [],
+              "rationale": "Q2 pricing question is unsupported by any collected source; no public pricing page evidence exists for Unified Access or RMB tax-inclusive totals."
+            },
+            "self_found": true,
+            "metadata": {}
+          },
+          {
+            "id": "qc-issue-736e9267b759a069",
+            "severity": "blocker",
+            "detected_by": "reflector",
+            "target_agent": "collector",
+            "target_subagent": "feature",
+            "target_competitor": null,
+            "field_path": "reflections[-1].blocking_gaps[1]",
+            "problem": "Feature dimension assessment status is insufficient_evidence (gap_count 6), so the guest vault-access conclusion cannot be treated as fully validated.",
+            "redo_scope": {
+              "kind": "collector",
+              "target_subagent": "feature",
+              "target_competitor": null,
+              "target_competitors": [],
+              "rationale": "Feature dimension assessment status is insufficient_evidence (gap_count 6), so the guest vault-access conclusion cannot be treated as fully validated."
+            },
+            "self_found": true,
+            "metadata": {}
+          }
+        ],
+        "error_type": null,
+        "error_reason": null
+      },
+      "execution": {
+        "product": "1Password",
+        "run_id": "run-99bd02d88c654baaa588a43c8f9b3096",
+        "case_ids": [
+          "agent-readiness-holdout-v1-003",
+          "agent-readiness-holdout-v1-004"
+        ],
+        "artifact_directory": "data/artifacts/answer-projection-2026-10-20/regression-1password",
+        "status": "execution_complete",
+        "error_type": null,
+        "production_code_sha256": "eb63ba121c70e9638dd4bc586e1d899b61520c1b7a302fa5c15f0d0fa7732ea8",
+        "manifest_sha256": "de95031acd2015bd99a5063ec766f5c4330edc27276f8d894ea0a320ae07e6ad",
+        "source_count": 1,
+        "snapshot_facts": 24,
+        "runtime_report_characters": 955,
+        "saved_report_characters": 955,
+        "saved_report_sha256": "1472ee8d52afbcf986057b198e49e29897711c838920efc0335ce089b7927ce9",
+        "run_sha256": "e3d4ef575c907c70f99b403ba507c99e6c7e644ff4aa170c9ef616f10642fbce",
+        "summary_sha256": "b462a84827af0448183a37395a57330f490ecb7ade342ff5e2d612a59d918dd9",
+        "body_is_redaction_placeholder": false,
+        "saved_report_matches_saved_run": true,
+        "llm_transport_attempts": 12,
+        "provider_tokens": 41202,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 2,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 5
+        },
+        "qa_llm_names": {
+          "dimension_claim_review": 3,
+          "dimension_answer_coverage": 1,
+          "dimension_answer_review": 1
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false,
+        "deepseek_web_api_enabled": true,
+        "module_executions": [
+          {
+            "agent": "analyst",
+            "subagent": "feature::1Password",
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "reason": ""
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          {
+            "agent": "comparator",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false,
+              "attempts": 1,
+              "max_attempts": 3
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          {
+            "agent": "reflector",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false
+            },
+            "reason": null,
+            "has_structured_output": true
+          }
+        ],
+        "module_status_counts": {
+          "llm": 3
+        },
+        "llm_phases": {
+          "collector:1Password/feature": {
+            "span_count": 3,
+            "transport_attempts": 3,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 3
+            }
+          },
+          "analyst:1Password/feature": {
+            "span_count": 1,
+            "transport_attempts": 1,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 1
+            }
+          },
+          "comparator:run": {
+            "span_count": 1,
+            "transport_attempts": 1,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 1
+            }
+          },
+          "reflector:run": {
+            "span_count": 1,
+            "transport_attempts": 1,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 1
+            }
+          },
+          "writer:1Password/feature": {
+            "span_count": 1,
+            "transport_attempts": 1,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 1
+            }
+          },
+          "qa:1Password/feature": {
+            "span_count": 5,
+            "transport_attempts": 5,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 5
+            }
+          }
+        },
+        "partial_report_generated": false,
+        "web_api_requests": 2,
+        "web_api_successful_responses": 2,
+        "web_api_billable_requests_estimate": 2,
+        "web_api_billing_unknown_requests": 0,
+        "web_api_billing_basis": "provider_success_request_estimate_not_invoice",
+        "fetch_methods": {
+          "deepseek_web_fetch": 2
+        },
+        "tool_requests_by_kind": {
+          "fetch": 2,
+          "search": 0
+        }
+      }
+    },
+    {
+      "product": "Dropbox",
+      "run_id": "run-8e6518b260e4479c8cf7f365bd79c18c",
+      "body_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-005",
+          "question_id": null,
+          "question": "我通过邮件直接邀请别人访问 Dropbox 共享文件夹，只给了 Can view 权限，没有发共享链接。这样能阻止他下载文件夹里的文件吗？",
+          "agent_judgment": "omission",
+          "reason": "正文为空；未回答邮件直接邀请且 Can view 仍可下载，也没有可评分的保存回答。零接受来源不等于完成合理拒答。",
+          "reported_status": null,
+          "answer_text": null,
+          "conclusion_rendered": null,
+          "actual_amount_positive": false
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-006",
+          "question_id": null,
+          "question": "我在 Dropbox 里“取消共享”了，之前拿到文件的人现在就完全看不到了吗？",
+          "agent_judgment": "omission",
+          "reason": "正文为空；没有询问实际操作、访问方式和保留副本等关键澄清，也没有保存回答。不能把 collector 阻塞算成完成纯澄清。",
+          "reported_status": null,
+          "answer_text": null,
+          "conclusion_rendered": null,
+          "actual_amount_positive": false
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-005",
+          "question_id": null,
+          "agent_judgment": "omission",
+          "reason": "正文为空；未回答邮件直接邀请且 Can view 仍可下载，也没有可评分的保存回答。零接受来源不等于完成合理拒答。",
+          "record": null,
+          "conclusion_field_present": false,
+          "effective_conclusion": null,
+          "answer_spans_match_published_claims": null,
+          "actual_amount_positive": false
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-006",
+          "question_id": null,
+          "agent_judgment": "omission",
+          "reason": "正文为空；没有询问实际操作、访问方式和保留副本等关键澄清，也没有保存回答。不能把 collector 阻塞算成完成纯澄清。",
+          "record": null,
+          "conclusion_field_present": false,
+          "effective_conclusion": null,
+          "answer_spans_match_published_claims": null,
+          "actual_amount_positive": false
+        }
+      ],
+      "published_claims": [],
+      "content_qualified": false,
+      "binding_qualified": false,
+      "atomicity_qualified": false,
+      "content_and_binding_qualified": false,
+      "remaining_issues": [
+        "两个官网捕获均 rejected，HTTP 200 不代表可用源；text_length=33、capture_not_successful，未接受来源。",
+        "core collector/analyst/comparator/reflector/writer/qa transport 均为 0；下游阶段因 no_accepted_sources 跳过。",
+        "没有正文／保存答案，2 题均 omission；0 条主张不能真空计 binding_qualified。",
+        "保留 1 个缺证 QA blocker。"
+      ],
+      "system": {
+        "status": "blocked",
+        "pipeline_terminal": false,
+        "mechanical_pass": false,
+        "deliverable": false,
+        "publication_status": "not_attempted",
+        "system_deliverable": false,
+        "qa_blocker_count": 1,
+        "qa_blockers": [
+          {
+            "id": "qc-issue-6001ddb29c4d40dd",
+            "severity": "blocker",
+            "detected_by": "coverage",
+            "target_agent": "collector",
+            "target_subagent": "feature",
+            "target_competitor": null,
+            "field_path": "raw_sources[feature]",
+            "problem": "No evidence sources were collected for feature.",
+            "redo_scope": {
+              "kind": "collector",
+              "target_subagent": "feature",
+              "target_competitor": null,
+              "target_competitors": [],
+              "rationale": "No sources collected for feature."
+            },
+            "self_found": false,
+            "metadata": {
+              "issue_kind": "missing_evidence"
+            }
+          }
+        ],
+        "error_type": "ValueError",
+        "error_reason": "no_accepted_sources: downstream model stages not attempted"
+      },
+      "execution": {
+        "product": "Dropbox",
+        "run_id": "run-8e6518b260e4479c8cf7f365bd79c18c",
+        "case_ids": [
+          "agent-readiness-holdout-v1-005",
+          "agent-readiness-holdout-v1-006"
+        ],
+        "artifact_directory": "data/artifacts/answer-projection-2026-10-20/regression-dropbox",
+        "status": "blocked",
+        "error_type": "ValueError",
+        "production_code_sha256": "eb63ba121c70e9638dd4bc586e1d899b61520c1b7a302fa5c15f0d0fa7732ea8",
+        "manifest_sha256": "c78ba984c2289945ab22203f91df4e7c6be8b90045837fd9d54dc0c2f90a9c3d",
+        "source_count": 0,
+        "snapshot_facts": 0,
+        "runtime_report_characters": 0,
+        "saved_report_characters": 0,
+        "saved_report_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "run_sha256": "9803a343fb01097f1734a75c3bf7e44d85403226e0bbf907e524c85ccedda51e",
+        "summary_sha256": "6621040125045baa003c275c36701c299d78abc25c9f34a0a54b6e6daa826857",
+        "body_is_redaction_placeholder": false,
+        "saved_report_matches_saved_run": true,
+        "llm_transport_attempts": 0,
+        "provider_tokens": null,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": false,
+        "llm_transport_by_agent": {
+          "collector": 0,
+          "analyst": 0,
+          "comparator": 0,
+          "reflector": 0,
+          "writer": 0,
+          "qa": 0
+        },
+        "qa_llm_names": {},
+        "actual_models": [],
+        "user_accepted": false,
+        "deepseek_web_api_enabled": true,
+        "module_executions": [],
+        "module_status_counts": {},
+        "llm_phases": {},
+        "partial_report_generated": false,
+        "web_api_requests": 2,
+        "web_api_successful_responses": 0,
+        "web_api_billable_requests_estimate": 0,
+        "web_api_billing_unknown_requests": 0,
+        "web_api_billing_basis": "provider_success_request_estimate_not_invoice",
+        "fetch_methods": {
+          "basic_httpx_low_quality": 2
+        },
+        "tool_requests_by_kind": {
+          "fetch": 2,
+          "search": 0
+        }
+      }
+    },
+    {
+      "product": "Cloudflare",
+      "run_id": "run-55d654cb4c5b4258aecf623a355c792b",
+      "body_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-007",
+          "question_id": "question-1b7471af0d3dcf4af91c",
+          "question": "同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？",
+          "agent_judgment": "omission",
+          "reason": "问题处只写尚未核实和泛缺证，未给出角色本身不能扩展到 other.example 的结论。虽然正文发表了域范围规则，且实际 Writer 输入包含该规则和 Cache Domain Purge 角色说明，不能代替最终问题答案。官网无需重复用户两个域名；无其他角色前提来自题目，不能以缺少用户域名为由遗漏。",
+          "reported_status": "unverified",
+          "answer_text": null,
+          "conclusion_rendered": null,
+          "actual_amount_positive": false,
+          "rendered_body": "本次已审核证据尚未完整覆盖此问题。"
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-008",
+          "question_id": "question-dd9aeefb8be2a32bc5bf",
+          "question": "我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？",
+          "agent_judgment": "correct",
+          "reason": "明确拒绝以 1500 万次动态请求给出完整准确美元账单，并具体索取 CPU 总用量、其他计费项目和完整用量明细；没有套用 7 ms 示例、最低月费或其他价格当实际账单。Paid／Standard 与本月范围由当前完整问题保留。答案额外的 CPU 计费说明可由 basis snapshot 中已准入的 Workers Caching 计费规则重建；不是实际金额正例。",
+          "reported_status": "partial",
+          "answer_text": "已给请求条件：购买范围 Workers Paid、报价币种 美元。已准入计费规则包含 CPU 时间计费。本次请求及已准入资料不足以核实准确的完整账单。请先确认：适用市场／地区、税费口径、CPU 总用量、完整用量明细及其他计费项目；补齐适用的定价资料和输入后，再核验截至 2026-10-20 的适用金额。",
+          "conclusion_rendered": null,
+          "actual_amount_positive": false
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-007",
+          "question_id": "question-1b7471af0d3dcf4af91c",
+          "agent_judgment": "omission",
+          "reason": "问题处只写尚未核实和泛缺证，未给出角色本身不能扩展到 other.example 的结论。虽然正文发表了域范围规则，且实际 Writer 输入包含该规则和 Cache Domain Purge 角色说明，不能代替最终问题答案。官网无需重复用户两个域名；无其他角色前提来自题目，不能以缺少用户域名为由遗漏。",
+          "record": {
+            "question_id": "question-1b7471af0d3dcf4af91c",
+            "question": "Cloudflare: 同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？",
+            "status": "unverified",
+            "claim_ids": [],
+            "reason": "Answer coverage response was missing or invalid: coverage guard rejected: answer_body_unresolved"
+          },
+          "conclusion_field_present": false,
+          "effective_conclusion": "unknown",
+          "answer_spans_match_published_claims": true,
+          "actual_amount_positive": false,
+          "claim_ids_all_published": true
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-008",
+          "question_id": "question-dd9aeefb8be2a32bc5bf",
+          "agent_judgment": "correct",
+          "reason": "明确拒绝以 1500 万次动态请求给出完整准确美元账单，并具体索取 CPU 总用量、其他计费项目和完整用量明细；没有套用 7 ms 示例、最低月费或其他价格当实际账单。Paid／Standard 与本月范围由当前完整问题保留。答案额外的 CPU 计费说明可由 basis snapshot 中已准入的 Workers Caching 计费规则重建；不是实际金额正例。",
+          "record": {
+            "question_id": "question-dd9aeefb8be2a32bc5bf",
+            "question": "Cloudflare: 我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？",
+            "status": "partial",
+            "claim_ids": [],
+            "reason": "server_missing_quote_inputs;as_of=2026-10-20",
+            "answer": "已给请求条件：购买范围 Workers Paid、报价币种 美元。已准入计费规则包含 CPU 时间计费。本次请求及已准入资料不足以核实准确的完整账单。请先确认：适用市场／地区、税费口径、CPU 总用量、完整用量明细及其他计费项目；补齐适用的定价资料和输入后，再核验截至 2026-10-20 的适用金额。",
+            "resolution": "insufficient",
+            "missing_fields": [
+              "cpu_usage",
+              "market",
+              "tax_scope",
+              "usage_inputs"
+            ],
+            "basis_snapshot_id": "evidence-snapshot-14ac754e0fb4558f975976027ade83605a37fc435d641d4dc3761de9f5e1df87"
+          },
+          "conclusion_field_present": false,
+          "effective_conclusion": "unknown",
+          "answer_spans_match_published_claims": true,
+          "actual_amount_positive": false,
+          "claim_ids_all_published": true,
+          "snapshot_insufficiency_replay": {
+            "status": "partial",
+            "resolution": "insufficient",
+            "conclusion_effective": "unknown",
+            "raw_conclusion_absent": true,
+            "basis_snapshot_matches_current": true,
+            "missing_fields": [
+              "cpu_usage",
+              "market",
+              "tax_scope",
+              "usage_inputs"
+            ],
+            "claim_ids": [],
+            "reason_matches_as_of": true,
+            "no_actual_amount": true,
+            "not_claimed_sales_quote": true
+          }
+        }
+      ],
+      "published_claims": [
+        {
+          "claim_id": "claim-ba94791b79903da8b0d2",
+          "text": "Workers Paid 计划的用户可使用 Standard 用量模式；Workers Enterprise 账户按其合同规定的用量模式计费。",
+          "fully_bound": true,
+          "single_fact_predicate": false,
+          "agent_judgment": "fully_bound",
+          "assertions": [
+            {
+              "text": "Workers Paid 用户可使用 Standard",
+              "bound": true,
+              "reason": "对应 selected quote 第一句。"
+            },
+            {
+              "text": "Workers Enterprise 依合同的用量模式计费",
+              "bound": true,
+              "reason": "对应 selected quote 第二句，未把后句联系 Account Manager 的切换操作发表为额外能力。"
+            }
+          ],
+          "issue": "将 Paid 的模式资格与 Enterprise 的合同计费两个独立规则合在一条，原子性不足；全部语义仍有同条引用支持。",
+          "source_ids": [
+            "raw-source-52ba7b31b51e937245c1"
+          ],
+          "fact_ids": [
+            "evidence-fact-record-d3b9d72336157192c171266f6e5cf59a1bbcca6db321a9fcf02e949e88456ffb"
+          ],
+          "source_span_bindings": [
+            {
+              "span_id": "source-span-17c17686677a3525eef091ea",
+              "fact_id": "evidence-fact-record-d3b9d72336157192c171266f6e5cf59a1bbcca6db321a9fcf02e949e88456ffb",
+              "source_id": "raw-source-52ba7b31b51e937245c1",
+              "fact_hash": "d0102c93395b1ed6c1d6a2464309db184793626a8cb38fc794dc3204bc8243f4",
+              "source_path": "quote",
+              "start": 0,
+              "end": 233,
+              "quote": "Users on the Workers Paid plan have access to the Standard usage model. Workers Enterprise accounts are billed based on the usage model specified in their contract. To switch to the Standard usage model, contact your Account Manager."
+            }
+          ],
+          "operation_binding": null
+        },
+        {
+          "claim_id": "claim-3f66e3b22f7516a9ec16",
+          "text": "域范围角色仅适用于账户内指定的某个域名。",
+          "fully_bound": true,
+          "single_fact_predicate": true,
+          "agent_judgment": "fully_bound",
+          "assertions": [
+            {
+              "text": "域范围角色仅适用于账户中指定的某域名",
+              "bound": true,
+              "reason": "Domain-scoped roles apply for a given domain within an account 直接给出域资源范围；仅是范围语义，没有扩大为其他账户角色或任意权限。"
+            }
+          ],
+          "issue": null,
+          "source_ids": [
+            "raw-source-c71a5d8161af6e06ae53"
+          ],
+          "fact_ids": [
+            "evidence-fact-record-6def2ed92619248600afe782fce5f29c4a777bfb17aab232830695bbb545aa5e"
+          ],
+          "source_span_bindings": [
+            {
+              "span_id": "source-span-c307265084d78a38f92be688",
+              "fact_id": "evidence-fact-record-6def2ed92619248600afe782fce5f29c4a777bfb17aab232830695bbb545aa5e",
+              "source_id": "raw-source-c71a5d8161af6e06ae53",
+              "fact_hash": "235a15575d3a935ff3e2dbfd44a0eab570a7d48a7ba6abb34bc0e76459298a63",
+              "source_path": "quote",
+              "start": 0,
+              "end": 63,
+              "quote": "Domain-scoped roles apply for a given domain within an account."
+            }
+          ],
+          "operation_binding": null
+        },
+        {
+          "claim_id": "claim-3097c09a7dcb8038f841",
+          "text": "启用 Workers Caching 时，由 Worker 缓存提供的请求按与调用 Worker 的请求相同的每请求费率计费，包括对静态资源的请求和 worker-to-worker 调用；仅当 Worker 运行（缓存未命中或绕过）时才计 CPU 时间。",
+          "fully_bound": true,
+          "single_fact_predicate": false,
+          "agent_judgment": "fully_bound",
+          "assertions": [
+            {
+              "text": "Workers Caching 启用时缓存请求按调用 Worker 相同每请求费率计费",
+              "bound": true,
+              "reason": "保留 When Workers Caching is enabled 及 same per-request rate。"
+            },
+            {
+              "text": "包括静态资源和 worker-to-worker 调用",
+              "bound": true,
+              "reason": "对应 this includes，保留两个并列对象。"
+            },
+            {
+              "text": "只在 Worker 运行（缓存 miss 或 bypass）时计 CPU",
+              "bound": true,
+              "reason": "完整保留 only、runs、cache miss or bypass，不误写成两者同时发生。"
+            }
+          ],
+          "issue": "请求费率与 CPU 计费时点是两个独立计费谓词，建议拆分；本条已选完整引文涵盖全部条件与例外。",
+          "source_ids": [
+            "raw-source-52ba7b31b51e937245c1"
+          ],
+          "fact_ids": [
+            "evidence-fact-record-e823898578c2fb3b347f4977d92ade84ec50ced459da80a49fd162c3847b8c37"
+          ],
+          "source_span_bindings": [
+            {
+              "span_id": "source-span-e73e2bf9c97d7e34e9e09191",
+              "fact_id": "evidence-fact-record-e823898578c2fb3b347f4977d92ade84ec50ced459da80a49fd162c3847b8c37",
+              "source_id": "raw-source-52ba7b31b51e937245c1",
+              "fact_hash": "d2da26f96afeb0be9f8927d15619b4f2cfe6f6b96f44697f098cdc5a1831fbf2",
+              "source_path": "quote",
+              "start": 0,
+              "end": 298,
+              "quote": "4 When Workers Caching is enabled, requests served from the Worker's cache are billed at the same per-request rate as requests that invoke the Worker. This includes requests to static assets and worker-to-worker invocations. CPU time is only billed when the Worker runs (on a cache miss or bypass)."
+            }
+          ],
+          "operation_binding": null
+        }
+      ],
+      "content_qualified": false,
+      "binding_qualified": true,
+      "atomicity_qualified": false,
+      "content_and_binding_qualified": false,
+      "remaining_issues": [
+        "权限题实际送入 domain 范围和 Cache Domain Purge 说明，最终仍只写泛缺证，正文及保存均 omission。",
+        "Paid／Enterprise 模式与 Caching 请求／CPU 规则虽完整受引用支持，均合并多个独立谓词。",
+        "账单不足回答合格，实际准确金额仍未知；不能计金额正例。",
+        "保留 1 个系统 QA blocker。"
+      ],
+      "system": {
+        "status": "execution_complete",
+        "pipeline_terminal": false,
+        "mechanical_pass": false,
+        "deliverable": false,
+        "publication_status": "not_attempted",
+        "system_deliverable": false,
+        "qa_blocker_count": 1,
+        "qa_blockers": [
+          {
+            "id": "qa-claim-f302b8e92ddca3572f9b",
+            "severity": "blocker",
+            "detected_by": "citation",
+            "target_agent": "writer",
+            "target_subagent": "feature",
+            "target_competitor": "Cloudflare",
+            "field_path": "report.dimension_audits.0",
+            "problem": "主张引用审核失败：answer_coverage_incomplete。请重新生成该产品和维度的报告内容。",
+            "redo_scope": {
+              "kind": "writer_only",
+              "target_subagent": null,
+              "target_competitor": null,
+              "target_competitors": [],
+              "rationale": "phantom citation only"
+            },
+            "self_found": false,
+            "metadata": {
+              "claim_audit_reason": "answer_coverage_incomplete",
+              "snapshot_id": "evidence-snapshot-14ac754e0fb4558f975976027ade83605a37fc435d641d4dc3761de9f5e1df87",
+              "unpublishable_evidence": true
+            }
+          }
+        ],
+        "error_type": null,
+        "error_reason": null
+      },
+      "server_answer_product_assertions": [
+        {
+          "text": "已准入计费规则包含 CPU 时间计费。",
+          "agent_judgment": "supported_by_exact_snapshot_replay",
+          "basis_snapshot_id": "evidence-snapshot-14ac754e0fb4558f975976027ade83605a37fc435d641d4dc3761de9f5e1df87",
+          "fact_id": "evidence-fact-record-e823898578c2fb3b347f4977d92ade84ec50ced459da80a49fd162c3847b8c37",
+          "quote": "CPU time is only billed when the Worker runs (on a cache miss or bypass).",
+          "actual_writer_input_contains_rule": true,
+          "same_rule_already_in_published_claim_id": "claim-3097c09a7dcb8038f841",
+          "conditions_preserved_in_published_rule": true,
+          "note": "服务器不足答复的本地准入资料摘要，按 basis snapshot 精确复核；不扩张为 Worker 所有 CPU／账户实际 CPU 已知，也不重复增加 claim ID 数。"
+        }
+      ],
+      "execution": {
+        "product": "Cloudflare",
+        "run_id": "run-55d654cb4c5b4258aecf623a355c792b",
+        "case_ids": [
+          "agent-readiness-holdout-v1-007",
+          "agent-readiness-holdout-v1-008"
+        ],
+        "artifact_directory": "data/artifacts/answer-projection-2026-10-20/regression-cloudflare",
+        "status": "execution_complete",
+        "error_type": null,
+        "production_code_sha256": "eb63ba121c70e9638dd4bc586e1d899b61520c1b7a302fa5c15f0d0fa7732ea8",
+        "manifest_sha256": "eef7b7ef0e266f1540544e2d7a6896ee5f9c6cd19801ebddf5781cbbd9347130",
+        "source_count": 2,
+        "snapshot_facts": 45,
+        "runtime_report_characters": 1129,
+        "saved_report_characters": 1129,
+        "saved_report_sha256": "4af7ba0d21ab34eaa7e8e6bb54a5667d8f8bce44fc87570d31d48a5d97181c58",
+        "run_sha256": "8fe4727e67c56db6060cee09a6322d3f007f9ccfcf656731f579af25e63fb77d",
+        "summary_sha256": "80e13bf8c83938263830d9bc45394e8df0f549e24f6e1b70c149691321d32f44",
+        "body_is_redaction_placeholder": false,
+        "saved_report_matches_saved_run": true,
+        "llm_transport_attempts": 14,
+        "provider_tokens": 47559,
+        "provider_usage_unknown_spans": 0,
+        "qa_blockers": 1,
+        "writer_producer_verified": true,
+        "llm_transport_by_agent": {
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 1,
+          "qa": 7
+        },
+        "qa_llm_names": {
+          "dimension_claim_review": 5,
+          "dimension_answer_coverage": 1,
+          "dimension_answer_review": 1
+        },
+        "actual_models": [
+          "deepseek-flash"
+        ],
+        "user_accepted": false,
+        "deepseek_web_api_enabled": true,
+        "module_executions": [
+          {
+            "agent": "analyst",
+            "subagent": "feature::Cloudflare",
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "reason": ""
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          {
+            "agent": "comparator",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false,
+              "attempts": 1,
+              "max_attempts": 3
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          {
+            "agent": "reflector",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false
+            },
+            "reason": null,
+            "has_structured_output": true
+          }
+        ],
+        "module_status_counts": {
+          "llm": 3
+        },
+        "llm_phases": {
+          "collector:Cloudflare/feature": {
+            "span_count": 3,
+            "transport_attempts": 3,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 3
+            }
+          },
+          "analyst:Cloudflare/feature": {
+            "span_count": 1,
+            "transport_attempts": 1,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 1
+            }
+          },
+          "comparator:run": {
+            "span_count": 1,
+            "transport_attempts": 1,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 1
+            }
+          },
+          "reflector:run": {
+            "span_count": 1,
+            "transport_attempts": 1,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 1
+            }
+          },
+          "writer:Cloudflare/feature": {
+            "span_count": 1,
+            "transport_attempts": 1,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 1
+            }
+          },
+          "qa:Cloudflare/feature": {
+            "span_count": 7,
+            "transport_attempts": 7,
+            "unknown_transport_spans": 0,
+            "execution_status_counts": {
+              "succeeded": 7
+            }
+          }
+        },
+        "partial_report_generated": false,
+        "web_api_requests": 0,
+        "web_api_successful_responses": 0,
+        "web_api_billable_requests_estimate": 0,
+        "web_api_billing_unknown_requests": 0,
+        "web_api_billing_basis": "provider_success_request_estimate_not_invoice",
+        "fetch_methods": {
+          "basic_httpx": 2
+        },
+        "tool_requests_by_kind": {
+          "fetch": 0,
+          "search": 0
+        }
+      }
+    }
+  ],
+  "integrity": {
+    "production_code_sha256": "eb63ba121c70e9638dd4bc586e1d899b61520c1b7a302fa5c15f0d0fa7732ea8",
+    "freeze_files": 730,
+    "critical_helpers": 5,
+    "historical_protected_files": 1332,
+    "reference_sha256": "d3f36c6f50e530c74110a1eae8bbc7688e018c1235cc192a761864b1a61e58e3",
+    "original_source_span_binding_test_unchanged": true,
+    "captures": 9,
+    "capture_body_hashes_match": true,
+    "capture_bodies_redacted": 0,
+    "report_export_diff_is_only_final_newline": true,
+    "content_review_sha256": "fbd695bec289d8332590c5407b7ee8c67788b2e515fa89a423aee7ed9793aee0",
+    "proof_directory": "data/artifacts/answer-projection-2026-10-20",
+    "proof_index": "data/artifacts/answer-projection-2026-10-20/verification/proof-index.json",
+    "local_proof_artifacts_git_ignored": true
+  },
+  "remaining_priorities": [
+    "Preserve assertion predicates, objects and can/must modal strength within selected spans; extra or stronger claims must not publish.",
+    "Project source scope rules plus request-only subjects into independently reviewed question conclusions (Cloudflare); do not require official source to repeat user domain names.",
+    "Deduplicate and budget complete question core/exception originals before Writer; a pure clarification must not clear real omitted-source gaps.",
+    "Separate valid local clarification/insufficient answers from dimension-global comparison status in Reflector; retain genuine source and binding blockers.",
+    "Recover Dropbox official bodies or report a clear failed-source state; do not treat zero-source empty output as successful refusal."
+  ],
+  "limitations": [
+    "Known exposed questions; no claim of general accuracy, controlled improvement or token efficiency.",
+    "Question correctness and all-published-claim binding are separate measures; 0 question errors does not mean 0 defective assertions.",
+    "Two correct insufficient-price responses are not verified amount positives.",
+    "Finite EN/ZH action and clarification recognizers do not prove universal NLI or compound-question parsing.",
+    "Fresh independent review is Agent judgment, not new human acceptance.",
+    "Secret scans exclude actual environment bodies and Git history; final receipt records their scope and results."
+  ],
+  "secret_scan": {
+    "current_literal_credentials": "pass",
+    "common_key_patterns": "pass",
+    "tracked_real_env_files": [],
+    "values_printed": false,
+    "scope": "nonignored working-tree text, built frontend and current new artifacts; excludes actual environment bodies and Git history",
+    "receipt_directory": "data/artifacts/answer-projection-2026-10-20/verification/final"
+  }
+}

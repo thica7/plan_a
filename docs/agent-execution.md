@@ -2,7 +2,9 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-当前验证见[逐题证据包与原子回答](optimization/2026-10-20-agent-question-packets.md)：后端6308通过／1跳过，四组各首次30调用／123676token。正文及保存记录均3正确／5遗漏；发表观察5/6完整绑定，内容与绑定同时0/4、系统0/4交付。三组核心Agent真实调用，Dropbox采集阻断。各入口已统一选择身份；真实Writer两套派送遥测状态仍不一致，实际输入可独立核实。BW澄清、1Password复合句及CF范围误判仍待修，非feature逐题、Planner／全Graph／生产稠密RAG未验收，未训练。
+当前验证见[完整引用支持与回答投影](optimization/2026-10-20-bound-answer-projection.md)：最终6452通过／1跳过；四组各首次38调用／129433 token。正文及保存均5正确／0错误／3遗漏，全部发表主张5/7完整绑定。BW上限否定和固定离职澄清已正常生成；BW额外共享动作越过窄引用、1Password“可以”到“必须”的模态强化、CF范围题漏答与Dropbox正文仍待修。内容合格2/4，内容与绑定同时0/4，系统0/4、6阻断。三家Analyst／Comparator／Reflector／Writer真实调用且核心模块无回退；Dropbox无接受来源未调用核心阶段。Writer实际输入已核实派送，但两套遥测状态仍不一致，BW真实核心资料仍有遗漏；不能仅据unverified遥测断言未发送。730冻结文件、5 helper及1332旧文件保持；不是Planner／全Graph／生产稠密RAG验收，未训练。
+
+上一轮验证见[逐题证据包与原子回答](optimization/2026-10-20-agent-question-packets.md)：后端6308通过／1跳过，四组各首次30调用／123676token。正文及保存记录均3正确／5遗漏；发表观察5/6完整绑定，内容与绑定同时0/4、系统0/4交付。三组核心Agent真实调用，Dropbox采集阻断。各入口已统一选择身份；真实Writer两套派送遥测状态仍不一致，实际输入可独立核实。BW澄清、1Password复合句及CF范围误判仍待修，非feature逐题、Planner／全Graph／生产稠密RAG未验收，未训练。
 
 上一轮真实验证见[逐题证据交付修复](optimization/2026-10-20-question-delivery-repair.md)：后端6151通过／1跳过，四组各首次30调用／116410token。正文5正确／3遗漏，记录4正确／1错误／3遗漏；Cloudflare两题及全部发表绑定合格，系统仍0/4交付。三组核心阶段真实调用，Dropbox无正文未调用生成模型。实际Reflector视图与Writer仍未逐题对齐；两条额外主张只有半句绑定。不是Planner/全Graph/生产稠密RAG验收，未训练。
 
@@ -120,6 +122,10 @@ Analyst、Comparator、Reflector、Writer 现共用 [`question_packets.py`](../b
 
 ### Writer：把有效分析写入报告
 
+v3 逐条隔离支持审核：仅选定 operation quote／source span 及完整来源条件支持该主张，父级宽原文和其他主张不能支持额外谓词。明确独立动作与未重建必要条件在实时及最终 QA 共用守卫，保留角色权限前提、权限选项、日期与例外；有限识别不构成通用 NLI。
+
+[`request_clarification.py`](../backend/packages/agents/writer/request_clarification.py) 从当前生命周期结果请求生成有限的纯澄清，使用现有 v3 partial／clarification／depends、空引用及固定正文／理由。步骤、释义、已识别的独立并列子问不获得整题资格；已给输入不重复问。完整来源规则继续独立答案复核，失败／无关规则可回到安全询问；真实核心资料和预算缺口继续阻断。Writer 已运行时，零 supported 的澄清分流不调用答案模型；采集失败仍可能阻止 Writer 执行。
+
 逐题选择在8条/14000 bytes中先保核心事实和必要例外；阶段视图与最终compact用同一函数核验完整quote/value/qualifiers，只有元数据不算送达。模型从实际发送候选选择 `source_span_ids`，服务器生成可重放的 `source_span_bindings`；父事实只施加限制。合格澄清可局部交付，缺核心事实/例外仍硬阻断。显式功能问题现一次返回 `question_plans`，模型明确列出事实原子，服务器逐条核对整句与引用；不按标点猜拆，操作陈述仍需真实操作绑定。`claim_review_version=3` 的实时与持久化回放共用准入门，不能因模型自报 supported 而跳过。
 
 - **入口**：[`writer/runner.py`](../backend/packages/agents/writer/runner.py)；分维度写作见 [`dimension_writer.py`](../backend/packages/agents/writer/dimension_writer.py)。
@@ -143,7 +149,7 @@ Analyst、Comparator、Reflector、Writer 现共用 [`question_packets.py`](../b
 - **计费适用性重放**：同一命名语法核对每处 scope span 与题设，未知或混入其它套餐／模式拒绝。表格须有完整肯定 plan+mode 适用原句、匹配当前行及CPU表头→单元格正时间费率；否定／仅共现／未知限制不能证明适用。全部背景和脚注继续送QA；prose缺本句范围仅继承无歧义父级。`Free`名称误触否定仍未修，有限语法不是通用NLI。
 - **边界**：不得自由查询新资料替换原引用。历史错误绑定继续拒绝；局部报告不等于完整覆盖，生成成功不等于事实准确率已通过独立人审。
 
-此前真实回归曾发现（本轮具体结果见页首）：`answer_body_unresolved` 会误拒已正确写出的数量越界结论；下载规则原稿可能被主张处理删掉，覆盖模型却用reason补答；pricing的未提取仍可能被说成未捕获。角色页的来源状态守卫仅覆盖有限模式，这些已知失败不能被上述合同说明掩盖。
+此前数量越界结论的格式误拒已修，本轮 Bitwarden 正文出现正式“否”及请求澄清；日期、单位和作用域仍须独立审核。已采原文到完整主张的语义投影、其他文字规则的结论形成，以及采集／省略／准入状态的准确区分仍须按页首真实结果验收，不能由上述合同说明推定合格。
 
 回答校验另检查明确套餐排他性及强制升级建议：被引用主张必须有相同套餐集合的明确限制，不能把某套餐被包含写成只有该套餐可用。未知范围保持未核实；有限词法规则不等于普遍语义证明。中文明确报价年月日按请求解析，无效或矛盾日期不自动生成已回答记录。
 

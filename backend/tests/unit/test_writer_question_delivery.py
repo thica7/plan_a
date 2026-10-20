@@ -432,8 +432,16 @@ async def test_four_independent_lifecycle_originals_share_total_writer_budget(mo
         assert 'question_core_context_budget_exceeded' not in saved.gaps
     else:
         assert 'question_core_context_budget_exceeded' in saved.gaps
+    clarification = saved.answer_coverage[0]
+    assert clarification.status == 'partial' and clarification.resolution == 'clarification'
+    assert clarification.conclusion == 'depends' and clarification.binding_version == 3
+    assert clarification.missing_fields == ('actual_action', 'data_ownership')
+    assert not clarification.claim_ids and not clarification.evidence_spans
+    assert clarification.basis_snapshot_id is None
+    assert clarification.answer == ('请确认具体操作：您准备移除成员，还是永久删除账户或数据？ '
+                                    '请确认数据归属：相关数据属于个人，还是组织？')
     issues = audit_dimension_claims(service, record, current_snapshot(detail), producer_verified=True)
-    assert any(issue.metadata.get('claim_audit_reason') == 'answer_coverage_incomplete' for issue in issues)
+    assert any(issue.metadata.get('claim_audit_reason') == 'answer_coverage_incomplete' for issue in issues) == (budget == 2000)
 
 
 PAID_SEAT_QUESTION = (

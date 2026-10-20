@@ -88,6 +88,123 @@ _PLAN_TOKENS = {
 }
 
 
+def explicit_operation_assertions(text, *, independent=False):
+    """Recognize a small set of asserted verbs, excluding subject/condition mentions.
+
+    This is only an extra-action guard. Unknown verbs and same-action object
+    changes still require the independent, selected-support semantic review.
+    """
+    from packages.research.evidence.operations import OPERATIONS, ROLE_LABELS, _ACTOR, _PERMISSION_SELECTION, operation_matches_text, permission_selector_context
+
+    actions = set()
+    parts = re.split(r"[。；;.!?]|\b(?:while|but|however)\b|但是|然而", text, flags=re.I)
+    if independent:
+        # A later explicit subject/modal assertion is independent of a preceding
+        # trailing condition. Keep it outside operation_matches_text's cutoff.
+        parts = [clause for part in parts for clause in re.sub(
+            r'[,，]\s*and\s+(?=(?:(?:' + _ACTOR.pattern + r'|they|it)\s+)?(?:can|cannot|may)\b)',
+            "\n", part, flags=re.I).splitlines()]
+    for part in parts:
+        if re.match(r"\s*(?:前提|条件|requires?\b|provided\b|subject to\b)", part, re.I):
+            continue
+        if permission_selector_context(part):
+            actions.add("manage_access")
+        if independent:
+            part = _PERMISSION_SELECTION.sub("", part)
+            part = re.sub(r"[\"'“‘](?:" + ROLE_LABELS + r")[\"'”’]", "§role§", part, flags=re.I)
+            part = re.sub(r"((?:拥有|具有|持有|\bwith|\bhas|\bhave)\s+)(?:" + ROLE_LABELS + r")",
+                          r"\1§role§", part, flags=re.I)
+            if re.match(r'^\s*(?:(?:only\s+)?(?:if|when|after|before)\b|只有|仅当|如果|若)', part, re.I):
+                condition = re.split(r'[,，]|\bthen\b', part, maxsplit=1, flags=re.I)
+                if len(condition) == 2:
+                    part = condition[1]
+                elif main := re.search(r'\b(?:can|cannot|may)\s+(?:' + _ACTOR.pattern +
+                        r')\s+(?:edit|comment|create|read|view|share|manage)\b', part, re.I):
+                    # The inverted modal+actor begins the main clause; an
+                    # earlier actor+modal belongs to the front prerequisite.
+                    part = part[main.start():]
+                # Inverted 'Only after X can guests share' and Chinese 才可以
+                # still have an explicit main predicate without a comma. Keep
+                # scanning it; an unknown split must not hide asserted verbs.
+        pattern = (
+            r"\b(?:can|cannot|may|supports?)\s+(?:(?:only|also)\s+)?(?:edit|comment|create|read|view|share|manage)\b|"
+            r"(?:不能|可以|能够|支持|可)(?:编辑|评论|查看|阅读|创建|新建|分享|管理)(?!权限|级别|选项)"
+        )
+        if independent:
+            pattern = (
+                r"\b(?:can|cannot|may|supports?)\s+(?:(?:only|also|not)\s+)?"
+                r"(?:(?:" + _ACTOR.pattern + r")\s+)?(?:edit|comment|create|read|view|share|manage)\b|"
+                r"(?:不能|无法|不得|可以|能够|有权|支持|可)[^。；;.!?，,\n]{0,48}?"
+                r"(?:编辑|评论|查看|阅读|创建|新建|分享|共享|管理)(?!级别|选项)"
+            )
+        assertion = re.search(pattern, part, re.I)
+        if not assertion:
+            continue
+        predicate = part[assertion.start():]
+        if independent:
+            predicate = re.split(r'前提(?:是|为)|条件(?:是|为)|\b(?:provided that|subject to|on condition that)\b',
+                                 predicate, maxsplit=1, flags=re.I)[0]
+        # "manage access to documents" is not an independent read action.
+        read_predicate = re.sub(OPERATIONS['manage_access'][1], '', predicate, flags=re.I) if independent else predicate
+        actions.update(operation for operation in OPERATIONS
+                       if operation_matches_text(operation, read_predicate if operation == 'read' else predicate))
+        if independent and operation_matches_text('share', predicate.replace('共享', '分享')):
+            actions.add('share')
+    return actions
+
+
+def operation_review_support(binding):
+    """Project true structured conditions; condition_evidence also contains hints.
+
+    Retain the original saved binding for identity/check hashes. This projection
+    is only the semantic review input; an unrepresented explicit dependency
+    fails closed during the same v3 replay as the independent-action guard.
+    """
+    from packages.research.evidence.operations import OPERATIONS, condition_operations
+
+    bound = dict(_values(binding))
+    selected = list(dict.fromkeys([bound['operation_quote'],
+        *(item['quote'] for item in bound.get('prerequisites', ())),
+        *(option for group in bound.get('condition_groups', ()) for option in group['options'])]))
+    normalize = lambda text: text.strip().rstrip(' .。;；\\').casefold()
+    unresolved = False
+    for quote in bound.get('condition_evidence', ()):
+        if any(normalize(quote) in normalize(item) for item in selected):
+            continue
+        dependency = re.search(r'\b(?:contingent on|subject to|conditional on|provided that|only\s+(?:after|before|if|when)|requires?|must|needs? to|prerequisites?)\b|前提|取决于|需要|必须|除非', quote, re.I)
+        if not dependency:
+            continue
+        # Associate the dependency with its governed assertion. A condition's
+        # internal action (e.g. admins manage access) is not the target action.
+        head = quote[:dependency.start()]
+        actions = explicit_operation_assertions(head if head.strip() else quote, independent=True)
+        if not actions and head.strip():
+            # Nominalized known actions such as Sharing/Editing name the target
+            # without asserting that the condition's actor can perform them.
+            read_head = re.sub(OPERATIONS['manage_access'][1], '', head, flags=re.I)
+            actions = {operation for operation in OPERATIONS if re.search(OPERATIONS[operation][1],
+                read_head if operation == 'read' else head, re.I)}
+        if not actions and re.fullmatch(r'must|needs? to|需要|必须', dependency.group(), re.I):
+            # 'Members must sign in to edit' puts the governed action after
+            # the modal. Its explicit edit restriction remains local to edit.
+            actions = condition_operations(quote)
+        if not actions or bound['operation'] in actions:
+            unresolved = True
+    bound['condition_evidence'] = selected
+    return bound, ('operation_condition_support_unresolved',) if unresolved else ()
+
+
+def independent_operation_reasons(claim):
+    """v3-only replay gate for explicit actions beyond the selected observation."""
+    if claim.operation_binding is None:
+        return ()
+    _, reasons = operation_review_support(claim.operation_binding)
+    actions = explicit_operation_assertions(claim.text, independent=True)
+    if actions - {claim.operation_binding.operation}:
+        return (*reasons, 'operation_assertion_outside_binding')
+    return reasons
+
+
 def operation_condition_reasons(claim, bound):
     """Conservative checks of explicit forms; unknown phrasing stays with QA."""
     from packages.research.evidence.operations import (
@@ -145,24 +262,7 @@ def operation_condition_reasons(claim, bound):
         reasons.append("operation_condition_scope_unresolved")
     # A finite verb matcher may miss a legitimate translation. Only an
     # explicitly recognized different assertion supplies a deterministic block.
-    explicit_actions = set()
-    for part in parts:
-        if re.match(r"\s*(?:前提|条件|requires?\b|provided\b|subject to\b)", part, re.I):
-            continue
-        if permission_selector_context(part):
-            explicit_actions.add("manage_access")
-        assertion = re.search(
-            r"\b(?:can|cannot|may|supports?)\s+(?:(?:only|also)\s+)?(?:edit|comment|create|read|view|share|manage)\b|"
-            r"(?:不能|可以|能够|支持|可)(?:编辑|评论|查看|阅读|创建|新建|分享|管理)(?!权限|级别|选项)",
-            part,
-            re.I,
-        )
-        if assertion:
-            explicit_actions.update(
-                operation
-                for operation in ("read", "comment", "edit", "create", "share", "manage_access")
-                if operation_matches_text(operation, part[assertion.start() :])
-            )
+    explicit_actions = explicit_operation_assertions(text)
     if explicit_actions and bound["operation"] not in explicit_actions:
         reasons.append("operation_assertion_mismatch")
     if (

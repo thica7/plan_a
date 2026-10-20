@@ -84,10 +84,12 @@ _QUANTITY_CAP = re.compile(
     r"[^。.!?？\n]+?\b(?:has\s+a\s+maximum\s+of|includes?\s+up\s+to)"
     r"\s+\d+(?:\.\d+)?\s+[A-Za-z][A-Za-z -]*[.!]?|"
     r"[^。.!?？\n]+?(?:最多(?:包含|容纳|包括)?|至多(?:包含|容纳|包括)?|上限为?|不超过)"
-    r"\s*[0-9一二两三四五六七八九十百千]+\s*(?:人|(?:名|位|个|条|次)\s*\w+)[。.!]?",
+    r"\s*[0-9一二两三四五六七八九十百千]+\s*(?:人|(?:名|位|个|条|次)\s*\w+)"
+    r"(?:[ \t]+[^。；;.!?？\n]+)?[。.!]?",
     re.I,
 )
-_CAP_NON_ASSERTION = re.compile(r"\b(?:example|recommend\w*|suggest\w*|suppose|whether)\b", re.I)
+_CAP_NON_ASSERTION = re.compile(
+    r"\b(?:example|recommend\w*|suggest\w*|suppose|whether|if|unless|provided|assuming)\b|若|仅当|除非", re.I)
 _USER_CATEGORY = re.compile(
     r"\buser\s+(?:categor(?:y|ies)|types?)\b"
     r"|\b(?:types?|categor(?:y|ies))\s+of\s+(?:(?:external|internal)\s+)?users?\b"
@@ -198,12 +200,14 @@ def _chinese_condition_asserts(text: str) -> bool:
 
 def _quantity_cap_asserts(text: str) -> bool:
     """Recognise a complete stated cap; its scope and decision need semantic review."""
-    if (_CHINESE_QUOTATION.search(text) or _CHINESE_NON_ASSERTION.search(text)
-            or _CAP_NON_ASSERTION.search(text)):
+    unquoted = re.sub(r'“[^”]*”|‘[^’]*’|"[^"]*"|「[^」]*」|『[^』]*』', '', text)
+    if _CHINESE_NON_ASSERTION.search(unquoted) or _CAP_NON_ASSERTION.search(unquoted):
         return False
     return any(_QUANTITY_CAP.fullmatch(unit.strip())
+               and not _CHINESE_QUOTATION.search(unit)
+               and not _CHINESE_NON_ASSERTION.search(unit) and not _CAP_NON_ASSERTION.search(unit)
                and not _OPEN_QUESTION.search(unit) and not _CLOSED_QUESTION.search(unit)
-               for unit in _SCOPE_UNIT.findall(text))
+               for unit in re.split(r'(?<=[。；;.!?？])', text))
 
 
 def resolution_reasons(

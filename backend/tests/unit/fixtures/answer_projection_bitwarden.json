@@ -1,0 +1,187 @@
+{
+  "questions": [
+    {
+      "question_id": "question-cb40c90e4d944bf23275",
+      "question": "Bitwarden: 我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？"
+    },
+    {
+      "question_id": "question-63762e09ae5d8faa1071",
+      "question": "Bitwarden: 我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？"
+    }
+  ],
+  "claims": [
+    {
+      "id": "claim-9824e9a10f8a356b1073",
+      "text": "Free organization 用于存储并安全共享数据，但共享对象为“你和最多一名其他用户”，即共 2 人。",
+      "kind": "fact",
+      "competitor": "Bitwarden",
+      "dimension": "feature",
+      "fact_ids": [
+        "evidence-fact-record-b39d49f61cfa062c85c08890764c2fa526e146ff2b33ac274f37b5f917634717"
+      ],
+      "source_ids": [
+        "raw-source-476cdfef80ec06d6a285"
+      ],
+      "operation_binding": {
+        "observation_id": "operation-f5bb9cd853dbf922accb4be4",
+        "fact_id": "evidence-fact-record-b39d49f61cfa062c85c08890764c2fa526e146ff2b33ac274f37b5f917634717",
+        "source_id": "raw-source-476cdfef80ec06d6a285",
+        "competitor": "Bitwarden",
+        "dimension": "feature",
+        "operation": "share",
+        "object_type": null,
+        "object_quote": null,
+        "role": null,
+        "plan": "Personal plans",
+        "access_scope": null,
+        "effect": "allowed",
+        "prerequisites": [
+          {
+            "kind": "plan",
+            "quote": "Start a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization."
+          }
+        ],
+        "condition_evidence": [
+          "Free organizations\nStart a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.",
+          "Password Manager Plans",
+          "Personal plans"
+        ],
+        "operation_quote": "Start a Free organization to store and securely share data with one other user"
+      }
+    },
+    {
+      "id": "claim-52e6c85db0cf53e4861a",
+      "text": "Free organization 提供最多两个 collections 的安全数据共享。",
+      "kind": "fact",
+      "competitor": "Bitwarden",
+      "dimension": "feature",
+      "fact_ids": [
+        "evidence-fact-record-b39d49f61cfa062c85c08890764c2fa526e146ff2b33ac274f37b5f917634717"
+      ],
+      "source_ids": [
+        "raw-source-476cdfef80ec06d6a285"
+      ],
+      "source_span_bindings": [
+        {
+          "span_id": "source-span-eb8ae83d43367db1c54420f2",
+          "fact_id": "evidence-fact-record-b39d49f61cfa062c85c08890764c2fa526e146ff2b33ac274f37b5f917634717",
+          "source_id": "raw-source-476cdfef80ec06d6a285",
+          "fact_hash": "bbf424d6489fa96b571762d6fe27026ddde09beea64d4e5cf0f1b262b0e62709",
+          "source_path": "value/0",
+          "start": 99,
+          "end": 226,
+          "quote": "Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections."
+        }
+      ]
+    },
+    {
+      "id": "claim-6a2623a6d258f9c62c0c",
+      "text": "任何计划的用户都可以成为一个 Free organization 的所有者。",
+      "kind": "fact",
+      "competitor": "Bitwarden",
+      "dimension": "feature",
+      "fact_ids": [
+        "evidence-fact-record-b39d49f61cfa062c85c08890764c2fa526e146ff2b33ac274f37b5f917634717"
+      ],
+      "source_ids": [
+        "raw-source-476cdfef80ec06d6a285"
+      ],
+      "source_span_bindings": [
+        {
+          "span_id": "source-span-f521bb375de2a4c838f4ade2",
+          "fact_id": "evidence-fact-record-b39d49f61cfa062c85c08890764c2fa526e146ff2b33ac274f37b5f917634717",
+          "source_id": "raw-source-476cdfef80ec06d6a285",
+          "fact_hash": "bbf424d6489fa96b571762d6fe27026ddde09beea64d4e5cf0f1b262b0e62709",
+          "source_path": "value/0",
+          "start": 227,
+          "end": 290,
+          "quote": "Any user of any plan can be the owner of one Free organization."
+        }
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "evidence-fact-record-b39d49f61cfa062c85c08890764c2fa526e146ff2b33ac274f37b5f917634717",
+      "semantic_id": "evidence-fact-5087f2d517031b4836f642f99602bde558fc50ed5446eabc695343c815d18712",
+      "evidence_item_ids": [
+        "evidence-item-dab6fca6c9f167be9a0e"
+      ],
+      "source_id": "raw-source-476cdfef80ec06d6a285",
+      "competitor": "Bitwarden",
+      "dimension": "feature",
+      "field": "evidence_terms",
+      "value_json": "[\"Free organizations\\nStart a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.\",\"Password Manager Plans\",\"Personal plans\"]",
+      "unit": null,
+      "market": null,
+      "qualifiers_json": "{\"operations\":[{\"access_scope\":null,\"effect\":\"allowed\",\"missing_fields\":[\"role\",\"access_scope\"],\"object_quote\":null,\"object_type\":null,\"operation\":\"share\",\"operation_quote\":\"Start a Free organization to store and securely share data with one other user\",\"plan\":\"Personal plans\",\"prerequisites\":[{\"kind\":\"plan\",\"quote\":\"Start a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.\"}],\"role\":null}],\"slot\":\"semantic_capability_308c53113116d672\",\"source_scope\":{\"captured_page_id\":\"captured-page-bfedca6a80e5e08b279d\",\"context\":{\"document_section\":[1554,1845],\"plan\":null,\"role\":null,\"section_path\":null},\"operations\":[{\"access_scope\":null,\"effect\":\"allowed\",\"missing_fields\":[\"role\",\"access_scope\"],\"object_quote\":null,\"object_type\":null,\"operation\":\"share\",\"operation_quote\":\"Start a Free organization to store and securely share data with one other user\",\"plan\":\"Personal plans\",\"prerequisites\":[{\"kind\":\"plan\",\"quote\":\"Start a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.\"}],\"role\":null}],\"raw_source_id\":null,\"source_url\":\"https://bitwarden.com/help/password-manager-plans/\"}}",
+      "quote": "Start a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.",
+      "status": "supported",
+      "confidence": 0.8
+    }
+  ],
+  "proposals": [
+    {
+      "version": 3,
+      "answers": [
+        {
+          "question_id": "question-cb40c90e4d944bf23275",
+          "status": "answered",
+          "claim_ids": [
+            "claim-9824e9a10f8a356b1073",
+            "claim-52e6c85db0cf53e4861a"
+          ],
+          "resolution": "direct",
+          "conclusion": "no",
+          "missing_fields": [],
+          "reason": "已发布证据表明 Free organization 最多仅支持 2 人（你与最多一名其他用户）共享，且最多 2 个 collections；用户要求 3 人、3 个 collections，均超出上限，因此不能满足。"
+        },
+        {
+          "question_id": "question-63762e09ae5d8faa1071",
+          "status": "partial",
+          "claim_ids": [],
+          "resolution": "clarification",
+          "conclusion": "unknown",
+          "missing_fields": [
+            "actual_action",
+            "data_ownership",
+            "retained_copy",
+            "access_path"
+          ],
+          "reason": "已发布证据未涉及删除离职同事后其保存密码的保留、归属或访问路径，无法判断；需澄清实际删除操作、数据归属、是否保留副本及访问路径。"
+        }
+      ]
+    },
+    {
+      "version": 3,
+      "answers": [
+        {
+          "question_id": "question-cb40c90e4d944bf23275",
+          "status": "answered",
+          "claim_ids": [
+            "claim-9824e9a10f8a356b1073",
+            "claim-52e6c85db0cf53e4861a"
+          ],
+          "resolution": "direct",
+          "conclusion": "no",
+          "missing_fields": [],
+          "reason": "已发布证据表明 Free organization 仅支持与最多一名其他用户共享（共 2 人），且最多 2 个 collections；用户要求 3 人、3 个 collections，均超出上限，故不能满足。"
+        },
+        {
+          "question_id": "question-63762e09ae5d8faa1071",
+          "status": "partial",
+          "claim_ids": [],
+          "resolution": "clarification",
+          "conclusion": "unknown",
+          "missing_fields": [
+            "actual_action",
+            "data_ownership",
+            "retained_copy",
+            "access_path"
+          ],
+          "reason": "已发布证据未明确回答删除离职同事后其保存密码的保留、归属与访问路径；需澄清实际删除操作、数据归属、是否保留副本及访问路径。"
+        }
+      ]
+    }
+  ]
+}

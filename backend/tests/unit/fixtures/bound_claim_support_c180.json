@@ -1,0 +1,114 @@
+{
+  "audited_claim": {
+    "claim": {
+      "id": "claim-c1806d32c0c66ae561d3",
+      "text": "访客必须先接受邀请并被确认，之后才能与其共享保险库；确认后，可像对待家庭成员一样将其加入保险库并管理其访问权限。",
+      "kind": "fact",
+      "competitor": "1Password",
+      "dimension": "feature",
+      "fact_ids": [
+        "evidence-fact-record-62573ed241e718f8cc7ed77334dab71c049e46016950c0b2942f2dc7258281df"
+      ],
+      "source_ids": [
+        "raw-source-d14e1c9530112ba42840"
+      ],
+      "operation_binding": {
+        "observation_id": "operation-83b57ccf0fc3be6b8db16585",
+        "fact_id": "evidence-fact-record-62573ed241e718f8cc7ed77334dab71c049e46016950c0b2942f2dc7258281df",
+        "source_id": "raw-source-d14e1c9530112ba42840",
+        "competitor": "1Password",
+        "dimension": "feature",
+        "operation": "share",
+        "object_type": null,
+        "object_quote": null,
+        "role": "Guests have to accept their invitation and be confirmed before you",
+        "plan": null,
+        "access_scope": null,
+        "effect": "allowed",
+        "prerequisites": [
+          {
+            "kind": "shared_access",
+            "quote": "A guest can only be invited to a single vault at a time\\, but you can remove them from one vault\\, then add them to a different one\\."
+          }
+        ],
+        "condition_evidence": [
+          "Guests have to accept their invitation and be confirmed before you can share a vault with them\\",
+          "Guest accounts are ideal for sharing information with people on a limited basis\\. They don’t have their own private vaults and only have access to a single vault\\, which you choose\\. Consider inviting\\:",
+          "\\- Your accountant\\, who needs your financial information\\.",
+          "\\- Your realtor\\, who needs building codes\\.",
+          "\\- Your babysitter\\, who needs household information like the Wi\\-Fi password and alarm codes\\.",
+          "A guest can only be invited to a single vault at a time\\, but you can remove them from one vault\\, then add them to a different one\\.",
+          "If you created the account for your family\\, you’re a family organizer\\, and you can invite guests and share a vault with them\\. To get started\\, sign in to your account on 1Password\\.com\\."
+        ],
+        "operation_quote": "Guests have to accept their invitation and be confirmed before you can share a vault with them\\"
+      }
+    },
+    "status": "supported",
+    "review": {
+      "claim_id": "claim-c1806d32c0c66ae561d3",
+      "verdict": "supported",
+      "reason": "The claim states guests must accept their invitation and be confirmed before a vault can be shared with them, and that after confirmation they can be added to a vault and their access managed like a family member. The bound quote t4 supports both parts, and the operation binding's prerequisite (shared_access, t1) is consistent with the source-local condition.",
+      "checks": [
+        {
+          "check_id": "operation-check-35316acfa85863503e4870a1",
+          "verdict": "supported",
+          "claim_span": "才能与其共享保险库"
+        },
+        {
+          "check_id": "operation-check-82720ab39f245f833a28f327",
+          "verdict": "supported",
+          "claim_span": "访客必须先接受邀请并被确认"
+        },
+        {
+          "check_id": "operation-check-a70cb70b4de3380be2328797",
+          "verdict": "supported",
+          "claim_span": "才能与其共享保险库"
+        },
+        {
+          "check_id": "operation-check-92775633334c10dc39c726e8",
+          "verdict": "supported",
+          "claim_span": "访客必须先接受邀请并被确认"
+        },
+        {
+          "check_id": "claim-check-291bbd1459e3d4a2a13041f9",
+          "verdict": "supported",
+          "claim_span": "访客必须先接受邀请并被确认，之后才能与其共享保险库；确认后，可像对待家庭成员一样将其加入保险库并管理其访问权限。"
+        },
+        {
+          "check_id": "claim-check-c2ac77ff20d3ee060d74589f",
+          "verdict": "supported",
+          "claim_span": "访客必须先接受邀请并被确认，之后才能与其共享保险库；确认后，可像对待家庭成员一样将其加入保险库并管理其访问权限。"
+        }
+      ]
+    },
+    "rule_reasons": []
+  },
+  "fact": {
+    "id": "evidence-fact-record-62573ed241e718f8cc7ed77334dab71c049e46016950c0b2942f2dc7258281df",
+    "semantic_id": "evidence-fact-8cfdb3f17b186aed047f244294a04a82d576990d161785c9450dd1fb25b30f28",
+    "evidence_item_ids": [
+      "evidence-item-a3c95afc372354531333"
+    ],
+    "source_id": "raw-source-d14e1c9530112ba42840",
+    "competitor": "1Password",
+    "dimension": "feature",
+    "field": "evidence_terms",
+    "value_json": "[\"Guests have to accept their invitation and be confirmed before you can share a vault with them\\\\. After you’ve confirmed a guest\\\\, you can add them to a vault and manage their access to it\\\\, like you would a family member\\\\.\",\"Guest accounts are ideal for sharing information with people on a limited basis\\\\. They don’t have their own private vaults and only have access to a single vault\\\\, which you choose\\\\. Consider inviting\\\\:\",\"\\\\- Your accountant\\\\, who needs your financial information\\\\.\",\"\\\\- Your realtor\\\\, who needs building codes\\\\.\",\"\\\\- Your babysitter\\\\, who needs household information like the Wi\\\\-Fi password and alarm codes\\\\.\",\"A guest can only be invited to a single vault at a time\\\\, but you can remove them from one vault\\\\, then add them to a different one\\\\.\",\"If you created the account for your family\\\\, you’re a family organizer\\\\, and you can invite guests and share a vault with them\\\\. To get started\\\\, sign in to your account on 1Password\\\\.com\\\\.\"]",
+    "unit": null,
+    "market": null,
+    "qualifiers_json": "{\"operations\":[{\"access_scope\":null,\"effect\":\"allowed\",\"missing_fields\":[\"plan\",\"access_scope\"],\"object_quote\":null,\"object_type\":null,\"operation\":\"share\",\"operation_quote\":\"Guests have to accept their invitation and be confirmed before you can share a vault with them\\\\\",\"plan\":null,\"prerequisites\":[{\"kind\":\"shared_access\",\"quote\":\"A guest can only be invited to a single vault at a time\\\\, but you can remove them from one vault\\\\, then add them to a different one\\\\.\"}],\"role\":\"Guests have to accept their invitation and be confirmed before you\"}],\"slot\":\"semantic_capability_db3bff830faf61e8\",\"source_scope\":{\"captured_page_id\":\"captured-page-29d3f7ac1053c67e678e\",\"context\":{\"document_section\":[890,1282],\"plan\":null,\"role\":null,\"section_path\":null},\"operations\":[{\"access_scope\":null,\"effect\":\"allowed\",\"missing_fields\":[\"plan\",\"access_scope\"],\"object_quote\":null,\"object_type\":null,\"operation\":\"share\",\"operation_quote\":\"Guests have to accept their invitation and be confirmed before you can share a vault with them\\\\\",\"plan\":null,\"prerequisites\":[{\"kind\":\"shared_access\",\"quote\":\"A guest can only be invited to a single vault at a time\\\\, but you can remove them from one vault\\\\, then add them to a different one\\\\.\"}],\"role\":\"Guests have to accept their invitation and be confirmed before you\"}],\"raw_source_id\":null,\"source_url\":\"https://support.1password.com/guests/\"}}",
+    "quote": "Guests have to accept their invitation and be confirmed before you can share a vault with them\\. After you’ve confirmed a guest\\, you can add them to a vault and manage their access to it\\, like you would a family member\\.",
+    "status": "supported",
+    "confidence": 0.8
+  },
+  "source_identity": {
+    "id": "raw-source-d14e1c9530112ba42840",
+    "semantic_id": "evidence-source-37eab5953b7a01c06327e720185c0e1c8c2d5c5a1fbcc3640d167f2f6bffb697",
+    "competitor": "1Password",
+    "dimension": "feature",
+    "source_type": "webpage_verified",
+    "title": "Share with guests in 1Password Families",
+    "url": "https://support.1password.com/guests/",
+    "content_hash": "9db60b325cfef4cc4a56bc76e6bbc2500d8118b64358a065f3d6f55d613256d7"
+  }
+}

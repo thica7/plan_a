@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serial
 
 from packages.research.evidence.operation_claim_checks import (
     required_operation_checks as required_operation_checks,
-    operation_condition_reasons, operation_review_reasons,
+    independent_operation_reasons, operation_condition_reasons, operation_review_reasons,
 )
 from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
 from packages.research.evidence.source_spans import ReportSourceSpanBinding
@@ -460,6 +460,7 @@ def audit_report_claims(claims, reviews, view, boundaries, *, available_facts=No
         rules = list(claim_rule_reasons(claim, view, boundaries, available_facts=available_facts))
         if review_version == 3:
             rules.extend(current_feature_binding_reasons(claim))
+            rules.extend(independent_operation_reasons(claim))
         review = by_id.get(claim.id)
         if review is not None:
             operation_review = review
