@@ -298,6 +298,9 @@ def review_payload(claims, view, *, review_version=None):
             'Parent facts are restriction/counterexample context, never support for sibling assertions. '
             'full_assertion_support checks every word of the whole atom; atomicity requires one predicate with its '
             'complete AND/OR prerequisites and exceptions. Both checks must quote the entire claim text. '
+            'Inventory each independent actor/action/object/recipient assertion before deciding support. '
+            'Preserve can/may versus must/need/only-if for the SAME governed predicate; an available path '
+            'is not a necessary or unique path, and an unrelated must is not support. '
             'For captured price amounts, the exact bound price fact value and qualifiers support only that recorded amount. '
             'Reject compound assertions, clarification questions and extra operations without their own observation.')
     if review_version == 3:
@@ -1032,7 +1035,10 @@ class DimensionWriterMixin:
                             "Numbers bound the quoted group: 'you and up to N teammates' means you plus N teammates, "
                             "never a total of N editors. In Chinese preserve '你和最多N名队友'. "
                             "do not attach extra operations supported only by other uncited facts. "
-                            "Each observation is one factual assertion or explicitly conditional inference. "
+                            "Each observation is one factual assertion or explicitly conditional inference. " +
+                            ("Put each independent predicate in its own atom; objects and inseparable AND/OR conditions stay together. "
+                            "Preserve can/may/可以 versus must/need/必须/需 and if versus only-if. "
+                            "A possible path is not a necessary or unique step. An inference label does not waive factual support. " if questions else "") +
                             "For feature claims cite evidence_terms facts, never support_level or slot metadata alone. "
                             "Describe concrete user-visible behavior in natural language; do not print internal capability "
                             "slots, fact fields, source IDs, statuses or English metadata keys as product content. "
@@ -1146,7 +1152,11 @@ class DimensionWriterMixin:
                             "For full_assertion_support and atomicity required_checks use the ENTIRE exact claim text as claim_span. "
                             "The former requires the complete assertion to follow only from its selected support quotes; "
                             "the latter requires one factual predicate with inseparable conditions, never a compound sibling claim "
-                            "or a clarification request. No real operation observation means that operation is unsupported. "
+                            "or a clarification request. No real operation observation means that operation is unsupported. " +
+                            ("Inventory independent actor/action/object/recipient predicates and verify each against selected support. "
+                            "For the SAME governed predicate preserve can/may/可以 versus must/need/必须/需, if versus only-if, "
+                            "and possible versus necessary or unique paths. A must for another action or actor supplies no support. "
+                            "An inference label cannot exempt unsupported product assertions. " if questions else "") +
                             "For each other required_checks item return exactly one check with its ID and the smallest "
                             "verbatim span of the claim that preserves that original role, object, effect or prerequisite. "
                             "If the condition is absent or changed, mark unsupported or uncertain, never supported. "

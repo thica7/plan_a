@@ -90,6 +90,17 @@ _QUANTITY_CAP = re.compile(
 )
 _CAP_NON_ASSERTION = re.compile(
     r"\b(?:example|recommend\w*|suggest\w*|suppose|whether|if|unless|provided|assuming)\b|若|仅当|除非", re.I)
+_CHINESE_SCOPE_ASSERTION = re.compile(
+    r"(?P<subject>\w[^，,：:。；;.!?？\r\n]*?)(?:仅|只)适用于[ \t]*"
+    r"\w[^，,：:。；;.!?？\r\n]*[。；;.!]?"
+)
+_SCOPE_NON_ASSERTION = re.compile(
+    r"建议|推荐|应该|应当|最好|希望|讨论|背景|例如|比如|示例|举例|假设|假定|设想|"
+    r"如果|假如|要是|只有|能不能|可不可以|有没有|呢|吧|难道|莫非|"
+    r"(?:当|在)[^，,：:。；;.!?？\r\n]+时(?:[，,。；;.!?？]|\s*$)|的(?:情况|条件|前提)下|前提是|"
+    r"(?:^|[，,：:。；;.!?？\s])请|仅供|不构成|不代表|并非|"
+    r"未(?:确认|证实|核实|验证)|待(?:确认|核实|验证)"
+)
 _USER_CATEGORY = re.compile(
     r"\buser\s+(?:categor(?:y|ies)|types?)\b"
     r"|\b(?:types?|categor(?:y|ies))\s+of\s+(?:(?:external|internal)\s+)?users?\b"
@@ -210,6 +221,24 @@ def _quantity_cap_asserts(text: str) -> bool:
                for unit in re.split(r'(?<=[。；;.!?？])', text))
 
 
+def _chinese_scope_asserts(text: str) -> bool:
+    """Recognise a complete scope rule, without deciding entailment or polarity."""
+    # Inspect the whole block before sentence matching: headings, quotations and
+    # trailing disclaimers cannot turn their embedded example into a rule.
+    # Request markers are bounded so nouns such as 邀请规则 remain assertions.
+    if any(pattern.search(text) for pattern in (
+        _CHINESE_QUOTATION, _SCOPE_NON_ASSERTION, _CAP_NON_ASSERTION,
+        _OPEN_QUESTION, _CLOSED_QUESTION,
+    )):
+        return False
+    for unit in re.split(r'(?<=[。；;.!?？])', text):
+        match = _CHINESE_SCOPE_ASSERTION.fullmatch(unit.strip())
+        # Repeated limiting adverbs do not supply a subject of their own.
+        if match and not re.fullmatch(r'[仅只\s]+', match.group('subject')):
+            return True
+    return False
+
+
 def resolution_reasons(
     answer: dict, question: str, claims: Iterable[dict]
 ) -> tuple[str, ...]:
@@ -248,6 +277,7 @@ def resolution_reasons(
         and not _ANSWER_ASSERTION.search(body)
         and not _chinese_condition_asserts(body)
         and not _quantity_cap_asserts(body)
+        and not _chinese_scope_asserts(body)
     ):
         reasons.append("answer_body_unresolved")
     if conclusion == "unknown" or conclusion == "not_applicable" and not open_question:

@@ -1,0 +1,816 @@
+{
+  "stage": "complete-claim-semantics-and-question-projection-v34",
+  "stage_date": "2026-10-20",
+  "completed_date_local": "2026-10-21",
+  "baseline_commit": "6798ba80c8692f576c978c3f514e8370af073457",
+  "production_code_sha256": "9c3c624e5988cbf8c9128410d8e864b3d8a8fb22c6fca40d942d4e817edf7f3a",
+  "scope": {
+    "fixed_official_url_feature_stage": true,
+    "first_attempts_per_group": 1,
+    "old_samples": "old_exposed8",
+    "new_samples": "new_frozen4",
+    "new_reference_boundaries_user_approved": true,
+    "new_reference_received_before_live": true,
+    "runtime_reference_answers_included": false,
+    "blind_holdout": false,
+    "controlled_ab": false,
+    "actual_model_alias": "deepseek-flash",
+    "independent_1017_version_proof": false,
+    "retrieval_mode": "degraded_lexical; diagnostic-only sparse canonical storage",
+    "full_graph_acceptance_evaluated": false,
+    "publication_attempted": false,
+    "planner_auto_discovery_evaluated": false,
+    "production_dense_rag_evaluated": false,
+    "user_report_acceptance": false,
+    "new_reviewer_metadata_exposure": "主要判断已形成后，任务状态工具意外带回另一旧组完成摘要；未读其文件、未采用评分，非完全隔离盲审。"
+  },
+  "engineering": {
+    "status": "pass",
+    "backend": {
+      "group": "backend",
+      "exit_code": 0,
+      "elapsed_seconds": 198.47,
+      "command": [
+        "/Users/a1/Documents/ChatGPT/竞品分析优化/plan_a/.venv/bin/python",
+        "-m",
+        "pytest",
+        "backend/tests",
+        "-q",
+        "--tb=short"
+      ],
+      "cwd": "/Users/a1/Documents/ChatGPT/竞品分析优化/plan_a_pm_modes",
+      "log": "/tmp/plan_a_v34_backend_v2.log",
+      "counts": {
+        "passed": 6649,
+        "skipped": 1,
+        "warnings": 212
+      }
+    },
+    "new_tests": 197,
+    "original_tests_modified": false,
+    "lint_changed_python_E9_F": "pass",
+    "openapi": {
+      "baseline_canonical_sha256": "72f728f24009d472f589625c967523387d552f6dce7667f2fef3787d3dca8bd4",
+      "current_canonical_sha256": "72f728f24009d472f589625c967523387d552f6dce7667f2fef3787d3dca8bd4",
+      "changed_schema_components": [],
+      "generated_json_matches_backend": true,
+      "endpoints_unchanged": true,
+      "legacy_claim_coverage_audit_and_v3_assignment_compiles": true,
+      "generated_types_sha256": "01352651585fd1566d2120df2a4a2609b0f4ca6e63716c23e2b9125c3403e727"
+    },
+    "frontend_build": "pass",
+    "frontend_source_changed": false,
+    "frontend_suite_rerun": false,
+    "cumulative_review": "APPROVE v6; previous FAIL and probes preserved",
+    "startup_preflight": {
+      "status": "pass",
+      "pytest_tests": 3,
+      "scenarios": 33,
+      "model_calls": 0,
+      "network_calls": 0,
+      "log": "/tmp/plan_a_v34_wrapper_preflight_v3.log",
+      "variants": [
+        "old-human-reviewed",
+        "new-candidate",
+        "new-human-reviewed"
+      ]
+    }
+  },
+  "content": {
+    "old_exposed8": {
+      "group_count": 4,
+      "case_count": 8,
+      "internal_question_count": 8,
+      "sample_partition": "old_exposed8",
+      "new_frozen4_case_count": 0,
+      "body": {
+        "correct": 4,
+        "error": 0,
+        "omission": 4
+      },
+      "saved": {
+        "correct": 4,
+        "error": 0,
+        "omission": 4
+      },
+      "published_claim_id_count": 6,
+      "fully_bound_claim_id_count": 6,
+      "single_predicate_claim_id_count": 4,
+      "additional_visible_product_assertion_count": 1,
+      "content_qualified_groups": 1,
+      "binding_qualified_groups": 2,
+      "atomicity_qualified_groups": 0,
+      "content_and_binding_qualified_groups": 1,
+      "content_binding_and_atomicity_qualified_groups": 0,
+      "stage_qa_without_blockers_groups": 0,
+      "actual_QA_blockers": 10,
+      "all_visible_product_assertions_binding_qualified_groups": 1,
+      "actual_agent_execution": {
+        "bitwarden": [
+          "collector_semantic_extract:ok",
+          "collector_semantic_extract:ok",
+          "collector_question_evidence_review:ok",
+          "feature_bitwarden_analyst:ok",
+          "comparison_matrix:ok",
+          "coverage_reflection:ok",
+          "dimension_claim_writer:error"
+        ],
+        "1password": [
+          "collector_semantic_extract:ok",
+          "collector_semantic_extract:ok",
+          "collector_question_evidence_review:ok",
+          "feature_1password_analyst:ok",
+          "comparison_matrix:ok",
+          "coverage_reflection:ok",
+          "dimension_claim_writer:ok",
+          "dimension_claim_review:ok",
+          "dimension_claim_review:ok",
+          "dimension_claim_review:ok",
+          "dimension_answer_coverage:ok",
+          "dimension_answer_review:ok"
+        ],
+        "dropbox": [],
+        "cloudflare": [
+          "collector_semantic_extract:ok",
+          "collector_semantic_extract:ok",
+          "collector_question_evidence_review:ok",
+          "feature_cloudflare_analyst:ok",
+          "comparison_matrix:ok",
+          "coverage_reflection:ok",
+          "dimension_claim_writer:ok",
+          "dimension_claim_review:ok",
+          "dimension_claim_review:ok",
+          "dimension_claim_review:ok",
+          "dimension_claim_review:ok",
+          "dimension_answer_coverage:ok",
+          "dimension_answer_review:ok"
+        ]
+      },
+      "provider_usage": {
+        "llm_requests": 32,
+        "llm_succeeded": 31,
+        "llm_errors": 1,
+        "provider_reported_tokens": 111302,
+        "usage_unknown_request_count": 1,
+        "web_api_requests": 6,
+        "web_api_successful_responses": 4,
+        "provider_bill_usd": null,
+        "efficiency_improvement_inferred": false
+      },
+      "monetary_exact_amount_positive_cases": 0,
+      "all_reviewed_groups_local_content_and_binding_qualified": false
+    },
+    "new_frozen4": {
+      "cohort": "new_frozen4",
+      "group_count": 2,
+      "frozen_case_count": 4,
+      "internal_question_id_count": 7,
+      "body_questions": {
+        "correct": 0,
+        "error": 0,
+        "omission": 4
+      },
+      "saved_questions": {
+        "correct": 0,
+        "error": 0,
+        "omission": 4
+      },
+      "actual_saved_answer_records": 0,
+      "published_unique_claim_count": 0,
+      "fully_bound_claim_count": 0,
+      "single_predicate_claim_count": 0,
+      "binding_fraction": null,
+      "atomicity_fraction": null,
+      "published_claims_evaluation_note": "分母 0；不是全部绑定通过或原子性通过。",
+      "content_qualified_groups": 0,
+      "binding_qualified_groups": 0,
+      "atomicity_qualified_groups": 0,
+      "content_and_binding_qualified_groups": 0,
+      "content_binding_and_atomicity_qualified_groups": 0,
+      "stage_qa_without_blockers_groups": 0,
+      "qa_blocker_count": 2,
+      "qa_warning_count": 2,
+      "qa_replay_matches_saved_groups": 2,
+      "actual_model_calls": 1,
+      "actual_transport_attempts": 1,
+      "actual_provider_total_tokens": 907,
+      "provider_bill_usd": null,
+      "actual_agent_execution": {
+        "planner_llm": 0,
+        "collector_llm": 1,
+        "analyst_llm": 0,
+        "comparator_llm": 0,
+        "reflector_llm": 0,
+        "writer_llm": 0,
+        "qa_llm": 0,
+        "deterministic_qa_groups": 2
+      },
+      "actual_web_api_requests_observed": 1,
+      "actual_web_api_successful_responses_observed": 0,
+      "web_api_billable_requests_estimate_observed": 0,
+      "core_and_exception_omitted_case_count": 4,
+      "current_amount_positive_cases": 0,
+      "meets_local_content_plus_all_binding_delivery": false,
+      "full_graph_acceptance_evaluated": false,
+      "publication_attempted": false,
+      "not_accepted": [
+        "user_formal_report_acceptance",
+        "all_PM",
+        "Planner",
+        "full_Graph",
+        "production_dense_RAG"
+      ]
+    },
+    "all_groups_qualified": false,
+    "all_visible_product_assertions_have_exact_binding": false,
+    "minimum_5_USD_claim_published": true,
+    "actual_amount_positive_questions": 0,
+    "grade_not_derived_from_hardcoded_deliverable": true
+  },
+  "usage": {
+    "llm_transport_attempts": 33,
+    "known_provider_reported_tokens": 112209,
+    "usage_unknown_llm_spans": 1,
+    "web_api_requests": 7,
+    "web_api_successful_responses": 4,
+    "search_requests": 0,
+    "provider_bill_usd": null,
+    "known_tokens_are_not_complete_total": true,
+    "efficiency_improvement_inferred": false
+  },
+  "groups": [
+    {
+      "group": "bitwarden",
+      "product": "Bitwarden",
+      "run_id": "run-75a546abf65b4039aa402f8ee2d4a1be",
+      "case_ids": [
+        "agent-readiness-holdout-v1-001",
+        "agent-readiness-holdout-v1-002"
+      ],
+      "artifact_directory": "data/artifacts/claim-semantics-2026-10-20/regression-bitwarden",
+      "status": "execution_complete",
+      "source_count": 3,
+      "snapshot_facts": 69,
+      "llm_transport_attempts": 7,
+      "provider_tokens": 21827,
+      "provider_usage_unknown_spans": 1,
+      "qa_blockers": 2,
+      "saved_report_characters": 657,
+      "manifest_sha256": "f2bdb35a48a6bf21abb912cc095ae8a08a42e11a5ef992fddb22db2c55111fce",
+      "saved_report_sha256": "9d455f7144d9584db600e1b61e94590158aaf86b0037dd6e629b4b8c6ae671fe",
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 0
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "raw_stage_summary_deliverable": false,
+      "stage_runner_deliverable_is_fixed_false": true,
+      "stage_qa_without_blockers": false,
+      "body_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-001",
+          "question_id": "question-cb40c90e4d944bf23275",
+          "agent_judgment": "omission",
+          "reason": "正文与保存均没有回答能否满足，也没有交付包括创建者共两人、最多两个 collections 的限制；只是尚未核实。实际 Writer 已收到完整限额，不能当合理拒答。",
+          "conclusion": null
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-002",
+          "question_id": "question-63762e09ae5d8faa1071",
+          "agent_judgment": "correct",
+          "reason": "提出移除成员或永久删除账户/数据、个人或组织数据两项关键澄清；未作统一保留/删除或仍可登录保证。纯澄清足以满足本题，未补写产品结论。",
+          "conclusion": "depends"
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-001",
+          "question_id": "question-cb40c90e4d944bf23275",
+          "agent_judgment": "omission",
+          "reason": "正文与保存均没有回答能否满足，也没有交付包括创建者共两人、最多两个 collections 的限制；只是尚未核实。实际 Writer 已收到完整限额，不能当合理拒答。",
+          "conclusion": null
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-002",
+          "question_id": "question-63762e09ae5d8faa1071",
+          "agent_judgment": "correct",
+          "reason": "提出移除成员或永久删除账户/数据、个人或组织数据两项关键澄清；未作统一保留/删除或仍可登录保证。纯澄清足以满足本题，未补写产品结论。",
+          "conclusion": "depends"
+        }
+      ],
+      "published_claims": [],
+      "content_and_binding_qualified": false,
+      "content_binding_and_atomicity_qualified": false,
+      "report_user_accepted": false
+    },
+    {
+      "group": "1password",
+      "product": "1Password",
+      "run_id": "run-0fa46feebc594934b43fc014b156d6fb",
+      "case_ids": [
+        "agent-readiness-holdout-v1-003",
+        "agent-readiness-holdout-v1-004"
+      ],
+      "artifact_directory": "data/artifacts/claim-semantics-2026-10-20/regression-1password",
+      "status": "execution_complete",
+      "source_count": 1,
+      "snapshot_facts": 24,
+      "llm_transport_attempts": 12,
+      "provider_tokens": 43577,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 2,
+      "saved_report_characters": 1022,
+      "manifest_sha256": "e0a091fcef700b6b5264c7d641a8731cad1cddafc82a361612d0c2febfedce21",
+      "saved_report_sha256": "9dfbbfa4db2de48aab5d59abcea8c9cf60f6f73bb85a177742fa6a2f604812c1",
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 5
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "raw_stage_summary_deliverable": false,
+      "stage_runner_deliverable_is_fixed_false": true,
+      "stage_qa_without_blockers": false,
+      "body_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-003",
+          "question_id": "question-60a7010e0c7ca2ae7058",
+          "agent_judgment": "correct",
+          "reason": "正式 conclusion=no；正文与保存同时覆盖只能访问一个选定保险库、没有 Private vault 两子问。另以可提升为家庭成员保留 can 语气，没有声称访客永远不能换库。",
+          "conclusion": "no"
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-004",
+          "question_id": "question-26d795d67d79bd12e05d",
+          "agent_judgment": "correct",
+          "reason": "以 Unified Access、一年、人民币、含税为请求条件，明确当前已准入资料不足以核实精确报价，列出合同/SKU、市场、计费周期、付费席位等补充项。当前 snapshot 没有可重建的该产品报价；没有编金额、套其他产品价格。未交付定制报价/联系销售说明，列为下一优先项；按本次允许的具体缺价口径仍属 correct，不算实金额正例。",
+          "conclusion": null
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-003",
+          "question_id": "question-60a7010e0c7ca2ae7058",
+          "agent_judgment": "correct",
+          "reason": "正式 conclusion=no；正文与保存同时覆盖只能访问一个选定保险库、没有 Private vault 两子问。另以可提升为家庭成员保留 can 语气，没有声称访客永远不能换库。",
+          "conclusion": "no"
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-004",
+          "question_id": "question-26d795d67d79bd12e05d",
+          "agent_judgment": "correct",
+          "reason": "以 Unified Access、一年、人民币、含税为请求条件，明确当前已准入资料不足以核实精确报价，列出合同/SKU、市场、计费周期、付费席位等补充项。当前 snapshot 没有可重建的该产品报价；没有编金额、套其他产品价格。未交付定制报价/联系销售说明，列为下一优先项；按本次允许的具体缺价口径仍属 correct，不算实金额正例。",
+          "conclusion": null
+        }
+      ],
+      "published_claims": [
+        {
+          "claim_id": "claim-97a721f8cebf881ac98a",
+          "text": "访客必须先接受邀请并被确认，之后才能与其共享保险库。",
+          "fully_bound": true,
+          "single_predicate": true
+        },
+        {
+          "claim_id": "claim-37ccad525c556f99f86f",
+          "text": "访客没有自己的 Private vault，只能访问由你选择的一个保险库。",
+          "fully_bound": true,
+          "single_predicate": false
+        },
+        {
+          "claim_id": "claim-5612bd0a90de407defeb",
+          "text": "若要让访客拥有自己的 Private vault 并访问多个共享保险库，可将其从访客提升为家庭成员。",
+          "fully_bound": true,
+          "single_predicate": true
+        }
+      ],
+      "content_and_binding_qualified": true,
+      "content_binding_and_atomicity_qualified": false,
+      "report_user_accepted": false
+    },
+    {
+      "group": "dropbox",
+      "product": "Dropbox",
+      "run_id": "run-25debf8fad264dd98cc0a632fa120eb7",
+      "case_ids": [
+        "agent-readiness-holdout-v1-005",
+        "agent-readiness-holdout-v1-006"
+      ],
+      "artifact_directory": "data/artifacts/claim-semantics-2026-10-20/regression-dropbox",
+      "status": "blocked",
+      "source_count": 0,
+      "snapshot_facts": 0,
+      "llm_transport_attempts": 0,
+      "provider_tokens": null,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 1,
+      "saved_report_characters": 0,
+      "manifest_sha256": "afa940d7479a55499102f2b6abdb4609845c346804a1f3d7ae8ad997f8b3261c",
+      "saved_report_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "llm_transport_by_agent": {
+        "collector": 0,
+        "analyst": 0,
+        "comparator": 0,
+        "reflector": 0,
+        "writer": 0,
+        "qa": 0
+      },
+      "actual_models": [],
+      "raw_stage_summary_deliverable": false,
+      "stage_runner_deliverable_is_fixed_false": true,
+      "stage_qa_without_blockers": false,
+      "body_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-005",
+          "question_id": "question-55e153a4bb828470945e",
+          "agent_judgment": "omission",
+          "reason": "report.md 与 run.report_md 均为空，且无保存 answer_coverage。没有交付直接邀请 Can view 仍可下载的答案；空稿不是合理拒答。",
+          "conclusion": null
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-006",
+          "question_id": "question-386ae5074b9e8f4b4fed",
+          "agent_judgment": "omission",
+          "reason": "正文为空、无保存回答。未确认取消共享的实际操作、访问路径或保留副本，不能计为完成了合理澄清。",
+          "conclusion": null
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-005",
+          "question_id": "question-55e153a4bb828470945e",
+          "agent_judgment": "omission",
+          "reason": "report.md 与 run.report_md 均为空，且无保存 answer_coverage。没有交付直接邀请 Can view 仍可下载的答案；空稿不是合理拒答。",
+          "conclusion": null
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-006",
+          "question_id": "question-386ae5074b9e8f4b4fed",
+          "agent_judgment": "omission",
+          "reason": "正文为空、无保存回答。未确认取消共享的实际操作、访问路径或保留副本，不能计为完成了合理澄清。",
+          "conclusion": null
+        }
+      ],
+      "published_claims": [],
+      "content_and_binding_qualified": false,
+      "content_binding_and_atomicity_qualified": false,
+      "report_user_accepted": false
+    },
+    {
+      "group": "cloudflare",
+      "product": "Cloudflare",
+      "run_id": "run-d731373878d545d2b59704d65b892424",
+      "case_ids": [
+        "agent-readiness-holdout-v1-007",
+        "agent-readiness-holdout-v1-008"
+      ],
+      "artifact_directory": "data/artifacts/claim-semantics-2026-10-20/regression-cloudflare",
+      "status": "execution_complete",
+      "source_count": 2,
+      "snapshot_facts": 42,
+      "llm_transport_attempts": 13,
+      "provider_tokens": 45898,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 5,
+      "saved_report_characters": 961,
+      "manifest_sha256": "9bca819453cc24b81d145c6940687db0f0ad9a70aa2cba53defae2ac4df58246",
+      "saved_report_sha256": "857610d59de67f83c4623ad4d19880a35520f6ae3533e4ffb0216b1a6274aa63",
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 6
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "raw_stage_summary_deliverable": false,
+      "stage_runner_deliverable_is_fixed_false": true,
+      "stage_qa_without_blockers": false,
+      "body_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-007",
+          "question_id": "question-1b7471af0d3dcf4af91c",
+          "agent_judgment": "omission",
+          "reason": "正文与保存仅尚未核实。没有回答 Cache Domain Purge 只覆盖被授权特定域名，故此角色本身不给 other.example 权限。域名与无其他角色是请求场景条件，不要求 source 重复域名；实际缺的是角色/操作/特定域名规则未进入已发表 claim。",
+          "conclusion": null
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-008",
+          "question_id": "question-dd9aeefb8be2a32bc5bf",
+          "agent_judgment": "correct",
+          "reason": "说明仅现有请求条件与资料不足以核实完整账单，明确仍需 CPU 总用量、其他计费项目/用量；不把 5 USD 最低费用或官网 15M 请求示例当实际账单。CPU 缺项可由当前 admitted snapshot 计费规则重建。正式 conclusion 字段缺省，正文的不足额结论清楚；不算实金额正例。",
+          "conclusion": null
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-007",
+          "question_id": "question-1b7471af0d3dcf4af91c",
+          "agent_judgment": "omission",
+          "reason": "正文与保存仅尚未核实。没有回答 Cache Domain Purge 只覆盖被授权特定域名，故此角色本身不给 other.example 权限。域名与无其他角色是请求场景条件，不要求 source 重复域名；实际缺的是角色/操作/特定域名规则未进入已发表 claim。",
+          "conclusion": null
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-008",
+          "question_id": "question-dd9aeefb8be2a32bc5bf",
+          "agent_judgment": "correct",
+          "reason": "说明仅现有请求条件与资料不足以核实完整账单，明确仍需 CPU 总用量、其他计费项目/用量；不把 5 USD 最低费用或官网 15M 请求示例当实际账单。CPU 缺项可由当前 admitted snapshot 计费规则重建。正式 conclusion 字段缺省，正文的不足额结论清楚；不算实金额正例。",
+          "conclusion": null
+        }
+      ],
+      "published_claims": [
+        {
+          "claim_id": "claim-ffa9ab9521960b792440",
+          "text": "Workers Paid 计划的用户可使用 Standard 用量模式。",
+          "fully_bound": true,
+          "single_predicate": true
+        },
+        {
+          "claim_id": "claim-f9c178ab417fd9e44cf2",
+          "text": "Workers Paid 计划包含 Workers、Pages Functions、Workers KV、Hyperdrive 和 Durable Objects 用量，账户每月最低收费为 5 USD。",
+          "fully_bound": true,
+          "single_predicate": false
+        },
+        {
+          "claim_id": "claim-a033cbfd187b909fc8a2",
+          "text": "所有包含的用量均按月计算。",
+          "fully_bound": true,
+          "single_predicate": true
+        }
+      ],
+      "content_and_binding_qualified": false,
+      "content_binding_and_atomicity_qualified": false,
+      "report_user_accepted": false
+    },
+    {
+      "group": "trello-new",
+      "product": "Trello",
+      "run_id": "run-9fa834f4432f4ea1bd72579ea8ad0cc2",
+      "case_ids": [
+        "claim-semantics-candidate-20261020-trello-001",
+        "claim-semantics-candidate-20261020-trello-002"
+      ],
+      "artifact_directory": "data/artifacts/claim-semantics-2026-10-20/regression-trello-new",
+      "status": "blocked",
+      "source_count": 0,
+      "snapshot_facts": 0,
+      "llm_transport_attempts": 1,
+      "provider_tokens": 907,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 1,
+      "saved_report_characters": 0,
+      "manifest_sha256": "3ba8b2db6afb890a65ff9b9475f77f0405476da5475e352fd0c5ff2d104553cd",
+      "saved_report_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "llm_transport_by_agent": {
+        "collector": 1,
+        "analyst": 0,
+        "comparator": 0,
+        "reflector": 0,
+        "writer": 0,
+        "qa": 0
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "raw_stage_summary_deliverable": false,
+      "stage_runner_deliverable_is_fixed_false": true,
+      "stage_qa_without_blockers": false,
+      "body_questions": [
+        {
+          "case_id": "claim-semantics-candidate-20261020-trello-001",
+          "question_id": "question-659854eaa5bf118b8901",
+          "agent_judgment": "omission",
+          "reason": "正文为空，未发表任何对子问的回答。",
+          "conclusion": null
+        },
+        {
+          "case_id": "claim-semantics-candidate-20261020-trello-002",
+          "question_id": "question-a5be8c7a210d770f2ea7",
+          "agent_judgment": "omission",
+          "reason": "正文为空，未发表任何对子问的回答。",
+          "conclusion": null
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "claim-semantics-candidate-20261020-trello-001",
+          "question_id": "question-659854eaa5bf118b8901",
+          "agent_judgment": "omission",
+          "reason": "没有保存回答或 conclusion 记录；参考答案、遥测原因与 QA 错误说明不能补成保存答案。",
+          "conclusion": null
+        },
+        {
+          "case_id": "claim-semantics-candidate-20261020-trello-002",
+          "question_id": "question-a5be8c7a210d770f2ea7",
+          "agent_judgment": "omission",
+          "reason": "没有保存回答或 conclusion 记录；参考答案、遥测原因与 QA 错误说明不能补成保存答案。",
+          "conclusion": null
+        }
+      ],
+      "published_claims": [],
+      "content_and_binding_qualified": false,
+      "content_binding_and_atomicity_qualified": false,
+      "report_user_accepted": false
+    },
+    {
+      "group": "miro-new",
+      "product": "Miro",
+      "run_id": "run-680b598e1c8a4e2fb863abf130fddba3",
+      "case_ids": [
+        "claim-semantics-candidate-20261020-miro-001",
+        "claim-semantics-candidate-20261020-miro-002"
+      ],
+      "artifact_directory": "data/artifacts/claim-semantics-2026-10-20/regression-miro-new",
+      "status": "blocked",
+      "source_count": 0,
+      "snapshot_facts": 0,
+      "llm_transport_attempts": 0,
+      "provider_tokens": null,
+      "provider_usage_unknown_spans": 0,
+      "qa_blockers": 1,
+      "saved_report_characters": 0,
+      "manifest_sha256": "e41bba53da3ce2c9d555759ce2bca140eb38c3c3123035888286b04da1f1f6bd",
+      "saved_report_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "llm_transport_by_agent": {
+        "collector": 0,
+        "analyst": 0,
+        "comparator": 0,
+        "reflector": 0,
+        "writer": 0,
+        "qa": 0
+      },
+      "actual_models": [],
+      "raw_stage_summary_deliverable": false,
+      "stage_runner_deliverable_is_fixed_false": true,
+      "stage_qa_without_blockers": false,
+      "body_questions": [
+        {
+          "case_id": "claim-semantics-candidate-20261020-miro-001",
+          "question_id": "question-f7fc36ac779979801a22",
+          "agent_judgment": "omission",
+          "reason": "正文为空，未发表任何对子问的回答。",
+          "conclusion": null
+        },
+        {
+          "case_id": "claim-semantics-candidate-20261020-miro-002",
+          "question_id": "question-77f8d5918bcc8ca13691",
+          "agent_judgment": "omission",
+          "reason": "正文为空，未发表任何对子问的回答。",
+          "conclusion": null
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "claim-semantics-candidate-20261020-miro-001",
+          "question_id": "question-f7fc36ac779979801a22",
+          "agent_judgment": "omission",
+          "reason": "没有保存回答或 conclusion 记录；参考答案、遥测原因与 QA 错误说明不能补成保存答案。",
+          "conclusion": null
+        },
+        {
+          "case_id": "claim-semantics-candidate-20261020-miro-002",
+          "question_id": "question-77f8d5918bcc8ca13691",
+          "agent_judgment": "omission",
+          "reason": "没有保存回答或 conclusion 记录；参考答案、遥测原因与 QA 错误说明不能补成保存答案。",
+          "conclusion": null
+        }
+      ],
+      "published_claims": [],
+      "content_and_binding_qualified": false,
+      "content_binding_and_atomicity_qualified": false,
+      "report_user_accepted": false
+    }
+  ],
+  "integrity": {
+    "runtime_frozen_files": {
+      "count": 743,
+      "mismatches": []
+    },
+    "historical_files": {
+      "count": 1531,
+      "mismatches": []
+    },
+    "original_sample_files": {
+      "count": 4,
+      "mismatches": []
+    },
+    "new_runtime_helpers": {
+      "count": 5,
+      "mismatches": []
+    },
+    "previous_runtime_helpers": {
+      "count": 5,
+      "mismatches": []
+    },
+    "freeze_sha256": "ef79b32a0891366e44625328f7a4e18f10746a97eff8457d95ec1c42cc0cb7c0",
+    "original_sample_freeze_sha256": "ab97e9cd2a7619d76a2bf7a44be0a9af8341bba0544e47a7b60aed36ce8b5b73",
+    "reports": [
+      {
+        "group": "bitwarden",
+        "report_sha256": "9d455f7144d9584db600e1b61e94590158aaf86b0037dd6e629b4b8c6ae671fe",
+        "run_report_sha256": "c6a56214b710d2bb3111038212e94c6305cee6331f38a833fabc94cfa824e3b0",
+        "export_exactly_run_plus_newline": true,
+        "export_text_matches_run": true,
+        "run_sha256": "d824967a5ec127d6bc6b7a346ea45f457b05eb197435ee58dbebec825156d1b4"
+      },
+      {
+        "group": "1password",
+        "report_sha256": "9dfbbfa4db2de48aab5d59abcea8c9cf60f6f73bb85a177742fa6a2f604812c1",
+        "run_report_sha256": "2df26e095fa2bb973becaeb3c185876fa23163d0e427ca05a66fa48ef2069ad4",
+        "export_exactly_run_plus_newline": true,
+        "export_text_matches_run": true,
+        "run_sha256": "deb6ae015621591fe7c022b3e4b4e12b0e4c1a46745f51cf16d95211cdbd046c"
+      },
+      {
+        "group": "dropbox",
+        "report_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "run_report_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "export_exactly_run_plus_newline": true,
+        "export_text_matches_run": true,
+        "run_sha256": "fbf4ff4ad0a7c7b21df3e65827cc7a3851d9d590dce3c1b3b4c2501e028c020a"
+      },
+      {
+        "group": "cloudflare",
+        "report_sha256": "857610d59de67f83c4623ad4d19880a35520f6ae3533e4ffb0216b1a6274aa63",
+        "run_report_sha256": "c4526a6f07440e5f6bc5f78db8de17c2b18ece11b59f893b6b6630389b8582bf",
+        "export_exactly_run_plus_newline": true,
+        "export_text_matches_run": true,
+        "run_sha256": "5b2f76890deece4dede94fa8a592deffcb98f81050eb5a23a13add4fed2ba310"
+      },
+      {
+        "group": "trello-new",
+        "report_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "run_report_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "export_exactly_run_plus_newline": true,
+        "export_text_matches_run": true,
+        "run_sha256": "8743f739115f06c9d6660a6185fd23ac6dc5e5f12977a82bdb6eb555851be958"
+      },
+      {
+        "group": "miro-new",
+        "report_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "run_report_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "export_exactly_run_plus_newline": true,
+        "export_text_matches_run": true,
+        "run_sha256": "35b0f1437a5e163cf34bf3f762ebaa92b3db981ec9d3854f66c380aca760bce5"
+      }
+    ],
+    "passed": true
+  },
+  "proofs": {
+    "directory": "data/artifacts/claim-semantics-2026-10-20",
+    "index": "data/artifacts/claim-semantics-2026-10-20/verification/proof-index.json",
+    "old_content_review": "data/artifacts/claim-semantics-2026-10-20/verification/proofs/plan_a_v34_old_content_review.json",
+    "new_content_review": "data/artifacts/claim-semantics-2026-10-20/verification/proofs/plan_a_v34_new_content_review.json",
+    "live_metrics": "data/artifacts/claim-semantics-2026-10-20/verification/proofs/plan_a_v34_live_metrics.json",
+    "capture_metrics": "data/artifacts/claim-semantics-2026-10-20/verification/proofs/plan_a_v34_capture_metrics.json",
+    "contract_metrics": "data/artifacts/claim-semantics-2026-10-20/verification/proofs/plan_a_v34_contract_observations.json",
+    "git_delivery_receipt": "data/artifacts/claim-semantics-2026-10-20/verification/git-delivery.json",
+    "raw_artifacts_ignored_not_pushed": true
+  },
+  "remaining_priorities": [
+    "Trello：捕获正文到语义抽取输入的丢失；Cloudflare：角色规则从capture到admitted facts及核心输入的丢失。不得仅按存在fact ID判逐题齐备。",
+    "Bitwarden：Writer已收到限额但finish_reason=length，保持原预算设计分题输出与答案保全；实际正例绑定仍待重验。",
+    "Dropbox导航壳和Miro403：可见抓取失败与合规补采路线，空稿不能算合理拒答。",
+    "两条复合claim拆谓词；Cloudflare服务器CPU事实短句也进入逐条精确引用合同。",
+    "1Password Unified Access价格方式与sales来源准入；本轮具体缺价答复正确不等于价格采集完整。",
+    "局部内容稳定后单独做完整Graph/自动发现/发布及生产语义RAG验收。"
+  ],
+  "training": {
+    "reward": null,
+    "training_ready": false,
+    "training_performed": false,
+    "new_model_downloads": 0
+  },
+  "delivery_assessment": "工程实现通过；旧组仅1Password满足局部题目内容+已发表claim绑定，所有组均有实际QA阻断；新四题全遗漏。本轮报告整体未达交付标准。完整Graph与发布未测，不能从runner固定False推导0/6。",
+  "security": {
+    "current_credential_literal_scan": {
+      "scope": "literal current configured credentials in nonignored text sources/docs/eval, built frontend and specified acceptance artifacts; excludes secret env bodies and Git history",
+      "configured_credential_count": 1,
+      "files_scanned": 1793,
+      "actual_secret_hit_paths": [],
+      "tracked_secret_config_paths": [],
+      "status": "pass"
+    },
+    "secret_pattern_scan": {
+      "scope": "nonignored working tree text, generated schema/types, built frontend and explicitly specified new artifacts; excludes actual env bodies and Git history",
+      "files_scanned": 1816,
+      "findings": [],
+      "values_printed": false,
+      "status": "pass"
+    },
+    "git_history_audited": false
+  }
+}

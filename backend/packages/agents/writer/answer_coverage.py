@@ -372,10 +372,16 @@ def parse_answer_coverage(
 
 RESOURCE_SCOPE_RULES = (
     "For a source rule explicitly confined to its given resource, the question may supply two different resources. "
+    "For a question-level conclusion, the selected complete published claims must establish the role category, requested operation, "
+    "closed resource scope and any applicable product conditions or exceptions. A non-exclusive list "
+    "does not establish a closed scope. Original facts may reveal omissions or reject a decision, "
+    "but cannot fill missing product premises in the answer or reason. "
     "That role itself does not grant permission on the other resource; the source need not repeat user-specific domains. "
     "Do not claim that this scope is unverified solely because the user's resource names are absent from the source. "
     "A claim about the person's complete permissions additionally requires an explicit no-other-grants premise; "
     "preserve it as a scenario condition, never a product fact. Otherwise state only what that role itself grants. "
+    "Assigned and target resource names and the question's stated other grants are request inputs; "
+    "they are not verified user authorizations and need not be repeated in product claims. "
     "Do not extend this denial to account-wide roles, unbounded scopes or the already granted resource. "
 )
 
@@ -387,7 +393,8 @@ ANSWER_COVERAGE_SYSTEM = (RESOURCE_SCOPE_RULES +
     "text answers the question; the server copies their complete text into the answer and "
     "creates one complete evidence span per ID. Do not write answer prose or evidence spans. "
     "Original facts help audit the claims; they cannot supply an answer fact or condition "
-    "absent from the selected published claim text. If a required condition has not been "
+    "absent from the selected published claim text. This claim-only requirement concerns product rules, "
+    "not the request inputs described above. If a required product condition has not been "
     "published, use partial or unverified rather than adding it in reason. "
     "A list of included plans does not establish "
     "that only those plans support a feature. Do not add an exclusive plan or required "

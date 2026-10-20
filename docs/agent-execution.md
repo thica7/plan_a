@@ -2,7 +2,9 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-当前验证见[完整引用支持与回答投影](optimization/2026-10-20-bound-answer-projection.md)：最终6452通过／1跳过；四组各首次38调用／129433 token。正文及保存均5正确／0错误／3遗漏，全部发表主张5/7完整绑定。BW上限否定和固定离职澄清已正常生成；BW额外共享动作越过窄引用、1Password“可以”到“必须”的模态强化、CF范围题漏答与Dropbox正文仍待修。内容合格2/4，内容与绑定同时0/4，系统0/4、6阻断。三家Analyst／Comparator／Reflector／Writer真实调用且核心模块无回退；Dropbox无接受来源未调用核心阶段。Writer实际输入已核实派送，但两套遥测状态仍不一致，BW真实核心资料仍有遗漏；不能仅据unverified遥测断言未发送。730冻结文件、5 helper及1332旧文件保持；不是Planner／全Graph／生产稠密RAG验收，未训练。
+当前验证见[完整主张审核与问题结论投影](optimization/2026-10-20-claim-semantics.md)：新增v3选定支持的有限语义冲突守卫，实时/最终QA共用；Writer与独立审核提示逐谓词保持can/must及条件；问题级结论识别完整中文闭合范围，产品规则与请求对象分离。最终后端6649通过／1跳过；旧八题4正确／4遗漏，新四题全遗漏，6条发表claim ID完整绑定但仅4条单谓词，另有服务器CPU短句缺精确绑定。BW/1P/CF的Analyst、Comparator、Reflector均实际执行无回退，Writer均调用但BW length出错；Dropbox、Trello、Miro准入前阻断、下游未执行。Trello实际提取body为空，CF已抓角色规则未进facts，不能用packet标记当语义送达。阶段QA分别10/2个阻断；全Graph、自动发现、发布、生产dense RAG未测，固定runner False不作系统失败评分。未训练。
+
+上一轮验证见[完整引用支持与回答投影](optimization/2026-10-20-bound-answer-projection.md)：最终6452通过／1跳过；四组各首次38调用／129433 token。正文及保存均5正确／0错误／3遗漏，全部发表主张5/7完整绑定。BW上限否定和固定离职澄清已正常生成；BW额外共享动作越过窄引用、1Password“可以”到“必须”的模态强化、CF范围题漏答与Dropbox正文仍待修。内容合格2/4，内容与绑定同时0/4，系统0/4、6阻断。三家Analyst／Comparator／Reflector／Writer真实调用且核心模块无回退；Dropbox无接受来源未调用核心阶段。Writer实际输入已核实派送，但两套遥测状态仍不一致，BW真实核心资料仍有遗漏；不能仅据unverified遥测断言未发送。730冻结文件、5 helper及1332旧文件保持；不是Planner／全Graph／生产稠密RAG验收，未训练。
 
 上一轮验证见[逐题证据包与原子回答](optimization/2026-10-20-agent-question-packets.md)：后端6308通过／1跳过，四组各首次30调用／123676token。正文及保存记录均3正确／5遗漏；发表观察5/6完整绑定，内容与绑定同时0/4、系统0/4交付。三组核心Agent真实调用，Dropbox采集阻断。各入口已统一选择身份；真实Writer两套派送遥测状态仍不一致，实际输入可独立核实。BW澄清、1Password复合句及CF范围误判仍待修，非feature逐题、Planner／全Graph／生产稠密RAG未验收，未训练。
 

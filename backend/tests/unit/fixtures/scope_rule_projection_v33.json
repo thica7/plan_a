@@ -1,0 +1,166 @@
+{
+  "fixture_version": 1,
+  "provenance": "Exact original Cloudflare span-56/span-57 transport replay; not a semantic gold answer.",
+  "questions": [
+    {
+      "question_id": "question-1b7471af0d3dcf4af91c",
+      "question": "Cloudflare: 同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？"
+    }
+  ],
+  "required_clarifications": [],
+  "published_claims": [
+    {
+      "id": "claim-ba94791b79903da8b0d2",
+      "text": "Workers Paid 计划的用户可使用 Standard 用量模式；Workers Enterprise 账户按其合同规定的用量模式计费。",
+      "competitor": "Cloudflare",
+      "dimension": "feature",
+      "fact_ids": [
+        "evidence-fact-record-d3b9d72336157192c171266f6e5cf59a1bbcca6db321a9fcf02e949e88456ffb"
+      ],
+      "source_ids": [
+        "raw-source-52ba7b31b51e937245c1"
+      ],
+      "source_span_bindings": [
+        {
+          "span_id": "source-span-17c17686677a3525eef091ea",
+          "fact_id": "evidence-fact-record-d3b9d72336157192c171266f6e5cf59a1bbcca6db321a9fcf02e949e88456ffb",
+          "source_id": "raw-source-52ba7b31b51e937245c1",
+          "fact_hash": "d0102c93395b1ed6c1d6a2464309db184793626a8cb38fc794dc3204bc8243f4",
+          "source_path": "quote",
+          "start": 0,
+          "end": 233,
+          "quote": "Users on the Workers Paid plan have access to the Standard usage model. Workers Enterprise accounts are billed based on the usage model specified in their contract. To switch to the Standard usage model, contact your Account Manager."
+        }
+      ]
+    },
+    {
+      "id": "claim-3f66e3b22f7516a9ec16",
+      "text": "域范围角色仅适用于账户内指定的某个域名。",
+      "competitor": "Cloudflare",
+      "dimension": "feature",
+      "fact_ids": [
+        "evidence-fact-record-6def2ed92619248600afe782fce5f29c4a777bfb17aab232830695bbb545aa5e"
+      ],
+      "source_ids": [
+        "raw-source-c71a5d8161af6e06ae53"
+      ],
+      "source_span_bindings": [
+        {
+          "span_id": "source-span-c307265084d78a38f92be688",
+          "fact_id": "evidence-fact-record-6def2ed92619248600afe782fce5f29c4a777bfb17aab232830695bbb545aa5e",
+          "source_id": "raw-source-c71a5d8161af6e06ae53",
+          "fact_hash": "235a15575d3a935ff3e2dbfd44a0eab570a7d48a7ba6abb34bc0e76459298a63",
+          "source_path": "quote",
+          "start": 0,
+          "end": 63,
+          "quote": "Domain-scoped roles apply for a given domain within an account."
+        }
+      ]
+    },
+    {
+      "id": "claim-3097c09a7dcb8038f841",
+      "text": "启用 Workers Caching 时，由 Worker 缓存提供的请求按与调用 Worker 的请求相同的每请求费率计费，包括对静态资源的请求和 worker-to-worker 调用；仅当 Worker 运行（缓存未命中或绕过）时才计 CPU 时间。",
+      "competitor": "Cloudflare",
+      "dimension": "feature",
+      "fact_ids": [
+        "evidence-fact-record-e823898578c2fb3b347f4977d92ade84ec50ced459da80a49fd162c3847b8c37"
+      ],
+      "source_ids": [
+        "raw-source-52ba7b31b51e937245c1"
+      ],
+      "source_span_bindings": [
+        {
+          "span_id": "source-span-e73e2bf9c97d7e34e9e09191",
+          "fact_id": "evidence-fact-record-e823898578c2fb3b347f4977d92ade84ec50ced459da80a49fd162c3847b8c37",
+          "source_id": "raw-source-52ba7b31b51e937245c1",
+          "fact_hash": "d2da26f96afeb0be9f8927d15619b4f2cfe6f6b96f44697f098cdc5a1831fbf2",
+          "source_path": "quote",
+          "start": 0,
+          "end": 298,
+          "quote": "4 When Workers Caching is enabled, requests served from the Worker's cache are billed at the same per-request rate as requests that invoke the Worker. This includes requests to static assets and worker-to-worker invocations. CPU time is only billed when the Worker runs (on a cache miss or bypass)."
+        }
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "evidence-fact-record-6def2ed92619248600afe782fce5f29c4a777bfb17aab232830695bbb545aa5e",
+      "semantic_id": "evidence-fact-987eb2cce9c4ac2aa0c1dc8dfbb8eadde701dc9c499adff980508bbf59909d7c",
+      "evidence_item_ids": [
+        "evidence-item-2871377568091f06b5b7"
+      ],
+      "source_id": "raw-source-c71a5d8161af6e06ae53",
+      "competitor": "Cloudflare",
+      "dimension": "feature",
+      "field": "evidence_terms",
+      "value_json": "[\"Domain-scoped roles\\nDomain-scoped roles apply for a given domain within an account.\\n| Role | Description | \\n|---|---|\",\"Whenever you add a new member to your account, you can assign policies to those users and make use of the available roles. Roles can only ever be assigned to their given scope and multiple roles can be assigned to a given policy.\",\"| AI Crawl Control Read Only | Can read AI Crawl Control and metrics. This role also grants read access to the underlying products AI Crawl Control depends on (analytics, DNS, firewall, and bot management), which makes additional zone pages visible in the dashboard, including the zone Overview, Analytics, and Security Analytics. |\",\"| Domain Administrator | Grants full access to domains in an account (including Regional Services configurations), and read-only access to account-wide Firewall, Access, and Worker resources. |\",\"| Domain Administrator Read Only | Grants read-only access to domains in an account, as well as account-wide Firewall, Access, and Worker resources. This role does not currently include read access to Regional Services configurations. |\",\"| Zone Versioning Read | Grants read-only access to Zone Versioning. |\"]",
+      "unit": null,
+      "market": null,
+      "qualifiers_json": "{\"operations\":[],\"slot\":\"semantic_capability_a8a537651314ebe8\",\"source_scope\":{\"captured_page_id\":\"captured-page-ffcab66db4d81556b3ed\",\"context\":{\"document_section\":[10191,12024],\"plan\":null,\"role\":null,\"section_path\":null},\"operations\":[],\"raw_source_id\":null,\"source_url\":\"https://developers.cloudflare.com/fundamentals/manage-members/roles/\"}}",
+      "quote": "Domain-scoped roles apply for a given domain within an account.",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-a879d6f720dba443cdeaf698d767b1d15889b7d7a0ae3438eb731584066e9b9d",
+      "semantic_id": "evidence-fact-8b098cf4940ce3f0783e5dcd4503c1825136820d7cc2f03723b70a9ea33879e9",
+      "evidence_item_ids": [
+        "evidence-item-4f093e414596d6cd1b47"
+      ],
+      "source_id": "raw-source-c71a5d8161af6e06ae53",
+      "competitor": "Cloudflare",
+      "dimension": "feature",
+      "field": "evidence_terms",
+      "value_json": "[\"| AI Crawl Control Read Only | Can read AI Crawl Control and metrics. This role also grants read access to the underlying products AI Crawl Control depends on (analytics, DNS, firewall, and bot management), which makes additional zone pages visible in the dashboard, including the zone Overview, Analytics, and Security Analytics. | \\n| Bot Management | Can edit Bot Management (including Super Bot Fight Mode) configurations. | \\n| Cache Domain Purge | Grants access to purge the edge cache for a specific domain and allows the reading of zone settings. | \\n| Domain Administrator | Grants full access to domains in an account (including Regional Services configurations), and read-only access to account-wide Firewall, Access, and Worker resources. | \\n| Domain Administrator Read Only | Grants read-only access to domains in an account, as well as account-wide Firewall, Access, and Worker resources. This role does not currently include read access to Regional Services configurations. |\",\"Whenever you add a new member to your account, you can assign policies to those users and make use of the available roles. Roles can only ever be assigned to their given scope and multiple roles can be assigned to a given policy.\",\"| AI Crawl Control Read Only | Can read AI Crawl Control and metrics. This role also grants read access to the underlying products AI Crawl Control depends on (analytics, DNS, firewall, and bot management), which makes additional zone pages visible in the dashboard, including the zone Overview, Analytics, and Security Analytics. |\",\"| Domain Administrator | Grants full access to domains in an account (including Regional Services configurations), and read-only access to account-wide Firewall, Access, and Worker resources. |\",\"| Domain Administrator Read Only | Grants read-only access to domains in an account, as well as account-wide Firewall, Access, and Worker resources. This role does not currently include read access to Regional Services configurations. |\",\"| Zone Versioning Read | Grants read-only access to Zone Versioning. |\"]",
+      "unit": null,
+      "market": null,
+      "qualifiers_json": "{\"operations\":[],\"slot\":\"semantic_capability_eebe9b42c3ec11bc\",\"source_scope\":{\"captured_page_id\":\"captured-page-ffcab66db4d81556b3ed\",\"context\":{\"document_section\":[10191,12024],\"plan\":null,\"role\":null,\"section_path\":null},\"operations\":[],\"raw_source_id\":null,\"source_url\":\"https://developers.cloudflare.com/fundamentals/manage-members/roles/\"}}",
+      "quote": "| Cache Domain Purge | Grants access to purge the edge cache for a specific domain and allows the reading of zone settings. |",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-d3b9d72336157192c171266f6e5cf59a1bbcca6db321a9fcf02e949e88456ffb",
+      "semantic_id": "evidence-fact-1cb1068de580402594a63543ba9ed7be918eb3f233786a5ce1f3801fd18c22d6",
+      "evidence_item_ids": [
+        "evidence-item-87707c8aa832b32036a9"
+      ],
+      "source_id": "raw-source-52ba7b31b51e937245c1",
+      "competitor": "Cloudflare",
+      "dimension": "feature",
+      "field": "evidence_terms",
+      "value_json": "[\"Workers\\nUsers on the Workers Paid plan have access to the Standard usage model. Workers Enterprise accounts are billed based on the usage model specified in their contract. To switch to the Standard usage model, contact your Account Manager.\\n|  | Requests1, 2, 3, 4 | Duration | CPU time | \\n|---|---|---|---|\",\"The Workers Paid plan includes Workers, Pages Functions, Workers KV, Hyperdrive, and Durable Objects usage for a minimum charge of $5 USD per month for an account. The plan includes increased initial usage allotments, with clear charges for usage that exceeds the base plan. There are no additional charges for data transfer (egress) or throughput (bandwidth).\",\"Users on the Workers Paid plan have access to the Standard usage model. Workers Enterprise accounts are billed based on the usage model specified in their contract. To switch to the Standard usage model, contact your Account Manager.\",\"1 Inbound requests to your Worker. Cloudflare does not bill for subrequests you make from your Worker.\",\"WebSocket messages routed through a Worker do not count as requests.\",\"4 When Workers Caching is enabled, requests served from the Worker's cache are billed at the same per-request rate as requests that invoke the Worker. This includes requests to static assets and worker-to-worker invocations. CPU time is only billed when the Worker runs (on a cache miss or bypass).\",\"Workers\"]",
+      "unit": null,
+      "market": null,
+      "qualifiers_json": "{\"operations\":[],\"slot\":\"semantic_capability_1a7ca5552b5f3042\",\"source_scope\":{\"captured_page_id\":\"captured-page-d2fc3a6ca1d47e2c6dd5\",\"context\":{\"document_section\":[606,2028],\"plan\":null,\"role\":null,\"section_path\":null},\"operations\":[],\"raw_source_id\":null,\"source_url\":\"https://developers.cloudflare.com/workers/platform/pricing/\"}}",
+      "quote": "Users on the Workers Paid plan have access to the Standard usage model. Workers Enterprise accounts are billed based on the usage model specified in their contract. To switch to the Standard usage model, contact your Account Manager.",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    {
+      "id": "evidence-fact-record-e823898578c2fb3b347f4977d92ade84ec50ced459da80a49fd162c3847b8c37",
+      "semantic_id": "evidence-fact-df227bb918cc2f615e47c68dbce0e4f36c9f4f7cb2122b71645ba44acf040647",
+      "evidence_item_ids": [
+        "evidence-item-dabbcaf0f445dd4a5a19"
+      ],
+      "source_id": "raw-source-52ba7b31b51e937245c1",
+      "competitor": "Cloudflare",
+      "dimension": "feature",
+      "field": "evidence_terms",
+      "value_json": "[\"WebSocket messages routed through a Worker do not count as requests.\\n3 Requests to static assets are free and unlimited.\\n4 When Workers Caching is enabled, requests served from the Worker's cache are billed at the same per-request rate as requests that invoke the Worker. This includes requests to static assets and worker-to-worker invocations. CPU time is only billed when the Worker runs (on a cache miss or bypass).\",\"Users on the Workers Paid plan have access to the Standard usage model. Workers Enterprise accounts are billed based on the usage model specified in their contract. To switch to the Standard usage model, contact your Account Manager.\",\"1 Inbound requests to your Worker. Cloudflare does not bill for subrequests you make from your Worker.\\n2 WebSocket connections made to a Worker are charged as a request,\\nrepresenting the initial Upgrade connection made to establish the WebSocket.\\nWebSocket messages routed through a Worker do not count as requests.\\n3 Requests to static assets are free and unlimited.\\n4 When Workers Caching is enabled, requests served from the Worker's cache are billed at the same per-request rate as requests that invoke the Worker. This includes requests to static assets and worker-to-worker invocations. CPU time is only billed when the Worker runs (on a cache miss or bypass).\",\"By default, users have access to the Workers Free plan. The Workers Free plan includes limited usage of Workers, Pages Functions, Workers KV and Hyperdrive. Read more about the Free plan limits.\\nThe Workers Paid plan includes Workers, Pages Functions, Workers KV, Hyperdrive, and Durable Objects usage for a minimum charge of $5 USD per month for an account. The plan includes increased initial usage allotments, with clear charges for usage that exceeds the base plan. There are no additional charges for data transfer (egress) or throughput (bandwidth).\\nAll included usage is on a monthly basis.\"]",
+      "unit": null,
+      "market": null,
+      "qualifiers_json": "{\"operations\":[],\"slot\":\"semantic_capability_3dd7919d30bcbb9e\",\"source_scope\":{\"captured_page_id\":\"captured-page-d2fc3a6ca1d47e2c6dd5\",\"context\":{\"document_section\":[606,2028],\"plan\":null,\"role\":null,\"section_path\":null},\"operations\":[],\"raw_source_id\":null,\"source_url\":\"https://developers.cloudflare.com/workers/platform/pricing/\"}}",
+      "quote": "4 When Workers Caching is enabled, requests served from the Worker's cache are billed at the same per-request rate as requests that invoke the Worker. This includes requests to static assets and worker-to-worker invocations. CPU time is only billed when the Worker runs (on a cache miss or bypass).",
+      "status": "supported",
+      "confidence": 0.8
+    }
+  ],
+  "initial_response": "{\"version\":3,\"answers\":[{\"question_id\":\"question-1b7471af0d3dcf4af91c\",\"status\":\"partial\",\"claim_ids\":[\"claim-3f66e3b22f7516a9ec16\"],\"resolution\":\"clarification\",\"conclusion\":\"depends\",\"missing_fields\":[\"actual_action\",\"data_ownership\",\"retained_copy\",\"access_path\"],\"reason\":\"已发布证据仅说明域范围角色只适用于账户内指定域名，未明确 Cache Domain Purge 角色对 other.example 的清除权限，也未确认该角色是否可跨域生效；需澄清实际动作与访问路径。\"}]}",
+  "review_response": "{\"version\":3,\"answers\":[{\"question_id\":\"question-1b7471af0d3dcf4af91c\",\"status\":\"answered\",\"claim_ids\":[\"claim-3f66e3b22f7516a9ec16\"],\"resolution\":\"direct\",\"conclusion\":\"no\",\"missing_fields\":[],\"reason\":\"已发布证据明确域范围角色仅适用于账户内指定域名，因此仅授予 example.com 的 Cache Domain Purge 角色不能清除 other.example 的边缘缓存；问题已明确无其他角色，无需额外澄清。\"}]}",
+  "original_rejections": {
+    "initial": "incomplete clarification selection",
+    "review": "answer_body_unresolved"
+  },
+  "scope_claim_id": "claim-3f66e3b22f7516a9ec16"
+}

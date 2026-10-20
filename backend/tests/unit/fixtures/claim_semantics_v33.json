@@ -1,0 +1,136 @@
+[
+  {
+    "product": "bitwarden",
+    "audited_claim": {
+      "claim": {
+        "id": "claim-0de7a39e168ca65279be",
+        "text": "Free organization 用于与另外一名用户安全共享数据，Free organization 为这两名用户提供 Password Manager 的全部核心功能，并支持在最多两个 collections 中安全共享数据。",
+        "kind": "fact",
+        "competitor": "Bitwarden",
+        "dimension": "feature",
+        "fact_ids": [
+          "evidence-fact-record-62ac074648c1998b66457f7d540bd18dbe34f07d8ca67f505b3b39969e22154a"
+        ],
+        "source_ids": [
+          "raw-source-476cdfef80ec06d6a285"
+        ],
+        "source_span_bindings": [
+          {
+            "span_id": "source-span-539d5b83198662ed19057fd7",
+            "fact_id": "evidence-fact-record-62ac074648c1998b66457f7d540bd18dbe34f07d8ca67f505b3b39969e22154a",
+            "source_id": "raw-source-476cdfef80ec06d6a285",
+            "fact_hash": "772c614120b19939e871c63ed2e3b62d721aa4c1b053d86c2a77de862c540f9c",
+            "source_path": "value/0",
+            "start": 99,
+            "end": 226,
+            "quote": "Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections."
+          }
+        ]
+      },
+      "status": "supported",
+      "review": {
+        "claim_id": "claim-0de7a39e168ca65279be",
+        "verdict": "supported",
+        "reason": "The claim matches the cited quote: a Free organization for two users offers all core Password Manager features and secure sharing in up to two collections. The Chinese claim preserves the same two-user scope, core features, and two-collection limit.",
+        "checks": [
+          {
+            "check_id": "claim-check-856996a699342264cb7aff60",
+            "verdict": "supported",
+            "claim_span": "Free organization 用于与另外一名用户安全共享数据，Free organization 为这两名用户提供 Password Manager 的全部核心功能，并支持在最多两个 collections 中安全共享数据。"
+          },
+          {
+            "check_id": "claim-check-e65387ee5d14b150d8d2bb92",
+            "verdict": "supported",
+            "claim_span": "Free organization 用于与另外一名用户安全共享数据，Free organization 为这两名用户提供 Password Manager 的全部核心功能，并支持在最多两个 collections 中安全共享数据。"
+          }
+        ]
+      },
+      "rule_reasons": []
+    },
+    "fact": {
+      "id": "evidence-fact-record-62ac074648c1998b66457f7d540bd18dbe34f07d8ca67f505b3b39969e22154a",
+      "semantic_id": "evidence-fact-7ac5e2462cc83468f9ce0e9904e06e7d7a5b393f5bd142075c2ceea762a653f9",
+      "evidence_item_ids": [
+        "evidence-item-dab6fca6c9f167be9a0e"
+      ],
+      "source_id": "raw-source-476cdfef80ec06d6a285",
+      "competitor": "Bitwarden",
+      "dimension": "feature",
+      "field": "evidence_terms",
+      "value_json": "[\"Free organizations\\nStart a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.\",\"Password Manager Plans\",\"Personal plans\"]",
+      "unit": null,
+      "market": null,
+      "qualifiers_json": "{\"operations\":[{\"access_scope\":null,\"effect\":\"allowed\",\"missing_fields\":[\"role\",\"access_scope\"],\"object_quote\":null,\"object_type\":null,\"operation\":\"share\",\"operation_quote\":\"Start a Free organization to store and securely share data with one other user\",\"plan\":\"Personal plans\",\"prerequisites\":[{\"kind\":\"plan\",\"quote\":\"Start a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.\"}],\"role\":null}],\"slot\":\"semantic_capability_308c53113116d672\",\"source_scope\":{\"captured_page_id\":\"captured-page-bfedca6a80e5e08b279d\",\"context\":{\"document_section\":[1554,1845],\"plan\":null,\"role\":null,\"section_path\":null},\"operations\":[{\"access_scope\":null,\"effect\":\"allowed\",\"missing_fields\":[\"role\",\"access_scope\"],\"object_quote\":null,\"object_type\":null,\"operation\":\"share\",\"operation_quote\":\"Start a Free organization to store and securely share data with one other user\",\"plan\":\"Personal plans\",\"prerequisites\":[{\"kind\":\"plan\",\"quote\":\"Start a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.\"}],\"role\":null}],\"raw_source_id\":null,\"source_url\":\"https://bitwarden.com/help/password-manager-plans/\"}}",
+      "quote": "Start a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.",
+      "status": "supported",
+      "confidence": 0.8
+    }
+  },
+  {
+    "product": "1password",
+    "audited_claim": {
+      "claim": {
+        "id": "claim-33158e619887adf73a9a",
+        "text": "若要让访客拥有自己的 Private vault 并访问多个共享保险库，需将其从访客升级为家庭成员。",
+        "kind": "fact",
+        "competitor": "1Password",
+        "dimension": "feature",
+        "fact_ids": [
+          "evidence-fact-record-4c5cb771b65dfe7357b2efeccfe984fdf7c04537973cf76325a9522696bff642"
+        ],
+        "source_ids": [
+          "raw-source-d14e1c9530112ba42840"
+        ],
+        "source_span_bindings": [
+          {
+            "span_id": "source-span-ffb7f618ac0ac4429ef78d10",
+            "fact_id": "evidence-fact-record-4c5cb771b65dfe7357b2efeccfe984fdf7c04537973cf76325a9522696bff642",
+            "source_id": "raw-source-d14e1c9530112ba42840",
+            "fact_hash": "60114e41783b13eae0b48bc9ba7c9d446fcac266bf207949294cff172f92eaea",
+            "source_path": "quote",
+            "start": 0,
+            "end": 185,
+            "quote": "If you want to give a guest more access to your account\\, including their own Private vault and access to more than one shared vault\\, you can promote them from guest to family member\\."
+          }
+        ]
+      },
+      "status": "supported",
+      "review": {
+        "claim_id": "claim-33158e619887adf73a9a",
+        "verdict": "supported",
+        "reason": "The claim accurately restates the source quote: to give a guest their own Private vault and access to more than one shared vault, promote them from guest to family member. All elements (guest, Private vault, multiple shared vaults, promotion to family member) match the selected quote.",
+        "checks": [
+          {
+            "check_id": "claim-check-5e2629ef954bd4ef7892f662",
+            "verdict": "supported",
+            "claim_span": "若要让访客拥有自己的 Private vault 并访问多个共享保险库，需将其从访客升级为家庭成员。"
+          },
+          {
+            "check_id": "claim-check-975b4a7524165b878d6ee212",
+            "verdict": "supported",
+            "claim_span": "若要让访客拥有自己的 Private vault 并访问多个共享保险库，需将其从访客升级为家庭成员。"
+          }
+        ]
+      },
+      "rule_reasons": []
+    },
+    "fact": {
+      "id": "evidence-fact-record-4c5cb771b65dfe7357b2efeccfe984fdf7c04537973cf76325a9522696bff642",
+      "semantic_id": "evidence-fact-3bae47c2a6233f32ae401b0acde3974fe67e9a39474fab6e108b3a2724c1513b",
+      "evidence_item_ids": [
+        "evidence-item-b7b6f0ca59f06dc13bc4"
+      ],
+      "source_id": "raw-source-d14e1c9530112ba42840",
+      "competitor": "1Password",
+      "dimension": "feature",
+      "field": "evidence_terms",
+      "value_json": "[\"If you want to give a guest more access to your account\\\\, including their own Private vault and access to more than one shared vault\\\\, you can promote them from guest to family member\\\\.\",\"Guest accounts are ideal for sharing information with people on a limited basis\\\\. They don’t have their own private vaults and only have access to a single vault\\\\, which you choose\\\\. Consider inviting\\\\:\",\"\\\\- Your accountant\\\\, who needs your financial information\\\\.\",\"\\\\- Your realtor\\\\, who needs building codes\\\\.\",\"\\\\- Your babysitter\\\\, who needs household information like the Wi\\\\-Fi password and alarm codes\\\\.\",\"If you created the account for your family\\\\, you’re a family organizer\\\\, and you can invite guests and share a vault with them\\\\. To get started\\\\, sign in to your account on 1Password\\\\.com\\\\.\"]",
+      "unit": null,
+      "market": null,
+      "qualifiers_json": "{\"operations\":[],\"slot\":\"semantic_capability_86637d08e9af81af\",\"source_scope\":{\"captured_page_id\":\"captured-page-29d3f7ac1053c67e678e\",\"context\":{\"document_section\":[1695,2085],\"plan\":null,\"role\":null,\"section_path\":null},\"operations\":[],\"raw_source_id\":null,\"source_url\":\"https://support.1password.com/guests/\"}}",
+      "quote": "If you want to give a guest more access to your account\\, including their own Private vault and access to more than one shared vault\\, you can promote them from guest to family member\\.",
+      "status": "supported",
+      "confidence": 0.8
+    }
+  }
+]

@@ -461,6 +461,8 @@ def audit_report_claims(claims, reviews, view, boundaries, *, available_facts=No
         if review_version == 3:
             rules.extend(current_feature_binding_reasons(claim))
             rules.extend(independent_operation_reasons(claim))
+            from packages.research.evidence.claim_semantics import claim_semantic_reasons
+            rules.extend(claim_semantic_reasons(claim, view.facts))
         review = by_id.get(claim.id)
         if review is not None:
             operation_review = review
