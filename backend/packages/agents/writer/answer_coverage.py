@@ -218,6 +218,8 @@ def coverage_resolution_reasons(record, claims, *, require_v2=False, required_bi
                        if reason != 'answer_body_unresolved')
     reasons.extend(resolution_reasons(record.model_dump(mode="json"), record.question, claims))
     reasons.extend(plan_exclusivity_reasons(record, claims))
+    from packages.agents.writer.answer_action_scope import answer_action_scope_reasons
+    reasons.extend(answer_action_scope_reasons(record, claims))
     from packages.research.evidence.source_exceptions import answer_source_exception_reasons
     reasons.extend(answer_source_exception_reasons(record, claims, facts=facts))
     if record.binding_version == 3 and record.resolution == 'clarification' and record.claim_ids:

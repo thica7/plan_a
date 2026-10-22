@@ -48,7 +48,9 @@ def selection(question_id='q', *, ids=('scope',), conclusion='no', status='answe
         claim_ids=list(ids), resolution=resolution, conclusion=conclusion, missing_fields=[], reason=reason)]})
 
 
-def parse_scope(text, *, question=QUESTION, conclusion='no'):
+def parse_scope(text, *, question='资源级角色是否适用于任意资源？', conclusion='no'):
+    # Isolate the scope-syntax guard. A purge decision additionally requires a
+    # published purge rule (covered by writer_replay and answer_action_v35).
     claims = [{'id': 'scope', 'text': text}]
     assert guards._CLOSED_QUESTION.search(question), 'Exercise the closed-question guard'
     result = parse_answer_coverage(selection(conclusion=conclusion),
@@ -73,27 +75,26 @@ def test_exact_span56_still_rejects_unrequired_lifecycle_clarifications():
     assert result.reason.endswith('incomplete clarification selection')
 
 
-def test_exact_span57_original_failure_is_only_the_scope_assertion(monkeypatch):
+def test_exact_span57_keeps_scope_and_operation_failures_separate(monkeypatch):
     monkeypatch.setattr(guards, '_chinese_scope_asserts', lambda text: False, raising=False)
     saved, result = original_replay('review_response')
     assert guards._CLOSED_QUESTION.search(saved['questions'][0]['question'])
     assert result.status == 'unverified' and not result.answer and not result.claim_ids
-    assert result.reason.endswith('coverage guard rejected: answer_body_unresolved')
+    assert 'answer_body_unresolved' in result.reason
+    assert 'answer_operation_not_grounded' in result.reason
 
 
-def test_exact_span57_projects_the_reviewed_no_with_complete_original_bindings():
+def test_exact_span57_cannot_project_no_without_a_published_operation_rule():
     saved, result = original_replay('review_response')
     claim = next(c for c in saved['published_claims'] if c['id'] == saved['scope_claim_id'])
-    assert (result.status, result.resolution, result.conclusion) == ('answered', 'direct', 'no'), result.reason
-    assert result.binding_version == 3 and result.answer == claim['text']
-    assert [s.model_dump(mode='json') for s in result.evidence_spans] == [
-        {'claim_id': claim['id'], 'quote': claim['text']}]
+    assert (result.status, result.resolution, result.conclusion) == ('unverified', 'unresolved', 'unknown')
+    assert not result.answer and not result.claim_ids and not result.evidence_spans
+    assert 'answer_operation_not_grounded' in result.reason
     assert claim['source_span_bindings'][0]['quote'] == (
         'Domain-scoped roles apply for a given domain within an account.')
-    assert result.reason == '依据1条已发表主张；已回答，直接回答。'
-    assert 'example.com' not in result.answer and 'other.example' not in result.reason
-    assert not coverage_resolution_reasons(result, saved['published_claims'], required_binding_version=3,
-        facts=tuple(EvidenceFact.model_validate(f) for f in saved['facts']))
+    # The capture and reference labels remain unchanged; a legal scope quote
+    # no longer supplies the absent Cache Domain Purge action by itself.
+    assert claim['text']
 
 
 @pytest.mark.parametrize('text', [
@@ -144,7 +145,9 @@ def test_nonasserting_or_incomplete_blocks_do_not_unlock_the_body_guard(text):
 @pytest.mark.parametrize('conclusion', ['yes', 'no'])
 @pytest.mark.parametrize('other_grants', [True, False])
 def test_scope_syntax_never_decides_polarity_or_proves_person_wide_authorization(conclusion, other_grants):
-    question = QUESTION if other_grants else QUESTION.replace('，没有任何其他授权', '')
+    question = '同事只被授予甲资源的资源级角色，没有任何其他授权。此角色是否适用于乙资源？'
+    if not other_grants:
+        question = question.replace('，没有任何其他授权', '')
     result, _ = parse_scope(SCOPE, question=question, conclusion=conclusion)
     assert result.status == 'answered' and result.conclusion == conclusion
 

@@ -411,14 +411,46 @@ def claim_rule_reasons(claim, view, boundaries, *, available_facts=None):
     return tuple(reasons)
 
 
+def claim_operations(text):
+    """Recognized body actions, without the planner's broad role expansion.
+
+    The shared assertion recognizer retains main actions after prerequisites;
+    the source matcher also keeps bare edit/share statements behind the gate.
+    A role granting a capability describes that capability, rather than an
+    actor performing the distinct grant-access operation.
+    """
+    from packages.research.evidence.claim_semantics import _asserted_actions
+    from packages.research.evidence.operations import OPERATIONS, operation_matches_text
+
+    actions = {operation for operation in _asserted_actions(text)
+               if re.search(OPERATIONS[operation][1], text, re.I)}
+    for part in re.split(r'[。；;.!?\n]', text):
+        front_condition = re.match(
+            r'^\s*(?:(?:only\s+)?(?:if|when|after|before|unless|without)\b|'
+            r'只有|仅当|如果|若|除非)', part, re.I)
+        if front_condition:
+            # The source matcher stops at condition markers. Give it the main
+            # clause after a front condition so bare verbs and set/grant/etc.
+            # cannot disappear just because the modal recognizer is narrower.
+            part = re.split(r'[,，]|\bthen\b|则|那么',
+                part[front_condition.end():], maxsplit=1, flags=re.I)[-1]
+        part = re.sub(r'((?:\broles?\b|角色)\s*)(?:grants?\b|授予)', r'\1', part, flags=re.I)
+        # "读取区域设置的权限" names settings as the read object. It does
+        # not assert the separate action "设置权限".
+        access_action = re.sub(
+            r'(?:管理|修改|更改|变更|设置|分配|授予|撤销)(?=的(?:访问)?权限)', '', part)
+        actions.update(operation for operation in OPERATIONS if operation_matches_text(
+            operation, access_action if operation == 'manage_access' else part))
+    return tuple(sorted(actions))
+
+
 def current_feature_binding_reasons(claim):
     """Replay the current feature transport gate, independent of semantic verdicts."""
     if claim.dimension != 'feature' or claim.operation_binding is not None:
         return ()
     if not claim.source_span_bindings:
         return ('source_span_binding_required',)
-    from packages.research.evidence.operations import required_operations
-    if required_operations(claim.text):
+    if claim_operations(claim.text):
         return ('operation_binding_required',)
     return ()
 

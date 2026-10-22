@@ -2,7 +2,9 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-当前验证见[Collector 正文交付与 Writer 截断](optimization/2026-10-21-collector-input-writer.md)：Collector 从同一可见DOM重放并重验标题，空提取窗在模型调用前跳过；provider Markdown仅恢复唯一完整纯转义引文，含raw HTML的文档不进入新恢复；Writer仅feature逐题模式使用短support_refs，并从实际发送的同canonical支持恢复完整绑定。原exact/legacy、公有schema、预算与1600写作cap保持。后端6833通过／1跳过；四个有来源产品的Analyst、Comparator、Reflector、Writer都实际调用，Dropbox/Miro准入前阻断。旧八题6正确／2遗漏、新四题4遗漏；claim ID 9/10绑定、6/10单谓词。问答结论、具体前提和服务器事实仍有支持缺口，严格局部资格旧0/4、新0/2，实际QA共12阻断；不是全Graph／发布／生产dense RAG验收。中断丢失的临时辅助证据已披露，恢复后的审读和日志直接保存在项目忽略目录，未训练。
+当前验证见[问题结论绑定与完整规则投影](optimization/2026-10-23-question-conclusion.md)（2026-10-23）：后端 **6922通过／1跳过**，新增89项；有限操作覆盖守卫、完整可选举例前规则候选和正文操作识别已接入实际入口并通过独立审查。四组固定历史页面、真实模型回放共 **60调用／193790 token**，无截断。原始八题有6题核心内容覆盖、1题部分遗漏、1题整题遗漏，但仍有1Password否定前提漏绑、Cloudflare正文与答案状态冲突、Trello权限漏答及服务器事实漏绑；11条正式主张10条完整支持、仅4条单谓词，不能当完整报告合格率。**局部报告仍未通过严格验收**，实际QA共10阻断。不是新抓取、旧八题＋新四题全量复验、全Graph或生产稠密RAG验收，未训练。[结构化结果](optimization/2026-10-23-question-conclusion-results.json)。
+
+上一轮验证见[Collector 正文交付与 Writer 截断](optimization/2026-10-21-collector-input-writer.md)：Collector 从同一可见DOM重放并重验标题，空提取窗在模型调用前跳过；provider Markdown仅恢复唯一完整纯转义引文，含raw HTML的文档不进入新恢复；Writer仅feature逐题模式使用短support_refs，并从实际发送的同canonical支持恢复完整绑定。原exact/legacy、公有schema、预算与1600写作cap保持。后端6833通过／1跳过；四个有来源产品的Analyst、Comparator、Reflector、Writer都实际调用，Dropbox/Miro准入前阻断。旧八题6正确／2遗漏、新四题4遗漏；claim ID 9/10绑定、6/10单谓词。问答结论、具体前提和服务器事实仍有支持缺口，严格局部资格旧0/4、新0/2，实际QA共12阻断；不是全Graph／发布／生产dense RAG验收。中断丢失的临时辅助证据已披露，恢复后的审读和日志直接保存在项目忽略目录，未训练。
 
 上一轮验证见[完整主张审核与问题结论投影](optimization/2026-10-20-claim-semantics.md)：新增v3选定支持的有限语义冲突守卫，实时/最终QA共用；Writer与独立审核提示逐谓词保持can/must及条件；问题级结论识别完整中文闭合范围，产品规则与请求对象分离。最终后端6649通过／1跳过；旧八题4正确／4遗漏，新四题全遗漏，6条发表claim ID完整绑定但仅4条单谓词，另有服务器CPU短句缺精确绑定。BW/1P/CF的Analyst、Comparator、Reflector均实际执行无回退，Writer均调用但BW length出错；Dropbox、Trello、Miro准入前阻断、下游未执行。Trello实际提取body为空，CF已抓角色规则未进facts，不能用packet标记当语义送达。阶段QA分别10/2个阻断；全Graph、自动发现、发布、生产dense RAG未测，固定runner False不作系统失败评分。未训练。
 
@@ -125,6 +127,8 @@ Analyst、Comparator、Reflector、Writer 现共用 [`question_packets.py`](../b
 - **边界**：反思不是新增一手证据，不能用推断填补缺失的能力或报价；回退状态单独记录。
 
 ### Writer：把有效分析写入报告
+
+新增[有限问题操作覆盖](../backend/packages/agents/writer/answer_action_scope.py)：下载、导出、导入、投票、清缓存的明确子问，只能用涉及相应操作的已发表主张给出完整或确定是／否结论。生成、复审和保存重放共用 `coverage_resolution_reasons()`；已给场景不直接当作待回答操作，未知表达仍须语义审核。新增正文 `claim_operations()` 与规划关键词扩展分离，前置条件后的明确操作仍需绑定。源候选只恢复完整原文规则后的有限可选举例边界，必要列表和条件不能截断。这些检查拒绝已知错误，不证明一般蕴含；真实模型仍有否定前提、全文缺席断言、状态投影及服务器事实漏绑。
 
 v3 逐条隔离支持审核：仅选定 operation quote／source span 及完整来源条件支持该主张，父级宽原文和其他主张不能支持额外谓词。明确独立动作与未重建必要条件在实时及最终 QA 共用守卫，保留角色权限前提、权限选项、日期与例外；有限识别不构成通用 NLI。
 

@@ -17,7 +17,14 @@ from packages.llm.errors import LLMExecutionLimitError
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.research.evidence.answer_models import AnswerBoundary
 from packages.research.evidence.report_claims import (
-    ClaimReview, ReportClaim, ReportDimensionAudit, ReportOperationBinding, audit_report_claims, claim_rule_reasons, current_feature_binding_reasons,
+    ClaimReview,
+    ReportClaim,
+    ReportDimensionAudit,
+    ReportOperationBinding,
+    audit_report_claims,
+    claim_operations,
+    claim_rule_reasons,
+    current_feature_binding_reasons,
 )
 from packages.schema.decision_brief import decision_brief_prompt_context, safe_decision_brief_text
 
@@ -83,10 +90,9 @@ def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, sourc
             values = claim.model_dump(exclude={'observation_id', 'source_span_ids'})
             from packages.research.evidence.source_spans import source_span_candidates
             bound_spans = []
-            from packages.research.evidence.operations import required_operations
             if (claim.observation_id is None and claim.operation_binding is None
                     and any(item['fact_id'] in claim.fact_ids for item in candidates.values())
-                    and required_operations(claim.text)):
+                    and claim_operations(claim.text)):
                 gaps.add('operation_binding_required')
                 continue
             for span_id in claim.source_span_ids:
@@ -118,7 +124,6 @@ def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, sourc
                 values['source_span_bindings'] = bound_spans
             if not set(claim.fact_ids) <= sent_fact_ids:
                 raise ValueError('Claim cites a fact not sent to the writer')
-            from packages.research.evidence.operations import required_operations
             bound_originals = [originals[fid] for fid in claim.fact_ids if fid in originals]
             if bound_spans:
                 from types import SimpleNamespace
@@ -136,19 +141,20 @@ def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, sourc
             elif claim.operation_binding is not None:
                 if candidates.get(claim.operation_binding.observation_id) != claim.operation_binding.model_dump(mode='json'):
                     raise ValueError('Operation binding was not a sent candidate')
-            elif bound_spans and required_operations(claim.text):
+            elif bound_spans and claim_operations(claim.text):
                 gaps.add('operation_binding_required')
                 continue
             elif (any(item['fact_id'] in claim.fact_ids for item in candidates.values())
                     and not bound_spans
                     and not literal_non_operation(claim.text, claim.fact_ids, source_facts)
-                    and not (exception_pair and not required_operations(claim.text))):
+                    and not (exception_pair and not claim_operations(claim.text))):
                 gaps.add('operation_binding_required')
                 continue
             published = ReportClaim(id=f"claim-{hashlib.sha256(encoded([consumption_id, index]).encode()).hexdigest()[:20]}", **values)
             if len(claim.fact_ids) != 1 and not exception_pair:
                 raise ValueError('Multiple facts require a complete sent exception pair')
-            if exception_pair and published.operation_binding is None and required_operations(claim.text):
+            if (exception_pair and published.operation_binding is None
+                    and claim_operations(claim.text)):
                 gaps.add('operation_binding_required')
                 continue
             binding_reasons = current_feature_binding_reasons(published) if span_candidates is not None else ()
@@ -639,7 +645,6 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
 def operation_claim_selection(claims, view, requested, sent_fact_ids, *, fact_targets=None):
     """Retain distinct scoped answers, including non-operation access facts."""
     from packages.research.evidence.operations import bound_operation_observation
-    from packages.research.evidence.operations import required_operations
     from packages.research.evidence.source_exceptions import verified_exception_binding
     facts = {fact.id: fact for fact in view.facts}
     selected, covered = [], set()
@@ -652,7 +657,8 @@ def operation_claim_selection(claims, view, requested, sent_fact_ids, *, fact_ta
                 from packages.research.evidence.source_spans import projected_source_facts
                 support, span_reasons = projected_source_facts(
                     claim, [facts[fid] for fid in claim.fact_ids if fid in facts])
-                if (not span_reasons and claim.operation_binding is None and not required_operations(claim.text)
+                if (not span_reasons and claim.operation_binding is None
+                        and not claim_operations(claim.text)
                         and verified_exception_binding(
                             claim, support)):
                     selected.append(claim)

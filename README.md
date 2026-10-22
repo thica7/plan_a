@@ -191,7 +191,9 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.p
 
 ## 验证与交付边界
 
-最新[Collector 正文与 Writer 截断修复](docs/optimization/2026-10-21-collector-input-writer.md)（2026-10-22汇总）：后端 **6833通过／1跳过**，新增184项，OpenAPI、前端构建、变更Ruff及独立代码审查通过。Trello真实提取输入恢复为2452字符；CF具体角色行已入库并送达四个核心Agent；BW写作在原1600 cap内正常结束。六组首次共 **50调用／171070 token**；旧八题 **6正确／2遗漏**，新四题 **4遗漏**，claim ID **9/10完整绑定、6/10单谓词**。报告仍未达标：问答结论错绑、关键前提未发表、服务器事实漏绑、Dropbox导航壳与Miro403尚待修；严格局部资格旧0/4、新0/2，实际QA共12阻断。不是全Graph、发布或生产稠密RAG验收，未训练。中断后临时审查与helper丢失，已补独立审读和完整离线回归；原辅助证据未假称恢复，详见交付说明。[结构化结果](docs/optimization/2026-10-21-collector-input-writer-results.json)。
+最新[问题结论绑定与完整规则投影](docs/optimization/2026-10-23-question-conclusion.md)（2026-10-23）：后端 **6922通过／1跳过**，新增89项；有限操作覆盖守卫、完整可选举例前规则候选和正文操作识别已接入实际入口并通过独立审查。四组固定历史页面、真实模型回放共 **60调用／193790 token**，无截断。原始八题有6题核心内容覆盖、1题部分遗漏、1题整题遗漏，但仍有1Password否定前提漏绑、Cloudflare正文与答案状态冲突、Trello权限漏答及服务器事实漏绑；11条正式主张10条完整支持、仅4条单谓词，不能当完整报告合格率。**局部报告仍未通过严格验收**，实际QA共10阻断。不是新抓取、旧八题＋新四题全量复验、全Graph或生产稠密RAG验收，未训练。[结构化结果](docs/optimization/2026-10-23-question-conclusion-results.json)。
+
+上一轮[Collector 正文与 Writer 截断修复](docs/optimization/2026-10-21-collector-input-writer.md)（2026-10-22汇总）：后端 **6833通过／1跳过**，新增184项，OpenAPI、前端构建、变更Ruff及独立代码审查通过。Trello真实提取输入恢复为2452字符；CF具体角色行已入库并送达四个核心Agent；BW写作在原1600 cap内正常结束。六组首次共 **50调用／171070 token**；旧八题 **6正确／2遗漏**，新四题 **4遗漏**，claim ID **9/10完整绑定、6/10单谓词**。报告仍未达标：问答结论错绑、关键前提未发表、服务器事实漏绑、Dropbox导航壳与Miro403尚待修；严格局部资格旧0/4、新0/2，实际QA共12阻断。不是全Graph、发布或生产稠密RAG验收，未训练。中断后临时审查与helper丢失，已补独立审读和完整离线回归；原辅助证据未假称恢复，详见交付说明。[结构化结果](docs/optimization/2026-10-21-collector-input-writer-results.json)。
 
 上一轮[完整主张审核与问题结论投影](docs/optimization/2026-10-20-claim-semantics.md)（2026-10-21汇总）：后端 **6649通过／1跳过**，新增197项，变更Ruff、API／旧TS、构建及独立累计审查通过。六组各首次共 **33调用／已知112209 token，另1次usage未知**；旧八题正文与保存 **4正确／0错误／4遗漏**，新四题 **4遗漏**。发表claim ID **6/6完整绑定、4/6单谓词**，另有CF服务器CPU事实短句缺独立精确绑定。旧组局部内容与绑定 **1/4**，新组 **0/2**，实际QA阻断分别10、2；报告仍未达标。BW写作length、CF角色事实漏入、Trello捕获正文未送入提取、Dropbox导航壳与Miro403是下一优先项。阶段runner固定`deliverable=False`不代表全Graph实测失败；本轮全Graph／自动发现／发布／生产稠密RAG均未验收，未训练。用户已认可新题参考边界，新报告未验收。[结构化结果](docs/optimization/2026-10-20-claim-semantics-results.json)。
 

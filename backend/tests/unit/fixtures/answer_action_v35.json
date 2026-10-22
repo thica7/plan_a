@@ -1,0 +1,130 @@
+{
+  "provenance": "Exact saved question answer and published claims; no expected answers supplied to runtime.",
+  "cases": [
+    {
+      "group": "regression-trello-new",
+      "run_sha256": "ceb511c80ae7bfc73805c5c25a2ee9e8860983dca19ac23d174b3a7e0127104e",
+      "answer": {
+        "question_id": "question-00e2382d7575b5384c9a",
+        "question": "他能下载 A 的卡片附件并导出 A 吗？",
+        "status": "answered",
+        "claim_ids": [
+          "claim-446d0a88a6c3bd65836c"
+        ],
+        "reason": "依据1条已发表主张；已回答，直接回答。",
+        "answer": "所给页面只说明 Observer 在启用投票的看板上可以投票，并未说明投票是强制义务；因此“B 允许投票”不意味着小林必须给每张卡片投票。",
+        "resolution": "direct",
+        "conclusion": "yes",
+        "evidence_spans": [
+          {
+            "claim_id": "claim-446d0a88a6c3bd65836c",
+            "quote": "所给页面只说明 Observer 在启用投票的看板上可以投票，并未说明投票是强制义务；因此“B 允许投票”不意味着小林必须给每张卡片投票。"
+          }
+        ],
+        "binding_version": 3
+      },
+      "published_claims": [
+        {
+          "id": "claim-446d0a88a6c3bd65836c",
+          "text": "所给页面只说明 Observer 在启用投票的看板上可以投票，并未说明投票是强制义务；因此“B 允许投票”不意味着小林必须给每张卡片投票。",
+          "kind": "inference",
+          "competitor": "Trello",
+          "dimension": "feature",
+          "fact_ids": [
+            "evidence-fact-record-11a39a92c69c04c274aed5153423ab1b58d3a744b2773766255608c943b4a46f"
+          ],
+          "source_ids": [
+            "raw-source-033d8ca615035ad47a36"
+          ],
+          "source_span_bindings": [
+            {
+              "span_id": "source-span-8a40f317bffbd5667144aecb",
+              "fact_id": "evidence-fact-record-11a39a92c69c04c274aed5153423ab1b58d3a744b2773766255608c943b4a46f",
+              "source_id": "raw-source-033d8ca615035ad47a36",
+              "fact_hash": "bb61e247492c1c5c5f2073cc07b82258d547c53ca46a2f8a7ed3fe3700e12df0",
+              "source_path": "value/0",
+              "start": 52,
+              "end": 252,
+              "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board."
+            }
+          ]
+        },
+        {
+          "id": "claim-e67136b63c73ea46ba9e",
+          "text": "所给页面未记载仅凭 Observer 标签即可确定该成员免费或计费。",
+          "kind": "inference",
+          "competitor": "Trello",
+          "dimension": "feature",
+          "fact_ids": [
+            "evidence-fact-record-11a39a92c69c04c274aed5153423ab1b58d3a744b2773766255608c943b4a46f"
+          ],
+          "source_ids": [
+            "raw-source-033d8ca615035ad47a36"
+          ],
+          "source_span_bindings": [
+            {
+              "span_id": "source-span-63496264cc7e9eb508d63254",
+              "fact_id": "evidence-fact-record-11a39a92c69c04c274aed5153423ab1b58d3a744b2773766255608c943b4a46f",
+              "source_id": "raw-source-033d8ca615035ad47a36",
+              "fact_hash": "bb61e247492c1c5c5f2073cc07b82258d547c53ca46a2f8a7ed3fe3700e12df0",
+              "source_path": "value/0",
+              "start": 401,
+              "end": 475,
+              "quote": "Because an observer is a board member permission and not a membership\ntype"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "group": "regression-cloudflare",
+      "run_sha256": "876f7e8fdbf4978f0de1aa3fea0fe5a08607664c71e9f36df6e9693bd51ade99",
+      "answer": {
+        "question_id": "question-1b7471af0d3dcf4af91c",
+        "question": "Cloudflare: 同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？",
+        "status": "answered",
+        "claim_ids": [
+          "claim-02e5aab93ae89dc8a438"
+        ],
+        "reason": "依据1条已发表主张；已回答，直接回答。",
+        "answer": "域范围角色仅适用于账户内指定的某个域名。",
+        "resolution": "direct",
+        "conclusion": "no",
+        "evidence_spans": [
+          {
+            "claim_id": "claim-02e5aab93ae89dc8a438",
+            "quote": "域范围角色仅适用于账户内指定的某个域名。"
+          }
+        ],
+        "binding_version": 3
+      },
+      "published_claims": [
+        {
+          "id": "claim-02e5aab93ae89dc8a438",
+          "text": "域范围角色仅适用于账户内指定的某个域名。",
+          "kind": "fact",
+          "competitor": "Cloudflare",
+          "dimension": "feature",
+          "fact_ids": [
+            "evidence-fact-record-ad75779de1dcbb2874b64a3796352f8048a42c869fb44e3130b7d3aefcdf71b4"
+          ],
+          "source_ids": [
+            "raw-source-c71a5d8161af6e06ae53"
+          ],
+          "source_span_bindings": [
+            {
+              "span_id": "source-span-9a75dc2967fade32089fc1e2",
+              "fact_id": "evidence-fact-record-ad75779de1dcbb2874b64a3796352f8048a42c869fb44e3130b7d3aefcdf71b4",
+              "source_id": "raw-source-c71a5d8161af6e06ae53",
+              "fact_hash": "1dd87d6f99c9baa33f110035e28f9858c5ed6d6f86b67d056a422d8dfd1158d8",
+              "source_path": "quote",
+              "start": 0,
+              "end": 63,
+              "quote": "Domain-scoped roles apply for a given domain within an account."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

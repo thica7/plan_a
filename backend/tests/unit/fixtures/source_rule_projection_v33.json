@@ -1,0 +1,229 @@
+[
+  {
+    "case": "guest_rule_optional_examples",
+    "product": "1password",
+    "source": {
+      "snapshot_path": "data/artifacts/collector-input-writer-2026-10-21/regression-1password/snapshot.json",
+      "snapshot_sha256": "0eb0ce810add82d6dc817ee77f0576bae531221b8a064fa9b27add82e6dfcddb",
+      "snapshot_id": "evidence-snapshot-be2d593e31f883ab01adea8fe47c27f6ca0c9fb6b0c652fd0a74a53bd3dedfd3",
+      "trace_path": "data/artifacts/collector-input-writer-2026-10-21/regression-1password/trace.json",
+      "trace_sha256": "ae68b94a551b944dcc1d5ea8a4b0b20553913a5f74f37f2782c90c0fe748cd28",
+      "writer_trace_id": "span-47"
+    },
+    "fact": {
+      "id": "evidence-fact-record-dd9ed6e3f9142190cb76614d5be20629521f2e108c38c766dcf9bd38f957b663",
+      "semantic_id": "evidence-fact-a93bc995957206aefec115027faeaf818a4f22d7341dc6f11969646031fe9ef7",
+      "evidence_item_ids": [
+        "evidence-item-10c18c5624b5963e8590"
+      ],
+      "source_id": "raw-source-9ea4b68f00a9a2851e78",
+      "competitor": "1Password",
+      "dimension": "feature",
+      "field": "evidence_terms",
+      "value_json": "[\"manage their access to it\\n, like you would a family member.\\nA guest can only be invited to a single vault at a time, but you can remove them from one vault, then add them to a different one.\",\"Guest accounts are ideal for sharing information with people on a limited basis. They don’t have their own private vaults and only have access to a single vault, which you choose. Consider inviting:\",\"Your accountant, who needs your financial information.\",\"Your realtor, who needs building codes.\",\"Your babysitter, who needs household information like the Wi-Fi password and alarm codes.\",\"Guests have to accept their invitation and be confirmed before you can share a vault with them. After you’ve confirmed a guest, you can\",\"A guest can only be invited to a single vault at a time, but you can remove them from one vault, then add them to a different one.\"]",
+      "unit": null,
+      "market": null,
+      "qualifiers_json": "{\"operations\":[],\"slot\":\"semantic_capability_b6fbcdbf2e5e386a\",\"source_scope\":{\"captured_page_id\":\"captured-page-771b02ef185f362599ce\",\"context\":{\"document_section\":[898,1276],\"plan\":null,\"role\":null,\"section_path\":null},\"operations\":[],\"raw_source_id\":null,\"source_url\":\"https://support.1password.com/guests/\"}}",
+      "quote": "A guest can only be invited to a single vault at a time, but you can remove them from one vault, then add them to a different one.",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    "writer_atom": {
+      "text": "访客没有自己的 Private vault，只能访问由你选择的一个共享保险库。",
+      "kind": "fact",
+      "support_refs": [
+        "s2"
+      ]
+    }
+  },
+  {
+    "case": "cache_role",
+    "product": "cloudflare",
+    "source": {
+      "snapshot_path": "data/artifacts/collector-input-writer-2026-10-21/regression-cloudflare/snapshot.json",
+      "snapshot_sha256": "f55e4436a7e214e883dc7fa8273214cf4dc199a97669eaf01f25e7275caa45e3",
+      "snapshot_id": "evidence-snapshot-b7004dfff7a4ebe6a912f9ec27d6bd91279318fc71a11f3754796086bfc4fb4d",
+      "trace_path": "data/artifacts/collector-input-writer-2026-10-21/regression-cloudflare/trace.json",
+      "trace_sha256": "8b74936ceb4cc8160295a0eb1eb2c7035955b185dfeb912ad0189ed9a965d5c8",
+      "writer_trace_id": "span-47"
+    },
+    "fact": {
+      "id": "evidence-fact-record-481ad47288f6518daa07b13a8e9317452bdb22bd94585358b6e8f5ea37f06804",
+      "semantic_id": "evidence-fact-558a9a550f560497071f6ff77bef771a14a33458dd70892716b28540259b07e8",
+      "evidence_item_ids": [
+        "evidence-item-4f093e414596d6cd1b47"
+      ],
+      "source_id": "raw-source-c71a5d8161af6e06ae53",
+      "competitor": "Cloudflare",
+      "dimension": "feature",
+      "field": "evidence_terms",
+      "value_json": "[\"| AI Crawl Control Read Only | Can read AI Crawl Control and metrics. This role also grants read access to the underlying products AI Crawl Control depends on (analytics, DNS, firewall, and bot management), which makes additional zone pages visible in the dashboard, including the zone Overview, Analytics, and Security Analytics. | \\n| Bot Management | Can edit Bot Management (including Super Bot Fight Mode) configurations. | \\n| Cache Domain Purge | Grants access to purge the edge cache for a specific domain and allows the reading of zone settings. | \\n| Domain Administrator | Grants full access to domains in an account (including Regional Services configurations), and read-only access to account-wide Firewall, Access, and Worker resources. | \\n| Domain Administrator Read Only | Grants read-only access to domains in an account, as well as account-wide Firewall, Access, and Worker resources. This role does not currently include read access to Regional Services configurations. |\",\"Whenever you add a new member to your account, you can assign policies to those users and make use of the available roles. Roles can only ever be assigned to their given scope and multiple roles can be assigned to a given policy.\",\"| AI Crawl Control Read Only | Can read AI Crawl Control and metrics. This role also grants read access to the underlying products AI Crawl Control depends on (analytics, DNS, firewall, and bot management), which makes additional zone pages visible in the dashboard, including the zone Overview, Analytics, and Security Analytics. |\",\"| Domain Administrator | Grants full access to domains in an account (including Regional Services configurations), and read-only access to account-wide Firewall, Access, and Worker resources. |\",\"| Domain Administrator Read Only | Grants read-only access to domains in an account, as well as account-wide Firewall, Access, and Worker resources. This role does not currently include read access to Regional Services configurations. |\",\"| Zone Versioning Read | Grants read-only access to Zone Versioning. |\"]",
+      "unit": null,
+      "market": null,
+      "qualifiers_json": "{\"operations\":[],\"slot\":\"semantic_capability_eebe9b42c3ec11bc\",\"source_scope\":{\"captured_page_id\":\"captured-page-ffcab66db4d81556b3ed\",\"context\":{\"document_section\":[10191,12024],\"plan\":null,\"role\":null,\"section_path\":null},\"operations\":[],\"raw_source_id\":null,\"source_url\":\"https://developers.cloudflare.com/fundamentals/manage-members/roles/\"}}",
+      "quote": "| Cache Domain Purge | Grants access to purge the edge cache for a specific domain and allows the reading of zone settings. |",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    "writer_atom": {
+      "text": "Cache Domain Purge 角色授予清除特定域名的边缘缓存并读取区域设置的权限。",
+      "kind": "fact",
+      "support_refs": [
+        "s10"
+      ]
+    },
+    "sent_source_spans": [
+      {
+        "span_id": "source-span-878782c3f123041f0c94e6df",
+        "source_path": "quote",
+        "start": 0,
+        "end": 125,
+        "support_ref": "s10"
+      },
+      {
+        "span_id": "source-span-8e94c0a745d5a0b3e08ec217",
+        "source_path": "value/0",
+        "start": 0,
+        "end": 69,
+        "support_ref": "s11"
+      },
+      {
+        "span_id": "source-span-b09ef4cc477c8961d29a44f8",
+        "source_path": "value/0",
+        "start": 70,
+        "end": 899,
+        "support_ref": "s12"
+      },
+      {
+        "span_id": "source-span-1c86b01613209ca5bae039f0",
+        "source_path": "value/0",
+        "start": 900,
+        "end": 987,
+        "support_ref": "s13"
+      },
+      {
+        "span_id": "source-span-55431d493906a5c9daa98a66",
+        "source_path": "value/1",
+        "start": 0,
+        "end": 229,
+        "support_ref": "s14"
+      },
+      {
+        "span_id": "source-span-aaf7ffb45b509f5739d2ee3c",
+        "source_path": "value/2",
+        "start": 0,
+        "end": 332,
+        "support_ref": "s15"
+      },
+      {
+        "span_id": "source-span-da60c53d2e430a0e7b2f946e",
+        "source_path": "value/3",
+        "start": 0,
+        "end": 193,
+        "support_ref": "s16"
+      },
+      {
+        "span_id": "source-span-8faa3bb574d3106e3bdac823",
+        "source_path": "value/4",
+        "start": 0,
+        "end": 236,
+        "support_ref": "s17"
+      },
+      {
+        "span_id": "source-span-066746189b6c42bf81f7fb37",
+        "source_path": "value/5",
+        "start": 0,
+        "end": 70,
+        "support_ref": "s18"
+      }
+    ]
+  },
+  {
+    "case": "domain_scope",
+    "product": "cloudflare",
+    "source": {
+      "snapshot_path": "data/artifacts/collector-input-writer-2026-10-21/regression-cloudflare/snapshot.json",
+      "snapshot_sha256": "f55e4436a7e214e883dc7fa8273214cf4dc199a97669eaf01f25e7275caa45e3",
+      "snapshot_id": "evidence-snapshot-b7004dfff7a4ebe6a912f9ec27d6bd91279318fc71a11f3754796086bfc4fb4d",
+      "trace_path": "data/artifacts/collector-input-writer-2026-10-21/regression-cloudflare/trace.json",
+      "trace_sha256": "8b74936ceb4cc8160295a0eb1eb2c7035955b185dfeb912ad0189ed9a965d5c8",
+      "writer_trace_id": "span-47"
+    },
+    "fact": {
+      "id": "evidence-fact-record-ad75779de1dcbb2874b64a3796352f8048a42c869fb44e3130b7d3aefcdf71b4",
+      "semantic_id": "evidence-fact-070c4b841d50859a95f60e9d47adb3c8d0f270d06fc0b88d58e52d0eb5dc2d86",
+      "evidence_item_ids": [
+        "evidence-item-2871377568091f06b5b7"
+      ],
+      "source_id": "raw-source-c71a5d8161af6e06ae53",
+      "competitor": "Cloudflare",
+      "dimension": "feature",
+      "field": "evidence_terms",
+      "value_json": "[\"Domain-scoped roles\\nDomain-scoped roles apply for a given domain within an account.\\n| Role | Description | \\n|---|---|\",\"Whenever you add a new member to your account, you can assign policies to those users and make use of the available roles. Roles can only ever be assigned to their given scope and multiple roles can be assigned to a given policy.\",\"| AI Crawl Control Read Only | Can read AI Crawl Control and metrics. This role also grants read access to the underlying products AI Crawl Control depends on (analytics, DNS, firewall, and bot management), which makes additional zone pages visible in the dashboard, including the zone Overview, Analytics, and Security Analytics. |\",\"| Domain Administrator | Grants full access to domains in an account (including Regional Services configurations), and read-only access to account-wide Firewall, Access, and Worker resources. |\",\"| Domain Administrator Read Only | Grants read-only access to domains in an account, as well as account-wide Firewall, Access, and Worker resources. This role does not currently include read access to Regional Services configurations. |\",\"| Zone Versioning Read | Grants read-only access to Zone Versioning. |\"]",
+      "unit": null,
+      "market": null,
+      "qualifiers_json": "{\"operations\":[],\"slot\":\"semantic_capability_a8a537651314ebe8\",\"source_scope\":{\"captured_page_id\":\"captured-page-ffcab66db4d81556b3ed\",\"context\":{\"document_section\":[10191,12024],\"plan\":null,\"role\":null,\"section_path\":null},\"operations\":[],\"raw_source_id\":null,\"source_url\":\"https://developers.cloudflare.com/fundamentals/manage-members/roles/\"}}",
+      "quote": "Domain-scoped roles apply for a given domain within an account.",
+      "status": "supported",
+      "confidence": 0.8
+    },
+    "writer_atom": {
+      "text": "域范围角色仅适用于账户内指定的某个域名。",
+      "kind": "fact",
+      "support_refs": [
+        "s19"
+      ]
+    },
+    "sent_source_spans": [
+      {
+        "span_id": "source-span-9a75dc2967fade32089fc1e2",
+        "source_path": "quote",
+        "start": 0,
+        "end": 63,
+        "support_ref": "s19"
+      },
+      {
+        "span_id": "source-span-c221f49cc7c36c8de318298c",
+        "source_path": "value/0",
+        "start": 0,
+        "end": 117,
+        "support_ref": "s20"
+      },
+      {
+        "span_id": "source-span-fc7a561da95c9e73f0fbefe1",
+        "source_path": "value/1",
+        "start": 0,
+        "end": 229,
+        "support_ref": "s21"
+      },
+      {
+        "span_id": "source-span-dc7490d4f89b419b8c8f85e5",
+        "source_path": "value/2",
+        "start": 0,
+        "end": 332,
+        "support_ref": "s22"
+      },
+      {
+        "span_id": "source-span-0b95b80af1d745168f5002dd",
+        "source_path": "value/3",
+        "start": 0,
+        "end": 193,
+        "support_ref": "s23"
+      },
+      {
+        "span_id": "source-span-76344f1dfe78f0cacf0e609f",
+        "source_path": "value/4",
+        "start": 0,
+        "end": 236,
+        "support_ref": "s24"
+      },
+      {
+        "span_id": "source-span-a96570d7e95cd92d0298a784",
+        "source_path": "value/5",
+        "start": 0,
+        "end": 70,
+        "support_ref": "s25"
+      }
+    ]
+  }
+]

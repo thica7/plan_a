@@ -53,6 +53,29 @@ def source_span_candidates(fact):
             paragraph = paragraph.strip()
             if not paragraph:
                 continue
+            # A standalone optional-example lead-in does not qualify the
+            # preceding completed rule. Keep that whole prefix, with its
+            # original negations/conditions and offsets; required list headers
+            # are deliberately absent from this finite boundary vocabulary.
+            optional = re.search(
+                r'(?<=[.!?。！？])\s*'
+                r'(?:Consider inviting|For example|Examples include|例如)\s*[:：]$',
+                paragraph, re.I)
+            if optional:
+                prefix = paragraph[:optional.start()].rstrip()
+                lines = prefix.splitlines()
+                # Check every forward reference. A later complete sentence
+                # cannot resolve an earlier missing list. Only a list already
+                # present immediately after its own header closes that pointer.
+                if any((pointer := re.search(
+                            r'\b(?:following|below|these)\b|以下|下列|这些', line, re.I))
+                       and not (line.rstrip().endswith((':', '：')) and index + 1 < len(lines)
+                                and not re.search(r'[.!?。！？]', line[pointer.end():])
+                                and re.match(r'^\s*[-*]\s+\S', lines[index + 1]))
+                       for index, line in enumerate(lines)):
+                    continue
+                choices.append(prefix)
+                continue
             # Lists and their explanations remain one complete group. Wrapped
             # text remains one sentence until terminal punctuation, never one
             # candidate per physical line.
