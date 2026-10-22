@@ -1,5 +1,6 @@
 import json
-from claim_review_fixture import sent_source_span_id
+from claim_review_fixture import answer_response
+from claim_review_fixture import sent_source_atom
 from types import SimpleNamespace
 
 from claim_review_fixture import expand_prompt_payload, question_plan_response, supported_review
@@ -88,8 +89,8 @@ def test_coverage_payload_preserves_bound_evidence_without_candidate_duplication
         [], [claim], SimpleNamespace(facts=[original], competitor=original.competitor)
     )
     assert payload["competitor"] == original.competitor
-    assert payload["facts"][0]["quote"] == original.quote
-    assert payload["facts"][0]["qualifiers"] == {"access": "invited boards only"}
+    assert payload["published_supports"][0]["quote"] == original.quote
+    assert payload["published_supports"][0]["claim_id"] == claim.id
     assert "unused_candidate" not in json.dumps(payload)
 
 
@@ -470,7 +471,7 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
                 }
             )
         if kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}:
-            return json.dumps(
+            return answer_response(payload,
                 {
                     "version": 3,
                     "answers": [
@@ -488,19 +489,9 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
                 }
             )
         row = payload["evidence_view"]["facts"][0]
-        return question_plan_response(payload, [
-                    {
-                        "text": "Members must sign in before accessing their own documents."
-                        if complete
-                        else "Members have documents.",
-                        "kind": "fact",
-                        "competitor": "Notion",
-                        "dimension": "feature",
-                        "fact_ids": [row["id"]],
-                        "source_ids": [row["source_id"]],
-                        "source_span_ids": [sent_source_span_id(row)],
-                    }
-                ])
+        return question_plan_response(payload, [sent_source_atom(row,
+            "Members must sign in before accessing their own documents." if complete
+            else "Members have documents.")])
 
     monkeypatch.setattr(service, "_trace_llm_text", model)
     await service._real_writer_step(record)

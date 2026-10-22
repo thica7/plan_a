@@ -14929,6 +14929,64 @@
         ],
         "title": "AnswerRequirement"
       },
+      "AnswerSubquestionBinding": {
+        "properties": {
+          "question_quote": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question Quote"
+          },
+          "claim_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Claim Ids",
+            "default": []
+          },
+          "conclusion": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no",
+              "depends",
+              "unknown",
+              "not_applicable"
+            ],
+            "title": "Conclusion"
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "direct",
+              "explicit_negative",
+              "upper_bound",
+              "resource_scope",
+              "permission_entailment",
+              "destructive_effect",
+              "unresolved"
+            ],
+            "title": "Relation"
+          },
+          "support_digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Support Digest"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question_quote",
+          "conclusion",
+          "relation",
+          "support_digest"
+        ],
+        "title": "AnswerSubquestionBinding",
+        "description": "A reviewed decision tied to an exact request part and whole published premises."
+      },
       "ArtifactCreateRequest": {
         "properties": {
           "workspace_id": {
@@ -26265,6 +26323,15 @@
               }
             ],
             "title": "Binding Version"
+          },
+          "subquestion_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/AnswerSubquestionBinding"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Subquestion Bindings",
+            "default": []
           }
         },
         "additionalProperties": false,
@@ -26719,6 +26786,18 @@
               }
             ],
             "title": "Answer Binding Version"
+          },
+          "answer_review_contract": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "subquestion-premises-v1"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Review Contract"
           },
           "claim_review_version": {
             "anyOf": [

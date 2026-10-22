@@ -1,6 +1,7 @@
 """Finite v3 rejection gates; a forced verdict never proves general entailment."""
 
 import json
+from claim_review_fixture import answer_response
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -368,7 +369,7 @@ def test_semantics_does_not_use_a_forged_span_as_support():
 @pytest.mark.parametrize('row', json.loads(CAPTURED.read_text()), ids=lambda row: row['product'])
 @pytest.mark.parametrize('valid', [False, True])
 async def test_actual_writer_keeps_legal_atoms_and_rejects_original_false_supported_claim(monkeypatch, row, valid):
-    from claim_review_fixture import expand_prompt_payload
+    from claim_review_fixture import expand_prompt_payload, sent_source_atom
     from packages.agents.qa.evidence_alignment import audit_dimension_claims
     from packages.schema.models import DecisionBrief
     from test_question_retrieval import replace_snapshot
@@ -403,9 +404,8 @@ async def test_actual_writer_keeps_legal_atoms_and_rejects_original_false_suppor
         if kwargs['name'] == 'dimension_claim_writer':
             span = saved.claim.source_span_bindings[0]
             sent = next(item for item in payload['evidence_view']['facts'] if item['id'] == original.id)
-            assert span.span_id in {item['span_id'] for item in sent['source_span_candidates']}
-            atoms = [dict(text=text, kind='fact', competitor=original.competitor, dimension='feature',
-                fact_ids=[original.id], source_ids=[original.source_id], source_span_ids=[span.span_id]) for text in texts]
+            assert span.quote in {item['quote'] for item in sent['source_span_candidates']}
+            atoms = [sent_source_atom(sent, text, support_text=span.quote) for text in texts]
             return json.dumps({'question_plans': [dict(question_id=q['question_id'], atoms=atoms if index == 0 else [],
                 missing_fields=[]) for index, q in enumerate(payload['questions'])]})
         if kwargs['name'] == 'dimension_claim_review':
@@ -415,10 +415,10 @@ async def test_actual_writer_keeps_legal_atoms_and_rejects_original_false_suppor
             return json.dumps({'reviews': [supported_review(payload['claims'][0])]})
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}
         selected = next((item for item in payload['claims'] if 'collections' in item['text']), payload['claims'][0])
-        return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'],
+        return answer_response(payload, {'version': 3, 'answers': [dict(question_id=q['question_id'],
             status='answered' if is_cap else 'unverified', resolution='direct' if is_cap else 'unresolved',
             conclusion='no' if is_cap else 'unknown', claim_ids=[selected['id']] if is_cap else [],
-            missing_fields=[], reason='The exact selected atom supports this answer.') for q in payload['questions']]})
+            missing_fields=[], reason='The exact selected atom supports this answer.') for q in payload['questions']]}, relation='upper_bound')
 
     monkeypatch.setattr(service, '_trace_llm_text', model)
     await service._real_writer_step(record)

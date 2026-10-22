@@ -47,6 +47,12 @@ async def check(monkeypatch, responses, *, facts=(), compact=None):
     )
     responses = [json.dumps(dict(json.loads(value), version=3)) if isinstance(value, str) and value.startswith('{')
                  else value for value in responses]
+    if len(responses) > 1 and isinstance(responses[1], str) and responses[1].startswith('{'):
+        response = json.loads(responses[1])
+        for row in response['answers']:
+            row['subquestions'] = [dict(question_quote=QUESTION['question'], claim_ids=row['claim_ids'],
+                conclusion=row['conclusion'], relation='upper_bound' if row['conclusion'] == 'no' else 'direct')]
+        responses[1] = json.dumps(response)
     reviewer = Reviewer(responses)
     claim = ReportClaim(id="limit", text="Only two people can use a Basic workspace.",
                         competitor="Example", dimension="feature", kind="fact",
@@ -66,7 +72,7 @@ async def test_second_review_sees_sent_but_unpublished_exception_without_publish
 
     quotes = [
         'Only two people can use a Basic workspace.',
-        'Previously downloaded copies remain accessible after membership removal.',
+        'If you allow members to keep a copy, they can retain downloaded files after removal.',
         'An unrelated capability has different limits.',
     ]
     facts = tuple(EvidenceFact(
@@ -81,8 +87,8 @@ async def test_second_review_sees_sent_but_unpublished_exception_without_publish
     )
     payloads = [json.loads(call['user'].split('\nJSON:\n')[1]) for call in reviewer.calls]
     assert 'facts' not in payloads[0]
-    assert {fact['id'] for fact in payloads[1]['facts']} == {'f1', 'f2'}
-    assert next(fact['quote'] for fact in payloads[1]['facts'] if fact['id'] == 'f2') == quotes[1]
+    assert {fact['fact_id'] for fact in payloads[1]['published_supports']} == {'f1'}
+    assert payloads[1]['restrictive_source_context'][0]['source_exceptions'][0]['quote'] == quotes[1]
     assert [claim['id'] for claim in payloads[1]['claims']] == ['limit']
     assert answers[0].claim_ids == ('limit',) and quotes[1] not in answers[0].answer
 

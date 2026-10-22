@@ -1,6 +1,7 @@
 """Semantic fact IDs survive the protected Writer's first draft projection."""
 
 import json
+from claim_review_fixture import answer_response
 from datetime import UTC, datetime
 
 import pytest
@@ -81,7 +82,7 @@ async def test_protected_writer_projects_new_semantic_source_and_replays_its_pro
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(c) for c in payload['claims']]})
         if kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}:
-            return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'], status='answered',
+            return answer_response(payload, {'version': 3, 'answers': [dict(question_id=q['question_id'], status='answered',
                 resolution='direct', conclusion='yes',
                 claim_ids=[c['id'] for c in payload['claims']],
                 missing_fields=[], reason='The published sign-in rule answers the question.')

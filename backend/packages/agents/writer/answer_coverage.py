@@ -63,48 +63,49 @@ def question_fact_ids(detail, snapshot, product, dimension):
 
 
 def answer_review_payload(questions, claims, view, *, additional_fact_ids=(), include_originals=True):
-    """All bound originals, without duplicating rejected operation candidates."""
+    """Published atoms prove answers; unselected originals can only restrict them."""
     ids = {fid for claim in claims for fid in claim.fact_ids} | set(additional_fact_ids)
     from packages.research.evidence.temporal_conditions import temporal_constraints
     from packages.research.evidence.source_exceptions import (
         required_question_clarifications, source_exception_constraints,
     )
+    from packages.research.evidence.source_spans import projected_source_facts
     payload = {
         "required_clarifications": required_question_clarifications(questions),
         "competitor": view.competitor,
         "questions": questions,
-        "claims": [
-            claim.model_dump(
-                mode="json",
-                include={
-                    "id",
-                    "text",
-                    "competitor",
-                    "dimension",
-                    "fact_ids",
-                    "source_ids",
-                    "operation_binding",
-                    "source_span_bindings",
-                },
-            )
-            for claim in claims
-        ],
-        "facts": [
-            dict(
-                id=fact.id,
-                source_id=fact.source_id,
-                quote=fact.quote,
-                value=fact.value,
-                qualifiers={k: v for k, v in fact.qualifiers.items() if k != "operations"},
-                temporal_constraints=temporal_constraints(fact),
-                source_exceptions=source_exception_constraints(fact, available_facts=view.facts),
-            )
-            for fact in view.facts
-            if fact.id in ids
-        ],
+        "claims": [claim.model_dump(mode="json", include={
+            "id", "text", "kind", "competitor", "dimension", "fact_ids", "source_ids",
+            "operation_binding", "source_span_bindings",
+        }) for claim in claims],
     }
-    if not include_originals:
-        payload.pop('facts')
+    if include_originals:
+        supports = []
+        for claim in claims:
+            if claim.operation_binding is not None:
+                from packages.research.evidence.operations import bound_operation_observation
+                bound = bound_operation_observation(claim, {fact.id: fact for fact in view.facts})
+                if bound is not None:
+                    supports.append(dict(claim_id=claim.id, fact_id=bound['fact_id'],
+                        source_id=bound['source_id'], quote=bound['operation_quote'],
+                        condition_evidence=bound['condition_evidence']))
+                continue
+            originals = [fact for fact in view.facts if fact.id in claim.fact_ids]
+            projected, errors = projected_source_facts(claim, originals)
+            if not errors:
+                supports.extend(dict(claim_id=claim.id, fact_id=fact.id, source_id=fact.source_id,
+                                     quote=fact.quote) for fact in projected)
+        restrictions = []
+        for fact in view.facts:
+            if fact.id not in ids:
+                continue
+            temporal = temporal_constraints(fact)
+            exceptions = source_exception_constraints(fact, available_facts=view.facts)
+            if temporal or exceptions:
+                restrictions.append(dict(fact_id=fact.id, source_id=fact.source_id,
+                    purpose="reject_or_qualify_only", temporal_constraints=temporal,
+                    source_exceptions=exceptions))
+        payload.update(published_supports=supports, restrictive_source_context=restrictions)
     return payload
 
 
@@ -189,7 +190,7 @@ def saved_coverage_reason(record):
     return reason + ('; inputs to confirm: ' + ', '.join(labels) if labels else '') + '.'
 
 
-def coverage_resolution_reasons(record, claims, *, require_v2=False, required_binding_version=None, facts=()):
+def coverage_resolution_reasons(record, claims, *, require_v2=False, required_binding_version=None, facts=(), require_subquestions=False):
     """Replay answer guards against the exact published claims, never review reasons."""
     from packages.agents.writer.answer_resolution import resolution_reasons
     from packages.agents.writer.answer_plan_scope import plan_exclusivity_reasons
@@ -197,6 +198,10 @@ def coverage_resolution_reasons(record, claims, *, require_v2=False, required_bi
     if require_v2:
         required_binding_version = 2
     reasons = selection_binding_reasons(record, claims, required_binding_version=required_binding_version)
+    from packages.agents.writer.subquestion_premises import subquestion_binding_reasons
+    branch_reasons = subquestion_binding_reasons(record, claims, required=(require_subquestions
+        and record.status in {"answered", "partial"} and record.resolution in {"direct", "conditional"}))
+    reasons.extend(branch_reasons)
     if record.binding_version == 3 and record.resolution == 'clarification' and not record.claim_ids:
         # This finite record has no product assertion. Exact reconstruction
         # above replaces source-rule requirements only for this local delivery.
@@ -216,7 +221,14 @@ def coverage_resolution_reasons(record, claims, *, require_v2=False, required_bi
         direct = record.model_dump(mode="json") | {"resolution": "conditional", "conclusion": "depends"}
         reasons.extend(reason for reason in resolution_reasons(direct, record.question, claims)
                        if reason != 'answer_body_unresolved')
-    reasons.extend(resolution_reasons(record.model_dump(mode="json"), record.question, claims))
+    resolution_checks = resolution_reasons(record.model_dump(mode="json"), record.question, claims)
+    # The finite, source-bound deletion proof is itself an assertion. Preserve
+    # all role/object/exception checks; only the older assertion vocabulary is bypassed.
+    proven_deletion = bool(record.subquestion_bindings) and not branch_reasons and all(
+        branch.relation == 'destructive_effect' and branch.conclusion == 'no'
+        for branch in record.subquestion_bindings)
+    reasons.extend(reason for reason in resolution_checks
+                   if not (proven_deletion and reason == 'answer_body_unresolved'))
     reasons.extend(plan_exclusivity_reasons(record, claims))
     from packages.agents.writer.answer_action_scope import answer_action_scope_reasons
     reasons.extend(answer_action_scope_reasons(record, claims))
@@ -296,7 +308,8 @@ def selected_claim_texts(claim_ids, claims):
 
 
 def parse_answer_coverage(
-    text, questions, supported_claim_ids, *, claims=(), require_v2=False, required_binding_version=None, facts=()
+    text, questions, supported_claim_ids, *, claims=(), require_v2=False, required_binding_version=None, facts=(),
+    require_subquestions=False
 ):
     try:
         data = json.loads(text)
@@ -333,6 +346,10 @@ def parse_answer_coverage(
                 } <= set(row) or {"question", "basis_snapshot_id", "binding_version"} & set(row):
                     raise ValueError("missing or duplicate coverage")
                 if selection:
+                    subquestions = row.get("subquestions")
+                    row = {k: v for k, v in row.items() if k != "subquestions"}
+                    if subquestions is not None and data["version"] != 3:
+                        raise ValueError("subquestion contract requires v3")
                     if set(row) != {
                         "question_id", "status", "claim_ids", "reason", "resolution", "conclusion", "missing_fields",
                     } or not isinstance(row["claim_ids"], list):
@@ -342,8 +359,10 @@ def parse_answer_coverage(
                     if data['version'] == 3 and row['resolution'] == 'clarification' and not row['claim_ids']:
                         raise ValueError('empty clarification is server generated only')
                     texts = selected_claim_texts(row["claim_ids"], claims)
+                    from packages.agents.writer.subquestion_premises import bind_subquestions
+                    bindings = bind_subquestions(subquestions, question["question"], claims) if subquestions is not None else ()
                     record = ReportAnswerCoverage(
-                        **row, question=question["question"], binding_version=data["version"],
+                        **row, subquestion_bindings=bindings, question=question["question"], binding_version=data["version"],
                         answer="\n".join(texts),
                         evidence_spans=[{"claim_id": claim_id, "quote": quote}
                                         for claim_id, quote in zip(row["claim_ids"], texts)],
@@ -357,7 +376,7 @@ def parse_answer_coverage(
                     raise ValueError("coverage cites unpublished claims")
                 if record.binding_version == 3:
                     record = record.model_copy(update={'reason': saved_coverage_reason(record)})
-                reasons = coverage_resolution_reasons(record, claims, facts=facts)
+                reasons = coverage_resolution_reasons(record, claims, facts=facts, require_subquestions=require_subquestions)
                 if reasons:
                     raise ValueError("coverage guard rejected: " + ",".join(reasons))
                 result.append(record)
@@ -453,4 +472,38 @@ ANSWER_REVIEW_SYSTEM = (
     "not published, return partial or unverified with concrete missing_fields. Do not "
     "approve a proposal merely because it was previously marked answered. "
     + ANSWER_COVERAGE_SYSTEM
+)
+
+
+SUBQUESTION_REVIEW_SYSTEM = (
+    ANSWER_REVIEW_SYSTEM +
+    " This final review additionally requires subquestions on each answered or partial direct/conditional row. "
+    "Partition the COMPLETE original question into ordered contiguous question_quote excerpts; "
+    "copy every character (whitespace between excerpts may be omitted). Preserve scenario inputs and "
+    "format instructions with the relevant predicate. A subquestion is a REQUESTED decision, not a "
+    "truth judgment on a scenario sentence. Never make the user's account creation, assigned role, "
+    "date or requirements a separate yes branch. Attach all preceding scenario text to the first "
+    "requested decision, and trailing presentation instructions to the last. For example, "
+    "'We created a workspace yesterday. Can a guest export?' is ONE question_quote, not two. "
+    "'She has role R on A only. Can she act on B?' is also ONE branch. User scenarios are "
+    "conditional inputs, never product facts to verify. Separate independently decidable predicates: "
+    "access to two vaults and owning a private vault are two branches, never one shared no. "
+    "For each branch return only {question_quote,claim_ids,conclusion,relation}. "
+    "Select its own complete published premises, including role, plan, operation, access path, scope "
+    "and exceptions. No branch can borrow a missing predicate from another branch or from reason. "
+    "conclusion uses yes|no|depends|unknown|not_applicable. relation uses direct|explicit_negative|"
+    "upper_bound|resource_scope|permission_entailment|destructive_effect|unresolved. "
+    "An answered row requires every branch established; unknown branches require partial/unverified. "
+    "For no use explicit_negative only if selected published text explicitly denies that same predicate; "
+    "can upgrade does not mean must upgrade and cannot prove no current permission. "
+    "upper_bound compares a published numeric cap with a larger requested quantity of the same unit. "
+    "resource_scope requires both the complete scoped product rule AND a reviewed published inference; "
+    "select the inference as well as its rule. Supported inference is an eligible premise, not a raw suggestion. "
+    "permission_entailment only rejects the question's inference 'can therefore must'; it cannot prove "
+    "that no other duty exists. Mixed branch outcomes require parent conclusion depends. "
+    "published_supports audit the selected statements but do not add missing product assertions; "
+    "restrictive_source_context may reject or qualify only, never prove an unpublished answer. "
+    "destructive_effect permits only an explicit complete deletion of the same data to deny retention; "
+    "removing membership does not imply deletion. Preserve exceptions and actor/scope. "
+    "Return the same version 3 schema plus subquestions; no support_digest (server creates it). "
 )

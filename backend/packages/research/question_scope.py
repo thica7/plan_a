@@ -21,8 +21,17 @@ def research_questions(detail, product, dimension):
         if len(pieces) > 1 and not re.search(r"[?？]|是否|能否|如何|哪些|什么|怎样", pieces[-1]):
             pieces[-2:] = [pieces[-2] + pieces[-1]]
         segments.extend(pieces)
+    grouped = []
+    for segment in segments:
+        tail = segment.strip()
+        presentation = re.fullmatch(r"请将[^?？\n]*(?:分别|逐项)(?:说明|列出|展示)[。.!]?", tail)
+        if (grouped and presentation
+                and not any(name in tail and name not in grouped[-1] for name in products)):
+            grouped[-1] += " " + tail
+        else:
+            grouped.append(segment)
     result, seen, active_products = [], set(), []
-    for line in segments:
+    for line in grouped:
         question = re.sub(r"^\s*(?:[-*]|\d+[.)、])\s*", "", line).strip()
         if not question or question in seen:
             continue

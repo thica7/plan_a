@@ -1,6 +1,7 @@
 """Atomic transport and strict v3 replay; stubs do not prove model entailment."""
 
 import json
+from claim_review_fixture import answer_response
 from types import SimpleNamespace
 
 import pytest
@@ -162,7 +163,7 @@ def test_invalid_atom_and_repeated_background_do_not_consume_other_question_capa
 async def test_real_writer_review_save_and_final_qa_replay_atomic_clarification(monkeypatch, mutation):
     from datetime import UTC, datetime
     from pydantic import HttpUrl, TypeAdapter
-    from claim_review_fixture import expand_prompt_payload, supported_review, sent_source_span_id
+    from claim_review_fixture import expand_prompt_payload, supported_review, sent_source_atom
     from test_question_retrieval import research_case
     from test_writer_question_delivery import service_for
     from packages.agents.qa.evidence_alignment import audit_dimension_claims
@@ -190,9 +191,7 @@ async def test_real_writer_review_save_and_final_qa_replay_atomic_clarification(
         calls.append((kwargs['name'], payload))
         if kwargs['name'] == 'dimension_claim_writer':
             assert payload['required_clarifications'][0]['missing_fields'] == FIELDS
-            atoms = [dict(text=row['quote'], kind='fact', competitor='Example Product', dimension='feature',
-                fact_ids=[row['id']], source_ids=[row['source_id']], source_span_ids=[sent_source_span_id(row)])
-                for row in payload['evidence_view']['facts']]
+            atoms = [sent_source_atom(row, row['quote']) for row in payload['evidence_view']['facts']]
             return json.dumps({'question_plans': [dict(question_id=q['question_id'], atoms=atoms,
                                missing_fields=FIELDS) for q in payload['questions']]})
         if kwargs['name'] == 'dimension_claim_review':
@@ -426,7 +425,7 @@ def test_persisted_version_fields_do_not_coerce_invalid_json_values(field, versi
 async def test_real_writer_bad_atom_keeps_the_other_questions_valid_published_plan(monkeypatch):
     from datetime import UTC, datetime
     from pydantic import HttpUrl, TypeAdapter
-    from claim_review_fixture import expand_prompt_payload, sent_source_span_id, supported_review
+    from claim_review_fixture import expand_prompt_payload, sent_source_atom, supported_review
     from test_question_retrieval import research_case
     from test_writer_question_delivery import service_for
     from packages.research.evidence.snapshot import seal_snapshot
@@ -447,9 +446,7 @@ async def test_real_writer_bad_atom_keeps_the_other_questions_valid_published_pl
         payload = expand_prompt_payload(json.loads(kwargs['user'].split('\nJSON:\n', 1)[1]))
         if kwargs['name'] == 'dimension_claim_writer':
             rows = {row['quote']: row for row in payload['evidence_view']['facts']}
-            atoms = [dict(text=text, kind='fact', competitor='Example Product', dimension='feature',
-                fact_ids=[rows[text]['id']], source_ids=[rows[text]['source_id']],
-                source_span_ids=[sent_source_span_id(rows[text])]) for text in [ownership, limit]]
+            atoms = [sent_source_atom(rows[text], text) for text in [ownership, limit]]
             atoms[0]['fact_ids'] = ['not-sent']
             return json.dumps({'question_plans': [dict(question_id=q['question_id'], atoms=[atom], missing_fields=[])
                 for q, atom in zip(payload['questions'], atoms)]})
@@ -457,7 +454,7 @@ async def test_real_writer_bad_atom_keeps_the_other_questions_valid_published_pl
             assert [atom['text'] for atom in payload['claims']] == [limit]
             return json.dumps({'reviews': [supported_review(atom) for atom in payload['claims']]})
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}
-        return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'],
+        return answer_response(payload, {'version': 3, 'answers': [dict(question_id=q['question_id'],
             status='answered' if index else 'unverified', resolution='direct' if index else 'unresolved',
             conclusion='not_applicable' if index else 'unknown', missing_fields=[],
             claim_ids=[payload['claims'][0]['id']] if index else [], reason='The published rule or source gap.')

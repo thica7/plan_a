@@ -1,6 +1,7 @@
 """Anonymous examples for selecting and replaying published answer claims."""
 
 import json
+from claim_review_fixture import answer_response
 
 from claim_review_fixture import expand_prompt_payload, question_plan_response
 
@@ -292,7 +293,7 @@ async def test_writer_publishes_bound_plan_rules_and_final_qa_rejects_changed_an
                         {"claim_id": claim["id"], "quote": claim["text"]} for claim in payload["claims"]
                     ]
                 return json.dumps({"answers": answers})
-            return json.dumps({"version": 3, "answers": answers})
+            return answer_response(payload, {"version": 3, "answers": answers})
         assert kwargs["name"] == "dimension_claim_writer"
         writes.append(kwargs["system"])
         drafts = []

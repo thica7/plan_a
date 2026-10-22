@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from claim_review_fixture import (
-    expand_prompt_payload, question_plan_response, sent_source_span_id, supported_review,
+    answer_response, expand_prompt_payload, question_plan_response, sent_source_atom, supported_review,
 )
 from pydantic import HttpUrl, TypeAdapter
 from test_question_retrieval import research_case
@@ -187,9 +187,8 @@ async def writer_replay(monkeypatch, *, case='complete', review='no'):
         calls.append((kwargs['name'], payload))
         if kwargs['name'] == 'dimension_claim_writer':
             facts = payload['evidence_view']['facts']
-            atoms = [dict(text=f['quote'], kind='fact', competitor='Example Product', dimension='feature',
-                fact_ids=[f['id']], source_ids=[f['source_id']],
-                source_span_ids=[sent_source_span_id(f, f['quote'])]) for f in facts if f['quote'] in published]
+            atoms = [sent_source_atom(f, f['quote'], support_text=f['quote'])
+                     for f in facts if f['quote'] in published]
             return question_plan_response(payload, atoms)
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(c) for c in payload['claims']]})
@@ -198,7 +197,7 @@ async def writer_replay(monkeypatch, *, case='complete', review='no'):
         assert guards._CLOSED_QUESTION.search(payload['questions'][0]['question'])
         if kwargs['name'] == 'dimension_answer_review':
             assert {c['text'] for c in payload['claims']} == set(published)
-            assert set(rules) <= {f['quote'] for f in payload['facts']}
+            assert set(published) <= {f['quote'] for f in payload['published_supports']}
             if review == 'missing':
                 return None
             if review == 'invalid':
@@ -209,9 +208,10 @@ async def writer_replay(monkeypatch, *, case='complete', review='no'):
                 return selection(payload['questions'][0]['question_id'], ids=[], status='unverified',
                     resolution='unresolved', conclusion='unknown', reason='Raw facts or reason cannot fill missing published premises.')
         decision = review if kwargs['name'] == 'dimension_answer_review' else 'yes'
-        return selection(payload['questions'][0]['question_id'], ids=[c['id'] for c in payload['claims']],
+        response = json.loads(selection(payload['questions'][0]['question_id'], ids=[c['id'] for c in payload['claims']],
             conclusion=decision, resolution='conditional' if decision == 'depends' else 'direct',
-            reason='A model reason must not add product rules, resource names, or other grants.')
+            reason='A model reason must not add product rules, resource names, or other grants.'))
+        return answer_response(payload, response, relation='resource_scope' if decision == 'no' else 'direct')
 
     monkeypatch.setattr(service, '_trace_llm_text', model)
     await service._real_writer_step(record)

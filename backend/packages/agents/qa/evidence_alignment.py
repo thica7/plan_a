@@ -44,7 +44,10 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                 view, boundaries, available_facts=discovery, review_version=audit.claim_review_version)
             if any(c.status != "supported" for c in replayed):
                 reasons.add("claim_review_replay_failed")
-            for item in published:
+            from packages.agents.writer.answer_presentation import (
+                observation_claims, question_coverage_matches,
+            )
+            for item in observation_claims(record.detail, audit):
                 clause = safe_decision_brief_text(item.claim.text) + " " + "".join(f"[source:{sid}]" for sid in item.claim.source_ids)
                 if clause not in record.detail.report_md:
                     reasons.add("published_claim_missing_or_changed")
@@ -85,14 +88,14 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                 return ((item.status != 'answered' and not qualified_clarification) or not item.claim_ids
                         or not set(item.claim_ids) <= published_ids
                         or bool(coverage_resolution_reasons(item, published_claims,
-                            required_binding_version=required_version, facts=answer_facts)))
+                            required_binding_version=required_version, facts=answer_facts,
+                            require_subquestions=audit.answer_review_contract is not None)))
             if ({'question_core_context_budget_exceeded', 'question_exception_context_budget_exceeded'} & set(audit.gaps)
                     or any(answer_invalid(item) for item in audit.answer_coverage)
                     or questions and not audit.answer_coverage):
                 reasons.add('answer_coverage_incomplete')
-            if any(item.answer and item.status in {'answered', 'partial'}
-                   and safe_decision_brief_text(item.answer) not in record.detail.report_md
-                   for item in audit.answer_coverage):
+            if not question_coverage_matches(record.detail.report_md, audit, record.detail.output_language,
+                                             audits=record.detail.report_dimension_audits):
                 reasons.add('published_answer_missing_or_changed')
         for reason in sorted(reasons):
             problem = f"主张引用审核失败：{reason}。请重新生成该产品和维度的报告内容。"

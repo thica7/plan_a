@@ -2645,6 +2645,31 @@ export interface components {
              */
             context_json: string;
         };
+        /**
+         * AnswerSubquestionBinding
+         * @description A reviewed decision tied to an exact request part and whole published premises.
+         */
+        AnswerSubquestionBinding: {
+            /** Question Quote */
+            question_quote: string;
+            /**
+             * Claim Ids
+             * @default []
+             */
+            claim_ids: string[];
+            /**
+             * Conclusion
+             * @enum {string}
+             */
+            conclusion: "yes" | "no" | "depends" | "unknown" | "not_applicable";
+            /**
+             * Relation
+             * @enum {string}
+             */
+            relation: "direct" | "explicit_negative" | "upper_bound" | "resource_scope" | "permission_entailment" | "destructive_effect" | "unresolved";
+            /** Support Digest */
+            support_digest: string;
+        };
         /** ArtifactCreateRequest */
         ArtifactCreateRequest: {
             /** Workspace Id */
@@ -7426,6 +7451,11 @@ export interface components {
             basis_snapshot_id?: string | null;
             /** Binding Version */
             binding_version?: (2 | 3) | null;
+            /**
+             * Subquestion Bindings
+             * @default []
+             */
+            subquestion_bindings: components["schemas"]["AnswerSubquestionBinding"][];
         };
         /** ReportApprovalSignalRequest */
         ReportApprovalSignalRequest: {
@@ -7632,6 +7662,8 @@ export interface components {
             answer_coverage: components["schemas"]["ReportAnswerCoverage"][];
             /** Answer Binding Version */
             answer_binding_version?: (2 | 3) | null;
+            /** Answer Review Contract */
+            answer_review_contract?: "subquestion-premises-v1" | null;
             /** Claim Review Version */
             claim_review_version?: 3 | null;
             /** Upstream Dependencies */

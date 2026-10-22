@@ -127,6 +127,7 @@ class ReportDimensionAudit(BaseModel):
     review_context_bytes: tuple[int, ...] = ()
     answer_coverage: tuple[ReportAnswerCoverage, ...] = ()
     answer_binding_version: Literal[2, 3] | None = None
+    answer_review_contract: Literal["subquestion-premises-v1"] | None = None
     claim_review_version: Literal[3] | None = None
     upstream_dependencies: tuple[EvidenceArtifactDependency, ...] | None = None
 
@@ -144,6 +145,8 @@ class ReportDimensionAudit(BaseModel):
             values.pop('answer_coverage', None)
         if self.answer_binding_version is None:
             values.pop('answer_binding_version', None)
+        if self.answer_review_contract is None:
+            values.pop('answer_review_contract', None)
         if self.claim_review_version is None:
             values.pop('claim_review_version', None)
         if self.upstream_dependencies is None:

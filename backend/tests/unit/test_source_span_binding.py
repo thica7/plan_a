@@ -4,7 +4,7 @@ import importlib
 import json
 from types import SimpleNamespace
 
-from claim_review_fixture import expand_prompt_payload, question_plan_response, sent_source_span_id
+from claim_review_fixture import expand_prompt_payload, question_plan_response, sent_source_atom
 
 import pytest
 from test_literal_non_operation import candidates, draft, fact
@@ -221,9 +221,7 @@ async def test_real_writer_transport_reviews_and_persists_chinese_rule_and_clari
         if kwargs['name'] == 'dimension_claim_writer':
             source = payload['evidence_view']['facts'][0]
             assert source['source_span_candidates']
-            return question_plan_response(payload, [dict(text=atom, kind='fact', competitor='Example Product',
-                dimension='feature', fact_ids=[source['id']], source_ids=[source['source_id']],
-                source_span_ids=[sent_source_span_id(source)]) for atom in (ownership_text, text)])
+            return question_plan_response(payload, [sent_source_atom(source, atom) for atom in (ownership_text, text)])
         if kwargs['name'] == 'dimension_claim_review':
             assert payload['claims'][0]['source_span_bindings'][0]['quote'] == original
             return json.dumps({'reviews': [supported_review(row) for row in payload['claims']]})
@@ -389,7 +387,8 @@ def test_writer_offers_a_value_exception_pair_only_when_both_exact_span_ids_were
     view = SimpleNamespace(facts=[base, auth])
     payload, _ = compact_dimension_context({'segment_competitor': 'Example Product', 'dimension': 'feature'},
         view, {base.id, auth.id}, questions=[{'question_id': 'q', 'question': 'Can removed members log in?'}])
-    sent_ids = {span['span_id'] for row in payload['evidence_view']['facts'] for span in row.get('source_span_candidates', [])}
+    from packages.agents.writer.readable_support import dispatched_span_candidates
+    sent_ids = set(dispatched_span_candidates(payload, view.facts, {base.id, auth.id}))
     pairs = [row for row in payload.get('source_exception_bindings', []) if row.get('source_span_ids')]
     assert pairs and all(set(row['source_span_ids']) <= sent_ids for row in pairs)
     smaller, _ = compact_dimension_context({'segment_competitor': 'Example Product', 'dimension': 'feature'},
@@ -478,7 +477,7 @@ def test_a_clarification_suffix_cannot_hide_an_added_factual_access_assertion():
 async def test_required_exception_budget_gap_blocks_a_qualified_clarification_in_final_qa(monkeypatch):
     from datetime import UTC, datetime
     from pydantic import HttpUrl, TypeAdapter
-    from claim_review_fixture import sent_source_span_id, supported_review
+    from claim_review_fixture import sent_source_atom, supported_review
     from test_source_exception_closure import COPY, LINK
     from test_writer_question_delivery import service_for
     from packages.agents.writer import question_retrieval
@@ -509,9 +508,7 @@ async def test_required_exception_budget_gap_blocks_a_qualified_clarification_in
         if kwargs['name'] == 'dimension_claim_writer':
             row = next(row for row in payload['evidence_view']['facts'] if COPY in row['quote'])
             text = row['quote']
-            return question_plan_response(payload, [dict(text=text, kind='fact', competitor='Example Product',
-                dimension='feature', fact_ids=[row['id']], source_ids=[row['source_id']],
-                source_span_ids=[sent_source_span_id(row)])])
+            return question_plan_response(payload, [sent_source_atom(row, text)])
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(row) for row in payload['claims']]})
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}

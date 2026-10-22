@@ -4,7 +4,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from claim_review_fixture import question_plan_response, sent_source_span_id, supported_review
+from claim_review_fixture import answer_response, question_plan_response, sent_source_atom, supported_review
 from test_exception_recovery import ACCESS, AUTH, scoped_pair
 from test_literal_non_operation import candidates, draft, fact
 from test_missing_price_answers import answer, price_case
@@ -169,7 +169,8 @@ async def test_actual_coverage_initially_sees_published_claims_and_final_review_
         async def _dimension_call_with_gaps(self, record, gaps, **kwargs):
             payload = expand_text_refs(json.loads(kwargs['user'].split('\nJSON:\n')[1]))
             calls.append((kwargs['name'], payload))
-            return selection(question, [claim.id], version=3), gaps
+            return answer_response(payload, json.loads(selection(question, [claim.id], version=3)),
+                                   relation='resource_scope'), gaps
     view = SimpleNamespace(facts=[original], competitor='Example Product', dimension='feature')
     rows, gaps, _ = await DimensionWriterMixin._dimension_question_coverage(
         Harness(), SimpleNamespace(detail=detail), [question],
@@ -180,7 +181,7 @@ async def test_actual_coverage_initially_sees_published_claims_and_final_review_
     proposal = calls[1][1]['proposed_answers'][0]
     assert proposal['answer'] == claim.text
     assert proposal['evidence_spans'] == [{'claim_id': claim.id, 'quote': claim.text}]
-    assert calls[1][1]['facts'][0]['quote'] == quote
+    assert calls[1][1]['published_supports'][0]['quote'] == quote
 
 
 def test_collection_absence_cannot_be_a_product_fact_bound_to_a_role_page():
@@ -330,13 +331,22 @@ async def test_real_writer_claim_review_answer_and_final_qa_replay_the_same_orig
                         for candidate in f.get('operation_observations', []) if candidate['operation'] == 'edit')
             if path != 'pair_operation':
                 by_id = {f['id']: f for f in sent}
-                row['source_span_ids'] = [sent_source_span_id(by_id[fid]) for fid in row['fact_ids']]
+                row = sent_source_atom([by_id[fid] for fid in row['fact_ids']], row['text'])
             return question_plan_response(payload, [row])
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(c) for c in payload['claims']]})
-        return selection(payload['questions'][0], [c['id'] for c in payload['claims']],
+        response = json.loads(selection(payload['questions'][0], [c['id'] for c in payload['claims']],
                          conclusion='no' if path == 'literal' else 'depends',
-                         resolution='direct' if path == 'literal' else 'conditional', version=3)
+                         resolution='direct' if path == 'literal' else 'conditional', version=3))
+        if path == 'literal' and payload.get('answer_review_contract'):
+            row = response['answers'][0]
+            full = payload['questions'][0]['question']
+            pivot = full.index('or belong')
+            row['subquestions'] = [
+                dict(question_quote=full[:pivot], claim_ids=row['claim_ids'], conclusion='no', relation='explicit_negative'),
+                dict(question_quote=full[pivot:], claim_ids=row['claim_ids'], conclusion='no', relation='upper_bound'),
+            ]
+        return answer_response(payload, response)
     monkeypatch.setattr(service, '_trace_llm_text', model)
     detail.report_md = await service._writer_dimension_report(record, 20)
     uses = [u for u in detail.evidence_consumptions if u.agent == 'writer']

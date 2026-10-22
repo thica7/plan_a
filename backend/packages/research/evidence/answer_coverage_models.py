@@ -12,6 +12,18 @@ class AnswerEvidenceSpan(BaseModel):
     quote: str = Field(min_length=1, max_length=600)
 
 
+class AnswerSubquestionBinding(BaseModel):
+    """A reviewed decision tied to an exact request part and whole published premises."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    question_quote: str = Field(min_length=1, max_length=1000)
+    claim_ids: tuple[str, ...] = Field(default=(), max_length=8)
+    conclusion: Literal["yes", "no", "depends", "unknown", "not_applicable"]
+    relation: Literal["direct", "explicit_negative", "upper_bound", "resource_scope",
+                      "permission_entailment", "destructive_effect", "unresolved"]
+    support_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class ReportAnswerCoverage(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -27,6 +39,7 @@ class ReportAnswerCoverage(BaseModel):
     missing_fields: tuple[str, ...] = Field(default=(), max_length=16)
     basis_snapshot_id: str | None = Field(default=None, max_length=120)
     binding_version: Literal[2, 3] | None = None
+    subquestion_bindings: tuple[AnswerSubquestionBinding, ...] = Field(default=(), max_length=8)
 
     @field_validator('binding_version', mode='before')
     @classmethod
@@ -40,7 +53,7 @@ class ReportAnswerCoverage(BaseModel):
         result = handler(self)
         for key, default in (("answer", ""), ("resolution", "unresolved"), ("conclusion", "unknown"),
                              ("evidence_spans", ()), ("missing_fields", ()), ("basis_snapshot_id", None),
-                             ("binding_version", None)):
+                             ("binding_version", None), ("subquestion_bindings", ())):
             if getattr(self, key) == default:
                 result.pop(key, None)
         return result

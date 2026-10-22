@@ -1,12 +1,13 @@
 """Anonymous regressions for question originals and independently reviewed answers."""
 
 import json
+from claim_review_fixture import answer_response
 from datetime import UTC, datetime
 
 from claim_review_fixture import expand_prompt_payload, question_plan_response
 
 import pytest
-from claim_review_fixture import sent_source_span_id, supported_review
+from claim_review_fixture import sent_source_atom, supported_review
 from pydantic import HttpUrl, TypeAdapter
 from test_missing_price_answers import answer, price_case
 from test_question_retrieval import replace_snapshot, research_case
@@ -226,10 +227,14 @@ async def test_chinese_answer_flows_through_writer_review_saved_record_and_final
         if kwargs["name"] == "dimension_claim_review":
             return json.dumps({"reviews": [supported_review(claim) for claim in payload["claims"]]})
         assert kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}
-        return json.dumps({"version": 3, "answers": [dict(question_id=q["question_id"],
+        return answer_response(payload, {"version": 3, "answers": [dict(question_id=q["question_id"],
             status="answered", resolution="direct", conclusion="no", missing_fields=[],
-            claim_ids=[claim["id"] for claim in payload["claims"]], reason="The restriction answers both clauses.")
-            for q in payload["questions"]]})
+            claim_ids=[claim["id"] for claim in payload["claims"]], reason="The restriction answers both clauses.",
+            subquestions=[dict(question_quote=part, claim_ids=[claim["id"] for claim in payload["claims"]],
+                conclusion="no", relation=relation) for part, relation in [
+                    (q['question'].split('或者')[0], 'upper_bound'),
+                    ('或者' + q['question'].split('或者')[1], 'explicit_negative'),
+                ]]) for q in payload["questions"]]})
 
     monkeypatch.setattr(service, "_trace_llm_text", model)
     await service._real_writer_step(record)
@@ -351,10 +356,14 @@ async def test_role_background_and_bill_original_reach_real_writer_and_replay_cp
             return json.dumps({"reviews": [supported_review(claim) for claim in payload["claims"]]})
         assert kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}
         assert len(payload["questions"]) == 1  # The other answer is an exact local snapshot replay.
-        return json.dumps({"version": 3, "answers": [dict(question_id=q["question_id"],
+        return answer_response(payload, {"version": 3, "answers": [dict(question_id=q["question_id"],
             status="answered", resolution="direct", conclusion="no", missing_fields=[],
-            claim_ids=[claim["id"] for claim in payload["claims"]], reason="The complete restriction answers this request.")
-            for q in payload["questions"]]})
+            claim_ids=[claim["id"] for claim in payload["claims"]], reason="The complete restriction answers this request.",
+            subquestions=[dict(question_quote=part, claim_ids=[claim["id"] for claim in payload["claims"]],
+                conclusion="no", relation=relation) for part, relation in [
+                    (q['question'].split('或者')[0], 'upper_bound'),
+                    ('或者' + q['question'].split('或者')[1], 'explicit_negative'),
+                ]]) for q in payload["questions"]]})
 
     monkeypatch.setattr(service, "_trace_llm_text", model)
     await service._real_writer_step(record)
@@ -540,16 +549,14 @@ async def test_only_complete_identical_sent_originals_close_redundant_core_ids(m
         if kwargs['name'] == 'dimension_claim_writer':
             fact = payload['evidence_view']['facts'][0]
             assert fact['quote'] == quote
-            return question_plan_response(payload, [dict(text=conclusion, kind='fact', competitor='Example Product',
-                dimension='feature', fact_ids=[fact['id']], source_ids=[fact['source_id']],
-                source_span_ids=[sent_source_span_id(fact, conclusion)])])
+            return question_plan_response(payload, [sent_source_atom(fact, conclusion, support_text=conclusion)])
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(claim) for claim in payload['claims']]})
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}
-        return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'], status='answered',
+        return answer_response(payload, {'version': 3, 'answers': [dict(question_id=q['question_id'], status='answered',
             resolution='direct', conclusion='no', claim_ids=[claim['id'] for claim in payload['claims']],
             missing_fields=[], reason='The complete original records the account deletion outcome.')
-            for q in payload['questions']]})
+            for q in payload['questions']]}, relation='explicit_negative')
 
     monkeypatch.setattr(service, '_trace_llm_text', model)
     await service._real_writer_step(record)
@@ -619,9 +626,7 @@ async def test_fourth_different_lifecycle_condition_reaches_prompt_or_retains_ca
                 assert 'question_core_context_budget_exceeded' in payload['upstream_context_gaps']
                 fact = next(row for row in rows if row['quote'] in core)
                 text = conclusion
-            return question_plan_response(payload, [dict(text=text, kind='fact', competitor='Example Product',
-                dimension='feature', fact_ids=[fact['id']], source_ids=[fact['source_id']],
-                source_span_ids=[sent_source_span_id(fact, text)])])
+            return question_plan_response(payload, [sent_source_atom(fact, text, support_text=text)])
         if kwargs['name'] == 'dimension_claim_review':
             if budget == 14000:
                 text = payload['claims'][0]['text']
@@ -630,12 +635,12 @@ async def test_fourth_different_lifecycle_condition_reaches_prompt_or_retains_ca
                 assert payload['claims'][0]['text'] == hold
             return json.dumps({'reviews': [supported_review(claim) for claim in payload['claims']]})
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}
-        return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'], status='answered',
+        return answer_response(payload, {'version': 3, 'answers': [dict(question_id=q['question_id'], status='answered',
             resolution='conditional' if budget == 14000 else 'direct',
             conclusion='depends' if budget == 14000 else 'no',
             claim_ids=[claim['id'] for claim in payload['claims']], missing_fields=[],
             reason='The complete published text records the applicable original conditions.')
-            for q in payload['questions']]})
+            for q in payload['questions']]}, relation='direct' if budget == 14000 else 'explicit_negative')
 
     monkeypatch.setattr(service, '_trace_llm_text', model)
     await service._real_writer_step(record)

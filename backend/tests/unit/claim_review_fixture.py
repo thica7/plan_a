@@ -28,6 +28,27 @@ def sent_source_span_id(row, text=None):
     raise AssertionError('No sent complete source span supports the fixture text')
 
 
+def sent_source_atom(rows, text, *, support_text=None):
+    """Use complete sent short quotes, preserving legacy no-question fixtures."""
+    if isinstance(rows, dict):
+        rows = [rows]
+    refs = []
+    for row in rows:
+        choices = row.get('source_span_candidates', [])
+        candidate = next((span for span in choices if 'support_ref' in span
+            and support_text is not None and span.get('quote') == support_text), None)
+        if candidate is None:
+            candidate = next((span for span in choices if 'support_ref' in span and 'quote' in span
+                and (support_text is None or support_text in span['quote'])), None)
+        if candidate is None:
+            return dict(text=text, kind='fact', competitor=rows[0]['competitor'],
+                dimension=rows[0]['dimension'], fact_ids=[row['id'] for row in rows],
+                source_ids=list(dict.fromkeys(row['source_id'] for row in rows)),
+                source_span_ids=[sent_source_span_id(row, support_text) for row in rows])
+        refs.append(candidate['support_ref'])
+    return dict(text=text, kind='fact', support_refs=refs)
+
+
 def question_plan_response(payload, atoms):
     """Explicit current transport fixture; legacy no-question drafts keep their shape."""
     import json
@@ -43,3 +64,23 @@ def question_plan_response(payload, atoms):
 def expand_prompt_payload(payload):
     from packages.research.question_delivery import _expand_text_refs
     return _expand_text_refs(payload)
+
+
+def answer_response(payload, response, *, relation='direct'):
+    """Opted-in single-branch transport fixture, not a semantic reviewer.
+
+    Each caller supplies its expected relation explicitly for negative cases.
+    Historical/proposal responses and clarification/unknown rows stay untouched.
+    Multi-predicate fixtures must supply explicit subquestions themselves.
+    """
+    import json
+    from copy import deepcopy
+    response = deepcopy(response)
+    if payload.get('answer_review_contract') == 'subquestion-premises-v1':
+        questions = {q['question_id']: q['question'] for q in payload['questions']}
+        for row in response.get('answers', []):
+            if (row['status'] in {'answered', 'partial'}
+                    and row['resolution'] in {'direct', 'conditional'} and 'subquestions' not in row):
+                row['subquestions'] = [dict(question_quote=questions[row['question_id']],
+                    claim_ids=row['claim_ids'], conclusion=row['conclusion'], relation=relation)]
+    return json.dumps(response)

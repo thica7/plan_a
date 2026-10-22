@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from claim_review_fixture import answer_response
 from datetime import UTC, datetime
 
 import pytest
@@ -219,7 +220,7 @@ async def test_real_rag_entry_admission_snapshot_and_downstream_consumers_share_
                 "Offline replay quote matches every condition.") for claim in payload["claims"]]})
         assert kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}
         payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
-        return json.dumps({"version": 3, "answers": [dict(question_id=q["question_id"], status="answered",
+        return answer_response(payload, {"version": 3, "answers": [dict(question_id=q["question_id"], status="answered",
             claim_ids=[claim["id"] for claim in payload["claims"]], resolution="conditional", conclusion="depends",
             missing_fields=[], reason="The published offline rule preserves its synchronization condition.")
             for q in payload["questions"]]})

@@ -1,10 +1,11 @@
 """Real local stages with anonymous offline transport, never a semantic review claim."""
 
 import json
+from claim_review_fixture import answer_response
 from datetime import UTC, datetime
 
 import pytest
-from claim_review_fixture import question_plan_response, sent_source_span_id, supported_review
+from claim_review_fixture import question_plan_response, sent_source_atom, supported_review
 from test_billing_components import CPU, MINIMUM, RATE
 from test_question_reflection_scope import COMPARISON_GAPS
 from test_writer_question_delivery import service_for
@@ -101,15 +102,13 @@ async def test_actual_writer_final_evidence_and_qa_replay_component_bindings(mon
                     text = 'Compute Paid plan actual complete monthly bill for an account is $17 USD.'
                 elif text == MINIMUM and mutation == 'minimum_resource':
                     text = text.replace('for an account', 'for each project in an account')
-                claims.append(dict(text=text, kind='fact', competitor='ExampleCompute', dimension='feature',
-                    fact_ids=[row['id']], source_ids=[row['source_id']],
-                    source_span_ids=[sent_source_span_id(row)]))
+                claims.append(sent_source_atom(row, text))
             return question_plan_response(payload, claims)
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(row,
                 'Anonymous offline transport fixture, not a semantic accuracy verdict.') for row in payload['claims']]})
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}
-        return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'], status='answered',
+        return answer_response(payload, {'version': 3, 'answers': [dict(question_id=q['question_id'], status='answered',
             claim_ids=[next(c['id'] for c in payload['claims']
                             if ('minimum' in c['text']) == ('minimum' in q['question']))],
             resolution='direct', conclusion='yes', missing_fields=[],

@@ -169,70 +169,8 @@ def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, sourc
 
 def _support_ref_catalog(payload, source_facts, sent_fact_ids):
     """Resolve only annotated candidates present in this exact dispatched payload."""
-    from collections import Counter
-    from packages.research.evidence.operations import operation_binding, operation_observations
-    from packages.research.evidence.snapshot_models import canonical_json
-    from packages.research.evidence.source_spans import source_span_candidates
-    view = payload.get('evidence_view') if isinstance(payload, dict) else None
-    rows = view.get('facts') if isinstance(view, dict) else None
-    if not isinstance(rows, list):
-        return {}
-    counts = Counter(row['id'] for row in rows if isinstance(row, dict) and isinstance(row.get('id'), str))
-    originals = {fact.id: fact for fact in source_facts if fact.id in sent_fact_ids}
-    catalog, ambiguous = {}, set()
-    for row in rows:
-        if not isinstance(row, dict) or not isinstance(row.get('id'), str) or counts[row['id']] != 1:
-            continue
-        original = originals.get(row['id'])
-        if (original is None or row.get('competitor') != payload.get('segment_competitor')
-                or row.get('dimension') != payload.get('dimension')):
-            continue
-        expected = dict(id=original.id, source_id=original.source_id, competitor=original.competitor,
-            dimension=original.dimension, field=original.field, quote=original.quote, value=original.value,
-            qualifiers={key: value for key, value in original.qualifiers.items() if key != 'operations'})
-        try:
-            if (any(key not in row for key in expected)
-                    or canonical_json({key: row[key] for key in expected}) != canonical_json(expected)):
-                continue
-        except (TypeError, ValueError):
-            continue
-        operations = {item['observation_id']: item for item in
-                      (operation_binding(op) for op in operation_observations(original))}
-        spans = {item['span_id']: item for item in source_span_candidates(original)}
-        operation_rows = row.get('operation_observations', ())
-        operation_refs = row.get('operation_support_refs', ())
-        annotated_operations = ([dict(item, support_ref=ref) for item, ref in zip(operation_rows, operation_refs, strict=True)
-                                 if isinstance(item, dict)]
-                                if isinstance(operation_rows, list) and isinstance(operation_refs, list)
-                                and len(operation_rows) == len(operation_refs) else [])
-        for kind, choices in (('o', annotated_operations),
-                              ('s', row.get('source_span_candidates', ()))):
-            for item in choices if isinstance(choices, (list, tuple)) else ():
-                if not isinstance(item, dict):
-                    continue
-                ref = item.get('support_ref')
-                if not isinstance(ref, str) or not re.fullmatch(kind + r'[1-9][0-9]*', ref):
-                    continue
-                bare = {key: value for key, value in item.items() if key != 'support_ref'}
-                if kind == 'o':
-                    if not isinstance(item.get('observation_id'), str):
-                        continue
-                    bound = operations.get(item.get('observation_id'))
-                    if bound != bare:
-                        continue
-                    binding = dict(observation_id=bound['observation_id'])
-                else:
-                    if not isinstance(item.get('span_id'), str):
-                        continue
-                    bound = spans.get(item.get('span_id'))
-                    if bound is None or bare != {key: bound[key] for key in ('span_id', 'source_path', 'start', 'end')}:
-                        continue
-                    binding = dict(source_span_ids=[bound['span_id']])
-                if ref in catalog:
-                    ambiguous.add(ref)
-                catalog[ref] = dict(competitor=original.competitor, dimension=original.dimension,
-                    fact_ids=[original.id], source_ids=[original.source_id], **binding)
-    return {ref: binding for ref, binding in catalog.items() if ref not in ambiguous}
+    from packages.agents.writer.readable_support import support_ref_catalog
+    return support_ref_catalog(payload, source_facts, sent_fact_ids)
 
 
 def _expand_support_atom(atom, catalog):
@@ -610,7 +548,7 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
             for span in source_span_candidates(originals_by_id[row['id']]):
                 reference = {key: span[key] for key in ('span_id', 'source_path', 'start', 'end')}
                 if short_refs:
-                    reference['support_ref'] = f's{span_ref_count + 1}'
+                    reference = dict(support_ref=f's{span_ref_count + 1}', quote=span['quote'])
                 row.setdefault('source_span_candidates', []).append(reference)
                 if len(compact_prompt_json(payload).encode()) > max_bytes:
                     row['source_span_candidates'].pop()
@@ -620,8 +558,8 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
                 row.pop('source_span_candidates', None)
     if selected['dimension'] == 'feature':
         from packages.research.evidence.source_spans import source_span_exception_bindings
-        sent_spans = {span['span_id'] for row in payload['evidence_view']['facts']
-                      for span in row.get('source_span_candidates', ())}
+        from packages.agents.writer.readable_support import dispatched_span_candidates
+        sent_spans = set(dispatched_span_candidates(payload, view.facts, sent_ids))
         pairs = {tuple(sorted(row['fact_ids'])) for row in payload.get('source_exception_bindings', ())}
         for binding in source_span_exception_bindings(
                 [fact for fact in view.facts if fact.id in sent_ids], sent_spans):
@@ -880,7 +818,7 @@ class DimensionWriterMixin:
 
     async def _dimension_question_coverage(self, record, questions, compact, audited, view, use, gaps):
         from packages.agents.writer.answer_coverage import (
-            ANSWER_COVERAGE_SYSTEM, ANSWER_REVIEW_SYSTEM, answer_review_payload,
+            ANSWER_COVERAGE_SYSTEM, SUBQUESTION_REVIEW_SYSTEM, answer_review_payload,
             is_qualified_partial_clarification, parse_answer_coverage, unverified_coverage,
         )
         if not questions:
@@ -936,7 +874,8 @@ class DimensionWriterMixin:
                         proposal['proposed_reason'] = original.get('reason')
                 except (TypeError, ValueError, KeyError):
                     pass
-                review_payload['question_answer_plans'] = compact.get('question_answer_plans', [])
+                # Rejected draft atoms cannot become answer premises via the plan.
+                review_payload['answer_review_contract'] = 'subquestion-premises-v1'
                 review_prompt = compact_prompt_json(review_payload)
                 # A proposal never survives an unavailable or invalid semantic review.
                 coverage = unverified_coverage(pending, 'Answer semantic review was not completed.')
@@ -945,7 +884,7 @@ class DimensionWriterMixin:
                     reviewed, gaps = await self._dimension_call_with_gaps(
                         record, gaps, agent='qa', subagent=f'{view.competitor}/{view.dimension}',
                         name='dimension_answer_review',
-                        system=ANSWER_REVIEW_SYSTEM + language_instruction(record.detail.output_language),
+                        system=SUBQUESTION_REVIEW_SYSTEM + language_instruction(record.detail.output_language),
                         user='\nJSON:\n' + review_prompt,
                     )
                     self._validate_evidence_use(record, use)
@@ -953,7 +892,7 @@ class DimensionWriterMixin:
                     coverage = parse_answer_coverage(
                         reviewed, pending, {claim.id for claim in supported},
                         claims=[claim.model_dump(mode='json') for claim in supported],
-                        required_binding_version=3, facts=view.facts,
+                        required_binding_version=3, facts=view.facts, require_subquestions=True,
                     )
                     if reviewed is None:
                         gaps = tuple(sorted(set(gaps) | {'answer_semantic_review_unavailable'}))
@@ -1112,7 +1051,7 @@ class DimensionWriterMixin:
                             "o-reference and complete source-bound prerequisites. "
                             "For a non-operation assertion choose one complete source_span_candidates member's support_ref; "
                             "only a complete source_exception_bindings pair permits two span references. "
-                            "Resolve source_path and [start:end] against the exact quote/value. " if compact_supports else
+                            "Read each candidate quote as its complete support text, resolving any text_ref through text_sets. " if compact_supports else
                             "For every operation claim, including a permission or plan restriction, choose exactly one "
                             "legal operation_observations candidate and return its exact observation_id. "
                             "Write edit and comment permission rules as separate claims, each with its own matching "
@@ -1212,13 +1151,8 @@ class DimensionWriterMixin:
                             candidates = {item['observation_id']: {key: value for key, value in item.items()
                                           if key != 'support_ref'} for fact in dispatched['evidence_view']['facts']
                                           for item in fact.get('operation_observations', [])}
-                            from packages.research.evidence.source_spans import source_span_candidates
-                            sent_span_ids = {span['span_id'] for row in dispatched['evidence_view']['facts']
-                                             for span in row.get('source_span_candidates', ())}
-                            span_candidates = {span['span_id']: span for fact in view.facts
-                                               if fact.id in sent_fact_ids
-                                               for span in source_span_candidates(fact)
-                                               if span['span_id'] in sent_span_ids}
+                            from packages.agents.writer.readable_support import dispatched_span_candidates
+                            span_candidates = dispatched_span_candidates(dispatched, view.facts, sent_fact_ids)
                             parse_options = dict(source_facts=[fact for fact in view.facts if fact.id in sent_fact_ids],
                                 span_candidates=span_candidates if dimension == 'feature' else None)
                             if questions:
@@ -1360,6 +1294,7 @@ class DimensionWriterMixin:
                 audit = ReportDimensionAudit(competitor=product, dimension=dimension, consumption_id=use.id,
                     claims=tuple(audited), gaps=gaps, review_context_bytes=tuple(sizes), answer_coverage=coverage,
                     answer_binding_version=3 if questions else 2, claim_review_version=3 if questions else None,
+                    answer_review_contract="subquestion-premises-v1" if questions else None,
                     upstream_dependencies=upstream_dependencies)
                 audits.append(audit)
                 self._validate_evidence_use(record, use)
@@ -1499,6 +1434,9 @@ def render_common_capabilities(detail, audits, *, snapshot=None):
 
 
 def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessments=None):
+    from packages.agents.writer.answer_presentation import (
+        audit_heading, observation_claims, question_coverage_lines,
+    )
     zh = detail.output_language.startswith("zh")
     label = lambda key: report_label(detail.output_language, key)
     plain = safe_decision_brief_text
@@ -1546,7 +1484,9 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
     lines = [f"# {title}", '', f"## {label('executive_summary')}", '',
              *summary, '', f"## {label('competitive_findings')}", '']
     if not partial:
-        lines.extend(render_common_capabilities(detail, audits, snapshot=snapshot))
+        visible_audits = [audit.model_copy(update={'claims': observation_claims(detail, audit)})
+                          for audit in audits]
+        lines.extend(render_common_capabilities(detail, visible_audits, snapshot=snapshot))
     for dimension in detail.plan.dimensions:
         pricing = dimension == "pricing"
         dimension_name = {"feature": "功能", "pricing": "价格", "persona": "目标用户", "review": "用户反馈"}.get(dimension, dimension) if zh else dimension
@@ -1561,8 +1501,8 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
             lines.extend([("以下仅为采集时页面标价。付款周期、地区、税费和席位条件未核验时不得用于比较总成本。"
                            if zh else "These are captured page prices only. Unverified billing interval, market, tax and seat conditions preclude total-cost comparisons."), ""])
         for audit in dimension_audits:
-            lines.extend([f"### {plain(audit.competitor)} — {plain(dimension_name)}", ""])
-            supported = [c for c in audit.claims if c.status == "supported"]
+            lines.extend([audit_heading(audit, detail.output_language), ""])
+            supported = observation_claims(detail, audit)
             printed = set()
             for item in supported:
                 identity = (plain(item.claim.text), tuple(item.claim.source_ids))
@@ -1576,33 +1516,7 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
                 lines.extend([f"- {prefix}{plain(item.claim.text)} {citations}", ""])
             if not supported:
                 lines.extend(["- 暂无通过主张审核的证据观察。" if zh else "- No observation passed claim review.", ""])
-            if audit.answer_coverage:
-                lines.extend(['#### 问题回答情况' if zh else '#### Question coverage', ''])
-                names = {'answered': '已回答', 'partial': '部分回答', 'unanswered': '未回答', 'unverified': '尚未核实'}
-                for answer in audit.answer_coverage:
-                    status = names[answer.status] if zh else answer.status
-                    lines.append(f'- {plain(answer.question)} — {status}')
-                    if answer.answer and answer.status in {'answered', 'partial'}:
-                        decisions = ({'yes': '结论：是', 'no': '结论：否',
-                                      'depends': '结论：需按条件判断', 'unknown': '结论：尚不能确定',
-                                      'not_applicable': '结论：不适用'} if zh else {
-                            'yes': 'Conclusion: yes', 'no': 'Conclusion: no',
-                            'depends': 'Conclusion: depends', 'unknown': 'Conclusion: unresolved',
-                            'not_applicable': 'Conclusion: not applicable',
-                        })
-                        if answer.resolution == 'clarification':
-                            lines.append('  需要先澄清问题中的条件。' if zh else
-                                         '  Clarification is required before a definite conclusion.')
-                        elif answer.resolution != 'insufficient':
-                            lines.append('  ' + decisions[answer.conclusion])
-                        claim_sources = {sid for item in supported if item.claim.id in answer.claim_ids
-                                         for sid in item.claim.source_ids}
-                        citations = ''.join(f'[source:{sid}]' for sid in sorted(claim_sources))
-                        lines.append(f'  {plain(answer.answer)} {citations}'.rstrip())
-                    else:
-                        lines.append('  本次已审核证据尚未完整覆盖此问题。' if zh else
-                                     '  The reviewed evidence does not yet fully answer this question.')
-                lines.append('')
+            lines.extend(question_coverage_lines(audit, detail.output_language))
             if audit.gaps and not partial:
                 names = {"billing_interval": "付款周期", "market": "地区", "tax_scope": "税费", "seat_type": "席位类型", "context_budget_exceeded": "已采资料超出本段上下文，未全部选入", "no_reviewed_claims": "未取得已审核主张"}
                 names.update({"plan": "套餐", "amount": "报价金额", "currency": "币种", "current_price": "适用价格", "supporting_facts": "可支持主张的原始证据", "claim_review_invalid": "审核响应无效，主张未发布", "claim_review_context_budget_exceeded": "完整审核证据超出容量，主张未发布", "promotional_claim_not_concrete": "套餐宣传未证明具体功能", "operation_object_scope_omitted": "操作对象限定被遗漏，主张未发布"})

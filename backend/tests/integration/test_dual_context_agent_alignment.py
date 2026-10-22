@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 import json
+from claim_review_fixture import answer_response
 import socket
 
 import pytest
@@ -102,7 +103,7 @@ async def test_parent_prerequisite_survives_collector_admission_snapshot_and_wri
             return question_plan_response(payload, [claim])
         if kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}:
             # Transport fixture only; semantic quality is tested with real models separately.
-            return json.dumps({"version": 3, "answers": [dict(question_id=q["question_id"], status="answered",
+            return answer_response(payload, {"version": 3, "answers": [dict(question_id=q["question_id"], status="answered",
                 claim_ids=[c["id"] for c in payload["claims"]],
                 resolution="conditional", conclusion="depends", missing_fields=[],
                 reason="Replay retains offline editing and its owner prerequisite.")

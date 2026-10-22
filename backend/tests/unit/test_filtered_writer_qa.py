@@ -1,6 +1,7 @@
 """Real Writer/QA replay with fixed model transport, not a semantic accuracy test."""
 
 import json
+from claim_review_fixture import answer_response
 from claim_review_fixture import expand_prompt_payload, question_plan_response, supported_review
 
 import pytest
@@ -119,7 +120,7 @@ async def test_final_qa_replays_question_filtered_generation_view():
                     }
                 )
             if kw["name"] in {"dimension_answer_coverage", "dimension_answer_review"}:
-                return json.dumps(
+                return answer_response(payload,
                     {
                         "version": 3,
                         "answers": [

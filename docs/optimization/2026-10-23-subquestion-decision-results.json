@@ -1,0 +1,687 @@
+{
+  "schema_version": "subquestion_decision_delivery.v1",
+  "date": "2026-10-23",
+  "base_commit": "03fa684bf17985d9753db6cd6ac6fa16c2a0b273",
+  "training": false,
+  "docker_executed": false,
+  "scope": {
+    "original_cases": 8,
+    "groups": 4,
+    "rounds": 2,
+    "fresh_web_capture": false,
+    "full_graph": false,
+    "production_dense_rag": false,
+    "blind": false,
+    "reference_answers_in_runtime": false,
+    "report_human_approved": false
+  },
+  "tests": {
+    "backend_passed": 7019,
+    "backend_skipped": 1,
+    "new_tests": 97,
+    "after_final_prompt_focused_passed": 89,
+    "frontend_build": "passed",
+    "openapi_types": "generated",
+    "changed_python_lint_E9_F": "passed",
+    "new_python_lint": "passed",
+    "secret_scan": "passed"
+  },
+  "rounds": {
+    "first": {
+      "total_calls": 62,
+      "total_provider_tokens": 197723,
+      "products": [
+        {
+          "product": "bitwarden",
+          "run_id": "run-12ce26f262eb45f18772446e26501263",
+          "actual_calls": 15,
+          "provider_total_tokens": 48943,
+          "model": "deepseek-flash",
+          "stages": {
+            "collector": 3,
+            "analyst": 1,
+            "comparator": 1,
+            "reflector": 1,
+            "writer": 1,
+            "qa": 8
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "qa_counts": {
+            "blocker": 2,
+            "warn": 5
+          },
+          "production_code_sha256": "6da211518e3eab5035f9b4b38f0d7bc5d84c366add77698f77437299843431f5",
+          "production_code_changed": false,
+          "input_sha256": "ad5a6acb7174933f62b7c18cfa4d46287f70cde53f9ac966fd1ca3591429afde",
+          "capture_sha256": "1c5392d28db239a22167f4806108e5c909380ec5fc8c802e17fc2f14f457ca4e",
+          "saved_answer_statuses": [
+            "unverified",
+            "partial"
+          ],
+          "artifacts": {
+            "directory": "data/artifacts/subquestion-decision-2026-10-23/live-bitwarden-first",
+            "files": {
+              "run.json": "647ffdb2e9ba800d3830367d537cdf83515a8cf2a98d4bcc3e297b828edaec87",
+              "inputs.json": "ad5a6acb7174933f62b7c18cfa4d46287f70cde53f9ac966fd1ca3591429afde",
+              "snapshot.json": "df05c4331f2a49bc83863dedcf6f3c66f53d2d10d7bd1261c5f55bda5731935c",
+              "report.md": "5a59d5cb28c3a92a1841e87bcaeef2ddf04fa4118057b00b6a050a0564bd354d",
+              "trace.json": "c4731473f06f66a19892d07420bf24b94f2a6fb46ccb2d038882c2b19a6f0ad3",
+              "pipeline-captures.json": "1c5392d28db239a22167f4806108e5c909380ec5fc8c802e17fc2f14f457ca4e"
+            }
+          }
+        },
+        {
+          "product": "1password",
+          "run_id": "run-436e0ca5bc82495dadceaa72033d82f3",
+          "actual_calls": 15,
+          "provider_total_tokens": 48076,
+          "model": "deepseek-flash",
+          "stages": {
+            "collector": 3,
+            "analyst": 1,
+            "comparator": 1,
+            "reflector": 1,
+            "writer": 1,
+            "qa": 8
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "qa_counts": {
+            "blocker": 3,
+            "warn": 3
+          },
+          "production_code_sha256": "6da211518e3eab5035f9b4b38f0d7bc5d84c366add77698f77437299843431f5",
+          "production_code_changed": false,
+          "input_sha256": "621243fb9ed5459fb9dd6d5b731b738f8b3dc06f5df3292e57355bc01ebd522b",
+          "capture_sha256": "6c9cb9822f1c4cce09f2609ca00d865c3e11aef5e36e2393113ba5790022d8b1",
+          "saved_answer_statuses": [
+            "unverified",
+            "partial"
+          ],
+          "artifacts": {
+            "directory": "data/artifacts/subquestion-decision-2026-10-23/live-1password-first",
+            "files": {
+              "run.json": "9f5d2a0447a32222e66a6d33915e5ce628e292871700a05e52b252cda2d80c1e",
+              "inputs.json": "621243fb9ed5459fb9dd6d5b731b738f8b3dc06f5df3292e57355bc01ebd522b",
+              "snapshot.json": "8b1b341c2903310e35a39f91b89fab5aaa3336a345a794f52c7dd3ae4b2b066f",
+              "report.md": "1c52974ae355e241ccbb0dd4e3952c1922b80219f98c73f054e502cd831d42ff",
+              "trace.json": "c7d9bceba0f74dca7e626b33cc7a0dfa1381e366e19ac7e0c535190b6e17ae0a",
+              "pipeline-captures.json": "6c9cb9822f1c4cce09f2609ca00d865c3e11aef5e36e2393113ba5790022d8b1"
+            }
+          }
+        },
+        {
+          "product": "cloudflare",
+          "run_id": "run-f302ed2a5ff44f8e87017819231dced8",
+          "actual_calls": 17,
+          "provider_total_tokens": 54312,
+          "model": "deepseek-flash",
+          "stages": {
+            "collector": 3,
+            "analyst": 1,
+            "comparator": 1,
+            "reflector": 1,
+            "writer": 1,
+            "qa": 10
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "qa_counts": {
+            "blocker": 3,
+            "warn": 4
+          },
+          "production_code_sha256": "6da211518e3eab5035f9b4b38f0d7bc5d84c366add77698f77437299843431f5",
+          "production_code_changed": false,
+          "input_sha256": "b2a1fa4913c223c3729673a1cf9c50d9670bea2cdff2b450359e9e2e287f32e1",
+          "capture_sha256": "9d491763358a4970d51bb5131f9eb858bbf5019e96e6edb84cb60c1a27eae6a7",
+          "saved_answer_statuses": [
+            "unverified",
+            "partial"
+          ],
+          "artifacts": {
+            "directory": "data/artifacts/subquestion-decision-2026-10-23/live-cloudflare-first",
+            "files": {
+              "run.json": "7ae06acb7aefdadbee587803f5508c0d08c9716945975caa759669fe4a54f8ab",
+              "inputs.json": "b2a1fa4913c223c3729673a1cf9c50d9670bea2cdff2b450359e9e2e287f32e1",
+              "snapshot.json": "f5f46d2a2feb0996078ad8676283e65209dc8a24fc77c92d41b1b9449dca3880",
+              "report.md": "32ff40b5d290a916b31d7d9f0c22c147cf56590f0bb4e757382b44b194c4cffa",
+              "trace.json": "95041701c07529b8ffa4d0b5ee42dcb1839915abeb9588584b514d65764e6bed",
+              "pipeline-captures.json": "9d491763358a4970d51bb5131f9eb858bbf5019e96e6edb84cb60c1a27eae6a7"
+            }
+          }
+        },
+        {
+          "product": "trello",
+          "run_id": "run-7213ea27d93a4aeb8231201fa03c1552",
+          "actual_calls": 15,
+          "provider_total_tokens": 46392,
+          "model": "deepseek-flash",
+          "stages": {
+            "collector": 2,
+            "analyst": 1,
+            "comparator": 1,
+            "reflector": 1,
+            "writer": 1,
+            "qa": 9
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "qa_counts": {
+            "blocker": 4,
+            "warn": 8
+          },
+          "production_code_sha256": "6da211518e3eab5035f9b4b38f0d7bc5d84c366add77698f77437299843431f5",
+          "production_code_changed": false,
+          "input_sha256": "f6ecc084babe6c3073b56b0c14c0d8b3cc1670b89bb21c4b842848f80791d8f9",
+          "capture_sha256": "bd236c5b14373e40b1e87459a9066fdc2a982fbd73458514042f10172cf7daa6",
+          "saved_answer_statuses": [
+            "unverified",
+            "unverified",
+            "unverified",
+            "unverified"
+          ],
+          "artifacts": {
+            "directory": "data/artifacts/subquestion-decision-2026-10-23/live-trello-first",
+            "files": {
+              "run.json": "28a85fd5c88fbe6489891a9dfabe6d1cd3158c7622fd63bba856c3d2e2edf5e7",
+              "inputs.json": "f6ecc084babe6c3073b56b0c14c0d8b3cc1670b89bb21c4b842848f80791d8f9",
+              "snapshot.json": "7a34ac621ab7d8ae6f5d0bbc0035f7740f0df72b14009663a86befc0a0c26e6b",
+              "report.md": "14b68b3984dc78d0ce9181eef6757fa6a272445a9e0398dfafbcc7a7feaa04b9",
+              "trace.json": "324411b1f5722be411c8eeb4631ecb0ff4763936a95f22df68432ef36cb734a9",
+              "pipeline-captures.json": "bd236c5b14373e40b1e87459a9066fdc2a982fbd73458514042f10172cf7daa6"
+            }
+          }
+        }
+      ]
+    },
+    "context": {
+      "total_calls": 61,
+      "total_provider_tokens": 193421,
+      "products": [
+        {
+          "product": "bitwarden",
+          "run_id": "run-a94c172c17a24960b308ec68fe5ad92b",
+          "actual_calls": 14,
+          "provider_total_tokens": 45732,
+          "model": "deepseek-flash",
+          "stages": {
+            "collector": 3,
+            "analyst": 1,
+            "comparator": 1,
+            "reflector": 1,
+            "writer": 1,
+            "qa": 7
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "qa_counts": {
+            "blocker": 2,
+            "warn": 5
+          },
+          "production_code_sha256": "098b4dad42cf81e30c32540e61ab2abee683a882b7c0c2278a29457e8aa13226",
+          "production_code_changed": false,
+          "input_sha256": "ad5a6acb7174933f62b7c18cfa4d46287f70cde53f9ac966fd1ca3591429afde",
+          "capture_sha256": "1c5392d28db239a22167f4806108e5c909380ec5fc8c802e17fc2f14f457ca4e",
+          "saved_answer_statuses": [
+            "answered",
+            "partial"
+          ],
+          "artifacts": {
+            "directory": "data/artifacts/subquestion-decision-2026-10-23/live-bitwarden-context",
+            "files": {
+              "run.json": "520469d028222556c7d1546b30cbcf03019b8297a02c0071e30302fc7633d7c8",
+              "inputs.json": "ad5a6acb7174933f62b7c18cfa4d46287f70cde53f9ac966fd1ca3591429afde",
+              "snapshot.json": "5009afe0355712f685a3ea116de6e7bd876f47afe9f10f47fe611715970d2ef4",
+              "report.md": "a459fff007d804e910f1b65639948c99d4a77c1f55e5cd7549a63202be92b80c",
+              "trace.json": "b9db8a5ca300b1dc5a8748268c11ee32293f53703261743abc49706a49184dcd",
+              "pipeline-captures.json": "1c5392d28db239a22167f4806108e5c909380ec5fc8c802e17fc2f14f457ca4e"
+            }
+          }
+        },
+        {
+          "product": "1password",
+          "run_id": "run-e07c4510499a4a74b7bc565392dc04f0",
+          "actual_calls": 14,
+          "provider_total_tokens": 45120,
+          "model": "deepseek-flash",
+          "stages": {
+            "collector": 3,
+            "analyst": 1,
+            "comparator": 1,
+            "reflector": 1,
+            "writer": 1,
+            "qa": 7
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "qa_counts": {
+            "blocker": 3,
+            "warn": 3
+          },
+          "production_code_sha256": "098b4dad42cf81e30c32540e61ab2abee683a882b7c0c2278a29457e8aa13226",
+          "production_code_changed": false,
+          "input_sha256": "621243fb9ed5459fb9dd6d5b731b738f8b3dc06f5df3292e57355bc01ebd522b",
+          "capture_sha256": "6c9cb9822f1c4cce09f2609ca00d865c3e11aef5e36e2393113ba5790022d8b1",
+          "saved_answer_statuses": [
+            "unverified",
+            "partial"
+          ],
+          "artifacts": {
+            "directory": "data/artifacts/subquestion-decision-2026-10-23/live-1password-context",
+            "files": {
+              "run.json": "cb5d4d2be78cb2cf82acb26198bf79e68308031fc42755862d234856da8ffb53",
+              "inputs.json": "621243fb9ed5459fb9dd6d5b731b738f8b3dc06f5df3292e57355bc01ebd522b",
+              "snapshot.json": "2c23bbaee5b82d3a1ede36f26fc115a87041a64b1aaf9e80b9c7c835f1322d89",
+              "report.md": "e794fa36d4c1adc02cd6cb6acb13bda286ca095e9a3e2eb80a389517edb5286b",
+              "trace.json": "9b1957476f94f03eec2372271187cb1b63a03a065c02fcabc4aeb6cfcd964d7b",
+              "pipeline-captures.json": "6c9cb9822f1c4cce09f2609ca00d865c3e11aef5e36e2393113ba5790022d8b1"
+            }
+          }
+        },
+        {
+          "product": "cloudflare",
+          "run_id": "run-3cbc52c86da04e9e9c687b1863ac917b",
+          "actual_calls": 17,
+          "provider_total_tokens": 52780,
+          "model": "deepseek-flash",
+          "stages": {
+            "collector": 3,
+            "analyst": 1,
+            "comparator": 1,
+            "reflector": 1,
+            "writer": 1,
+            "qa": 10
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "qa_counts": {
+            "warn": 3,
+            "blocker": 2
+          },
+          "production_code_sha256": "098b4dad42cf81e30c32540e61ab2abee683a882b7c0c2278a29457e8aa13226",
+          "production_code_changed": false,
+          "input_sha256": "b2a1fa4913c223c3729673a1cf9c50d9670bea2cdff2b450359e9e2e287f32e1",
+          "capture_sha256": "9d491763358a4970d51bb5131f9eb858bbf5019e96e6edb84cb60c1a27eae6a7",
+          "saved_answer_statuses": [
+            "answered",
+            "partial"
+          ],
+          "artifacts": {
+            "directory": "data/artifacts/subquestion-decision-2026-10-23/live-cloudflare-context",
+            "files": {
+              "run.json": "64148c55ffc1e49ecfce6deed93ceb77d8e28631788d89a485cb79bb874e31e2",
+              "inputs.json": "b2a1fa4913c223c3729673a1cf9c50d9670bea2cdff2b450359e9e2e287f32e1",
+              "snapshot.json": "05c581ae448cb6dc8ca2aa95c17921326da4ffa5c39d850abba38083bb14b367",
+              "report.md": "b193bd3e48458d2c89192de7813fded540585567a6f936cc229fcb4c3fc2a85b",
+              "trace.json": "ed388b6c43c652a1b51d89eb8ac21ec9bde94e12da027f6b2001480de2ce0205",
+              "pipeline-captures.json": "9d491763358a4970d51bb5131f9eb858bbf5019e96e6edb84cb60c1a27eae6a7"
+            }
+          }
+        },
+        {
+          "product": "trello",
+          "run_id": "run-4ae52a78423b40c985812fe6dd5370f9",
+          "actual_calls": 16,
+          "provider_total_tokens": 49789,
+          "model": "deepseek-flash",
+          "stages": {
+            "collector": 2,
+            "analyst": 1,
+            "comparator": 1,
+            "reflector": 1,
+            "writer": 1,
+            "qa": 10
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "qa_counts": {
+            "blocker": 4,
+            "warn": 5
+          },
+          "production_code_sha256": "098b4dad42cf81e30c32540e61ab2abee683a882b7c0c2278a29457e8aa13226",
+          "production_code_changed": false,
+          "input_sha256": "f6ecc084babe6c3073b56b0c14c0d8b3cc1670b89bb21c4b842848f80791d8f9",
+          "capture_sha256": "bd236c5b14373e40b1e87459a9066fdc2a982fbd73458514042f10172cf7daa6",
+          "saved_answer_statuses": [
+            "answered",
+            "answered",
+            "answered",
+            "unverified"
+          ],
+          "artifacts": {
+            "directory": "data/artifacts/subquestion-decision-2026-10-23/live-trello-context",
+            "files": {
+              "run.json": "8ac1bc686478d1e0be7531a05aa10ddd7b4c9b55285ec57abce7b0ee323dcced",
+              "inputs.json": "f6ecc084babe6c3073b56b0c14c0d8b3cc1670b89bb21c4b842848f80791d8f9",
+              "snapshot.json": "d450222635a41f2541b90124b2268d0277547282417689549a584bc0f9c76041",
+              "report.md": "94d640ee62428059cc46549ccd4d9e241d318225d63dcd7b47ffca8bdaa95103",
+              "trace.json": "05b0f913cefed774e79ca9363b642fb36fe2d6c606fc06debe155d1de0d04581",
+              "pipeline-captures.json": "bd236c5b14373e40b1e87459a9066fdc2a982fbd73458514042f10172cf7daa6"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "total_actual_calls": 123,
+  "total_provider_tokens": 391144,
+  "strict_pass": false,
+  "final_content_summary": {
+    "calls": 61,
+    "transport_attempts": 61,
+    "prompt_tokens": 173618,
+    "completion_tokens": 19803,
+    "total_tokens": 193421,
+    "qa_blockers": 11,
+    "qa_warns": 16,
+    "visible_formal_claim_count": 11,
+    "visible_formal_claim_full_support": 11,
+    "visible_formal_single_predicate": 9,
+    "all_draft_claim_count": 30,
+    "strict_case_pass_count": 3,
+    "original_case_verdicts": {
+      "covered": 2,
+      "covered_clarification": 1,
+      "omission": 2,
+      "partial_omission": 2,
+      "covered_missing_price_with_support_gap": 1
+    },
+    "published_product_contradictions_found": 0,
+    "status_body_mismatch_count": 0,
+    "qa_vs_final_answer_disagreements": true
+  },
+  "first_content_summary": {
+    "calls": 62,
+    "transport_attempts": 62,
+    "prompt_tokens": 177262,
+    "completion_tokens": 20461,
+    "total_tokens": 197723,
+    "qa_blockers": 12,
+    "qa_warns": 20,
+    "visible_formal_claim_count": 11,
+    "visible_formal_claim_full_support": 10,
+    "visible_formal_single_predicate": 3,
+    "all_draft_claim_count": 30,
+    "original_case_verdicts": {
+      "omission": 4,
+      "covered_clarification": 1,
+      "partial_omission": 2,
+      "covered_missing_price_with_support_gap": 1
+    },
+    "published_product_contradictions_found": 0,
+    "status_body_mismatch_count": 0
+  },
+  "findings": [
+    {
+      "id": "C1",
+      "severity": "improvement",
+      "text": "BW容量与CF域权限已完整回答，最终状态与正文相同；原始背景不再独立判yes。"
+    },
+    {
+      "id": "C2",
+      "severity": "blocker",
+      "text": "1P访客双否定仍未答；模型持续把无Private/单库绑到邀请span，不能凭can promote补禁止前提。"
+    },
+    {
+      "id": "C3",
+      "severity": "blocker",
+      "text": "Trello A/B投票answered/depends但没有逐项A否/B是，单个合并subquestion receipt仍掩盖分支交付遗漏。"
+    },
+    {
+      "id": "C4",
+      "severity": "blocker",
+      "text": "Trello Workspace/跨板/改权主体/计费整题遗漏；原固定页有规则，不能归入合理澄清。"
+    },
+    {
+      "id": "C5",
+      "severity": "blocker",
+      "text": "1P缺价边界合理但缺定制报价解释与官方销售下一步；CF缺价正确但CPU产品前提无精确已发表绑定。"
+    },
+    {
+      "id": "C6",
+      "severity": "improvement",
+      "text": "11条正式可见claims全部由所选证据完整支持，9条单predicate；这不包含额外CPU服务器句，不能宣称全文11/11全通过。"
+    },
+    {
+      "id": "C7",
+      "severity": "limitation",
+      "text": "QA仍保留早期reflector与最终answer冲突的blocker/warn；正文-保存一致不等于整个QA内容判断一致。"
+    }
+  ],
+  "qa_semantic_consistency": [
+    {
+      "product": "Bitwarden",
+      "note": "保存容量answered/no正确；仍留reflector容量unsupported警告与comparison blocker；不拿这些机械标志反向否认正确容量事实。"
+    },
+    {
+      "product": "1Password",
+      "note": "QA reflector仍写promotion required，超出can；该误述未发表为正文结论。保存guest未核实与正文一致。"
+    },
+    {
+      "product": "Cloudflare",
+      "note": "最终资源范围answered/no有充分所选支持，但实际QA保留早期reflector negative inference blocker。不是整个QA结论都一致，也没有捕获CPU精确绑定缺口。"
+    },
+    {
+      "product": "Trello",
+      "note": "QA reflector仍称投票义务/no_relevant与per-board条件不足；正文no是许可不蕴含义务而非全页缺席，独立审查可支持。QA未将A/B只depends识别为交付遗漏。"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "agent-readiness-holdout-v1-001",
+      "product": "Bitwarden",
+      "label": "Bitwarden / 3 人与 3 collections",
+      "verdict": "covered",
+      "strict_pass": true,
+      "note": "背景附到真实请求，upper_bound完整绑定2用户/2collections；正文父no结合两个完整规则直接回答，未将2026背景另判真。",
+      "subquestions": [
+        {
+          "request": "含本人3人是否可满足",
+          "expected_boundary": "否：只本人+另一人",
+          "observed": "正文否，完整2用户上界可见。"
+        },
+        {
+          "request": "3个 collections 是否可满足",
+          "expected_boundary": "否：最多2个",
+          "observed": "正文否，完整2collections上界可见。"
+        }
+      ]
+    },
+    {
+      "case_id": "agent-readiness-holdout-v1-002",
+      "product": "Bitwarden",
+      "label": "Bitwarden / 删掉离职同事",
+      "verdict": "covered_clarification",
+      "strict_pass": true,
+      "note": "合理澄清算正确处理，不算漏答；不用补未发表 My Items/My vault 规则。",
+      "subquestions": [
+        {
+          "request": "“删掉”是哪种操作",
+          "expected_boundary": "澄清移除成员或永久删除账户/数据",
+          "observed": "已询问。"
+        },
+        {
+          "request": "密码归属及是否保留",
+          "expected_boundary": "先澄清个人/组织归属，不统一保证",
+          "observed": "已询问；未编造保留或删除结果。"
+        }
+      ]
+    },
+    {
+      "case_id": "agent-readiness-holdout-v1-003",
+      "product": "1Password",
+      "label": "1Password / Families guest 权限",
+      "verdict": "omission",
+      "strict_pass": false,
+      "note": "背景误拆消除，但无Private/单库仍错误选邀请span，升级句只能表可行途径；final-review仍误称已发表双禁止并将can写需，negative_unproven正确挡住，正文未核实。",
+      "subquestions": [
+        {
+          "request": "已接受确认访客能同时两个共享库吗",
+          "expected_boundary": "否，单库限制",
+          "observed": "未答；升级可行事实不能独立推导禁止。"
+        },
+        {
+          "request": "访客自己的 Private vault",
+          "expected_boundary": "否",
+          "observed": "未答；原文错误绑邀请 span，已拦。"
+        }
+      ]
+    },
+    {
+      "case_id": "agent-readiness-holdout-v1-004",
+      "product": "1Password",
+      "label": "1Password / 300 员工精确含税人民币报价",
+      "verdict": "partial_omission",
+      "strict_pass": false,
+      "note": "合理缺价和参考要求遗漏分别记录。300员工不必等于付费席位，一年期不必等于付费间隔；继续问这两者不自动是误读。",
+      "subquestions": [
+        {
+          "request": "300员工一年精确人民币含税金额",
+          "expected_boundary": "不能凭当前公开证据编造",
+          "observed": "已合理拒价，未误用其他产品价格。"
+        },
+        {
+          "request": "定价方式解释",
+          "expected_boundary": "按组织需求与能力范围定制",
+          "observed": "未答；冻结 pricing capture 自身缺此句，不能从参考答案补入 runtime。"
+        },
+        {
+          "request": "下一步",
+          "expected_boundary": "取得官方销售报价",
+          "observed": "仅通用输入清单，未明确官方销售下一步。"
+        }
+      ]
+    },
+    {
+      "case_id": "agent-readiness-holdout-v1-007",
+      "product": "Cloudflare",
+      "label": "Cloudflare / Cache Domain Purge 范围",
+      "verdict": "covered",
+      "strict_pass": true,
+      "note": "最终no仅绑定完整specific-domain事实；题设only example.com/nootherroles与resource_scope关系足够支持。未借unreviewed inference补。",
+      "subquestions": [
+        {
+          "request": "仅example.com角色可因此清other.example吗",
+          "expected_boundary": "否，特定域范围且无其他角色",
+          "observed": "正文明确否，完整角色范围规则可见。"
+        }
+      ]
+    },
+    {
+      "case_id": "agent-readiness-holdout-v1-008",
+      "product": "Cloudflare",
+      "label": "Cloudflare / 1500 万动态请求月账单",
+      "verdict": "covered_missing_price_with_support_gap",
+      "strict_pass": false,
+      "note": "回答方向正确；但 server“已准入计费规则包含CPU时间计费”是额外可见产品事实，claim_ids=[]，仅snapshot指针不能当精确引用完整支持。",
+      "subquestions": [
+        {
+          "request": "1500万动态请求精确本月账单",
+          "expected_boundary": "仅请求数不够；需CPU及其他项目",
+          "observed": "已拒绝精确金额，询问CPU与全用量。"
+        },
+        {
+          "request": "不得套用示例或最低费",
+          "expected_boundary": "不默认7ms、不输出8美元或把5美元当实际账单",
+          "observed": "保持此边界；正文5美元明确为最低费。"
+        }
+      ]
+    },
+    {
+      "case_id": "claim-semantics-candidate-20261020-trello-001",
+      "product": "Trello",
+      "label": "Trello / 投票、下载导出与义务",
+      "verdict": "partial_omission",
+      "strict_pass": false,
+      "note": "三个coverage保存answered，但A/B投票只显示depends及通用条件规则；没有逐项A否/B是。trace.reason写了两分支，不是实际发表答案，不能补正文。下载、导出与许可不蕴含义务已有完整支持；没有整页无义务断言。",
+      "subquestions": [
+        {
+          "request": "A未开启能投票吗",
+          "expected_boundary": "不能凭Observer投票",
+          "observed": "只显示需按条件判断，未明示A否。"
+        },
+        {
+          "request": "B开启且允许Observer能投票吗",
+          "expected_boundary": "可以",
+          "observed": "只显示需按条件判断，未明示B是。"
+        },
+        {
+          "request": "下载A卡片附件",
+          "expected_boundary": "可以，不附投票开关条件",
+          "observed": "已回答是，完整下载规则；未套投票开关。"
+        },
+        {
+          "request": "导出A",
+          "expected_boundary": "可以，不附投票开关条件",
+          "observed": "已回答是，完整导出规则；未套投票开关。"
+        },
+        {
+          "request": "允许投票是否必须每卡投票",
+          "expected_boundary": "许可不蕴含义务",
+          "observed": "正文明确否；permission_entailment表达许可不蕴含义务，未断言整页无任何义务。"
+        },
+        {
+          "request": "区分操作/条件/义务",
+          "expected_boundary": "按上述分支说明，不把格式当新事实问题",
+          "observed": "操作与启用条件可见，义务问以否回答；但要求逐项A/B未完成。"
+        }
+      ]
+    },
+    {
+      "case_id": "claim-semantics-candidate-20261020-trello-002",
+      "product": "Trello",
+      "label": "Trello / 权限范围、改权主体与计费",
+      "verdict": "omission",
+      "strict_pass": false,
+      "note": "最终仍未核实；模型尝试把资料缺口当4项clarification输入，unknown clarification fields拒绝。题设刻意不告知B成员/guest资格，正确答案本应说明规则而非要求补成确定类别。固定页含完整规则但未入选精确证据。",
+      "subquestions": [
+        {
+          "request": "Workspace统一Observer",
+          "expected_boundary": "不能，逐人逐板",
+          "observed": "未答。"
+        },
+        {
+          "request": "A改权自动决定B吗",
+          "expected_boundary": "不能据此推定B资格或权限",
+          "observed": "未答。"
+        },
+        {
+          "request": "谁能改A已有成员",
+          "expected_boundary": "Workspace admins 或 board admins",
+          "observed": "未答。"
+        },
+        {
+          "request": "Observer标签足够判免费/计费吗",
+          "expected_boundary": "不足；可为计费成员/多板guest或不计费单板guest",
+          "observed": "未答。"
+        },
+        {
+          "request": "不得臆测B成员与guest类型",
+          "expected_boundary": "保留题设未知",
+          "observed": "未臆测，但未答不能等同完成。"
+        }
+      ]
+    }
+  ],
+  "review_resolution": {
+    "unassigned_parent_claims": "fixed; union equality + replay tests",
+    "review_resolution_tests_passed": 60
+  },
+  "evidence_hashes": {
+    "full-frozen.log": "52fe2fe7b44c95e7404d0889c636652a3fb393e7dcb5f9e42d4f831bf2ca62b9",
+    "prompt-context-regression.log": "6de870a777a1ecad79d4360b0d5a7e7d8315a145e10bc11df232596189886a5d",
+    "frontend-build.log": "bb76303b089079f3e1b9bafa1381b1b1bbe42c1e7c92c5fbd421e97ae57dc72d",
+    "live-content-review-first.json": "8e5db8e7cc1c900587ea6c8846c023145207f1883bc177e3ec2005215ddfc016",
+    "live-content-review.json": "0656a2ab09edd2d053fcf3aecd9577120121b8109d714accdc00eee5b4c03f15",
+    "live-content-review-verification.json": "f870e9f898a0eef988ebcba3d36161633a613c1e6c11e3b2bab44bdb986824d4"
+  }
+}

@@ -3,6 +3,7 @@
 import asyncio
 import copy
 import json
+from claim_review_fixture import answer_response
 from types import SimpleNamespace
 
 import pytest
@@ -37,9 +38,8 @@ def parse(payload, atoms, originals, *, questions=None):
     ops = {op['observation_id']: {k: v for k, v in op.items() if k != 'support_ref'}
            for row in rows for op in row.get('operation_observations', [])}
     sent = {row['id'] for row in rows}
-    span_ids = {span['span_id'] for row in rows for span in row.get('source_span_candidates', [])}
-    choices = {span['span_id']: span for original in originals for span in spans(original)
-               if original.id in sent and span['span_id'] in span_ids}
+    from packages.agents.writer.readable_support import dispatched_span_candidates
+    choices = dispatched_span_candidates(payload, originals, sent)
     assert hasattr(writer, '_support_ref_catalog'), 'Writer needs a catalog from its actual prompt'
     refs = writer._support_ref_catalog(payload, originals, sent)
     plans = atoms if isinstance(atoms, list) and atoms and 'question_id' in atoms[0] else [
@@ -50,7 +50,7 @@ def parse(payload, atoms, originals, *, questions=None):
 
 def span_atom(row, text):
     span = next(candidate for candidate in row['source_span_candidates']
-                if candidate['source_path'] == 'quote')
+                if candidate['quote'] == row['quote'])
     assert 'support_ref' in span, 'Actual sent source spans need short references'
     return dict(text=text, kind='fact', support_refs=[span['support_ref']])
 
@@ -130,7 +130,7 @@ def test_catalog_checks_actual_candidate_against_full_canonical_original(change)
     op_ref, span_ref = row['operation_support_refs'][0], row['source_span_candidates'][0]['support_ref']
     sent = {original.id}
     if change == 'operation': row['operation_observations'][0]['operation_quote'] = 'Anyone can edit documents.'
-    elif change == 'span': row['source_span_candidates'][0]['end'] -= 1
+    elif change == 'span': row['source_span_candidates'][0]['quote'] += ' Altered.'
     elif change == 'identity': row['source_id'] = 'another-source'
     elif change == 'duplicate_ref': row['source_span_candidates'].append(dict(row['source_span_candidates'][0]))
     elif change == 'unsent': sent = set()
@@ -233,9 +233,9 @@ async def test_last_serialized_prompt_fault_cannot_restore_unverified_support(mo
             return serializer(payload)
         changed = copy.deepcopy(payload)
         row = changed['evidence_view']['facts'][0]
-        path = 'value/0' if change == 'missing_value' else 'quote'
+        expected_quote = value_text if change == 'missing_value' else original_text
         expected['ref'] = next(span['support_ref'] for span in row['source_span_candidates']
-                               if span['source_path'] == path)
+                               if span['quote'] == expected_quote)
         expected['text'] = value_text if change == 'missing_value' else original_text
         if change == 'quote_and_value': row['quote'], row['value'] = 'Members own private records.', []
         elif change == 'missing_quote': row.pop('quote')
@@ -255,8 +255,12 @@ async def test_last_serialized_prompt_fault_cannot_restore_unverified_support(mo
         data = expand_prompt_payload(json.loads(user.split('\nJSON:\n', 1)[1]))
         requests.append(data)
         if 'evidence_view' in data:
-            if change in {'quote_and_value', 'missing_quote', 'missing_value'}:
-                assert expected['text'] not in user
+            if change == 'quote_and_value':
+                assert data['evidence_view']['facts'][0]['quote'] != expected['text']
+            elif change == 'missing_quote':
+                assert 'quote' not in data['evidence_view']['facts'][0]
+            elif change == 'missing_value':
+                assert 'value' not in data['evidence_view']['facts'][0]
             content = {'question_plans': [dict(question_id=q['question_id'], atoms=[dict(text=expected['text'],
                 kind='fact', support_refs=[expected['ref']])], missing_fields=[]) for q in data['questions']]}
         elif 'atom_review_policy' in data:
@@ -288,8 +292,8 @@ def test_compact_pair_preserves_exact_two_fact_exception_rule():
     auth = scoped(auth.model_copy(update={'source_id': 'specific'}), 'specific')
     payload, _ = context([base, auth])
     selected = {next(span['span_id'] for span in spans(base) if span['quote'] == ACCESS), spans(auth)[0]['span_id']}
-    refs = [span['support_ref'] for row in payload['evidence_view']['facts']
-            for span in row['source_span_candidates'] if span['span_id'] in selected]
+    refs = [ref for ref, binding in writer._support_ref_catalog(payload, [base, auth], {base.id, auth.id}).items()
+            if set(binding.get('source_span_ids', ())) & selected]
     assert len(refs) == 2
     text = ' '.join((ACCESS + ' ' + AUTH).split())
     claims, gaps, _ = parse(payload, [dict(text=text, kind='fact', support_refs=refs)], [base, auth])
@@ -334,9 +338,8 @@ def test_more_than_eight_unique_atoms_still_allocates_other_question_first():
     original = fact(quote=texts[0], value=texts)
     payload, _ = context([original])
     row = payload['evidence_view']['facts'][0]
-    choices = {span['quote']: span['span_id'] for span in spans(original)}
-    refs = {span['span_id']: span['support_ref'] for span in row['source_span_candidates']}
-    atoms = [dict(text=text, kind='fact', support_refs=[refs[choices[text]]]) for text in texts]
+    refs = {span['quote']: span['support_ref'] for span in row['source_span_candidates']}
+    atoms = [dict(text=text, kind='fact', support_refs=[refs[text]]) for text in texts]
     questions = [dict(question_id='one', question='Who owns collections?'),
                  dict(question_id='two', question='Who owns other collections?')]
     response = [dict(question_id='one', atoms=atoms[:-1], missing_fields=[]),
@@ -362,7 +365,8 @@ def test_same_eight_atoms_and_bindings_need_less_response_transport(mixed):
                 observation_id=row['operation_observations'][0]['observation_id']))
         else:
             compact.append(span_atom(row, row['quote']))
-            legacy.append(draft(by_id[row['id']], row['quote'], source_span_ids=[row['source_span_candidates'][0]['span_id']]))
+            legacy.append(draft(by_id[row['id']], row['quote'], source_span_ids=[
+                next(span['span_id'] for span in spans(by_id[row['id']]) if span['quote'] == row['quote'])]))
     short_claims, short_gaps, _ = parse(payload, compact, originals)
     long_claims, long_gaps, _ = parse(payload, legacy, originals)
     assert not short_gaps and not long_gaps
@@ -583,6 +587,8 @@ async def test_real_writer_compact_review_save_reload_and_final_qa(monkeypatch, 
                     atoms.append(dict(text=row['quote'], kind='fact', support_refs=[row['operation_support_refs'][0]]))
                     expected_bindings.append(op)
                 else:
+                    assert all(set(span) == {'support_ref', 'quote'}
+                               for span in row['source_span_candidates'])
                     atoms.append(span_atom(row, row['quote']))
                     expected_bindings.append((row['id'], row['source_id'], row['quote']))
             if mode == 'exception_pair':
@@ -598,7 +604,7 @@ async def test_real_writer_compact_review_save_reload_and_final_qa(monkeypatch, 
                 'full_assertion_support', 'atomicity'}
             return json.dumps({'reviews': [supported_review(row) for row in payload['claims']]})
         fields = ['actual_action', 'data_ownership', 'retained_copy', 'access_path'] if mode == 'non_operation' else []
-        return json.dumps({'version': 3, 'answers': [dict(question_id=q['question_id'],
+        return answer_response(payload, {'version': 3, 'answers': [dict(question_id=q['question_id'],
             status='partial' if fields else 'answered', claim_ids=[c['id'] for c in payload['claims']],
             resolution='clarification' if fields else ('conditional' if mode == 'exception_pair' else 'direct'),
             conclusion='depends' if fields or mode == 'exception_pair' else 'yes',
