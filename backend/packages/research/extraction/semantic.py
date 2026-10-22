@@ -6,6 +6,8 @@ import json
 import re
 from urllib.parse import urlparse
 
+from markdown_it import MarkdownIt
+
 from packages.business_intel.entity_resolver import (
     confusion_terms_for_competitor, is_trusted_url_for_competitor, resolve_competitor_identity, product_title_matches, resolve_identity_mention,
 )
@@ -57,6 +59,12 @@ _ACCESS_HEADING = re.compile(
 )
 _ROLE_LINE = re.compile(r'^\s*(?:[-*|]\s*)?(Can comment|Can view|Can edit(?: content)?|Can create|Can manage(?: access)?|Full access|Comment-only|Read-only)\s*(?:[:|]|$)', re.I)
 _ROLE_SCOPE_RULE = re.compile(r'^[A-Za-z]+(?:-[A-Za-z]+)*-scoped roles?\s+apply\b', re.I)
+_MARKDOWN_ESCAPE = re.compile(r'\\+([!-/:-@\[-`{-~])')
+
+
+def _markdown_display_text(text):
+    """Recognize ASCII punctuation escapes without changing stored source text."""
+    return _MARKDOWN_ESCAPE.sub(r'\1', text)
 
 
 def _active_questions(brief):
@@ -92,7 +100,7 @@ def account_lifecycle_rule(text: str) -> bool:
 def source_rule_text_signal(text: str) -> bool:
     """Terminology signal only; authority and original rule admission remain separate."""
     return bool(account_lifecycle_rule(text) or billing_rule_text_signal(text) or any(
-        _ROLE_SCOPE_RULE.match(line.strip()) or re.fullmatch(
+        _ROLE_SCOPE_RULE.match(_markdown_display_text(line.strip())) or re.fullmatch(
             r'\|[^|]+\|(?=[^|]*\b(?:access|permissions?)\b)[^|]+\|', line.strip(), re.I,
         ) for line in text.splitlines()
     ))
@@ -105,7 +113,7 @@ def semantic_quote_quality_problem(brief: ResearchBrief, quote: str) -> str | No
         return problem
     if _billing_rule(brief, quote):
         return None
-    if _ROLE_SCOPE_RULE.match(quote) or account_lifecycle_rule(quote):
+    if _ROLE_SCOPE_RULE.match(_markdown_display_text(quote)) or account_lifecycle_rule(quote):
         return None
     return problem
 
@@ -767,6 +775,93 @@ def _restore_bullet(body, window, quote):
     return rows[0] if len(rows) == 1 and window.count(rows[0]) == 1 else quote
 
 
+def _markdown_prose_lines(body, lines):
+    """Use CommonMark line maps only; all quote text and offsets remain raw."""
+    display = _markdown_display_text(body)
+    normalized = display.replace('\r\n', '\n').replace('\r', '\n')
+    line_count = normalized.count('\n') + bool(normalized and not normalized.endswith('\n'))
+    if (re.findall(r'\r\n?|\n', display) != re.findall(r'\r\n?|\n', body)
+            or len(lines) != line_count):
+        return set()
+    block_types = {
+        'paragraph_open', 'paragraph_close', 'inline', 'heading_open', 'heading_close',
+        'blockquote_open', 'blockquote_close', 'bullet_list_open', 'bullet_list_close',
+        'ordered_list_open', 'ordered_list_close', 'list_item_open', 'list_item_close',
+        'hr', 'fence', 'code_block', 'html_block',
+    }
+    inline_types = {
+        'text', 'softbreak', 'hardbreak', 'em_open', 'em_close', 'strong_open', 'strong_close',
+        'link_open', 'link_close', 'image', 'code_inline', 'html_inline',
+    }
+    excluded = {'fence', 'code_block', 'html_block', 'blockquote_open',
+                'bullet_list_open', 'ordered_list_open', 'list_item_open'}
+    prose, blocked = set(), set()
+    try:
+        for token in MarkdownIt('commonmark', {'html': True}).parse(display):
+            # CommonMark HTML maps do not prove raw HTML closure across blank
+            # lines, so any HTML makes this document ineligible for recovery.
+            if token.type not in block_types or token.type == 'html_block':
+                return set()
+            if token.map is None:
+                if token.nesting != -1:
+                    return set()
+                continue
+            if (len(token.map) != 2 or any(type(value) is not int for value in token.map)
+                    or not 0 <= token.map[0] < token.map[1] <= len(lines)):
+                return set()
+            span = range(*token.map)
+            if token.type == 'paragraph_open':
+                prose.update(span)
+            if token.type in excluded:
+                blocked.update(span)
+            # A fence whose map omits a closing line keeps the remaining source
+            # uncertain even when CommonMark terminates its enclosing container.
+            if (token.type == 'fence'
+                    and token.map[1] - token.map[0] != len(token.content.splitlines()) + 2):
+                blocked.update(range(token.map[0], len(lines)))
+            if token.type == 'inline':
+                children = list(token.children)
+                while children:
+                    child = children.pop()
+                    if child.type not in inline_types or child.type == 'html_inline':
+                        return set()
+                    if child.type == 'code_inline':
+                        blocked.update(span)
+                    children.extend(child.children or [])
+    except Exception:
+        return set()
+    return prose - blocked
+
+
+def _restore_markdown_quote(body, window, quote, page):
+    """Recover one complete provider line/paragraph, never a fuzzy text span."""
+    if (page.metadata.get('document_structure_format') != 'provider_markdown_v1'
+            or not window or not _heading_resolution(body, page)['valid']):
+        return quote
+    target = _markdown_display_text(quote)
+    lines = body.splitlines(keepends=True)
+    prose_lines = _markdown_prose_lines(body, lines)
+    candidates = [(index, index + 1, line.strip()) for index, line in enumerate(lines)]
+    # Multiline selections must keep the whole blank-line-delimited paragraph.
+    lower = 0
+    for upper in range(len(lines) + 1):
+        if upper == len(lines) or not lines[upper].strip():
+            if upper - lower > 1:
+                candidates.append((lower, upper, ''.join(lines[lower:upper]).strip()))
+            lower = upper + 1
+    matches = [(lower, upper, original) for lower, upper, original in candidates
+               if _markdown_display_text(original) == target]
+    if len(matches) != 1:
+        return quote
+    lower, upper, original = matches[0]
+    # The window anchor must be the checked complete line/paragraph itself,
+    # never a second occurrence inside another line or a code block.
+    if (any(index not in prose_lines for index in range(lower, upper))
+            or body.count(original) != 1 or window.count(original) != 1):
+        return quote
+    return original
+
+
 def _table_context(body, start, end):
     """Bind only a contiguous original table header and its adjacent footnotes."""
     from packages.research.evidence.operations import _ROLE
@@ -853,6 +948,8 @@ def semantic_extraction(
             continue
         quote = _restore_table_edges(body, window, quote)
         quote = _restore_bullet(body, window, quote)
+        if quote not in window:
+            quote = _restore_markdown_quote(body, window, quote, page)
         if quote in seen or (len(quote) > MAX_QUOTE_CHARS and quote not in rule_blocks):
             diagnostic['reason'] = 'duplicate' if quote in seen else 'quote_capacity'
             continue

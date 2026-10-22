@@ -230,7 +230,10 @@ def _capture_html(body: str) -> tuple[str, tuple[tuple[int, str], ...], dict[str
     for node in tree.xpath('//button[@aria-controls]'):
         if _effective_disclosure_button(node):
             controls.setdefault(node.get('aria-controls'), []).append(node)
-    for node in tree.xpath('//nav|//footer'):
+    for node in tree.xpath('//nav|//footer|//*[@role]'):
+        if (node.tag not in {'nav', 'footer'}
+                and 'navigation' not in re.split(r'[ \t\r\n\f]+', node.get('role', ''))):
+            continue
         if node.getparent() is not None:
             node.drop_tree()
     mains = [node for node in tree.xpath('//main') if _heading_block_visible(node)]
@@ -316,10 +319,28 @@ def _capture_html(body: str) -> tuple[str, tuple[tuple[int, str], ...], dict[str
                         for key in ('question', 'answer')]
     disclosure_nodes = [*revealed, *(node for node, record in disclosures
                                     if node.tag == 'details' and record['status'] == 'complete')]
+    verified_details = {copies[node] for node, record in disclosures
+                        if node.tag == 'details' and record['status'] == 'complete'}
     disclosure_paths = {clone.getroottree().getpath(copies[node]) for node in disclosure_nodes}
     text, heading_records, heading_gap = _capture_heading_positions(
         clone, text, fallback=fallback, disclosure_texts=disclosure_texts, disclosure_paths=disclosure_paths,
     )
+    if (heading_gap == 'heading_source_boundary_unbound' and not fallback
+            and not metadata['capture_gaps'] and not clone.xpath('.//table')
+            and all(record['status'] == 'complete' for _, record in disclosures)
+            and all(node in verified_details for node in clone.iter('details'))):
+        # Replay only the same cleaned source DOM. A plain-text reparse would
+        # invent identities; flattening a table would lose its row context.
+        replay = '\n'.join(part.strip() for part in clone.itertext() if part.strip())
+        replay_text, replay_records, replay_gap = _capture_heading_positions(
+            clone, replay, fallback=True, disclosure_texts=disclosure_texts,
+            disclosure_paths=disclosure_paths,
+        )
+        verified_text, verified_anchors = _finish_heading_positions(replay_text, replay_records)
+        if (not replay_gap and len(verified_anchors) == len(headings)
+                and _collapse_space(verified_text) == _collapse_space(replay)):
+            text, heading_records, heading_gap = replay_text, replay_records, None
+            metadata['heading_capture_recovery'] = 'visible_dom_replay_after_unbound_boundary'
     if heading_gap:
         metadata['capture_gaps'].append(heading_gap)
     protected_quotes = []

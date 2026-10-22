@@ -1448,6 +1448,15 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         if not semantic_page_allowed(brief, page):
             return None
         record = self._evidence_live_record(record)
+        semantic_body = semantic_body_window(brief, page)
+        if not semantic_body.strip():
+            self._trace_local_tool(record, agent='collector', subagent=context.subagent,
+                name='collector_semantic_extract_skipped', input_text=page.final_url,
+                output_text=json.dumps({'reason': 'empty_semantic_body_window',
+                    'extraction_status': 'skipped', 'captured_page_id': page.id,
+                    'capture_gaps': page.metadata.get('capture_gaps', [])}), context=context,
+                metadata={'reason': 'empty_semantic_body_window', 'extraction_status': 'skipped'})
+            return None
         body = page.text or page.markdown or page.snippet
         key = (brief.competitor, brief.dimension, hashlib.sha256(body.encode()).hexdigest(),
                semantic_focus_signature(brief, page))
@@ -1482,7 +1491,7 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
                                                     "use_cases": brief.product_use_cases[:6],
                                                     "requested_operations": required_operations(brief.topic, brief.product_use_cases)},
                                  "url": page.final_url, "title": page.title,
-                                 "body": semantic_body_window(brief, page)}, ensure_ascii=False),
+                                 "body": semantic_body}, ensure_ascii=False),
                 schema_hint=SEMANTIC_SCHEMA, context=context,
                 timeout_seconds=30, max_output_tokens=1600,
             )

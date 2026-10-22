@@ -1,0 +1,188 @@
+{
+  "provenance": "Known exposed Cloudflare failure, original captured body and five model proposals; not a blind evaluation.",
+  "candidate": {
+    "id": "source-candidate-4e924570746695583588",
+    "title": "Account roles · Cloudflare Fundamentals docs",
+    "url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+    "snippet": "",
+    "origin": "trusted_registry",
+    "competitor": "Cloudflare",
+    "dimension": "feature",
+    "rank": 0,
+    "confidence": 0.8,
+    "query": null,
+    "reason": "",
+    "date": null,
+    "last_updated": null,
+    "metadata": {}
+  },
+  "page": {
+    "id": "captured-page-40e62cd15f4384969074",
+    "candidate_id": "source-candidate-4e924570746695583588",
+    "requested_url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+    "final_url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+    "status": "ok",
+    "title": "Account roles · Cloudflare Fundamentals docs",
+    "text": "\\# Roles\n\nWhenever you add a new member to your account\\, you can assign policies to those users and make use of the available roles\\. Roles can only ever be assigned to their given scope and multiple roles can be assigned to a given policy\\.\n\n\\#\\# Account\\-scoped roles\n\nAccount\\-scoped roles apply across an entire Cloudflare account\\, and through all domains in that account\\.\n\nRole \\| Description \n\\-\\-\\-\\|\\-\\-\\-\nAdministrator \\| Can access the full account and edit subscriptions\\. Cannot manage members nor billing profile\\. \nSuper Administrator \\- All Privileges \\| Can edit any Cloudflare setting\\, make purchases\\, update billing\\, manage members\\, create account\\-owned API tokens\\, and manage all account\\-owned API tokens\\. Super Administrators can revoke the access of other Super Administrators\\. \nAdministrator Read Only \\| Can access the full account in read\\-only mode\\. \nAnalytics \\| Can read Analytics\\. \nAPI Gateway \\| Grants full access to API Gateway \\(including API Shield\\) for all domains in an account\\. \nAPI Gateway Read \\| Grants read access to API Gateway \\(including API Shield\\) for all domains in an account\\. \nAPI Token Provisioning \\| Can create account API tokens\\. \nApplication Security Reports Read \\| Can read Application Security Reports\\. \nAudit Logs Viewer \\| Can view Audit Logs\\. \nBot Management \\(Account\\-Wide\\) \\| Can edit Bot Management \\(including Super Bot Fight Mode\\) configurations for all domains in account\\. \nBilling \\| Can edit the account\\'s billing profile and subscriptions \nCache Purge \\| Can purge the edge cache and allows the reading of zone settings\\. \nCloudflare Access \\| Can edit Cloudflare Access and Cloudflare Tunnel\\. \nCloudflare CASB \\| Can edit Cloudflare CASB\\. \nCloudflare CASB Read \\| Can read Cloudflare CASB\\. \nCloudchamber Admin \\| Can manage Cloudchamber deployments\\. \nCloudchamber Admin Read Only \\| Can manage Cloudchamber deployments in read\\-only mode\\. \nCloudflare DEX \\| Can edit Cloudflare DEX\\. \nCloudflare Gateway \\| Can edit Cloudflare Gateway and read Access\\. \nCloudflare Images \\| Can access Cloudflare Images data\\. \nCloudflare R2 Admin \\| Can edit Cloudflare R2 buckets\\, objects\\, and associated configurations\\. \nCloudflare R2 Read \\| Can read Cloudflare R2 buckets\\, objects\\, and associated configurations\\. \nCloudflare Stream \\| Can edit Cloudflare Stream media\\. \nCloudflare Zero Trust \\| Can edit Cloudflare Zero Trust\\. Grants administrator access to all Zero Trust products including Access\\, Gateway\\, the Cloudflare One Client\\, Tunnel\\, Browser Isolation\\, CASB\\, DLP\\, DEX\\, and Email security\\. \nCloudflare Zero Trust Secure DNS Locations Write \\| Can view Gateway DNS locations and create and edit secure DNS locations\\. \nCloudflare Zero Trust PII \\| Can access Cloudflare Zero Trust PII\\. \nCloudflare Zero Trust Read Only \\| Can access Cloudflare Zero Trust read only mode\\. \nCloudflare Zero Trust Reporting \\| Can access Cloudflare Zero Trust reporting data\\. \nZero Trust Account Lists Admin \\| Can create\\, edit\\, and delete all Gateway and Access lists in an account\\. \nZero Trust Account Lists Read \\| Can view all Gateway and Access lists in an account\\. \nZero Trust DNS Location Admin \\| Can create\\, edit\\, and delete all Gateway DNS locations in an account\\. \nZero Trust DNS Policies Admin \\| Can create\\, edit\\, delete\\, and reorder all Gateway DNS policies in an account\\. \nZero Trust Egress Policies Admin \\| Can create\\, edit\\, delete\\, and reorder all Gateway egress policies in an account\\. \nZero Trust Gateway Firewall Policies Admin \\| Can create\\, edit\\, delete\\, and reorder all Gateway firewall policies in an account\\, including DNS\\, HTTP\\, and network policies\\. \nZero Trust Gateway Policies Admin \\| Can create\\, edit\\, delete\\, and reorder all Gateway traffic policies in an account\\. \nZero Trust Gateway Policies Read \\| Can view all Gateway traffic policies in an account\\. \nZero Trust Gateway Read Only \\| Can view all Gateway resources in an account in read\\-only mode\\, including traffic policies\\, lists\\, and DNS locations\\. \nZero Trust HTTP Policies Admin \\| Can create\\, edit\\, delete\\, and reorder all Gateway HTTP policies in an account\\, including isolation policies\\. \nZero Trust Network Policies Admin \\| Can create\\, edit\\, delete\\, and reorder all Gateway network policies in an account\\. \nZero Trust Proxy Endpoints Admin \\| Can create\\, edit\\, and delete all Gateway proxy endpoints in an account\\. \nZero Trust Resolver Policies Admin \\| Can create\\, edit\\, delete\\, and reorder all Gateway resolver policies in an account\\. \nConnectivity Directory Admin \\| Can view\\, edit\\, create\\, and delete Workers VPC Services and bind to Cloudflare Tunnel\\. \nConnectivity Directory Bind \\| Can read\\, list\\, and bind to Workers VPC Services\\, as well as read and list Cloudflare Tunnels\\. \nConnectivity Directory Read \\| Can view Workers VPC Services and Cloudflare Tunnels\\. \nDNS \\| Can edit DNS records\\. \nEmail Configuration Admin \\| Grants administrator access to Email security\\. Cannot take actions on emails\\, or read emails\\. \nEmail Integration Admin \\| Grants read and write access to integrations only\\. \nEmail Security Analyst \\| Grants analyst access\\. Can take action on emails and read emails\\. \nEmail Security Read only \\| Grants read only access to all of Email security\\. \nEmail Security Reporting \\| Grants read access to Email security metrics\\. \nEmail Security Policy Admin \\| Grants read access to all settings\\, and write access to allow policies\\, trusted domains\\, and blocked senders \nFirewall \\| Can edit WAF\\, IP Access rules\\, Zone Lockdown settings\\, Cache Rules\\, and Cache Response Rules\\. \nHTTP Applications \\| Grants full access to HTTP Applications\\. \nHTTP Applications Read \\| Grants read\\-only access to HTTP Applications\\. \nLoad Balancer \\| Can edit Load Balancers\\, Pools\\, Origins\\, and Health Checks\\. \nLoad Balancing Account Read \\| Can read Load Balancing resources such as Load Balancers\\, Monitors\\, Monitor Groups\\, Pools\\, and Health Checks\\. \nLog Share \\| Can edit Log Share configuration\\. \nLog Share Reader \\| Can read Enterprise Log Share\\. \nMagic Network Monitoring \\| Can view and edit Network Flow configuration\\. \nMagic Network Monitoring Admin \\| Can view\\, edit\\, create\\, and delete Network Flow configuration\\. \nMagic Network Monitoring Read\\-Only \\| Can view Network Flow configuration\\. \nNetwork Services Write \\(Magic\\) \\| Grants write access to network configurations for Magic services\\. Magic Tunnel health checks require the Analytics role for non\\-admin users\\. \nNetwork Services Read \\(Magic\\) \\| Grants read access to network configurations for Magic services\\. Magic Tunnel health checks require the Analytics role for non\\-admin users\\. \nMinimal Account Access \\| Can view account\\, and nothing else\\. \nPage Shield \\| Grants write access to client\\-side security \\(formerly Page Shield\\) across the whole account\\. \nPage Shield Read \\| Grants read access to client\\-side security \\(formerly Page Shield\\) across the whole account\\. \nRealtime \\| Grants access to Realtime configuration excluding sensitive data\\. \nRealtime Admin \\| Grants administrator access to Realtime configuration\\. \nHyperdrive Read only \\| Grants read access to Hyperdrive database configuration\\. \nHyperdrive Admin \\| Grants write access to Hyperdrive database configuration\\. \nSSL\\/TLS\\, Caching\\, Performance\\, Page Rules\\, and Customization \\| Can edit most Cloudflare settings except for DNS and Firewall\\. \nSecrets Store Admin \\| Can create\\, edit\\, duplicate\\, delete\\, and view secrets metadata\\. Can also add a Secrets Store binding to a Worker\\. \nSecrets Store Deployer \\| Can view secrets metadata but cannot create\\, edit\\, duplicate\\, nor delete secrets\\. Can also add a Secrets Store binding to a Worker\\. \nSecrets Store Reporter \\| Can view secrets metadata\\. Cannot perform any actions \\(create\\, edit\\, duplicate\\, delete secrets\\)\\, nor add a Secrets Store binding to a Worker\\. \nBrand Protection \\| Can access the Brand Protection feature on the API and Cloudflare dashboard\\. Brand Protection role also gives you access to the Investigate platform\\. \nCloudforce One Admin \\| Grants write access to Cloudforce One\\. \nCloudforce One Read \\| Grants read access to Cloudforce One\\, and cannot create and\\/or edit RFIs or PIRs\\. \nTrust and Safety \\| Can access trust and safety related services\\. \nTurnstile \\| Grants full access to Turnstile\\. \nTurnstile Read \\| Grants read access to Turnstile\\. \nVectorize Admin \\| Can edit Vectorize configurations\\. \nVectorize Read only \\| Can read Vectorize configurations\\. \nWaiting Room Admin \\| Can edit Waiting Room configuration\\. \nWaiting Room Read \\| Can read Waiting Room configuration\\. \nWorkers Editor \\| Can use the Workers Playground\\. \nWorkers Platform Admin \\| Grants edit and read access to all products typically used as part of Cloudflare\\'s Developer Platform\\, including Workers\\, Pages\\, Durable Objects\\, KV\\, R2\\, Zones\\, Zone Analytics and Page Rules\\. Cloudflare may add additional read\\-only permissions to this role as new products are introduced\\. \nWorkers Platform \\(Read\\-only\\) \\| Grants read\\-only access to all products typically used as part of Cloudflare\\'s Developer Platform\\, including Workers\\, Pages\\, Durable Objects\\, KV\\, R2\\, Zones\\, Zone Analytics and Page Rules\\. Cloudflare may add additional read\\-only permissions to this role as new products are introduced\\. \nConnectivity Directory Read \\| Can view Workers VPC Services and Cloudflare Tunnels\\. \nConnectivity Directory Bind \\| Can read\\, list\\, and bind to Workers VPC Services\\, as well as read and list Cloudflare Tunnels\\. \nConnectivity Directory Admin \\| Can view\\, edit\\, create\\, and delete Workers VPC Services\\, including the ability to create VPC Services that bind to Cloudflare Tunnel\\. \nZaraz Admin \\| Can edit and publish Zaraz configuration\\. \nZaraz Edit \\| Can edit Zaraz configuration\\. \nZaraz Read only \\| Can read Zaraz configuration\\. \nZone Versioning \\(Account\\-Wide\\) \\| Can view and edit Zone Versioning for all domains in account\\. \nZone Versioning Read \\(Account\\-Wide\\) \\| Can view Zone Versioning for all domains in account\\. \n\n\\#\\# Domain\\-scoped roles\n\nDomain\\-scoped roles apply for a given domain within an account\\.\n\nRole \\| Description \n\\-\\-\\-\\|\\-\\-\\-\nAI Crawl Control Read Only \\| Can read AI Crawl Control and metrics\\. This role also grants read access to the underlying products AI Crawl Control depends on \\(analytics\\, DNS\\, firewall\\, and bot management\\)\\, which makes additional zone pages visible in the dashboard\\, including the zone Overview\\, Analytics\\, and Security Analytics\\. \nBot Management \\| Can edit Bot Management \\(including Super Bot Fight Mode\\) configurations\\. \nCache Domain Purge \\| Grants access to purge the edge cache for a specific domain and allows the reading of zone settings\\. \nDomain Administrator \\| Grants full access to domains in an account \\(including Regional Services configurations\\)\\, and read\\-only access to account\\-wide Firewall\\, Access\\, and Worker resources\\. \nDomain Administrator Read Only \\| Grants read\\-only access to domains in an account\\, as well as account\\-wide Firewall\\, Access\\, and Worker resources\\. This role does not currently include read access to Regional Services configurations\\. \nDomain API Gateway \\| Grants full access to API Gateway \\(including API Shield\\)\\. \nDomain API Gateway Read \\| Grants read access to API Gateway \\(including API Shield\\)\\. \nDomain DNS \\| Grants access to edit DNS settings for domains in an account\\. \nDomain Page Shield \\| Grants write access to client\\-side security for domains in an account\\. \nDomain Page Shield Read \\| Grants read access to client\\-side security for domains in an account\\. \nDomain Waiting Room Admin \\| Can edit waiting rooms configuration\\. \nDomain Waiting Room Read \\| Can read waiting rooms configuration\\. \nZone Versioning \\| Grants full access to Zone Versioning\\. \nZone Versioning Read \\| Grants read\\-only access to Zone Versioning\\. \n\n\\#\\# Resource\\-scoped roles\n\nResource\\-scoped roles apply for a specific resource within an account\\.\n\nRole \\| Description \n\\-\\-\\-\\|\\-\\-\\-\nCloudflare Access App Admin \\| Can edit a specific Access application in an account\\. \nCloudflare Access Identity Provider Admin \\| Can edit a specific Cloudflare One identity provider \\(IdP\\) in an account\\. \nCloudflare Access Policy Admin \\| Can edit a specific Access policy in an account\\. \nCloudflare Access Service Token Admin \\| Can edit a specific Access service token in an account\\. \nAccess for Infrastructure Target Admin \\| Can edit a specific Access for Infrastructure target in an account\\. \nIndividual Gateway lists \\| Scopes permissions to a specific Gateway list\\. Refer to Granular permissions for Gateway for details\\. \nIndividual Gateway policies \\| Scopes permissions to a specific Gateway traffic policy \\(DNS\\, HTTP\\, network\\, resolver\\, or egress\\)\\. Refer to Granular permissions for Gateway for details\\. \nIndividual Cloudflare Tunnel instances \\| Scopes permissions to a specific Cloudflare Tunnel instance\\. Refer to Granular permissions for Cloudflare Tunnel for details\\. \nIndividual Cloudflare Mesh nodes \\| Scopes permissions to a specific Cloudflare Mesh node\\. Refer to Granular permissions for Cloudflare Tunnel and Cloudflare Mesh for details\\. \n\nWas this helpful\\?",
+    "content_hash": "e40c00040dd813ec47a324272e1507965a0fa140f5cd904e1be613f8b1f3d31e",
+    "status_code": null,
+    "error": null,
+    "fetch_method": "deepseek_web_fetch",
+    "quality_score": 0.8,
+    "text_length": 13386,
+    "failure_reason": null,
+    "captured_at": "2026-10-20T15:09:12.072400Z",
+    "source_published_at": null,
+    "source_updated_at": null,
+    "source_material_level": "full_source",
+    "metadata": {
+      "provider": "deepseek",
+      "endpoint": "https://api.deepseek.com/v1/tools/fetch",
+      "requested_url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+      "origin_status": "unknown",
+      "final_url_observed": false,
+      "provider_api_status": 200,
+      "web_api_requests": 1,
+      "web_api_successful_responses": 1,
+      "web_api_billable_requests_estimate": 1,
+      "billing_basis": "provider_success_request_estimate_not_invoice",
+      "llm_request_attempts": 0,
+      "llm_tokens_charged": 0,
+      "llm_cost_charged_usd": 0.0,
+      "content_sha256": "e40c00040dd813ec47a324272e1507965a0fa140f5cd904e1be613f8b1f3d31e",
+      "captured_at": "2026-10-20T15:09:12.072400+00:00",
+      "document_structure_format": "provider_markdown_v1",
+      "document_headings": [
+        [
+          1,
+          "Roles"
+        ],
+        [
+          2,
+          "Account\\-scoped roles"
+        ],
+        [
+          2,
+          "Domain\\-scoped roles"
+        ],
+        [
+          2,
+          "Resource\\-scoped roles"
+        ]
+      ],
+      "document_heading_anchors": [
+        {
+          "level": 1,
+          "title": "Roles",
+          "start": 3,
+          "end": 8,
+          "occurrence": 1,
+          "content_sha256": "e40c00040dd813ec47a324272e1507965a0fa140f5cd904e1be613f8b1f3d31e",
+          "representation": "escaped_markdown"
+        },
+        {
+          "level": 2,
+          "title": "Account\\-scoped roles",
+          "start": 249,
+          "end": 270,
+          "occurrence": 1,
+          "content_sha256": "e40c00040dd813ec47a324272e1507965a0fa140f5cd904e1be613f8b1f3d31e",
+          "representation": "escaped_markdown"
+        },
+        {
+          "level": 2,
+          "title": "Domain\\-scoped roles",
+          "start": 10200,
+          "end": 10220,
+          "occurrence": 1,
+          "content_sha256": "e40c00040dd813ec47a324272e1507965a0fa140f5cd904e1be613f8b1f3d31e",
+          "representation": "escaped_markdown"
+        },
+        {
+          "level": 2,
+          "title": "Resource\\-scoped roles",
+          "start": 12050,
+          "end": 12072,
+          "occurrence": 1,
+          "content_sha256": "e40c00040dd813ec47a324272e1507965a0fa140f5cd904e1be613f8b1f3d31e",
+          "representation": "escaped_markdown"
+        }
+      ],
+      "provider_retrieval_receipt": {
+        "protocol": "deepseek_web_fetch_v1",
+        "provider": "deepseek",
+        "endpoint": "https://api.deepseek.com/v1/tools/fetch",
+        "method": "POST",
+        "requested_url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+        "title": "Account roles · Cloudflare Fundamentals docs",
+        "content_sha256": "e40c00040dd813ec47a324272e1507965a0fa140f5cd904e1be613f8b1f3d31e",
+        "captured_at": "2026-10-20T15:09:12.072400+00:00",
+        "provider_api_status": 200,
+        "web_api_requests": 1,
+        "web_api_successful_responses": 1,
+        "source_material_level": "full_source",
+        "origin_status": "unknown",
+        "final_url_observed": false
+      },
+      "previous_capture_diagnostics": {},
+      "capture_gaps": [],
+      "capture_incomplete": false,
+      "official_source_verification": {
+        "status": "verified",
+        "reason": null,
+        "product": "Cloudflare",
+        "requested_url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+        "final_url": null,
+        "title": "Account roles · Cloudflare Fundamentals docs",
+        "registered_url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+        "reviewed_by": "project_user",
+        "source_reviewed_at": "2026-10-18T02:15:30Z",
+        "registry_sha256": "c30b17249671c9c5fcfdfe3eddb7515df562431b2feb0326814af9f93828d5cc",
+        "content_sha256": "e40c00040dd813ec47a324272e1507965a0fa140f5cd904e1be613f8b1f3d31e",
+        "captured_at": "2026-10-20T15:09:12.072400+00:00",
+        "scope": "provider retrieval of requested reviewed document; origin HTTP status unknown; final redirect unobserved; not semantic approval"
+      }
+    }
+  },
+  "research_focus": {
+    "question": "Cloudflare 的功能、权限及计费条件研究",
+    "questions": [
+      {
+        "question_id": "question-1b7471af0d3dcf4af91c",
+        "question": "Cloudflare: 同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？"
+      },
+      {
+        "question_id": "question-dd9aeefb8be2a32bc5bf",
+        "question": "Cloudflare: 我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？"
+      }
+    ],
+    "use_cases": [],
+    "requested_operations": [
+      "read",
+      "comment",
+      "edit",
+      "create",
+      "share",
+      "manage_access"
+    ]
+  },
+  "model_proposals": {
+    "facts": [
+      {
+        "quote": "Roles can only ever be assigned to their given scope and multiple roles can be assigned to a given policy."
+      },
+      {
+        "quote": "Account\\-scoped roles apply across an entire Cloudflare account\\, and through all domains in that account."
+      },
+      {
+        "quote": "Domain\\-scoped roles apply for a given domain within an account."
+      },
+      {
+        "quote": "Cache Domain Purge \\| Grants access to purge the edge cache for a specific domain and allows the reading of zone settings."
+      },
+      {
+        "quote": "Cache Purge \\| Can purge the edge cache and allows the reading of zone settings."
+      }
+    ]
+  }
+}

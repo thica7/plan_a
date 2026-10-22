@@ -1,0 +1,2283 @@
+{
+  "schema_version": "collector-input-writer-delivery.v1",
+  "phase": "2026-10-21",
+  "summary_date_local": "2026-10-22",
+  "branch": "codex/pastoral-desktop",
+  "base_commit": "603cff19a817ee3c488132f68726c1870d7ea716",
+  "production_code_sha256": "c8279024e130093e9d723bacac4457c8ac5e029f7f3c3ec222f9fd8ace47e6dd",
+  "freeze_sha256": "70bc8c66a59cfc8533c9758016c0b58b2a3155267f496412dbb5702f0a481dfa",
+  "scope": {
+    "fixed_official_urls": true,
+    "dimension": "feature",
+    "first_model_attempts_only": true,
+    "blind_holdout": false,
+    "human_reference_boundaries_accepted": true,
+    "reports_accepted_by_user": false,
+    "reference_answers_sent_to_runtime": false,
+    "full_graph_acceptance_evaluated": false,
+    "planner_discovery_evaluated": false,
+    "publication_attempted": false,
+    "production_dense_rag_evaluated": false,
+    "retrieval": "degraded_lexical",
+    "raw_runner_deliverable_is_fixed_false": true
+  },
+  "limits": {
+    "calls_per_group": 24,
+    "tokens_per_group": 80000,
+    "max_output_tokens": 2048,
+    "actual_writer_output_cap": 1600,
+    "model_retries": 0
+  },
+  "new_test_count": 184,
+  "engineering_verification": {
+    "backend": {
+      "exit_code": 0,
+      "seconds": 211.43,
+      "counts": {
+        "passed": 6833,
+        "skipped": 1,
+        "warnings": 212
+      }
+    },
+    "lint": {
+      "exit_code": 0,
+      "seconds": 0.06,
+      "counts": {}
+    },
+    "api": {
+      "exit_code": 0,
+      "seconds": 3.56,
+      "counts": {}
+    },
+    "build": {
+      "exit_code": 0,
+      "seconds": 8.9,
+      "counts": {}
+    },
+    "diff": {
+      "exit_code": 0,
+      "seconds": 0.06,
+      "counts": {}
+    }
+  },
+  "partitions": {
+    "old_exposed8": {
+      "groups": 4,
+      "cases": 8,
+      "body": {
+        "correct": 6,
+        "omission": 2
+      },
+      "saved": {
+        "correct": 6,
+        "omission": 2
+      },
+      "published_claims": 8,
+      "fully_bound": 8,
+      "single_predicate": 5,
+      "strict_qualified_groups": 0,
+      "qa_blocker_count": 7
+    },
+    "new_frozen4_exposed": {
+      "groups": 2,
+      "cases": 4,
+      "body": {
+        "omission": 4
+      },
+      "saved": {
+        "omission": 4
+      },
+      "published_claims": 2,
+      "fully_bound": 1,
+      "single_predicate": 1,
+      "strict_qualified_groups": 0,
+      "qa_blocker_count": 5
+    }
+  },
+  "claim_id_totals": {
+    "published": 10,
+    "fully_bound": 9,
+    "single_predicate": 6,
+    "not_all_visible_assertions": true
+  },
+  "usage": {
+    "llm_calls": 50,
+    "provider_tokens": 171070,
+    "unknown_usage_spans": 0,
+    "web_api_requests": 4,
+    "web_api_successful_responses": 2,
+    "invoice_amount": null,
+    "efficiency_ab_test": false,
+    "actual_model_label": "deepseek-flash",
+    "exact_1017_weights_version_verified": false
+  },
+  "groups": [
+    {
+      "group": "bitwarden",
+      "product": "Bitwarden",
+      "run_id": "run-39ace0299c8c4d5f8993447ac73bcf4c",
+      "case_ids": [
+        "agent-readiness-holdout-v1-001",
+        "agent-readiness-holdout-v1-002"
+      ],
+      "status": "execution_complete",
+      "error_type": null,
+      "source_count": 3,
+      "snapshot_facts": 69,
+      "qa_blocker_count": 2,
+      "llm_calls": 15,
+      "provider_tokens": 48509,
+      "unknown_usage_spans": 0,
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 8
+      },
+      "module_status_counts": {
+        "llm": 3
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "report_characters": 1123,
+      "report_sha256": "6be97d427e7ee3955a2e2b9d34248bb2cb1a6f7c6dd34bf8cfd51f8443cbb8f3",
+      "report_matches_saved_run": true,
+      "web_api_requests": 1,
+      "web_api_successful_responses": 1,
+      "body_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-001",
+          "question_ids": [
+            "question-cb40c90e4d944bf23275"
+          ],
+          "question": "我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？",
+          "agent_judgment": "correct",
+          "reason": "完整 report.md 的问题回答区域明确写“结论：否”，并同时保留总共 2 名用户、最多 2 个 collections 两项限制。包含本人 3 人与 3 个 collections 的全部条件均获回答，事实正确且可由已发表规则推出。",
+          "conclusion": "no",
+          "subquestions": [
+            {
+              "subquestion": "含本人 3 人",
+              "body_judgment": "correct",
+              "saved_judgment": "correct"
+            },
+            {
+              "subquestion": "3 个 collections",
+              "body_judgment": "correct",
+              "saved_judgment": "correct"
+            }
+          ],
+          "answer_conclusion_binding": true,
+          "exact_report_answer": {
+            "artifact": "data/artifacts/collector-input-writer-2026-10-21/regression-bitwarden/report.md",
+            "source_path": "raw UTF-8 decoded text",
+            "start": 528,
+            "end": 806,
+            "text": "- Bitwarden: 我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？ — 已回答\n  结论：否\n  Bitwarden 的 Free organization 可供你和最多 1 名其他用户安全共享数据，即最多 2 名用户。 Free organization 最多支持 2 个 collections 的安全数据共享。 [source:raw-source-476cdfef80ec06d6a285]"
+          }
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-002",
+          "question_ids": [
+            "question-63762e09ae5d8faa1071"
+          ],
+          "question": "我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？",
+          "agent_judgment": "correct",
+          "reason": "完整 report.md 实际提出两项必要澄清：具体操作为移除成员还是永久删除账户或数据，数据属于个人还是组织；没有给无条件保留/删除结论，符合本题合理澄清边界。",
+          "conclusion": "depends",
+          "subquestions": [],
+          "answer_conclusion_binding": true,
+          "exact_report_answer": {
+            "artifact": "data/artifacts/collector-input-writer-2026-10-21/regression-bitwarden/report.md",
+            "source_path": "raw UTF-8 decoded text",
+            "start": 807,
+            "end": 940,
+            "text": "- Bitwarden: 我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？ — 部分回答\n  需要先澄清问题中的条件。\n  请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？\n"
+          }
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-001",
+          "question_ids": [
+            "question-cb40c90e4d944bf23275"
+          ],
+          "question": "我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？",
+          "agent_judgment": "correct",
+          "reason": "完整保存报告明确给出“否”及两项上限。",
+          "conclusion": "no",
+          "saved_status": "answered",
+          "answer_text": "Bitwarden 的 Free organization 可供你和最多 1 名其他用户安全共享数据，即最多 2 名用户。\nFree organization 最多支持 2 个 collections 的安全数据共享。",
+          "subquestions": [
+            {
+              "subquestion": "含本人 3 人",
+              "body_judgment": "correct",
+              "saved_judgment": "correct"
+            },
+            {
+              "subquestion": "3 个 collections",
+              "body_judgment": "correct",
+              "saved_judgment": "correct"
+            }
+          ]
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-002",
+          "question_ids": [
+            "question-63762e09ae5d8faa1071"
+          ],
+          "question": "我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？",
+          "agent_judgment": "correct",
+          "reason": "保存回答先问移除成员还是永久删除，以及数据属于个人还是组织；未给无条件保留/删除结论，符合合理澄清。",
+          "conclusion": "depends",
+          "saved_status": "partial",
+          "answer_text": "请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？",
+          "subquestions": []
+        }
+      ],
+      "case_question_mapping": [
+        {
+          "case_id": "agent-readiness-holdout-v1-001",
+          "question_ids": [
+            "question-cb40c90e4d944bf23275"
+          ],
+          "question": "我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？"
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-002",
+          "question_ids": [
+            "question-63762e09ae5d8faa1071"
+          ],
+          "question": "我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？"
+        }
+      ],
+      "published_claims": [
+        {
+          "id": "claim-ce95752d0bcd5fd94dd3",
+          "text": "Bitwarden 的 Free organization 可供你和最多 1 名其他用户安全共享数据，即最多 2 名用户。",
+          "kind": "fact",
+          "fully_bound": true,
+          "single_predicate": true,
+          "binding_reason": "本条实际选择 quote[0:271] 内直接有 one other user 与 both users，足以支持总共两人。",
+          "atomicity_reason": "一个 Free organization 的共享用户上限；“你和 1 名其他用户”与“总共 2 名”是同一数量谓词的等价表达。",
+          "exact_support": [
+            {
+              "span_id": "source-span-95b458f0f2cdefe22c47f1fb",
+              "fact_id": "evidence-fact-record-82cd1cea0e24aa012be6678b747d0f7ef5b4e9415a27306ca36a471e19072b67",
+              "source_id": "raw-source-476cdfef80ec06d6a285",
+              "fact_hash": "0b1702c51e328c3217653b63fbc0853c6f5111d2f55b4872c5d7c57d34ae855d",
+              "source_path": "quote",
+              "start": 0,
+              "end": 271,
+              "quote": "Start a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.",
+              "canonical_snapshot_id": "evidence-snapshot-c68a350737f876dc3058e27182f97128302b3da2181d8499c38578baa599ec5d",
+              "actual_original_field_length": 271,
+              "coordinates_valid": true,
+              "selected_substring_matches": true,
+              "binding_origin": "runtime selected source_span_binding"
+            }
+          ]
+        },
+        {
+          "id": "claim-fc85b64a7ba5721d8be5",
+          "text": "Free organization 最多支持 2 个 collections 的安全数据共享。",
+          "kind": "fact",
+          "fully_bound": true,
+          "single_predicate": true,
+          "binding_reason": "本条实际 quote[0:271] 内直接有 secure data sharing in up to two collections。",
+          "atomicity_reason": "单一谓词：Free organization 的共享 collections 上限为 2。",
+          "exact_support": [
+            {
+              "span_id": "source-span-95b458f0f2cdefe22c47f1fb",
+              "fact_id": "evidence-fact-record-82cd1cea0e24aa012be6678b747d0f7ef5b4e9415a27306ca36a471e19072b67",
+              "source_id": "raw-source-476cdfef80ec06d6a285",
+              "fact_hash": "0b1702c51e328c3217653b63fbc0853c6f5111d2f55b4872c5d7c57d34ae855d",
+              "source_path": "quote",
+              "start": 0,
+              "end": 271,
+              "quote": "Start a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.",
+              "canonical_snapshot_id": "evidence-snapshot-c68a350737f876dc3058e27182f97128302b3da2181d8499c38578baa599ec5d",
+              "actual_original_field_length": 271,
+              "coordinates_valid": true,
+              "selected_substring_matches": true,
+              "binding_origin": "runtime selected source_span_binding"
+            }
+          ]
+        },
+        {
+          "id": "claim-acbb183371a48c30e0db",
+          "text": "任何计划的用户都可以成为一个 Free organization 的所有者。",
+          "kind": "fact",
+          "fully_bound": true,
+          "single_predicate": true,
+          "binding_reason": "本条实际 quote[0:271] 内直接有 Any user of any plan can be the owner of one Free organization。",
+          "atomicity_reason": "单一谓词：任意计划用户可拥有一个 Free organization。",
+          "exact_support": [
+            {
+              "span_id": "source-span-95b458f0f2cdefe22c47f1fb",
+              "fact_id": "evidence-fact-record-82cd1cea0e24aa012be6678b747d0f7ef5b4e9415a27306ca36a471e19072b67",
+              "source_id": "raw-source-476cdfef80ec06d6a285",
+              "fact_hash": "0b1702c51e328c3217653b63fbc0853c6f5111d2f55b4872c5d7c57d34ae855d",
+              "source_path": "quote",
+              "start": 0,
+              "end": 271,
+              "quote": "Start a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.",
+              "canonical_snapshot_id": "evidence-snapshot-c68a350737f876dc3058e27182f97128302b3da2181d8499c38578baa599ec5d",
+              "actual_original_field_length": 271,
+              "coordinates_valid": true,
+              "selected_substring_matches": true,
+              "binding_origin": "runtime selected source_span_binding"
+            }
+          ]
+        },
+        {
+          "id": "claim-99f3309e1a33266f5c11",
+          "text": "因此，3 名用户共享 3 个 collections 的需求超出了 Free organization 最多 2 名用户、最多 2 个 collections 的限制，该免费组织无法满足。",
+          "kind": "inference",
+          "fully_bound": true,
+          "single_predicate": false,
+          "binding_reason": "实际 quote[0:271] 同时陈述两人/两 collections 上限；三人/三库作为本条明示的假设，3>2 的条件推论成立，不借其他主张或请求提供任何产品规则。",
+          "atomicity_reason": "同一条包含用户数超过 2、collections 超过 2 两项可独立核验限制，并附无法满足的结论；应拆开两项产品前提与结论。",
+          "exact_support": [
+            {
+              "span_id": "source-span-95b458f0f2cdefe22c47f1fb",
+              "fact_id": "evidence-fact-record-82cd1cea0e24aa012be6678b747d0f7ef5b4e9415a27306ca36a471e19072b67",
+              "source_id": "raw-source-476cdfef80ec06d6a285",
+              "fact_hash": "0b1702c51e328c3217653b63fbc0853c6f5111d2f55b4872c5d7c57d34ae855d",
+              "source_path": "quote",
+              "start": 0,
+              "end": 271,
+              "quote": "Start a Free organization to store and securely share data with one other user. Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections. Any user of any plan can be the owner of one Free organization.",
+              "canonical_snapshot_id": "evidence-snapshot-c68a350737f876dc3058e27182f97128302b3da2181d8499c38578baa599ec5d",
+              "actual_original_field_length": 271,
+              "coordinates_valid": true,
+              "selected_substring_matches": true,
+              "binding_origin": "runtime selected source_span_binding"
+            }
+          ]
+        }
+      ],
+      "additional_visible_product_assertions": [],
+      "answer_conclusion_checks": [
+        {
+          "case_id": "agent-readiness-holdout-v1-001",
+          "question_ids": [
+            "question-cb40c90e4d944bf23275"
+          ],
+          "question": "我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？",
+          "factually_correct": true,
+          "answer_conclusion_binding": true,
+          "reason": "两条实际发表规则同时给出人数与 collections 上限，明示 3>2，故否可推出。",
+          "actual_published_claim_ids": [
+            "claim-ce95752d0bcd5fd94dd3",
+            "claim-fc85b64a7ba5721d8be5"
+          ],
+          "reasonable_clarification_or_missing_price": false,
+          "amount_positive": false,
+          "no_unpublished_fact_completion": true
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-002",
+          "question_ids": [
+            "question-63762e09ae5d8faa1071"
+          ],
+          "question": "我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？",
+          "factually_correct": true,
+          "answer_conclusion_binding": true,
+          "reason": "原问缺具体操作及数据归属，保存回答只提出这两项必要澄清，合理且完整。",
+          "actual_published_claim_ids": [],
+          "reasonable_clarification_or_missing_price": true,
+          "amount_positive": false,
+          "no_unpublished_fact_completion": true
+        }
+      ],
+      "content_qualified": true,
+      "binding_qualified": true,
+      "atomicity_qualified": false,
+      "answer_conclusion_binding_qualified": true,
+      "all_visible_strict_qualified": false,
+      "core_input_gaps": [
+        {
+          "type": "upstream_context_gaps",
+          "values": [
+            "comparator_context_budget_exceeded",
+            "reflector_context_budget_exceeded",
+            "question_core_context_budget_exceeded",
+            "upstream_analysis_context_budget_exceeded"
+          ]
+        },
+        {
+          "question_id": "question-63762e09ae5d8faa1071",
+          "missing_core_fact_ids": [
+            "evidence-fact-record-e722382b9874007c50c4b199a2d61e5ce80fe9106d58b322a3decaf06b0b38ec",
+            "evidence-fact-record-906bc54a8b23099d902f1e3e51170b7f56550de3ead92398b7a0f16666bee31e"
+          ],
+          "missing_exception_fact_ids": [],
+          "minimum_evidence_missing": false,
+          "evidence_gap": "context_budget_exceeded",
+          "evidence_gaps": [
+            "question_core_context_budget_exceeded"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "1password",
+      "product": "1Password",
+      "run_id": "run-100089d4e0c24419a057222fc17eff4c",
+      "case_ids": [
+        "agent-readiness-holdout-v1-003",
+        "agent-readiness-holdout-v1-004"
+      ],
+      "status": "execution_complete",
+      "error_type": null,
+      "source_count": 1,
+      "snapshot_facts": 15,
+      "qa_blocker_count": 2,
+      "llm_calls": 13,
+      "provider_tokens": 44432,
+      "unknown_usage_spans": 0,
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 6
+      },
+      "module_status_counts": {
+        "llm": 3
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "report_characters": 1059,
+      "report_sha256": "f6e0767d5305d028f1f240a8079d24e2f93e25b20985feb5ff109e893b6e90be",
+      "report_matches_saved_run": true,
+      "web_api_requests": 1,
+      "web_api_successful_responses": 1,
+      "body_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-003",
+          "question_ids": [
+            "question-60a7010e0c7ca2ae7058"
+          ],
+          "question": "在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？",
+          "agent_judgment": "correct",
+          "reason": "完整 report.md 在同时询问两个共享库和 Private vault 的原题后明确给“结论：否”，因此两个子问均作否定回答，与已认可官方事实一致。不得把事实正确与支持完整混同：已发表单库规则及“升级可获得”路径仍不足以推出 Private vault 否定，结论绑定单列为 false。",
+          "conclusion": "no",
+          "subquestions": [
+            {
+              "subquestion": "能同时加入两个共享保险库吗",
+              "body_judgment": "correct",
+              "saved_judgment": "correct"
+            },
+            {
+              "subquestion": "能拥有自己的 Private vault 吗",
+              "body_judgment": "correct",
+              "saved_judgment": "correct",
+              "saved_support_complete": false,
+              "body_support_complete": false
+            }
+          ],
+          "answer_conclusion_binding": false,
+          "exact_report_answer": {
+            "artifact": "data/artifacts/collector-input-writer-2026-10-21/regression-1password/report.md",
+            "source_path": "raw UTF-8 decoded text",
+            "start": 360,
+            "end": 599,
+            "text": "- 1Password: 在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？ — 已回答\n  结论：否\n  访客同一时间只能被邀请加入一个保险库，但你可以先将其从一个保险库移除，再加入另一个保险库。 若要让访客拥有自己的 Private vault 并访问多个共享保险库，可将其从访客升级为家庭成员。 [source:raw-source-9ea4b68f00a9a2851e78]"
+          }
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-004",
+          "question_ids": [
+            "question-26d795d67d79bd12e05d"
+          ],
+          "question": "我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。",
+          "agent_judgment": "correct",
+          "reason": "完整 report.md 明确本次请求与已准入资料不足以核实精确 Unified Access 人民币含税报价，并请求定价输入；未编造单价、税费、汇率或总额，属于合理缺价。未补销售定制报价路径是局限，不把合理缺价记成实金额正例。",
+          "conclusion": "insufficient",
+          "subquestions": [],
+          "answer_conclusion_binding": true,
+          "exact_report_answer": {
+            "artifact": "data/artifacts/collector-input-writer-2026-10-21/regression-1password/report.md",
+            "source_path": "raw UTF-8 decoded text",
+            "start": 600,
+            "end": 851,
+            "text": "- 1Password: 我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。 — 部分回答\n  已给请求条件：购买范围 Unified Access、购买期限 12个月、报价币种 人民币、含税。本次请求及已准入资料不足以核实准确的当前报价。请先确认：适用市场／地区、计费周期、适用 SKU／合同及实际购买范围、实际付费席位数量；补齐适用的定价资料和输入后，再核验截至 2026-10-21 的适用金额。\n"
+          }
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-003",
+          "question_ids": [
+            "question-60a7010e0c7ca2ae7058"
+          ],
+          "question": "在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？",
+          "agent_judgment": "correct",
+          "reason": "保存报告在完整双子问后给出“否”，事实与已认可官方边界相符：不能同时两个库，也没有 Private vault。但其已发表证据链未完整支持第二子问，另记 conclusion binding=false。",
+          "conclusion": "no",
+          "saved_status": "answered",
+          "answer_text": "访客同一时间只能被邀请加入一个保险库，但你可以先将其从一个保险库移除，再加入另一个保险库。\n若要让访客拥有自己的 Private vault 并访问多个共享保险库，可将其从访客升级为家庭成员。",
+          "subquestions": [
+            {
+              "subquestion": "能同时加入两个共享保险库吗",
+              "body_judgment": "correct",
+              "saved_judgment": "correct"
+            },
+            {
+              "subquestion": "能拥有自己的 Private vault 吗",
+              "body_judgment": "omission",
+              "saved_judgment": "correct",
+              "saved_support_complete": false
+            }
+          ]
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-004",
+          "question_ids": [
+            "question-26d795d67d79bd12e05d"
+          ],
+          "question": "我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。",
+          "agent_judgment": "correct",
+          "reason": "保存回答明确当前请求与准入资料不足以核实精确报价，未编造 RMB 含税总额；属于合理缺价。没有金额不能算实金额正例。未补充销售定制报价路径，作为质量局限单列。",
+          "conclusion": "insufficient",
+          "saved_status": "partial",
+          "answer_text": "已给请求条件：购买范围 Unified Access、购买期限 12个月、报价币种 人民币、含税。本次请求及已准入资料不足以核实准确的当前报价。请先确认：适用市场／地区、计费周期、适用 SKU／合同及实际购买范围、实际付费席位数量；补齐适用的定价资料和输入后，再核验截至 2026-10-21 的适用金额。",
+          "subquestions": []
+        }
+      ],
+      "case_question_mapping": [
+        {
+          "case_id": "agent-readiness-holdout-v1-003",
+          "question_ids": [
+            "question-60a7010e0c7ca2ae7058"
+          ],
+          "question": "在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？"
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-004",
+          "question_ids": [
+            "question-26d795d67d79bd12e05d"
+          ],
+          "question": "我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。"
+        }
+      ],
+      "published_claims": [
+        {
+          "id": "claim-160fa7f50d9b61356b1d",
+          "text": "访客同一时间只能被邀请加入一个保险库，但你可以先将其从一个保险库移除，再加入另一个保险库。",
+          "kind": "fact",
+          "fully_bound": true,
+          "single_predicate": false,
+          "binding_reason": "s7 恢复为当前实际发送的同 canonical fact 的 value/6[0:130]，恰好同时陈述 single vault at a time 及 remove then add different one；无需父 quote。",
+          "atomicity_reason": "同时包含同一时间只能一个库的限制和从旧库移除后加入新库的允许操作，两项可独立核验。",
+          "exact_support": [
+            {
+              "span_id": "source-span-dfcdc48096fc3a1e2f72379e",
+              "fact_id": "evidence-fact-record-002442e5859e9c940505af67662fe338b78d5181cc28099fc2803935bcdb922a",
+              "source_id": "raw-source-9ea4b68f00a9a2851e78",
+              "fact_hash": "0e351fe6872b76c26de4a8e57792268eedfb4c3d59292badede1d3651b274c85",
+              "source_path": "value/6",
+              "start": 0,
+              "end": 130,
+              "quote": "A guest can only be invited to a single vault at a time, but you can remove them from one vault, then add them to a different one.",
+              "canonical_snapshot_id": "evidence-snapshot-be2d593e31f883ab01adea8fe47c27f6ca0c9fb6b0c652fd0a74a53bd3dedfd3",
+              "actual_original_field_length": 130,
+              "coordinates_valid": true,
+              "selected_substring_matches": true,
+              "binding_origin": "runtime selected source_span_binding"
+            }
+          ]
+        },
+        {
+          "id": "claim-6abd326d5b232a3116b8",
+          "text": "访客必须先接受邀请并被确认，之后你才能与其共享保险库。",
+          "kind": "fact",
+          "fully_bound": true,
+          "single_predicate": true,
+          "binding_reason": "o1 恢复为实际 operation-84b29d510f7b8ce24b287d34；operation_quote 直接给出 accept invitation + confirmed before share a vault。结构化 role 字段抽取不干净，但本条完整原文关系支持实际主张，不能据此扩展额外权限。",
+          "atomicity_reason": "单一条件权限关系：接受邀请且经确认是共享保险库前提；保留全部前提不拆成多个能力谓词。",
+          "exact_support": [
+            {
+              "observation_id": "operation-84b29d510f7b8ce24b287d34",
+              "fact_id": "evidence-fact-record-002442e5859e9c940505af67662fe338b78d5181cc28099fc2803935bcdb922a",
+              "source_id": "raw-source-9ea4b68f00a9a2851e78",
+              "competitor": "1Password",
+              "dimension": "feature",
+              "operation": "share",
+              "object_type": null,
+              "object_quote": null,
+              "role": "Guests have to accept their invitation and be confirmed before you",
+              "plan": null,
+              "access_scope": null,
+              "effect": "allowed",
+              "prerequisites": [
+                {
+                  "kind": "shared_access",
+                  "quote": "A guest can only be invited to a single vault at a time, but you can remove them from one vault, then add them to a different one."
+                }
+              ],
+              "condition_evidence": [
+                "Guests have to accept their invitation and be confirmed before you can share a vault with them",
+                "Share a vault with a guest\nGuests have to accept their invitation and be confirmed before you can share a vault with them. After you’ve confirmed a guest, you can\nadd them to a vault\nand",
+                "Guest accounts are ideal for sharing information with people on a limited basis. They don’t have their own private vaults and only have access to a single vault, which you choose. Consider inviting:",
+                "Your accountant, who needs your financial information.",
+                "Your realtor, who needs building codes.",
+                "Your babysitter, who needs household information like the Wi-Fi password and alarm codes.",
+                "A guest can only be invited to a single vault at a time, but you can remove them from one vault, then add them to a different one."
+              ],
+              "operation_quote": "Guests have to accept their invitation and be confirmed before you can share a vault with them",
+              "canonical_snapshot_id": "evidence-snapshot-be2d593e31f883ab01adea8fe47c27f6ca0c9fb6b0c652fd0a74a53bd3dedfd3",
+              "binding_origin": "runtime selected operation_binding",
+              "original_path": "qualifiers_json/source_scope/operations/0 + current writer operation_observations",
+              "operation_quote_verified_in_actual_writer_input": true
+            }
+          ]
+        },
+        {
+          "id": "claim-c8a32f56afb4332cb341",
+          "text": "若要让访客拥有自己的 Private vault 并访问多个共享保险库，可将其从访客升级为家庭成员。",
+          "kind": "fact",
+          "fully_bound": true,
+          "single_predicate": false,
+          "binding_reason": "s13 恢复为 quote[0:182]，明确 promote guest to family member 可获得自己的 Private vault 与多共享库访问；本条仅说“可升级”，未把充分条件反作必要条件。",
+          "atomicity_reason": "升级路径同时承载自己的 Private vault 和访问多个共享库两个可独立核验的权限结果。",
+          "exact_support": [
+            {
+              "span_id": "source-span-ece8663030a6938a62fce4b3",
+              "fact_id": "evidence-fact-record-325a1d8c8d3123a539a8d07438a66ea1cc5bd6c9d9285f70789aeb4aefced982",
+              "source_id": "raw-source-9ea4b68f00a9a2851e78",
+              "fact_hash": "f53f198affd7f3ca331b7759741c1203db3f609bf970975b3c446650aee983d4",
+              "source_path": "quote",
+              "start": 0,
+              "end": 182,
+              "quote": "If you want to give a guest more access to your account, including their own Private vault and access to more than one shared vault, you can promote them from guest to family member.",
+              "canonical_snapshot_id": "evidence-snapshot-be2d593e31f883ab01adea8fe47c27f6ca0c9fb6b0c652fd0a74a53bd3dedfd3",
+              "actual_original_field_length": 182,
+              "coordinates_valid": true,
+              "selected_substring_matches": true,
+              "binding_origin": "runtime selected source_span_binding"
+            }
+          ]
+        }
+      ],
+      "additional_visible_product_assertions": [],
+      "answer_conclusion_checks": [
+        {
+          "case_id": "agent-readiness-holdout-v1-003",
+          "question_ids": [
+            "question-60a7010e0c7ca2ae7058"
+          ],
+          "question": "在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？",
+          "factually_correct": true,
+          "answer_conclusion_binding": false,
+          "reason": "单库否定可推出；Private vault 否定不能从“升级可获得”推出。未发表 claim-f47d632a891414c1c11d 和其父 fact 中 private vault 事实不能补发表答案。",
+          "actual_published_claim_ids": [
+            "claim-160fa7f50d9b61356b1d",
+            "claim-c8a32f56afb4332cb341"
+          ],
+          "reasonable_clarification_or_missing_price": false,
+          "amount_positive": false,
+          "no_unpublished_fact_completion": true
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-004",
+          "question_ids": [
+            "question-26d795d67d79bd12e05d"
+          ],
+          "question": "我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。",
+          "factually_correct": true,
+          "answer_conclusion_binding": true,
+          "reason": "没有精确报价的已准入 pricing fact；保存答案将自身边界限定为请求与准入资料不足，合理缺价可成立。未声称官网本身不公开所有价格。",
+          "actual_published_claim_ids": [],
+          "reasonable_clarification_or_missing_price": true,
+          "amount_positive": false,
+          "no_unpublished_fact_completion": true
+        }
+      ],
+      "content_qualified": true,
+      "binding_qualified": true,
+      "atomicity_qualified": false,
+      "answer_conclusion_binding_qualified": false,
+      "all_visible_strict_qualified": false,
+      "core_input_gaps": [
+        {
+          "type": "upstream_context_gaps",
+          "values": [
+            "reflector_context_budget_exceeded",
+            "upstream_analysis_context_budget_exceeded",
+            "comparison_assessment_context_budget_exceeded"
+          ]
+        },
+        {
+          "type": "wrong_semantic_packet_coverage",
+          "question_id": "question-26d795d67d79bd12e05d",
+          "reason": "pricing 页面有 capture，但 collector span-6 输出 {facts: []}；准入快照只有 guests 来源。定价问题的非空 fact_ids 实为 guest facts，missing_core_fact_ids=[] 不能视为报价证据完备。"
+        }
+      ]
+    },
+    {
+      "group": "dropbox",
+      "product": "Dropbox",
+      "run_id": "run-9593ff77c5a84a479aad2719bdb0fc63",
+      "case_ids": [
+        "agent-readiness-holdout-v1-005",
+        "agent-readiness-holdout-v1-006"
+      ],
+      "status": "blocked",
+      "error_type": "ValueError",
+      "source_count": 0,
+      "snapshot_facts": 0,
+      "qa_blocker_count": 1,
+      "llm_calls": 0,
+      "provider_tokens": null,
+      "unknown_usage_spans": 0,
+      "llm_transport_by_agent": {
+        "collector": 0,
+        "analyst": 0,
+        "comparator": 0,
+        "reflector": 0,
+        "writer": 0,
+        "qa": 0
+      },
+      "module_status_counts": {},
+      "actual_models": [],
+      "report_characters": 0,
+      "report_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "report_matches_saved_run": true,
+      "web_api_requests": 2,
+      "web_api_successful_responses": 0,
+      "body_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-005",
+          "question_ids": [
+            "question-55e153a4bb828470945e"
+          ],
+          "question": "我通过邮件直接邀请别人访问 Dropbox 共享文件夹，只给了 Can view 权限，没有发共享链接。这样能阻止他下载文件夹里的文件吗？",
+          "agent_judgment": "omission",
+          "reason": "完整 report.md 仅一个换行，没有回答直接邀请 Can view 是否阻止下载；空报告记遗漏。",
+          "conclusion": null,
+          "subquestions": [],
+          "answer_conclusion_binding": false,
+          "exact_report_answer": {
+            "artifact": "data/artifacts/collector-input-writer-2026-10-21/regression-dropbox/report.md",
+            "source_path": "raw UTF-8 decoded text",
+            "start": 0,
+            "end": 1,
+            "text": "\n"
+          }
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-006",
+          "question_ids": [
+            "question-386ae5074b9e8f4b4fed"
+          ],
+          "question": "我在 Dropbox 里“取消共享”了，之前拿到文件的人现在就完全看不到了吗？",
+          "agent_judgment": "omission",
+          "reason": "完整 report.md 为空，没有澄清取消共享的实际操作、原访问方式或副本；记遗漏。",
+          "conclusion": null,
+          "subquestions": [],
+          "answer_conclusion_binding": false,
+          "exact_report_answer": {
+            "artifact": "data/artifacts/collector-input-writer-2026-10-21/regression-dropbox/report.md",
+            "source_path": "raw UTF-8 decoded text",
+            "start": 0,
+            "end": 1,
+            "text": "\n"
+          }
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-005",
+          "question_ids": [
+            "question-55e153a4bb828470945e"
+          ],
+          "question": "我通过邮件直接邀请别人访问 Dropbox 共享文件夹，只给了 Can view 权限，没有发共享链接。这样能阻止他下载文件夹里的文件吗？",
+          "agent_judgment": "omission",
+          "reason": "保存报告为空，没有答案。",
+          "conclusion": null,
+          "saved_status": null,
+          "answer_text": "",
+          "subquestions": []
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-006",
+          "question_ids": [
+            "question-386ae5074b9e8f4b4fed"
+          ],
+          "question": "我在 Dropbox 里“取消共享”了，之前拿到文件的人现在就完全看不到了吗？",
+          "agent_judgment": "omission",
+          "reason": "保存报告为空，缺少合理澄清。",
+          "conclusion": null,
+          "saved_status": null,
+          "answer_text": "",
+          "subquestions": []
+        }
+      ],
+      "case_question_mapping": [
+        {
+          "case_id": "agent-readiness-holdout-v1-005",
+          "question_ids": [
+            "question-55e153a4bb828470945e"
+          ],
+          "question": "我通过邮件直接邀请别人访问 Dropbox 共享文件夹，只给了 Can view 权限，没有发共享链接。这样能阻止他下载文件夹里的文件吗？"
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-006",
+          "question_ids": [
+            "question-386ae5074b9e8f4b4fed"
+          ],
+          "question": "我在 Dropbox 里“取消共享”了，之前拿到文件的人现在就完全看不到了吗？"
+        }
+      ],
+      "published_claims": [],
+      "additional_visible_product_assertions": [],
+      "answer_conclusion_checks": [
+        {
+          "case_id": "agent-readiness-holdout-v1-005",
+          "question_ids": [
+            "question-55e153a4bb828470945e"
+          ],
+          "question": "我通过邮件直接邀请别人访问 Dropbox 共享文件夹，只给了 Can view 权限，没有发共享链接。这样能阻止他下载文件夹里的文件吗？",
+          "factually_correct": false,
+          "answer_conclusion_binding": false,
+          "reason": "没有发表答案或合理缺价/澄清。",
+          "actual_published_claim_ids": [],
+          "reasonable_clarification_or_missing_price": false,
+          "amount_positive": false,
+          "no_unpublished_fact_completion": true
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-006",
+          "question_ids": [
+            "question-386ae5074b9e8f4b4fed"
+          ],
+          "question": "我在 Dropbox 里“取消共享”了，之前拿到文件的人现在就完全看不到了吗？",
+          "factually_correct": false,
+          "answer_conclusion_binding": false,
+          "reason": "没有发表答案或合理澄清。",
+          "actual_published_claim_ids": [],
+          "reasonable_clarification_or_missing_price": false,
+          "amount_positive": false,
+          "no_unpublished_fact_completion": true
+        }
+      ],
+      "content_qualified": false,
+      "binding_qualified": false,
+      "atomicity_qualified": false,
+      "answer_conclusion_binding_qualified": false,
+      "all_visible_strict_qualified": false,
+      "core_input_gaps": [
+        {
+          "type": "collector_capture_failure",
+          "reason": "两条 Dropbox 官方 URL 实际 fetch_page 均 error，只有导航文本；未准入来源/事实，模型阶段没有执行；保存空稿。",
+          "trace_span_ids": [
+            "span-2",
+            "span-4"
+          ],
+          "snapshot_fact_count": 0
+        }
+      ]
+    },
+    {
+      "group": "cloudflare",
+      "product": "Cloudflare",
+      "run_id": "run-61444ffd6a034e04a49bca356653d714",
+      "case_ids": [
+        "agent-readiness-holdout-v1-007",
+        "agent-readiness-holdout-v1-008"
+      ],
+      "status": "execution_complete",
+      "error_type": null,
+      "source_count": 2,
+      "snapshot_facts": 45,
+      "qa_blocker_count": 2,
+      "llm_calls": 10,
+      "provider_tokens": 37931,
+      "unknown_usage_spans": 0,
+      "llm_transport_by_agent": {
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 3
+      },
+      "module_status_counts": {
+        "llm": 3
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "report_characters": 802,
+      "report_sha256": "8b1abcf223d2b5f5ddf2f4fcb65bbc05d5983c010f8140f55f545848d7a2bdd5",
+      "report_matches_saved_run": true,
+      "web_api_requests": 0,
+      "web_api_successful_responses": 0,
+      "body_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-007",
+          "question_ids": [
+            "question-1b7471af0d3dcf4af91c"
+          ],
+          "question": "同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？",
+          "agent_judgment": "correct",
+          "reason": "完整 report.md 在具体 Cache Domain Purge/两个域名/没有其他角色的原题后明确给“结论：否”，事实符合官方限定域名边界。已发表的通用域范围主张缺少角色归属和 purge 产品前提，另记结论绑定不完整；不能因此把完整报告的事实答案改判遗漏。",
+          "conclusion": "no",
+          "subquestions": [],
+          "answer_conclusion_binding": false,
+          "exact_report_answer": {
+            "artifact": "data/artifacts/collector-input-writer-2026-10-21/regression-cloudflare/report.md",
+            "source_path": "raw UTF-8 decoded text",
+            "start": 169,
+            "end": 357,
+            "text": "- Cloudflare: 同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？ — 已回答\n  结论：否\n  域范围角色仅适用于账户内指定的某个域名。 [source:raw-source-c71a5d8161af6e06ae53]"
+          }
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-008",
+          "question_ids": [
+            "question-dd9aeefb8be2a32bc5bf"
+          ],
+          "question": "我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？",
+          "agent_judgment": "correct",
+          "reason": "完整 report.md 明确请求与准入资料不足以核实准确完整账单，并指出 CPU 总用量和完整计费项目输入缺失；未把官网示例或账户最低费当实际账单，合理缺价正确。CPU 计费服务器断言的来源支持与运行时精确绑定继续单列。",
+          "conclusion": "insufficient",
+          "subquestions": [],
+          "answer_conclusion_binding": true,
+          "exact_report_answer": {
+            "artifact": "data/artifacts/collector-input-writer-2026-10-21/regression-cloudflare/report.md",
+            "source_path": "raw UTF-8 decoded text",
+            "start": 358,
+            "end": 608,
+            "text": "- Cloudflare: 我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？ — 部分回答\n  已给请求条件：购买范围 Workers Paid、报价币种 美元。已准入计费规则包含 CPU 时间计费。本次请求及已准入资料不足以核实准确的完整账单。请先确认：适用市场／地区、税费口径、CPU 总用量、完整用量明细及其他计费项目；补齐适用的定价资料和输入后，再核验截至 2026-10-21 的适用金额。\n"
+          }
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "agent-readiness-holdout-v1-007",
+          "question_ids": [
+            "question-1b7471af0d3dcf4af91c"
+          ],
+          "question": "同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？",
+          "agent_judgment": "correct",
+          "reason": "保存报告对原题给出“否”，与官方 Cache Domain Purge 的特定域名范围一致。事实正确与其已发表主张缺少角色/操作产品前提分开记录。",
+          "conclusion": "no",
+          "saved_status": "answered",
+          "answer_text": "域范围角色仅适用于账户内指定的某个域名。",
+          "subquestions": []
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-008",
+          "question_ids": [
+            "question-dd9aeefb8be2a32bc5bf"
+          ],
+          "question": "我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？",
+          "agent_judgment": "correct",
+          "reason": "保存回答明确缺 CPU 总用量及完整计费输入，拒绝无依据的精确月账单，未把官网示例或最低费当实际账单。",
+          "conclusion": "insufficient",
+          "saved_status": "partial",
+          "answer_text": "已给请求条件：购买范围 Workers Paid、报价币种 美元。已准入计费规则包含 CPU 时间计费。本次请求及已准入资料不足以核实准确的完整账单。请先确认：适用市场／地区、税费口径、CPU 总用量、完整用量明细及其他计费项目；补齐适用的定价资料和输入后，再核验截至 2026-10-21 的适用金额。",
+          "subquestions": []
+        }
+      ],
+      "case_question_mapping": [
+        {
+          "case_id": "agent-readiness-holdout-v1-007",
+          "question_ids": [
+            "question-1b7471af0d3dcf4af91c"
+          ],
+          "question": "同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？"
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-008",
+          "question_ids": [
+            "question-dd9aeefb8be2a32bc5bf"
+          ],
+          "question": "我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？"
+        }
+      ],
+      "published_claims": [
+        {
+          "id": "claim-02e5aab93ae89dc8a438",
+          "text": "域范围角色仅适用于账户内指定的某个域名。",
+          "kind": "fact",
+          "fully_bound": true,
+          "single_predicate": true,
+          "binding_reason": "s19 恢复为 quote[0:63]，直接给出 domain-scoped roles 对给定 domain 的范围；它本身正确，但不含 Cache Domain Purge 角色归属。",
+          "atomicity_reason": "单一谓词：域范围角色限指定域名。",
+          "exact_support": [
+            {
+              "span_id": "source-span-9a75dc2967fade32089fc1e2",
+              "fact_id": "evidence-fact-record-ad75779de1dcbb2874b64a3796352f8048a42c869fb44e3130b7d3aefcdf71b4",
+              "source_id": "raw-source-c71a5d8161af6e06ae53",
+              "fact_hash": "1dd87d6f99c9baa33f110035e28f9858c5ed6d6f86b67d056a422d8dfd1158d8",
+              "source_path": "quote",
+              "start": 0,
+              "end": 63,
+              "quote": "Domain-scoped roles apply for a given domain within an account.",
+              "canonical_snapshot_id": "evidence-snapshot-b7004dfff7a4ebe6a912f9ec27d6bd91279318fc71a11f3754796086bfc4fb4d",
+              "actual_original_field_length": 63,
+              "coordinates_valid": true,
+              "selected_substring_matches": true,
+              "binding_origin": "runtime selected source_span_binding"
+            }
+          ]
+        }
+      ],
+      "additional_visible_product_assertions": [
+        {
+          "id": "server-cpu-billing-assertion",
+          "text": "已准入计费规则包含 CPU 时间计费。",
+          "case_id": "agent-readiness-holdout-v1-008",
+          "origin": "saved answer server_missing_quote_inputs",
+          "claim_id": null,
+          "factually_correct": true,
+          "source_supported": true,
+          "fully_bound": false,
+          "single_predicate": true,
+          "binding_reason": "basis_snapshot_id 对应当前准入快照含 Standard CPU 计费表，原事实确实支持。可见回答没有本断言单独 selected span/operation 或 claim_id；因此有来源事实支持与运行时精确逐条绑定分开，严格 fully_bound=false。",
+          "exact_support": [
+            {
+              "snapshot_id": "evidence-snapshot-b7004dfff7a4ebe6a912f9ec27d6bd91279318fc71a11f3754796086bfc4fb4d",
+              "fact_id": "evidence-fact-record-e175c53434d22f7c8a51c2e022e1a66f8d600616f19060c038b3279a16e0364c",
+              "source_id": "raw-source-52ba7b31b51e937245c1",
+              "source_path": "quote",
+              "start": 0,
+              "end": 346,
+              "quote": "| Standard | 10 million included per month +$0.30 per additional million | No charge or limit for duration | 30 million CPU milliseconds included per month +$0.02 per additional million CPU milliseconds Max of 5 minutes of CPU time per invocation (default: 30 seconds) Max of 15 minutes of CPU time per Cron Trigger or Queue Consumer invocation |",
+              "binding_origin": "reviewer located within runtime basis_snapshot; not a runtime per-assertion selection"
+            }
+          ]
+        }
+      ],
+      "answer_conclusion_checks": [
+        {
+          "case_id": "agent-readiness-holdout-v1-007",
+          "question_ids": [
+            "question-1b7471af0d3dcf4af91c"
+          ],
+          "question": "同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？",
+          "factually_correct": true,
+          "answer_conclusion_binding": false,
+          "reason": "已发表通用域范围规则没有把 Cache Domain Purge 绑定到域范围类别及 purge 操作。题目中的两个域名/无其他授权是合法场景条件，但不能代替该产品角色前提。",
+          "actual_published_claim_ids": [
+            "claim-02e5aab93ae89dc8a438"
+          ],
+          "reasonable_clarification_or_missing_price": false,
+          "amount_positive": false,
+          "no_unpublished_fact_completion": true
+        },
+        {
+          "case_id": "agent-readiness-holdout-v1-008",
+          "question_ids": [
+            "question-dd9aeefb8be2a32bc5bf"
+          ],
+          "question": "我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？",
+          "factually_correct": true,
+          "answer_conclusion_binding": true,
+          "reason": "保存答案明确自身资料/输入边界，CPU 计费有准入 canonical 支持而用户未给实际 CPU 总量，故不能核实准确总账单。",
+          "actual_published_claim_ids": [],
+          "reasonable_clarification_or_missing_price": true,
+          "amount_positive": false,
+          "no_unpublished_fact_completion": true
+        }
+      ],
+      "content_qualified": true,
+      "binding_qualified": true,
+      "atomicity_qualified": true,
+      "answer_conclusion_binding_qualified": false,
+      "all_visible_strict_qualified": false,
+      "core_input_gaps": [
+        {
+          "type": "upstream_context_gaps",
+          "values": [
+            "reflector_context_budget_exceeded",
+            "upstream_analysis_context_budget_exceeded",
+            "comparison_assessment_context_budget_exceeded"
+          ]
+        },
+        {
+          "type": "published_premise_filtered",
+          "reason": "writer s10 恰选 Cache Domain Purge 行，拟议 claim 包含 purge+read 两个操作且未发布；最后只保留 s19 通用域规则。价格表存在于完整准入快照，实际 writer 取到的主要 facts 为用量模式/通用计划信息，不得称官网完全无计费表。"
+        }
+      ]
+    },
+    {
+      "group": "trello-new",
+      "product": "Trello",
+      "run_id": "run-ac2d439435e840ac9c76013512a33d29",
+      "case_ids": [
+        "claim-semantics-candidate-20261020-trello-001",
+        "claim-semantics-candidate-20261020-trello-002"
+      ],
+      "status": "execution_complete",
+      "error_type": null,
+      "source_count": 1,
+      "snapshot_facts": 12,
+      "qa_blocker_count": 4,
+      "llm_calls": 12,
+      "provider_tokens": 40198,
+      "unknown_usage_spans": 0,
+      "llm_transport_by_agent": {
+        "collector": 2,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 6
+      },
+      "module_status_counts": {
+        "llm": 3
+      },
+      "actual_models": [
+        "deepseek-flash"
+      ],
+      "report_characters": 1341,
+      "report_sha256": "f10e5a47262db221623a7302829d9a3114aedc70d1c0499f9b4a62a796282f5d",
+      "report_matches_saved_run": true,
+      "web_api_requests": 0,
+      "web_api_successful_responses": 0,
+      "body_questions": [
+        {
+          "case_id": "claim-semantics-candidate-20261020-trello-001",
+          "question_ids": [
+            "question-659854eaa5bf118b8901",
+            "question-00e2382d7575b5384c9a",
+            "question-2d5402cf073188e6cb2f",
+            "question-0890a860a8d17cdeb76c"
+          ],
+          "agent_judgment": "omission",
+          "reason": "A/B 投票判断及操作分解未完整回答；下载/导出的“是”事实正确，但错绑投票非义务 claim；非强制投票部分正确。",
+          "conclusion": {
+            "voting_A": null,
+            "voting_B": null,
+            "download_A": "yes",
+            "export_A": "yes",
+            "mandatory_every_card": "no",
+            "complete": false
+          },
+          "subquestions": [
+            {
+              "subquestion": "A 是否可投票",
+              "reference_expectation": "A 未启用投票，不可据 Observer 身份投票",
+              "visible_answer": "尚未核实",
+              "agent_judgment": "omission",
+              "reason": "未给出 A 的逐项判断；不能将未发表的 A/B 推论补入正文。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "B 是否可投票",
+              "reference_expectation": "B 已启用并允许该 Observer，可投票",
+              "visible_answer": "通用的“启用投票看板上可以投票”；问题记录仍为尚未核实",
+              "agent_judgment": "omission",
+              "reason": "通用能力与题设可支持 B，但正文未形成 A/B 完整逐项回答。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "能否下载 A 的卡片附件",
+              "reference_expectation": "可以",
+              "visible_answer": "结论：是",
+              "agent_judgment": "correct",
+              "reason": "bare yes 与官方角色能力一致；实际发表支持却是投票非义务，事实正确与支持缺口分别计。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "能否导出 A",
+              "reference_expectation": "可以",
+              "visible_answer": "结论：是",
+              "agent_judgment": "correct",
+              "reason": "同一 bare yes 覆盖导出，在事实层面正确；所选 claim 文本没有导出能力。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "B 允许投票是否产生逐卡投票义务",
+              "reference_expectation": "不产生此必然义务",
+              "visible_answer": "结论：否；可投票不意味着必须逐卡投票",
+              "agent_judgment": "correct",
+              "reason": "已发表投票 claim 的许可/义务非蕴含支持此答案。",
+              "answer_conclusion_binding": true
+            },
+            {
+              "subquestion": "分别说明可执行操作、启用条件及强制义务",
+              "reference_expectation": "下载、导出不受投票开关约束；投票须本板启用；允许不等于必须",
+              "visible_answer": "仅有投票条件/非义务；该问题显示尚未核实",
+              "agent_judgment": "omission",
+              "reason": "所要求的操作分解不完整，不能借原始 source 中的未发表能力补正文。",
+              "answer_conclusion_binding": false
+            }
+          ]
+        },
+        {
+          "case_id": "claim-semantics-candidate-20261020-trello-002",
+          "question_ids": [
+            "question-a5be8c7a210d770f2ea7"
+          ],
+          "agent_judgment": "omission",
+          "reason": "只提供有限的计费标签不足结论；Workspace 设置范围、A/B 独立性、现有成员改权主体均遗漏。",
+          "conclusion": {
+            "workspace_level": null,
+            "board_B": null,
+            "change_authority": null,
+            "billing_label_sufficient": "no（仅正文通用观察，saved coverage 为 unverified）",
+            "complete": false
+          },
+          "subquestions": [
+            {
+              "subquestion": "能否在 Workspace 层级统一设 Observer",
+              "reference_expectation": "不能；须逐成员逐看板设置",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "只有“尚未核实”，没有回答。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "A 改权是否自动决定 B 权限",
+              "reference_expectation": "不能；B 成员资格和权限未给出",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "未发表独立权限/无同步规则。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "谁可将 A 的现有成员改成 Observer",
+              "reference_expectation": "Workspace 管理员或 A 的看板管理员",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "没有回答改权主体；添加新 Observer 的操作不等于现有成员改权主体。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "只凭 A 的 Observer 标签能否确定免费或计费",
+              "reference_expectation": "不能；还需实际成员/guest 类型及看板关系",
+              "visible_answer": "所给页面未记载仅凭 Observer 标签即可确定该成员免费或计费",
+              "agent_judgment": "correct",
+              "reason": "该有限否定在事实层面符合官方计费分支；所选 span 只说明权限不是成员类型，不足以单独证明计费不确定性。",
+              "answer_conclusion_binding": false
+            }
+          ]
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "claim-semantics-candidate-20261020-trello-001",
+          "question_ids": [
+            "question-659854eaa5bf118b8901",
+            "question-00e2382d7575b5384c9a",
+            "question-2d5402cf073188e6cb2f",
+            "question-0890a860a8d17cdeb76c"
+          ],
+          "agent_judgment": "omission",
+          "reason": "A/B 投票判断及操作分解未完整回答；下载/导出的“是”事实正确，但错绑投票非义务 claim；非强制投票部分正确。",
+          "conclusion": {
+            "voting_A": null,
+            "voting_B": null,
+            "download_A": "yes",
+            "export_A": "yes",
+            "mandatory_every_card": "no",
+            "complete": false
+          },
+          "subquestions": [
+            {
+              "subquestion": "A 是否可投票",
+              "reference_expectation": "A 未启用投票，不可据 Observer 身份投票",
+              "visible_answer": "尚未核实",
+              "agent_judgment": "omission",
+              "reason": "未给出 A 的逐项判断；不能将未发表的 A/B 推论补入正文。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "B 是否可投票",
+              "reference_expectation": "B 已启用并允许该 Observer，可投票",
+              "visible_answer": "通用的“启用投票看板上可以投票”；问题记录仍为尚未核实",
+              "agent_judgment": "omission",
+              "reason": "通用能力与题设可支持 B，但正文未形成 A/B 完整逐项回答。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "能否下载 A 的卡片附件",
+              "reference_expectation": "可以",
+              "visible_answer": "结论：是",
+              "agent_judgment": "correct",
+              "reason": "bare yes 与官方角色能力一致；实际发表支持却是投票非义务，事实正确与支持缺口分别计。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "能否导出 A",
+              "reference_expectation": "可以",
+              "visible_answer": "结论：是",
+              "agent_judgment": "correct",
+              "reason": "同一 bare yes 覆盖导出，在事实层面正确；所选 claim 文本没有导出能力。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "B 允许投票是否产生逐卡投票义务",
+              "reference_expectation": "不产生此必然义务",
+              "visible_answer": "结论：否；可投票不意味着必须逐卡投票",
+              "agent_judgment": "correct",
+              "reason": "已发表投票 claim 的许可/义务非蕴含支持此答案。",
+              "answer_conclusion_binding": true
+            },
+            {
+              "subquestion": "分别说明可执行操作、启用条件及强制义务",
+              "reference_expectation": "下载、导出不受投票开关约束；投票须本板启用；允许不等于必须",
+              "visible_answer": "仅有投票条件/非义务；该问题显示尚未核实",
+              "agent_judgment": "omission",
+              "reason": "所要求的操作分解不完整，不能借原始 source 中的未发表能力补正文。",
+              "answer_conclusion_binding": false
+            }
+          ],
+          "surface": "run.report_md 与 run.report_dimension_audits[*].answer_coverage；不是未发表 writer 候选或上游分析",
+          "saved_answer_records": [
+            {
+              "question_id": "question-659854eaa5bf118b8901",
+              "question": "Trello: 假设 Trello Workspace 已订阅 Premium，小林已分别被设为看板 A 和 B 的 Observer；A 未启用卡片投票，B 已启用且允许该 Observer 投票。仅依据所给官方页面，逐项判断：小林能在 A、B 投票吗？",
+              "status": "unverified",
+              "claim_ids": [],
+              "reason": "Answer coverage response was missing or invalid: coverage guard rejected: answer_resolution_unverified"
+            },
+            {
+              "question_id": "question-00e2382d7575b5384c9a",
+              "question": "他能下载 A 的卡片附件并导出 A 吗？",
+              "status": "answered",
+              "claim_ids": [
+                "claim-446d0a88a6c3bd65836c"
+              ],
+              "reason": "依据1条已发表主张；已回答，直接回答。",
+              "answer": "所给页面只说明 Observer 在启用投票的看板上可以投票，并未说明投票是强制义务；因此“B 允许投票”不意味着小林必须给每张卡片投票。",
+              "resolution": "direct",
+              "conclusion": "yes",
+              "evidence_spans": [
+                {
+                  "claim_id": "claim-446d0a88a6c3bd65836c",
+                  "quote": "所给页面只说明 Observer 在启用投票的看板上可以投票，并未说明投票是强制义务；因此“B 允许投票”不意味着小林必须给每张卡片投票。"
+                }
+              ],
+              "binding_version": 3
+            },
+            {
+              "question_id": "question-2d5402cf073188e6cb2f",
+              "question": "B 允许投票，是否意味着他必须给每张卡片投票？",
+              "status": "answered",
+              "claim_ids": [
+                "claim-446d0a88a6c3bd65836c"
+              ],
+              "reason": "依据1条已发表主张；已回答，直接回答。",
+              "answer": "所给页面只说明 Observer 在启用投票的看板上可以投票，并未说明投票是强制义务；因此“B 允许投票”不意味着小林必须给每张卡片投票。",
+              "resolution": "direct",
+              "conclusion": "no",
+              "evidence_spans": [
+                {
+                  "claim_id": "claim-446d0a88a6c3bd65836c",
+                  "quote": "所给页面只说明 Observer 在启用投票的看板上可以投票，并未说明投票是强制义务；因此“B 允许投票”不意味着小林必须给每张卡片投票。"
+                }
+              ],
+              "binding_version": 3
+            },
+            {
+              "question_id": "question-0890a860a8d17cdeb76c",
+              "question": "请将可以执行的操作、启用条件与是否存在强制义务分别说明。",
+              "status": "unverified",
+              "claim_ids": [],
+              "reason": "Answer coverage response was missing or invalid: coverage guard rejected: answer_resolution_unverified"
+            }
+          ]
+        },
+        {
+          "case_id": "claim-semantics-candidate-20261020-trello-002",
+          "question_ids": [
+            "question-a5be8c7a210d770f2ea7"
+          ],
+          "agent_judgment": "omission",
+          "reason": "保存 answer_coverage 对该完整 case 仅存 unverified、claim_ids=[]，没有任何逐项答案；正文的计费通用观察不在 saved answer 中。",
+          "conclusion": {
+            "workspace_level": null,
+            "board_B": null,
+            "change_authority": null,
+            "billing_label_sufficient": null,
+            "complete": false
+          },
+          "subquestions": [
+            {
+              "subquestion": "能否在 Workspace 层级统一设 Observer",
+              "reference_expectation": "不能；须逐成员逐看板设置",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存 answer_coverage 该完整原 case 的唯一 question_id 标为 unverified 且 claim_ids=[]；不能用正文通用观察或审核 reason 补该保存答案。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "A 改权是否自动决定 B 权限",
+              "reference_expectation": "不能；B 成员资格和权限未给出",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存 answer_coverage 该完整原 case 的唯一 question_id 标为 unverified 且 claim_ids=[]；不能用正文通用观察或审核 reason 补该保存答案。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "谁可将 A 的现有成员改成 Observer",
+              "reference_expectation": "Workspace 管理员或 A 的看板管理员",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存 answer_coverage 该完整原 case 的唯一 question_id 标为 unverified 且 claim_ids=[]；不能用正文通用观察或审核 reason 补该保存答案。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "只凭 A 的 Observer 标签能否确定免费或计费",
+              "reference_expectation": "不能；还需实际成员/guest 类型及看板关系",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存 answer_coverage 该完整原 case 的唯一 question_id 标为 unverified 且 claim_ids=[]；不能用正文通用观察或审核 reason 补该保存答案。",
+              "answer_conclusion_binding": false
+            }
+          ],
+          "surface": "run.report_md 与 run.report_dimension_audits[*].answer_coverage；不是未发表 writer 候选或上游分析",
+          "saved_answer_records": [
+            {
+              "question_id": "question-a5be8c7a210d770f2ea7",
+              "question": "Trello: 假设某 Trello Workspace 已订阅 Premium，管理员把看板 A 上现有协作者小周的权限改成了 Observer。同一 Workspace 另有看板 B，但题设没有说明小周是否加入 B、在 B 上的权限，或他属于 Workspace 成员还是哪一种 guest。仅依据所给页面，逐项回答：能否在 Workspace 层级把他统一设置成 Observer，A 上这次改权是否自动决定他在 B 的权限；谁有权把 A 的现有成员改为 Observer；只凭 A 上的 Observer 标签，能否确定他一定免费或一定计费？不要推定题设未说明的成员资格。",
+              "status": "unverified",
+              "claim_ids": [],
+              "reason": "Answer coverage response was missing or invalid: coverage guard rejected: answer_resolution_unverified"
+            }
+          ]
+        }
+      ],
+      "case_question_mapping": [
+        {
+          "case_id": "claim-semantics-candidate-20261020-trello-001",
+          "question_ids": [
+            "question-659854eaa5bf118b8901",
+            "question-00e2382d7575b5384c9a",
+            "question-2d5402cf073188e6cb2f",
+            "question-0890a860a8d17cdeb76c"
+          ]
+        },
+        {
+          "case_id": "claim-semantics-candidate-20261020-trello-002",
+          "question_ids": [
+            "question-a5be8c7a210d770f2ea7"
+          ]
+        }
+      ],
+      "published_claims": [
+        {
+          "id": "claim-446d0a88a6c3bd65836c",
+          "text": "所给页面只说明 Observer 在启用投票的看板上可以投票，并未说明投票是强制义务；因此“B 允许投票”不意味着小林必须给每张卡片投票。",
+          "factually_correct": true,
+          "fully_bound": true,
+          "single_predicate": false,
+          "binding_reason": "所选 s11 明确给出 Observer 在本板启用条件下可投票的许可；将“可”与“必须逐卡投票”区分是对该许可语句的非蕴含推断，没有宣称不存在其他义务来源。",
+          "atomicity_reason": "同一 atom 同时陈述条件下可以投票、未说明强制义务、B 允许不蕴含逐卡义务；许可能力与义务非蕴含为可独立审查的谓词。",
+          "predicate_inventory": [
+            "Observer 在启用投票的看板可投票",
+            "该许可描述未设强制投票义务",
+            "B 允许投票不推出小林必须逐卡投票"
+          ],
+          "exact_support": {
+            "span_id": "source-span-8a40f317bffbd5667144aecb",
+            "fact_id": "evidence-fact-record-11a39a92c69c04c274aed5153423ab1b58d3a744b2773766255608c943b4a46f",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "bb61e247492c1c5c5f2073cc07b82258d547c53ca46a2f8a7ed3fe3700e12df0",
+            "source_path": "value/0",
+            "start": 52,
+            "end": 252,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "support_ref": "s11",
+            "coordinate_unit": "Python Unicode code point, end exclusive, relative to exact canonical value/0",
+            "exact_coordinate_verified": true,
+            "resolved_selected_text_sha256": "65c3b9e4176b2bf35eda0f741e2e9430ad05d82c0a22d6fb5e621c773e5fc444",
+            "writer_span": "span-42",
+            "review_span": "span-47",
+            "current_snapshot_id": "evidence-snapshot-479e4c9cf87fab824f51ccce2ea1424195459bab9baaccf6d6816ee0e8c930e8"
+          }
+        },
+        {
+          "id": "claim-e67136b63c73ea46ba9e",
+          "text": "所给页面未记载仅凭 Observer 标签即可确定该成员免费或计费。",
+          "factually_correct": true,
+          "fully_bound": false,
+          "single_predicate": true,
+          "binding_reason": "s12 只到“Observer 是看板权限而非成员类型”。该身份分类不能单独证明免费/计费不能按标签确定；实际计费分支在同页另一段，不在选定 span 中。不能借同页、父 value 或 request 补支持。",
+          "atomicity_reason": "仅陈述“Observer 标签不足以决定计费”的一个否定推断；免费/计费是同一判定的两个取值。",
+          "predicate_inventory": [
+            "仅凭 Observer 标签不能确定免费或计费"
+          ],
+          "exact_support": {
+            "span_id": "source-span-63496264cc7e9eb508d63254",
+            "fact_id": "evidence-fact-record-11a39a92c69c04c274aed5153423ab1b58d3a744b2773766255608c943b4a46f",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "bb61e247492c1c5c5f2073cc07b82258d547c53ca46a2f8a7ed3fe3700e12df0",
+            "source_path": "value/0",
+            "start": 401,
+            "end": 475,
+            "quote": "Because an observer is a board member permission and not a membership\ntype",
+            "support_ref": "s12",
+            "coordinate_unit": "Python Unicode code point, end exclusive, relative to exact canonical value/0",
+            "exact_coordinate_verified": true,
+            "resolved_selected_text_sha256": "6ca2ff7df2ae940c5336277d18cde2d8d29011b87bf1088ee9f14451386b3207",
+            "writer_span": "span-42",
+            "review_span": "span-49",
+            "current_snapshot_id": "evidence-snapshot-479e4c9cf87fab824f51ccce2ea1424195459bab9baaccf6d6816ee0e8c930e8"
+          }
+        }
+      ],
+      "additional_visible_product_assertions": [
+        {
+          "assertion_id": "server-download-export-yes",
+          "case_id": "claim-semantics-candidate-20261020-trello-001",
+          "question_id": "question-00e2382d7575b5384c9a",
+          "surface": "report.md 问题回答情况；run.report_dimension_audits[0].answer_coverage[1]",
+          "text": "结论：是（能下载 A 的卡片附件并导出 A）",
+          "kind": "server_appended_conclusion",
+          "published_claim_ids": [
+            "claim-446d0a88a6c3bd65836c"
+          ],
+          "factually_correct": true,
+          "fully_bound": false,
+          "single_predicate": false,
+          "reason": "yes 与原始官方角色能力一致，但实际绑定 claim 只有投票许可/非义务；没有 download/export 谓词。不能用该 claim 的父 span 中恰好出现下载导出来补已发表文本。",
+          "exact_support": [],
+          "predicate_inventory": [
+            "下载 A 卡片附件",
+            "导出 A"
+          ]
+        },
+        {
+          "assertion_id": "server-mandatory-vote-no",
+          "case_id": "claim-semantics-candidate-20261020-trello-001",
+          "question_id": "question-2d5402cf073188e6cb2f",
+          "surface": "report.md 问题回答情况；run.report_dimension_audits[0].answer_coverage[2]",
+          "text": "结论：否（B 允许投票不意味着必须逐卡投票）",
+          "kind": "server_appended_conclusion",
+          "published_claim_ids": [
+            "claim-446d0a88a6c3bd65836c"
+          ],
+          "factually_correct": true,
+          "fully_bound": true,
+          "single_predicate": true,
+          "reason": "已发表 claim 明确包含相同的许可与义务非蕴含推断。",
+          "exact_support": [
+            {
+              "claim_id": "claim-446d0a88a6c3bd65836c",
+              "text": "所给页面只说明 Observer 在启用投票的看板上可以投票，并未说明投票是强制义务；因此“B 允许投票”不意味着小林必须给每张卡片投票。"
+            }
+          ],
+          "predicate_inventory": [
+            "B 允许投票不推出逐卡投票义务"
+          ]
+        }
+      ],
+      "answer_conclusion_checks": [
+        {
+          "case_id": "claim-semantics-candidate-20261020-trello-001",
+          "question_ids": [
+            "question-659854eaa5bf118b8901",
+            "question-00e2382d7575b5384c9a",
+            "question-2d5402cf073188e6cb2f",
+            "question-0890a860a8d17cdeb76c"
+          ],
+          "answer_conclusion_binding": false,
+          "complete": false,
+          "reason": "A/B 投票判断及操作分解未完整回答；下载/导出的“是”事实正确，但错绑投票非义务 claim；非强制投票部分正确。",
+          "subquestion_checks": [
+            {
+              "subquestion": "A 是否可投票",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "未给出 A 的逐项判断；不能将未发表的 A/B 推论补入正文。"
+            },
+            {
+              "subquestion": "B 是否可投票",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "通用能力与题设可支持 B，但正文未形成 A/B 完整逐项回答。"
+            },
+            {
+              "subquestion": "能否下载 A 的卡片附件",
+              "agent_judgment": "correct",
+              "factually_correct": true,
+              "answer_conclusion_binding": false,
+              "reason": "bare yes 与官方角色能力一致；实际发表支持却是投票非义务，事实正确与支持缺口分别计。"
+            },
+            {
+              "subquestion": "能否导出 A",
+              "agent_judgment": "correct",
+              "factually_correct": true,
+              "answer_conclusion_binding": false,
+              "reason": "同一 bare yes 覆盖导出，在事实层面正确；所选 claim 文本没有导出能力。"
+            },
+            {
+              "subquestion": "B 允许投票是否产生逐卡投票义务",
+              "agent_judgment": "correct",
+              "factually_correct": true,
+              "answer_conclusion_binding": true,
+              "reason": "已发表投票 claim 的许可/义务非蕴含支持此答案。"
+            },
+            {
+              "subquestion": "分别说明可执行操作、启用条件及强制义务",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "所要求的操作分解不完整，不能借原始 source 中的未发表能力补正文。"
+            }
+          ]
+        },
+        {
+          "case_id": "claim-semantics-candidate-20261020-trello-002",
+          "question_ids": [
+            "question-a5be8c7a210d770f2ea7"
+          ],
+          "answer_conclusion_binding": false,
+          "complete": false,
+          "reason": "只提供有限的计费标签不足结论；Workspace 设置范围、A/B 独立性、现有成员改权主体均遗漏。",
+          "subquestion_checks": [
+            {
+              "subquestion": "能否在 Workspace 层级统一设 Observer",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "只有“尚未核实”，没有回答。"
+            },
+            {
+              "subquestion": "A 改权是否自动决定 B 权限",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "未发表独立权限/无同步规则。"
+            },
+            {
+              "subquestion": "谁可将 A 的现有成员改成 Observer",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "没有回答改权主体；添加新 Observer 的操作不等于现有成员改权主体。"
+            },
+            {
+              "subquestion": "只凭 A 的 Observer 标签能否确定免费或计费",
+              "agent_judgment": "correct",
+              "factually_correct": true,
+              "answer_conclusion_binding": false,
+              "reason": "该有限否定在事实层面符合官方计费分支；所选 span 只说明权限不是成员类型，不足以单独证明计费不确定性。"
+            }
+          ]
+        }
+      ],
+      "content_qualified": false,
+      "binding_qualified": false,
+      "atomicity_qualified": false,
+      "answer_conclusion_binding_qualified": false,
+      "all_visible_strict_qualified": false,
+      "core_input_gaps": {
+        "snapshot_version": 2,
+        "snapshot_fact_rows": 12,
+        "snapshot_evidence_terms_rows": 4,
+        "writer_sent_evidence_terms": 3,
+        "compact_reference_reconstruction": [
+          {
+            "fact_id": "evidence-fact-record-dc032596e9e9ac380f7ed75b403c8b7470afab64a9c7e1c0fb7053408a45efb8",
+            "resolved_value_equals_current_canonical": true,
+            "resolved_quote_equals_current_canonical": true,
+            "value_sha256": "7bb4f5e1d766cac976d8704964e2819d138075d139f50400538b6fee36c941b9",
+            "quote_sha256": "2ee69edfd4a3b7ed47826d7f20200e3f3630a38c8e0f423d4bcb8e78b926b703"
+          },
+          {
+            "fact_id": "evidence-fact-record-48ea983262b760fc498b52ee6b158a9bca15949cdd3b2a4a488640bb2eeb5669",
+            "resolved_value_equals_current_canonical": true,
+            "resolved_quote_equals_current_canonical": true,
+            "value_sha256": "00b5237861df0abb46132539240768d4697a635344f89dc9c856cb2f98128589",
+            "quote_sha256": "169125c21007f4e1fb457c9dc11c46f78d876983149ba5882464ce3d7c97e16b"
+          },
+          {
+            "fact_id": "evidence-fact-record-11a39a92c69c04c274aed5153423ab1b58d3a744b2773766255608c943b4a46f",
+            "resolved_value_equals_current_canonical": true,
+            "resolved_quote_equals_current_canonical": true,
+            "value_sha256": "1d0fea8ce65dca90d18656b817ab19336a6d2da549b2aa28f509895b1a55f130",
+            "quote_sha256": "6aa95aa6a1925365c1ff304e1be8c28751578ef48109b484229fd5ac742c330a"
+          }
+        ],
+        "complete_canonical_values_preserved_for_sent_facts": true,
+        "writer_packet_gaps": [
+          "question_core_context_budget_exceeded",
+          "reflector_context_budget_exceeded",
+          "no_relevant_original for mandatory-vote and requested-breakdown packets despite voting rule in sent value"
+        ],
+        "original_capture_facts_not_preserved_in_sent_evidence": [
+          {
+            "fact": "billing",
+            "capture_text_start": 655,
+            "capture_text_end": 835,
+            "quote": "There are no limits to how many observers you can have on a board, and an observer can be a billable Workspace member, or\nmulti-board guest\n, or a non-billable single-board guest.\n",
+            "used_only_to_diagnose_gap": true,
+            "present_in_writer_sent_original_values": false
+          },
+          {
+            "fact": "workspace_scope",
+            "capture_text_start": 1435,
+            "capture_text_end": 1625,
+            "quote": "Because an observer is a board member permission it isn't currently possible to set a user as an observer at the\nWorkspace\nlevel, and each observer is set individually per member per board.\n",
+            "used_only_to_diagnose_gap": true,
+            "present_in_writer_sent_original_values": false
+          },
+          {
+            "fact": "change_authority",
+            "capture_text_start": 1855,
+            "capture_text_end": 1958,
+            "quote": "Please note that only Workspace admins and board admins can change a board member’s status to observer.",
+            "used_only_to_diagnose_gap": true,
+            "present_in_writer_sent_original_values": false
+          }
+        ],
+        "analysis": "完整采集页含计费分支、逐人逐板/不可 Workspace 设置、改权主体；collector span-3 也返回了这些语义，但最终 snapshot/实际 writer 三条 evidence_terms 未保留对应完整段落。sent_fact_ids 非空和 core-missing 元数据为空不等于问题所需原文齐全。"
+      }
+    },
+    {
+      "group": "miro-new",
+      "product": "Miro",
+      "run_id": "run-78a2c111e207467ab9b277e7479bdccb",
+      "case_ids": [
+        "claim-semantics-candidate-20261020-miro-001",
+        "claim-semantics-candidate-20261020-miro-002"
+      ],
+      "status": "blocked",
+      "error_type": "ValueError",
+      "source_count": 0,
+      "snapshot_facts": 0,
+      "qa_blocker_count": 1,
+      "llm_calls": 0,
+      "provider_tokens": null,
+      "unknown_usage_spans": 0,
+      "llm_transport_by_agent": {
+        "collector": 0,
+        "analyst": 0,
+        "comparator": 0,
+        "reflector": 0,
+        "writer": 0,
+        "qa": 0
+      },
+      "module_status_counts": {},
+      "actual_models": [],
+      "report_characters": 0,
+      "report_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "report_matches_saved_run": true,
+      "web_api_requests": 0,
+      "web_api_successful_responses": 0,
+      "body_questions": [
+        {
+          "case_id": "claim-semantics-candidate-20261020-miro-001",
+          "question_ids": [
+            "question-f7fc36ac779979801a22"
+          ],
+          "agent_judgment": "omission",
+          "reason": "403 采集失败后报告为空，全部子问遗漏；空稿不是合理拒答。",
+          "conclusion": {
+            "answer": null,
+            "complete": false
+          },
+          "subquestions": [
+            {
+              "subquestion": "添加便签",
+              "reference_expectation": "可以，受邀板 A 的编辑型 Guest",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "修改文字",
+              "reference_expectation": "可以，受邀板 A 的编辑型 Guest",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "分享 A 给新的人",
+              "reference_expectation": "不能",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "更改 A 分享设置",
+              "reference_expectation": "不能",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "创建 Tables",
+              "reference_expectation": "不能",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "编辑 Tables",
+              "reference_expectation": "不能",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "创建 Timeline widgets",
+              "reference_expectation": "不能",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "编辑 Timeline widgets",
+              "reference_expectation": "不能",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            }
+          ]
+        },
+        {
+          "case_id": "claim-semantics-candidate-20261020-miro-002",
+          "question_ids": [
+            "question-77f8d5918bcc8ca13691"
+          ],
+          "agent_judgment": "omission",
+          "reason": "同一空稿未回答组织 Member/Guest 区别、请求资格、是否强制/自动加入及 24 小时批准承诺。",
+          "conclusion": {
+            "answer": null,
+            "complete": false
+          },
+          "subquestions": [
+            {
+              "subquestion": "小林请求加入 T",
+              "reference_expectation": "可以：组织 Member、Team privacy 关闭、审批后加入开启",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "小陈请求加入 T",
+              "reference_expectation": "组织 Guest 没有请求加入选项",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "有资格是否必须提交申请",
+              "reference_expectation": "不表示必须申请",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "请求后是否自动成为团队成员",
+              "reference_expectation": "不表示自动加入，审批条件仍存在",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "是否最迟 24 小时一定批准",
+              "reference_expectation": "页面无此时限或必批承诺，应明确资料不足",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "组织角色与看板 Guest 身份",
+              "reference_expectation": "看板 Guest 访问可与组织 Member 并存，不能按板 Guest 标签否定小林资格",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。",
+              "answer_conclusion_binding": false
+            }
+          ]
+        }
+      ],
+      "saved_questions": [
+        {
+          "case_id": "claim-semantics-candidate-20261020-miro-001",
+          "question_ids": [
+            "question-f7fc36ac779979801a22"
+          ],
+          "agent_judgment": "omission",
+          "reason": "403 采集失败后报告为空，全部子问遗漏；空稿不是合理拒答。",
+          "conclusion": {
+            "answer": null,
+            "complete": false
+          },
+          "subquestions": [
+            {
+              "subquestion": "添加便签",
+              "reference_expectation": "可以，受邀板 A 的编辑型 Guest",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "修改文字",
+              "reference_expectation": "可以，受邀板 A 的编辑型 Guest",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "分享 A 给新的人",
+              "reference_expectation": "不能",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "更改 A 分享设置",
+              "reference_expectation": "不能",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "创建 Tables",
+              "reference_expectation": "不能",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "编辑 Tables",
+              "reference_expectation": "不能",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "创建 Timeline widgets",
+              "reference_expectation": "不能",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "编辑 Timeline widgets",
+              "reference_expectation": "不能",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。",
+              "answer_conclusion_binding": false
+            }
+          ],
+          "surface": "run.report_md 与 run.report_dimension_audits[*].answer_coverage；不是未发表 writer 候选或上游分析",
+          "saved_answer_records": []
+        },
+        {
+          "case_id": "claim-semantics-candidate-20261020-miro-002",
+          "question_ids": [
+            "question-77f8d5918bcc8ca13691"
+          ],
+          "agent_judgment": "omission",
+          "reason": "同一空稿未回答组织 Member/Guest 区别、请求资格、是否强制/自动加入及 24 小时批准承诺。",
+          "conclusion": {
+            "answer": null,
+            "complete": false
+          },
+          "subquestions": [
+            {
+              "subquestion": "小林请求加入 T",
+              "reference_expectation": "可以：组织 Member、Team privacy 关闭、审批后加入开启",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "小陈请求加入 T",
+              "reference_expectation": "组织 Guest 没有请求加入选项",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "有资格是否必须提交申请",
+              "reference_expectation": "不表示必须申请",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "请求后是否自动成为团队成员",
+              "reference_expectation": "不表示自动加入，审批条件仍存在",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "是否最迟 24 小时一定批准",
+              "reference_expectation": "页面无此时限或必批承诺，应明确资料不足",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。",
+              "answer_conclusion_binding": false
+            },
+            {
+              "subquestion": "组织角色与看板 Guest 身份",
+              "reference_expectation": "看板 Guest 访问可与组织 Member 并存，不能按板 Guest 标签否定小林资格",
+              "visible_answer": null,
+              "agent_judgment": "omission",
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。",
+              "answer_conclusion_binding": false
+            }
+          ],
+          "surface": "run.report_md 与 run.report_dimension_audits[*].answer_coverage；不是未发表 writer 候选或上游分析",
+          "saved_answer_records": []
+        }
+      ],
+      "case_question_mapping": [
+        {
+          "case_id": "claim-semantics-candidate-20261020-miro-001",
+          "question_ids": [
+            "question-f7fc36ac779979801a22"
+          ]
+        },
+        {
+          "case_id": "claim-semantics-candidate-20261020-miro-002",
+          "question_ids": [
+            "question-77f8d5918bcc8ca13691"
+          ]
+        }
+      ],
+      "published_claims": [],
+      "additional_visible_product_assertions": [],
+      "answer_conclusion_checks": [
+        {
+          "case_id": "claim-semantics-candidate-20261020-miro-001",
+          "question_ids": [
+            "question-f7fc36ac779979801a22"
+          ],
+          "answer_conclusion_binding": false,
+          "complete": false,
+          "reason": "403 采集失败后报告为空，全部子问遗漏；空稿不是合理拒答。",
+          "subquestion_checks": [
+            {
+              "subquestion": "添加便签",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。"
+            },
+            {
+              "subquestion": "修改文字",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。"
+            },
+            {
+              "subquestion": "分享 A 给新的人",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。"
+            },
+            {
+              "subquestion": "更改 A 分享设置",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。"
+            },
+            {
+              "subquestion": "创建 Tables",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。"
+            },
+            {
+              "subquestion": "编辑 Tables",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。"
+            },
+            {
+              "subquestion": "创建 Timeline widgets",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。"
+            },
+            {
+              "subquestion": "编辑 Timeline widgets",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有合理澄清、缺价或资料不足声明。"
+            }
+          ]
+        },
+        {
+          "case_id": "claim-semantics-candidate-20261020-miro-002",
+          "question_ids": [
+            "question-77f8d5918bcc8ca13691"
+          ],
+          "answer_conclusion_binding": false,
+          "complete": false,
+          "reason": "同一空稿未回答组织 Member/Guest 区别、请求资格、是否强制/自动加入及 24 小时批准承诺。",
+          "subquestion_checks": [
+            {
+              "subquestion": "小林请求加入 T",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。"
+            },
+            {
+              "subquestion": "小陈请求加入 T",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。"
+            },
+            {
+              "subquestion": "有资格是否必须提交申请",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。"
+            },
+            {
+              "subquestion": "请求后是否自动成为团队成员",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。"
+            },
+            {
+              "subquestion": "是否最迟 24 小时一定批准",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。"
+            },
+            {
+              "subquestion": "组织角色与看板 Guest 身份",
+              "agent_judgment": "omission",
+              "factually_correct": null,
+              "answer_conclusion_binding": false,
+              "reason": "保存报告为空；没有回答资格、义务、自动加入或批准时限。"
+            }
+          ]
+        }
+      ],
+      "content_qualified": false,
+      "binding_qualified": false,
+      "atomicity_qualified": false,
+      "answer_conclusion_binding_qualified": false,
+      "all_visible_strict_qualified": false,
+      "core_input_gaps": {
+        "capture_status": "rejected",
+        "http_status": 403,
+        "fetch_method": "basic_httpx_access_blocked",
+        "capture_body_characters": 0,
+        "accepted_sources": 0,
+        "snapshot_fact_rows": 0,
+        "downstream_models_attempted": false,
+        "reason": "no_accepted_sources: downstream model stages not attempted；本组没有将冻结参考作为运行证据，空稿因此仍计遗漏。"
+      }
+    }
+  ],
+  "delivery_assessment": {
+    "report_standard_met": false,
+    "old": {
+      "review_completed": true,
+      "content_only_groups": 3,
+      "all_visible_strict_groups": 0,
+      "stage_qa_without_blockers_groups": 0,
+      "full_graph_delivery_rate": null,
+      "reason": "四组 stage summary deliverable=false 是固定 runner/未走完整 Graph 的事实，不能推导系统 0/6 或全 Graph 失败。这里仅报这四组内容、绑定、原子性、结论与实际 QA。",
+      "reference_boundary_acceptance_is_report_acceptance": false,
+      "amount_positive_case_count": 0,
+      "unavailable_verification": [
+        "original /tmp helpers",
+        "old 2191-file SHA list"
+      ],
+      "old_2191_fresh_pass_claimed": false,
+      "real_model_or_training_run_performed_during_recovery": false
+    },
+    "new": {
+      "local_report_content_accepted": false,
+      "training_ready": false,
+      "training_performed": false,
+      "reward": null,
+      "interpretation": "两组 4 case 均有遗漏。Trello 有正文，但下载/导出结论错绑、计费缺口 claim 未精确绑定、投票 atom 复合；Miro 403 后空稿。实际本地 stage QA blocker 为 5。当前审读不支持验收本地报告；stage runner 固定 deliverable=False 及未走 Graph 发布是评估边界，不外推全系统 0/6 或完整 Graph 失败。",
+      "limitations": [
+        "非盲、非 A/B、样本全部已曝光",
+        "用户只认可参考边界，未验收报告正文",
+        "本次为独立 Agent 审读，不是用户人审",
+        "本次只读现存产物，未重跑模型、训练或全量测试",
+        "全局 749/76 清单在审读中后段定位后独立做首尾哈希核验；不等于恢复已丢失的早前首检。"
+      ]
+    },
+    "strict_local_groups_qualified": 0,
+    "full_graph_system_score": null,
+    "empty_report_not_reasonable_refusal": true,
+    "no_claims_not_vacuous_binding_success": true,
+    "real_exact_money_positive_cases": 0
+  },
+  "evidence_recovery": {
+    "temp_proofs_lost_after_interruption": true,
+    "original_intermediate_versions_and_old_review_logs_recovered": false,
+    "original_2191_history_manifest_available": false,
+    "original_5_launch_helpers_available": false,
+    "original_10_previous_helpers_available": false,
+    "current_source_and_input_hashes_matched": 749,
+    "current_parser_dependency_hashes_matched": 76,
+    "regenerated_independent_reviews": true,
+    "fresh_code_review_passed": true,
+    "full_offline_tests_rerun": true,
+    "models_rerun_during_recovery": false,
+    "old_body_review_v1_scope_error_corrected_in_v2": true
+  },
+  "captures": {
+    "count": 11,
+    "redacted_bodies": 0,
+    "all_exported_hashes_verified": true
+  },
+  "next_priorities": [
+    "逐个子问核对动作、对象、角色和条件，禁止投票主张支持下载导出",
+    "让已采/已发送的完整支持进入正式主张和结论，补齐Private vault、Cache Domain Purge与所有服务器事实绑定",
+    "拆分复合主张，补正文获取，并单独验收全Graph、跨产品比较和生产语义RAG"
+  ],
+  "private_evidence_directory": "data/artifacts/collector-input-writer-2026-10-21",
+  "reward": null,
+  "training_ready": false,
+  "training_performed": false
+}
