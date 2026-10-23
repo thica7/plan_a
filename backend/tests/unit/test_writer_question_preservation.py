@@ -60,7 +60,8 @@ def original_fact(number, quote):
     )
 
 
-def test_six_requested_observations_reach_writer_without_shortening_conditions():
+@pytest.mark.parametrize("payload_bytes", [14000, 18000])
+def test_requested_observations_reserve_whole_support_without_shortening_conditions(payload_bytes):
     record, snapshot, ids = preservation_case()
     before = snapshot.model_dump_json()
     view, use = EvidenceHarness()._begin_evidence_use(
@@ -76,17 +77,26 @@ def test_six_requested_observations_reach_writer_without_shortening_conditions()
     questions = research_questions(record.detail, PRODUCT, "feature")
     question_bytes = len(json.dumps({"questions": questions}, ensure_ascii=False).encode()) + 16
     compact, omitted = compact_dimension_context(
-        SELECTED, view, set(ids), max_bytes=14000 - question_bytes, questions=questions,
+        SELECTED, view, set(ids), max_bytes=payload_bytes - question_bytes, questions=questions,
     )
     compact["questions"] = questions
-    assert {row["id"] for row in compact["evidence_view"]["facts"]} == set(ids)
-    assert len(compact_prompt_json(compact).encode()) <= 14000
-    assert not omitted
+    sent = {row["id"] for row in compact["evidence_view"]["facts"]}
+    # Six complete originals plus legal readable support cost more than 14KB.
+    # Dropping all references to preserve six uncitable rows is not delivery.
+    if payload_bytes == 18000:
+        assert sent == set(ids) and not omitted
+    else:
+        assert sent and sent < set(ids) and omitted
+    assert len(compact_prompt_json(compact).encode()) <= payload_bytes
+    from packages.agents.writer.dimension_writer import _support_ref_catalog
+    catalog = _support_ref_catalog(compact, view.facts, sent)
     originals = {fact.id: fact for fact in snapshot.facts}
     for row in compact["evidence_view"]["facts"]:
         assert row["quote"] == originals[row["id"]].quote
         assert row["value"] == originals[row["id"]].value
         assert row["qualifiers"] == originals[row["id"]].qualifiers
+        assert row["source_span_candidates"]
+        assert all(span["support_ref"] in catalog for span in row["source_span_candidates"])
     assert snapshot.model_dump_json() == before
 
 

@@ -43,7 +43,7 @@ class Reviewer(DimensionWriterMixin):
 
 async def check(monkeypatch, responses, *, facts=(), compact=None):
     monkeypatch.setattr(
-        "packages.agents.writer.price_answers.server_missing_price_answers", lambda *args: {}
+        "packages.agents.writer.price_answers.server_missing_price_answers", lambda *args, **kwargs: {}
     )
     responses = [json.dumps(dict(json.loads(value), version=3)) if isinstance(value, str) and value.startswith('{')
                  else value for value in responses]

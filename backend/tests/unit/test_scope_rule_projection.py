@@ -192,6 +192,10 @@ async def writer_replay(monkeypatch, *, case='complete', review='no'):
             return question_plan_response(payload, atoms)
         if kwargs['name'] == 'dimension_claim_review':
             return json.dumps({'reviews': [supported_review(c) for c in payload['claims']]})
+        if kwargs['name'] == 'dimension_question_repair':
+            # Keep this missing-premise fixture incomplete after its bounded
+            # repair attempt; the original publication assertions still apply.
+            return question_plan_response(payload, [])
         assert kwargs['name'] in {'dimension_answer_coverage', 'dimension_answer_review'}
         assert payload['required_clarifications'] == []
         assert guards._CLOSED_QUESTION.search(payload['questions'][0]['question'])

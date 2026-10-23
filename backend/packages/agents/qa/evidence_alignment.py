@@ -65,7 +65,9 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
             published_claims = [item.claim.model_dump(mode='json') for item in published]
             from packages.agents.writer.price_answers import server_missing_price_answers
             from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
-            price_answers = server_missing_price_answers(record.detail, snapshot, questions, audit.competitor)
+            price_answers = server_missing_price_answers(
+                record.detail, snapshot, questions, audit.competitor,
+                claims=tuple(item.claim for item in published))
             from packages.agents.writer.request_clarification import server_clarification_answer
             clarification_answers = {q['question_id']: server_clarification_answer(q) for q in questions}
             if audit.answer_binding_version == 3 and audit.claim_review_version != 3:

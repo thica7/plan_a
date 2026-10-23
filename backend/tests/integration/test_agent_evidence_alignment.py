@@ -218,6 +218,11 @@ async def test_real_rag_entry_admission_snapshot_and_downstream_consumers_share_
             payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
             return json.dumps({"reviews": [supported_review(claim,
                 "Offline replay quote matches every condition.") for claim in payload["claims"]]})
+        if kwargs["name"] == "dimension_question_repair":
+            payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
+            return json.dumps({"question_plans": [dict(
+                question_id=question["question_id"], missing_fields=[], atoms=[]
+            ) for question in payload["questions"]]})
         assert kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}
         payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
         return answer_response(payload, {"version": 3, "answers": [dict(question_id=q["question_id"], status="answered",

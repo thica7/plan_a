@@ -352,6 +352,10 @@ async def test_role_background_and_bill_original_reach_real_writer_and_replay_cp
             fact = next(row for row in rows if row["quote"] == guest)
             return question_plan_response(payload, [dict(text=guest, kind="fact", competitor="Example Product",
                 dimension="feature", fact_ids=[fact["id"]], source_ids=[fact["source_id"]])])
+        if kwargs["name"] == "dimension_question_repair":
+            # This transport fixture intentionally keeps the missing CPU rule
+            # unpublished; the partial price answer must remain a visible gap.
+            return question_plan_response(payload, [])
         if kwargs["name"] == "dimension_claim_review":
             return json.dumps({"reviews": [supported_review(claim) for claim in payload["claims"]]})
         assert kwargs["name"] in {"dimension_answer_coverage", "dimension_answer_review"}

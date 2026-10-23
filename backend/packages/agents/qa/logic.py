@@ -418,6 +418,10 @@ class QualityAgentMixin(FinalEvidenceAuditMixin):
         issues.extend(self._build_claim_text_quality_issues(coverage_projected))
         issues.extend(self._build_matrix_consistency_issues(coverage_projected))
         issues.extend(self._build_collect_qa_issues(coverage_projected))
+        from packages.agents.qa.question_reconciliation import reconcile_question_findings
+        issues = await reconcile_question_findings(
+            self, record, issues, evidence_issues=evidence_issues
+        )
         issues = self._dedupe_qa_issues(issues)
         for use in uses:
             self._validate_evidence_use(record, use)

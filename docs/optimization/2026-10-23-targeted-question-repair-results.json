@@ -1,0 +1,729 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-23",
+  "baseline": "e0f6c5d80439945cd5afce4b3f7c2ee160aba239",
+  "branch": "codex/pastoral-desktop",
+  "conclusion": "Engineering verification completed; reports do not meet complete delivery requirements.",
+  "verification": {
+    "backend_passed": 7125,
+    "backend_skipped": 1,
+    "new_test_cases_since_baseline": 106,
+    "log": "full-release.log",
+    "new_files_ruff": "passed",
+    "existing_changed_python_E9_F": "passed",
+    "diff_check": "passed",
+    "public_schema_changed": false,
+    "frontend_changed": false,
+    "frontend_tests_run_this_phase": false,
+    "independent_A_review": "native-rules-review-v3.md",
+    "independent_B_review": "targeted-writer-review-v2.md",
+    "tracked_secret_scan": "passed",
+    "independent_content_review": "current-content-audit-transport.md"
+  },
+  "scope": {
+    "case_count": 8,
+    "products": [
+      "Bitwarden",
+      "1Password",
+      "Cloudflare",
+      "Trello"
+    ],
+    "rounds": 2,
+    "same_cases_each_round": true,
+    "independent_new_cases": 0,
+    "input_mode": "frozen captured official pages dated 2026-10-21",
+    "fresh_web_capture": false,
+    "full_graph": false,
+    "planner_discovery": false,
+    "production_dense_rag": false,
+    "publication": false,
+    "docker": false,
+    "training": false,
+    "reference_answers_sent_to_model": false,
+    "blind_review": false,
+    "reviewer_participated_in_C_D": true,
+    "model_alias": "deepseek-flash",
+    "specific_underlying_model_version_independently_verified": false
+  },
+  "budgets": {
+    "calls_per_product": 24,
+    "tokens_per_product": 80000,
+    "configured_output_cap": 2048,
+    "writer_output_cap": 1600,
+    "retries": 0,
+    "targeted_repair_rounds": 1,
+    "max_new_atoms": 4,
+    "max_extra_model_calls": 5,
+    "source_context_bytes": 14000,
+    "local_refill_attempts": 2
+  },
+  "runtime": {
+    "first": {
+      "products": [
+        {
+          "product": "Bitwarden",
+          "llm_calls": 7,
+          "known_provider_tokens": 29601,
+          "unknown_usage_spans": 0,
+          "qa_counts": {
+            "blocker": 3,
+            "warn": 5
+          },
+          "snapshot_facts": 90,
+          "accepted_sources": 3,
+          "production_hash": "306f9c11669f28ccdc97736858ad9e8de68ecbc44e7cb47b39e439fa6e512adc",
+          "hash_unchanged": true,
+          "finish_reasons": {
+            "stop": 7
+          },
+          "modules": [
+            {
+              "agent": "analyst",
+              "subagent": "feature::Bitwarden",
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "reason": ""
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "comparator",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false,
+                "attempts": 1,
+                "max_attempts": 3
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "reflector",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false
+              },
+              "reason": null,
+              "has_structured_output": true
+            }
+          ],
+          "calls_by_name": {
+            "collector_semantic_extract": 2,
+            "collector_question_evidence_review": 1,
+            "feature_bitwarden_analyst": 1,
+            "comparison_matrix": 1,
+            "coverage_reflection": 1,
+            "dimension_claim_writer": 1
+          },
+          "native_errors": []
+        },
+        {
+          "product": "1Password",
+          "llm_calls": 13,
+          "known_provider_tokens": 43168,
+          "unknown_usage_spans": 0,
+          "qa_counts": {
+            "blocker": 3,
+            "warn": 4
+          },
+          "snapshot_facts": 21,
+          "accepted_sources": 1,
+          "production_hash": "306f9c11669f28ccdc97736858ad9e8de68ecbc44e7cb47b39e439fa6e512adc",
+          "hash_unchanged": true,
+          "finish_reasons": {
+            "stop": 13
+          },
+          "modules": [
+            {
+              "agent": "analyst",
+              "subagent": "feature::1Password",
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "reason": ""
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "comparator",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false,
+                "attempts": 1,
+                "max_attempts": 3
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "reflector",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false
+              },
+              "reason": null,
+              "has_structured_output": true
+            }
+          ],
+          "calls_by_name": {
+            "collector_semantic_extract": 2,
+            "collector_question_evidence_review": 1,
+            "feature_1password_analyst": 1,
+            "comparison_matrix": 1,
+            "coverage_reflection": 1,
+            "dimension_claim_writer": 1,
+            "dimension_claim_review": 2,
+            "dimension_answer_coverage": 1,
+            "dimension_answer_review": 1,
+            "dimension_question_repair": 1,
+            "dimension_question_repair_review": 1
+          },
+          "native_errors": []
+        },
+        {
+          "product": "Cloudflare",
+          "llm_calls": 7,
+          "known_provider_tokens": 20319,
+          "unknown_usage_spans": 2,
+          "qa_counts": {
+            "blocker": 3,
+            "warn": 3
+          },
+          "snapshot_facts": 45,
+          "accepted_sources": 2,
+          "production_hash": "306f9c11669f28ccdc97736858ad9e8de68ecbc44e7cb47b39e439fa6e512adc",
+          "hash_unchanged": true,
+          "finish_reasons": {
+            "stop": 5,
+            "None": 2
+          },
+          "modules": [
+            {
+              "agent": "analyst",
+              "subagent": "feature::Cloudflare",
+              "module_status": "fallback",
+              "fallback": {
+                "used": true,
+                "reason": "one-shot analyst exceeded 25s"
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "comparator",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false,
+                "attempts": 1,
+                "max_attempts": 3
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "reflector",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false
+              },
+              "reason": null,
+              "has_structured_output": true
+            }
+          ],
+          "calls_by_name": {
+            "collector_semantic_extract": 2,
+            "collector_question_evidence_review": 1,
+            "feature_cloudflare_analyst": 1,
+            "comparison_matrix": 1,
+            "coverage_reflection": 1,
+            "dimension_claim_writer": 1
+          },
+          "native_errors": [
+            {
+              "name": "feature_cloudflare_analyst",
+              "status": "error",
+              "reason": "llm_timeout"
+            },
+            {
+              "name": "dimension_claim_writer",
+              "status": "error",
+              "reason": null
+            }
+          ]
+        },
+        {
+          "product": "Trello",
+          "llm_calls": 19,
+          "known_provider_tokens": 59904,
+          "unknown_usage_spans": 0,
+          "qa_counts": {
+            "blocker": 4,
+            "warn": 4
+          },
+          "snapshot_facts": 21,
+          "accepted_sources": 1,
+          "production_hash": "306f9c11669f28ccdc97736858ad9e8de68ecbc44e7cb47b39e439fa6e512adc",
+          "hash_unchanged": true,
+          "finish_reasons": {
+            "stop": 19
+          },
+          "modules": [
+            {
+              "agent": "analyst",
+              "subagent": "feature::Trello",
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "reason": ""
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "comparator",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false,
+                "attempts": 1,
+                "max_attempts": 3
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "reflector",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false
+              },
+              "reason": null,
+              "has_structured_output": true
+            }
+          ],
+          "calls_by_name": {
+            "collector_semantic_extract": 1,
+            "collector_question_evidence_review": 1,
+            "feature_trello_analyst": 1,
+            "comparison_matrix": 1,
+            "coverage_reflection": 1,
+            "dimension_claim_writer": 1,
+            "dimension_claim_review": 8,
+            "dimension_answer_coverage": 1,
+            "dimension_answer_review": 1,
+            "dimension_question_repair": 1,
+            "dimension_question_repair_review": 2
+          },
+          "native_errors": []
+        }
+      ],
+      "llm_calls": 46,
+      "known_provider_tokens": 152992,
+      "unknown_usage_spans": 2,
+      "qa_counts": {
+        "blocker": 13,
+        "warn": 16
+      },
+      "production_hashes": [
+        "306f9c11669f28ccdc97736858ad9e8de68ecbc44e7cb47b39e439fa6e512adc"
+      ]
+    },
+    "transport": {
+      "products": [
+        {
+          "product": "Bitwarden",
+          "llm_calls": 20,
+          "known_provider_tokens": 64679,
+          "unknown_usage_spans": 0,
+          "qa_counts": {
+            "blocker": 2,
+            "warn": 5
+          },
+          "snapshot_facts": 87,
+          "accepted_sources": 3,
+          "production_hash": "58a3a6b814d078c5b6535db838b094d7814f4f75fb277affa0e9f012ef31a433",
+          "hash_unchanged": true,
+          "finish_reasons": {
+            "stop": 20
+          },
+          "modules": [
+            {
+              "agent": "analyst",
+              "subagent": "feature::Bitwarden",
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "reason": ""
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "comparator",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false,
+                "attempts": 1,
+                "max_attempts": 3
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "reflector",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false
+              },
+              "reason": null,
+              "has_structured_output": true
+            }
+          ],
+          "calls_by_name": {
+            "collector_semantic_extract": 2,
+            "collector_question_evidence_review": 1,
+            "feature_bitwarden_analyst": 1,
+            "comparison_matrix": 1,
+            "coverage_reflection": 1,
+            "dimension_claim_writer": 1,
+            "dimension_claim_review": 7,
+            "dimension_answer_coverage": 2,
+            "dimension_answer_review": 2,
+            "dimension_question_repair": 1,
+            "dimension_question_repair_review": 1
+          },
+          "native_errors": []
+        },
+        {
+          "product": "1Password",
+          "llm_calls": 18,
+          "known_provider_tokens": 55818,
+          "unknown_usage_spans": 0,
+          "qa_counts": {
+            "warn": 2,
+            "blocker": 2
+          },
+          "snapshot_facts": 21,
+          "accepted_sources": 1,
+          "production_hash": "58a3a6b814d078c5b6535db838b094d7814f4f75fb277affa0e9f012ef31a433",
+          "hash_unchanged": true,
+          "finish_reasons": {
+            "stop": 18
+          },
+          "modules": [
+            {
+              "agent": "analyst",
+              "subagent": "feature::1Password",
+              "module_status": "fallback",
+              "fallback": {
+                "used": true,
+                "reason": "empty_structured_payload"
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "comparator",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false,
+                "attempts": 1,
+                "max_attempts": 3
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "reflector",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false
+              },
+              "reason": null,
+              "has_structured_output": true
+            }
+          ],
+          "calls_by_name": {
+            "collector_semantic_extract": 2,
+            "collector_question_evidence_review": 1,
+            "feature_1password_analyst": 1,
+            "comparison_matrix": 1,
+            "coverage_reflection": 1,
+            "dimension_claim_writer": 1,
+            "dimension_claim_review": 3,
+            "dimension_answer_coverage": 2,
+            "dimension_answer_review": 2,
+            "dimension_question_repair": 1,
+            "dimension_question_repair_review": 2,
+            "final_question_reconciliation": 1
+          },
+          "native_errors": []
+        },
+        {
+          "product": "Cloudflare",
+          "llm_calls": 18,
+          "known_provider_tokens": 62030,
+          "unknown_usage_spans": 0,
+          "qa_counts": {
+            "warn": 3,
+            "blocker": 1
+          },
+          "snapshot_facts": 45,
+          "accepted_sources": 2,
+          "production_hash": "58a3a6b814d078c5b6535db838b094d7814f4f75fb277affa0e9f012ef31a433",
+          "hash_unchanged": true,
+          "finish_reasons": {
+            "stop": 18
+          },
+          "modules": [
+            {
+              "agent": "analyst",
+              "subagent": "feature::Cloudflare",
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "reason": ""
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "comparator",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false,
+                "attempts": 1,
+                "max_attempts": 3
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "reflector",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false
+              },
+              "reason": null,
+              "has_structured_output": true
+            }
+          ],
+          "calls_by_name": {
+            "collector_semantic_extract": 2,
+            "collector_question_evidence_review": 1,
+            "feature_cloudflare_analyst": 1,
+            "comparison_matrix": 1,
+            "coverage_reflection": 1,
+            "dimension_claim_writer": 1,
+            "dimension_claim_review": 7,
+            "dimension_answer_coverage": 1,
+            "dimension_answer_review": 1,
+            "dimension_question_repair": 1,
+            "final_question_reconciliation": 1
+          },
+          "native_errors": []
+        },
+        {
+          "product": "Trello",
+          "llm_calls": 17,
+          "known_provider_tokens": 60304,
+          "unknown_usage_spans": 0,
+          "qa_counts": {
+            "blocker": 2,
+            "warn": 4
+          },
+          "snapshot_facts": 21,
+          "accepted_sources": 1,
+          "production_hash": "58a3a6b814d078c5b6535db838b094d7814f4f75fb277affa0e9f012ef31a433",
+          "hash_unchanged": true,
+          "finish_reasons": {
+            "stop": 17
+          },
+          "modules": [
+            {
+              "agent": "analyst",
+              "subagent": "feature::Trello",
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "reason": ""
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "comparator",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false,
+                "attempts": 1,
+                "max_attempts": 3
+              },
+              "reason": null,
+              "has_structured_output": true
+            },
+            {
+              "agent": "reflector",
+              "subagent": null,
+              "module_status": "llm",
+              "fallback": {
+                "used": false,
+                "deterministic_fallback": false
+              },
+              "reason": null,
+              "has_structured_output": true
+            }
+          ],
+          "calls_by_name": {
+            "collector_semantic_extract": 1,
+            "collector_question_evidence_review": 1,
+            "feature_trello_analyst": 1,
+            "comparison_matrix": 1,
+            "coverage_reflection": 1,
+            "dimension_claim_writer": 1,
+            "dimension_claim_review": 8,
+            "dimension_answer_coverage": 1,
+            "dimension_answer_review": 1,
+            "dimension_question_repair": 1
+          },
+          "native_errors": []
+        }
+      ],
+      "llm_calls": 73,
+      "known_provider_tokens": 242831,
+      "unknown_usage_spans": 0,
+      "qa_counts": {
+        "blocker": 7,
+        "warn": 14
+      },
+      "production_hashes": [
+        "58a3a6b814d078c5b6535db838b094d7814f4f75fb277affa0e9f012ef31a433"
+      ]
+    }
+  },
+  "total": {
+    "llm_transport_attempts": 119,
+    "known_provider_tokens": 395823,
+    "unknown_usage_spans": 2,
+    "tokens_are_provider_reported_known_usage_not_bill": true
+  },
+  "final_content": {
+    "strict_original_cases_complete": 4,
+    "strict_original_cases_total": 8,
+    "strict_original_cases_incomplete": 4,
+    "safe_price_refusal_passed": 2,
+    "safe_price_refusal_total": 2,
+    "visible_formal_claims": 14,
+    "case_summary": [
+      {
+        "product": "Bitwarden",
+        "complete": 2,
+        "total": 2,
+        "cases": [
+          "Free organization capacity no: complete",
+          "Action/ownership clarification: complete"
+        ],
+        "qa_limitation": "False citation blocker from global historical context-budget gap despite valid final answers; comparison gap remains."
+      },
+      {
+        "product": "1Password",
+        "complete": 1,
+        "total": 2,
+        "cases": [
+          "Guest single/private vault restrictions: complete",
+          "Exact price: safe refusal; public quote nature/sales next step missing"
+        ],
+        "additional_goal_not_completed": "Source-supported optional member promotion path not published."
+      },
+      {
+        "product": "Cloudflare",
+        "complete": 1,
+        "total": 2,
+        "cases": [
+          "Assigned-domain permission no: complete",
+          "Exact bill: safe refusal; formal CPU-time billing rule and precise citation missing"
+        ],
+        "delivery_diagnosis": "Complete Standard CPU row exists in snapshot but is absent from Writer and repair actual sent_fact_ids."
+      },
+      {
+        "product": "Trello",
+        "complete": 0,
+        "total": 2,
+        "cases": [
+          "Per-board voting/download/export/obligation: incomplete",
+          "Per-member/per-board/admin/billing: incomplete"
+        ],
+        "visible_assertion_problem": "A selected permission sentence does not prove the whole page lacks an obligation statement.",
+        "repair_failure": "Native stop output contained five new atoms, exceeding the four-atom contract; rejected without audit/publication.",
+        "supported_but_not_published": "A/B outcomes exist in audited hidden candidates, but final bindings fail; download/export compound claims rejected by atomicity."
+      }
+    ],
+    "strict_status_counts": {
+      "pass": 4,
+      "partial": 4,
+      "fail": 0
+    },
+    "visible_formal_claims_fully_supported": 13,
+    "visible_formal_claims_atomic": 8,
+    "total_audit_supported_claims": 18,
+    "total_audit_drafts": 34
+  },
+  "final_qa": {
+    "blockers": 7,
+    "warnings": 14,
+    "semantic_reconciliation_calls": 2,
+    "old_permission_findings_superseded": 3,
+    "unresolved_quote_findings_kept": true,
+    "global_context_gap_false_blocker_remaining": true,
+    "reconciliation_dispositions": {
+      "superseded": 3,
+      "keep": 15,
+      "current_limitation": 0
+    },
+    "proposed_limitations_not_accepted": 3
+  },
+  "next_priorities": [
+    "Question-scoped compact evidence cards with original restrictions preserved once, instead of repeated parent rows.",
+    "Plan individual repair atoms by subquestion priority within the existing budget and distinguish output-capacity failure from provider failure.",
+    "Reconcile context gaps per question; preserve real factual/exception gaps, allow exact request-only clarification.",
+    "Complete formal CPU-time rule projection and admit applicable public quote/sales evidence."
+  ],
+  "artifact_directory": "data/artifacts/targeted-question-repair-2026-10-23/",
+  "reports": [
+    "current-content-audit-first.md",
+    "current-content-audit-transport.md"
+  ],
+  "comparison_caveat": "Same exposed eight cases, multiple code changes and nondeterministic generation; 3/8 baseline to 4/8 final is not a general accuracy or controlled causal claim."
+}

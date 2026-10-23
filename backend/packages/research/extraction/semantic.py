@@ -59,6 +59,10 @@ _ACCESS_HEADING = re.compile(
 )
 _ROLE_LINE = re.compile(r'^\s*(?:[-*|]\s*)?(Can comment|Can view|Can edit(?: content)?|Can create|Can manage(?: access)?|Full access|Comment-only|Read-only)\s*(?:[:|]|$)', re.I)
 _ROLE_SCOPE_RULE = re.compile(r'^[A-Za-z]+(?:-[A-Za-z]+)*-scoped roles?\s+apply\b', re.I)
+_ROLE_ASSIGNMENT_RULE = re.compile(
+    r"\b(?:set|assign)\s+(?:(?:a|an|the|existing)\s+)?(?:users?|members?)\s+as\b"
+    r"[^.!?]{1,240}\b(?:level|permissions?|per\s+(?:member|user|board|workspace))\b", re.I,
+)
 _MARKDOWN_ESCAPE = re.compile(r'\\+([!-/:-@\[-`{-~])')
 
 
@@ -99,7 +103,8 @@ def account_lifecycle_rule(text: str) -> bool:
 
 def source_rule_text_signal(text: str) -> bool:
     """Terminology signal only; authority and original rule admission remain separate."""
-    return bool(account_lifecycle_rule(text) or billing_rule_text_signal(text) or any(
+    return bool(account_lifecycle_rule(text) or billing_rule_text_signal(text)
+        or _ROLE_ASSIGNMENT_RULE.search(_markdown_display_text(text)) or any(
         _ROLE_SCOPE_RULE.match(_markdown_display_text(line.strip())) or re.fullmatch(
             r'\|[^|]+\|(?=[^|]*\b(?:access|permissions?)\b)[^|]+\|', line.strip(), re.I,
         ) for line in text.splitlines()
@@ -113,7 +118,8 @@ def semantic_quote_quality_problem(brief: ResearchBrief, quote: str) -> str | No
         return problem
     if _billing_rule(brief, quote):
         return None
-    if _ROLE_SCOPE_RULE.match(_markdown_display_text(quote)) or account_lifecycle_rule(quote):
+    if (_ROLE_SCOPE_RULE.match(_markdown_display_text(quote)) or account_lifecycle_rule(quote)
+            or _ROLE_ASSIGNMENT_RULE.search(_markdown_display_text(quote))):
         return None
     return problem
 
@@ -912,6 +918,9 @@ def semantic_extraction(
     condition_lines = [line.strip() for line in window.splitlines() if _CONDITION.search(line)]
     from packages.research.evidence.operations import alternative_condition_blocks
     rule_blocks = _document_rule_blocks(body, page, window_start, window_start + len(window))
+    if extractor_name == 'source_structured_rules':
+        from packages.research.extraction.native_question_rules import native_question_blocks
+        rule_blocks = [*rule_blocks, *native_question_blocks(brief, page)]
     conditions = list(dict.fromkeys([
         *condition_lines, *alternative_condition_blocks(window), *rule_blocks
     ]))

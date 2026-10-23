@@ -12,6 +12,87 @@ from packages.research.evidence.answer_coverage_models import AnswerSubquestionB
 from packages.research.evidence.snapshot_models import canonical_json
 
 CONTRACT = "subquestion-premises-v1"
+_RESOURCE_NAME = r"[A-Z](?:[0-9]{1,3})?"
+_RESOURCE_NOUN = r"(?:boards?|看板|白板|vaults?|保险库|folders?|文件夹|workspaces?|工作区|resources?|资源)"
+
+
+def named_resource_items(question):
+    """Finite explicit A/B lists only; unknown names stay with semantic review."""
+    from packages.agents.writer.answer_action_scope import _INVERTED, _QUESTION
+    requests = [unit.rsplit(':', 1)[-1].rsplit('：', 1)[-1]
+        for unit in re.split(r'(?<=[。!?？！])|(?<=\.)\s+', question)
+        if _QUESTION.search(unit) or _INVERTED.match(unit)]
+    request = ' '.join(requests)
+    pattern = (rf"{_RESOURCE_NOUN}\s*(?P<first>{_RESOURCE_NAME})(?![A-Za-z0-9_])"
+        rf"\s*(?:、|和|及|与|,\s*(?:and\s+)?|\band\b|&)\s*"
+        rf"(?:{_RESOURCE_NOUN}\s*)?(?P<second>{_RESOURCE_NAME})(?![A-Za-z0-9_])")
+    pairs = [match.group('first', 'second') for match in re.finditer(pattern, request, re.I)]
+    if not pairs and re.search(_RESOURCE_NOUN, question, re.I) and re.search(r"逐项|分别|\beach\b|\bseparately\b", question, re.I):
+        pairs = [match.group('first', 'second') for match in re.finditer(
+            rf"(?<![A-Za-z0-9_])(?P<first>{_RESOURCE_NAME})\s*(?:、|和|与|\band\b)\s*"
+            rf"(?P<second>{_RESOURCE_NAME})(?![A-Za-z0-9_])", request)]
+    return tuple(dict.fromkeys(item for pair in pairs for item in pair))
+
+
+def named_resource_outcome_reasons(record, claims):
+    """An answered resource list must visibly apply the rule to every item."""
+    if record.status != 'answered' or record.resolution not in {'direct', 'conditional'}:
+        return ()
+    items = named_resource_items(record.question)
+    if len(items) < 2:
+        return ()
+    from packages.agents.writer.answer_action_scope import _ACTIONS, requested_answer_actions
+    actions = requested_answer_actions(record.question)
+    if not actions:
+        return ()
+    selected = [row for row in claims if row['id'] in record.claim_ids]
+    for action in actions:
+        outcomes = set().union(*(_named_action_outcomes(row['text'], items, _ACTIONS[action])
+            for row in selected)) if selected else set()
+        if not set(items) <= outcomes:
+            return ('answer_named_resource_outcome_missing',)
+    return ()
+
+
+def _named_action_outcomes(text, items, action):
+    """Bind finite named outcomes inside decision clauses, excluding scenario prose."""
+    modal = r"\b(?:can(?:not)?|can['’]t|may|allowed|permitted)\b|不能|无法|可以|能够|不允许|允许"
+    labels = re.compile(r'(?<![A-Za-z0-9_])(?:' + '|'.join(map(re.escape, items))
+                        + r')(?![A-Za-z0-9_])')
+    outcomes = set()
+    for unit in re.split(r'[。；;.!?？\n，,]', text):
+        # Conditional prefixes carry request inputs; only their resulting
+        # decision clause can establish an item's visible action outcome.
+        unit = re.sub(r'^\s*(?:在|当|若|如果|假设|题设).*?(?:条件下|情况下|题设下|时|下)\s*', '', unit)
+        if re.match(r'^\s*(?:if|when|assuming|given|because)\b|^\s*(?:若|如果|假设)', unit, re.I):
+            continue
+        unit = re.split(r'\b(?:if|when|because|provided|assuming)\b|因为|由于|如果', unit, maxsplit=1, flags=re.I)[0]
+        for predicate in re.finditer(modal, unit, re.I):
+            verbs = list(re.finditer(action, unit, re.I))
+            if not verbs:
+                continue
+            verb = min(verbs, key=lambda match: min(abs(match.start() - predicate.end()),
+                abs(predicate.start() - match.end())))
+            start, end = sorted((predicate.start(), verb.start()))
+            bound = [label for label in labels.finditer(unit) if start <= label.start() <= end]
+            if bound:
+                outcomes.update(label.group() for label in bound)
+                continue
+            after = [label for label in labels.finditer(unit) if label.start() >= verb.end()]
+            if verb.start() > predicate.start() and after:
+                first = after[0]
+                if re.fullmatch(rf'\s*(?:on|in|at|to|from|within|于|在)\s*(?:the\s+)?(?:{_RESOURCE_NOUN}\s*)?',
+                                unit[verb.end():first.start()], re.I):
+                    outcomes.add(first.group())
+                    continue
+            before = [label for label in labels.finditer(unit) if label.end() <= predicate.start()]
+            if before:
+                last = before[-1]
+                context = unit[last.end():predicate.start()]
+                if not re.search(r'\b(?:is|are|has|have|enabled|disabled|when|if|with|assuming|settings?)\b'
+                    r'|开启|关闭|启用|题设|条件|设置|无关|时|下', context, re.I):
+                    outcomes.add(last.group())
+    return outcomes
 _NEGATIVE = re.compile(
     r"\b(?:cannot|can['’]t|does\s+not|do\s+not|not\s+(?:allowed|permitted|available|have))\b"
     r"|不能|无法|没有|不允许|不具备|不可(?!以通过)|不支持",
@@ -228,9 +309,10 @@ def bind_subquestions(rows, question, claims):
 
 def subquestion_binding_reasons(record, claims, *, required=False):
     bindings = record.subquestion_bindings
+    resource_reasons = named_resource_outcome_reasons(record, claims)
     if not bindings:
-        return ("answer_subquestion_binding_required",) if required else ()
-    reasons = set()
+        return (*resource_reasons, *(("answer_subquestion_binding_required",) if required else ()))
+    reasons = set(resource_reasons)
     by_id = {claim["id"]: claim for claim in claims}
     cursor = 0
     outcomes = []

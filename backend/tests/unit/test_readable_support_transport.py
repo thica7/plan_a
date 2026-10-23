@@ -58,6 +58,44 @@ def test_short_context_shows_complete_quote_instead_of_coordinates():
     ]
 
 
+@pytest.mark.parametrize("max_bytes", [1200, 1800, 2400])
+def test_context_reserves_usable_support_before_filling_fact_rows(max_bytes):
+    originals = [fact(str(index), quote=(
+        f"A confirmed guest in workspace {index} can access only one shared vault. "
+        "Guests do not have a private vault and cannot access any other workspace."
+    )) for index in range(8)]
+    payload, _ = writer.compact_dimension_context(
+        dict(segment_competitor=originals[0].competitor, dimension="feature"),
+        SimpleNamespace(facts=originals), {item.id for item in originals},
+        questions=[dict(question_id="q", question="Can a guest have a private vault?")],
+        max_bytes=max_bytes,
+    )
+    rows = payload["evidence_view"]["facts"]
+    assert rows
+    assert len(writer.compact_prompt_json(payload).encode()) <= max_bytes
+    catalog = writer._support_ref_catalog(payload, originals, {item.id for item in originals})
+    for row in rows:
+        assert row.get("source_span_candidates"), "A retained original must have a usable reference"
+        assert all(span["support_ref"] in catalog for span in row["source_span_candidates"])
+
+
+def test_missing_premise_focus_ranks_complete_support_before_window_allocation():
+    original = fact(
+        quote="Guests must accept an invitation before an owner can confirm access.",
+        value=["Guests do not have a private vault and can access only one selected vault."],
+    )
+    payload, _ = writer.compact_dimension_context(
+        dict(segment_competitor=original.competitor, dimension="feature"),
+        SimpleNamespace(facts=[original]), {original.id},
+        questions=[dict(question_id="q", question="A confirmed guest needs more access.")],
+        support_focus=["The unpublished private vault restriction is missing."],
+    )
+    row = payload["evidence_view"]["facts"][0]
+    assert row["source_span_candidates"][0]["quote"] == original.value[0]
+    assert row["quote"] == original.quote and row["value"] == original.value
+    assert "unpublished private" not in writer.encoded(payload)
+
+
 def test_readable_quote_round_trip_restores_every_exact_binding_field():
     original = fact(quote="Guests do not have private vaults.")
     payload = payload_for([original])

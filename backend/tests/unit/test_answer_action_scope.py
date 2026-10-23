@@ -203,7 +203,7 @@ async def test_second_review_cannot_promote_unrelated_claim_to_answered(monkeypa
     from packages.research.evidence.report_claims import ReportClaim
 
     monkeypatch.setattr(
-        "packages.agents.writer.price_answers.server_missing_price_answers", lambda *args: {}
+        "packages.agents.writer.price_answers.server_missing_price_answers", lambda *args, **kwargs: {}
     )
     first = json.dumps(
         {

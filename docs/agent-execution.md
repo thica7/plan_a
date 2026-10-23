@@ -2,7 +2,9 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-当前验证见[子问前提与正文／QA一致性](optimization/2026-10-23-subquestion-decision.md)（2026-10-23）：后端 **7019通过／1跳过**，新增97项；最终复审Prompt调整后89项专项通过，OpenAPI/前端构建与变更审查通过。可读引用、逐子问前提摘要、精确支持隔离和统一问题块已接入。两轮四家固定页面真实回放共 **123调用／391144 token**；最终轮61调用／193421 token。原始八题严格完成 **3/8**，正式可见主张11/11完整支持、9/11单谓词，但另有CPU服务器事实漏绑。**报告仍未达标**：1Password漏选、Trello并列对象/第二题漏答及早期Reflector与最终QA冲突仍待修。不是新抓取、全Graph或生产稠密RAG验收，未训练。[结构化结果](optimization/2026-10-23-subquestion-decision-results.json)。
+当前验证见[子问定向选证与局部重写](optimization/2026-10-23-targeted-question-repair.md)（2026-10-23）：后端 **7125通过／1跳过**，新增106项。完整规则提案、单轮定向修复、引用预留、CPU事实合同与最终QA重核进入实际入口。两轮四家固定页面回放共119调用／已知395823 token，另2条usage未知；最终轮73调用／242831 token、全部stop。原始八题严格完成4/8；Trello逐项与条件仍遗漏，CPU前提未发表，部分可见主张过宽，BW有效澄清仍被全局context gap误阻，**报告仍未达标**。Analyst另有一次空结构回退。不是全Graph／新抓取／发布／生产稠密RAG验收，未训练。[结构化结果](optimization/2026-10-23-targeted-question-repair-results.json)。
+
+上一轮验证见[子问前提与正文／QA一致性](optimization/2026-10-23-subquestion-decision.md)（2026-10-23）：后端 **7019通过／1跳过**，新增97项；最终复审Prompt调整后89项专项通过，OpenAPI/前端构建与变更审查通过。可读引用、逐子问前提摘要、精确支持隔离和统一问题块已接入。两轮四家固定页面真实回放共 **123调用／391144 token**；最终轮61调用／193421 token。原始八题严格完成 **3/8**，正式可见主张11/11完整支持、9/11单谓词，但另有CPU服务器事实漏绑。**报告仍未达标**：1Password漏选、Trello并列对象/第二题漏答及早期Reflector与最终QA冲突仍待修。不是新抓取、全Graph或生产稠密RAG验收，未训练。[结构化结果](optimization/2026-10-23-subquestion-decision-results.json)。
 
 上一轮验证见[问题结论绑定与完整规则投影](optimization/2026-10-23-question-conclusion.md)（2026-10-23）：后端 **6922通过／1跳过**，新增89项；有限操作覆盖守卫、完整可选举例前规则候选和正文操作识别已接入实际入口并通过独立审查。四组固定历史页面、真实模型回放共 **60调用／193790 token**，无截断。原始八题有6题核心内容覆盖、1题部分遗漏、1题整题遗漏，但仍有1Password否定前提漏绑、Cloudflare正文与答案状态冲突、Trello权限漏答及服务器事实漏绑；11条正式主张10条完整支持、仅4条单谓词，不能当完整报告合格率。**局部报告仍未通过严格验收**，实际QA共10阻断。不是新抓取、旧八题＋新四题全量复验、全Graph或生产稠密RAG验收，未训练。[结构化结果](optimization/2026-10-23-question-conclusion-results.json)。
 
@@ -46,6 +48,8 @@ planner → planner_hitl
 - **边界**：用户指定的人数、套餐或访问方式是研究条件；不能作为来源已经证实的属性。没有可用搜索且未指定竞品时可能无法继续。
 
 ### Collector：检索、采集与补证
+
+本轮新增 [`native_question_rules.py`](../backend/packages/research/extraction/native_question_rules.py)：在当前提取窗中召回与原问有关的完整规则块，经 `structured_evidence.py → semantic_extraction → admission` 原入口重验。无可靠结构时上限800字符，有可验证标题时完整小节上限1600；子例外不能被切掉，跨窗和超长整体拒绝。它是候选提案恢复，不直接向 Writer 写事实；坏 disclosure、表格或标题身份仍拒绝。
 
 - **入口**：[`collectors/logic.py`](../backend/packages/agents/collectors/logic.py)；知识库取证见 [`kb_bridge.py`](../backend/packages/agents/collectors/kb_bridge.py) 的 `_collect_competitor_from_kb`。
 - **输入**：当前产品、维度、目标操作、研究条件、已采资料与真实缺口。
@@ -130,6 +134,10 @@ Analyst、Comparator、Reflector、Writer 现共用 [`question_packets.py`](../b
 
 ### Writer：把有效分析写入报告
 
+新增 [`question_repair.py`](../backend/packages/agents/writer/question_repair.py) 的逐子问定向修复入口：失败诊断用于检索排序，不能成为事实。事实装窗时先预留合法完整引用，缺失谓词在裁窗前参与排序；修复上下文保留失败原问和已通过主张，最多两次纯本地容量回填，不增14KB上限。一次最多4个新原子、2批独立主张审核、2次受影响答案复核，总额外调用最多5次；Writer输出仍1600。坏响应/传输失败不盲重试，原支持和成功答案保持。审核主张与原文回写目标使用字面字符串，模型不能回传 `text_ref` 对象代替严格字符串审核。明确的多对象请求逐项校验，未知自然语言仍需语义审核。
+
+服务器缺价答复也消费正式审核主张：CPU时间计费前提必须具备当前同模式、单位、表头/脚注及精确绑定，不能直接用 raw fact 发表产品断言。缺少正式支持时只要求补输入，金额仍未知；最终 QA 用同批主张重放。
+
 新增[有限问题操作覆盖](../backend/packages/agents/writer/answer_action_scope.py)：下载、导出、导入、投票、清缓存的明确子问，只能用涉及相应操作的已发表主张给出完整或确定是／否结论。生成、复审和保存重放共用 `coverage_resolution_reasons()`；已给场景不直接当作待回答操作，未知表达仍须语义审核。新增正文 `claim_operations()` 与规划关键词扩展分离，前置条件后的明确操作仍需绑定。源候选只恢复完整原文规则后的有限可选举例边界，必要列表和条件不能截断。这些检查拒绝已知错误，不证明一般蕴含；真实模型仍有否定前提、全文缺席断言、状态投影及服务器事实漏绑。
 
 v3 逐条隔离支持审核：仅选定 operation quote／source span 及完整来源条件支持该主张，父级宽原文和其他主张不能支持额外谓词。明确独立动作与未重建必要条件在实时及最终 QA 共用守卫，保留角色权限前提、权限选项、日期与例外；有限识别不构成通用 NLI。
@@ -169,6 +177,8 @@ v3 逐条隔离支持审核：仅选定 operation quote／source span 及完整�
 完整中文“只有……才能访问……”可作为闭合问句的必要条件断言；新增识别路径对完整主张块检查引号、示例、建议及未完成句，不从审核理由补答案。主体、对象、套餐、完整主张和 v2 引用重放仍须分别通过。
 
 ### QA：审核与重做决策
+
+新增 [`question_reconciliation.py`](../backend/packages/agents/qa/question_reconciliation.py)：在最终 QA 对可明确映射的历史 Reflector 问题复核当前正文和精确支持，最多一次1600输出调用、14KB输入；保留原反思，记录 `keep/superseded/current_limitation` 和快照/Writer/支持摘要收据。真实证据错误存在时保守保留旧问题；来源、矩阵、混合缺口或无法映射的问题不凭回答状态消除。预算/模型失败保留问题，不能将复核入口已接线当作旧问题已解决。
 
 有限原文金额组件只从已发表、已允许的精确span重放，分别核对费率与账户最低费的套餐、币种、单位、周期及收费对象，多个金额保持各自诊断。未知推导/额外收费范围仍阻断。本轮真实CF没有发表金额，不能据零金额问题宣称真实费率验收通过；保存reason与不足答复状态也须独立核对。
 

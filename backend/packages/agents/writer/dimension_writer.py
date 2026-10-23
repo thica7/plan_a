@@ -358,10 +358,13 @@ def compact_prompt_json(payload):
     """Losslessly share repeated original and condition strings for writing and review."""
     from collections import Counter
     counts = Counter()
-    def literal_quote(path):
-        return len(path) == 4 and path[:2] == ('evidence_view', 'facts') and path[-1] == 'quote'
+    def literal_text(path):
+        return ((len(path) == 4 and path[:2] == ('evidence_view', 'facts') and path[-1] == 'quote')
+                or len(path) == 3 and path[0] == 'claims' and path[-1] == 'text'
+                or len(path) == 5 and path[0] == 'claims' and path[2] == 'required_checks'
+                and path[-1] == 'claim_span')
     def count(value, path=()):
-        if isinstance(value, str) and not literal_quote(path) and len(value.encode()) >= 120:
+        if isinstance(value, str) and not literal_text(path) and len(value.encode()) >= 120:
             counts[value] += 1
         elif isinstance(value, dict):
             for key, item in value.items(): count(item, (*path, key))
@@ -370,7 +373,7 @@ def compact_prompt_json(payload):
     count(payload)
     refs = {value: f't{index}' for index, (value, n) in enumerate(counts.items()) if n > 1}
     def replace(value, path=()):
-        if isinstance(value, str) and not literal_quote(path) and value in refs:
+        if isinstance(value, str) and not literal_text(path) and value in refs:
             return {'text_ref': refs[value]}
         if isinstance(value, dict): return {key: replace(item, (*path, key)) for key, item in value.items()}
         if isinstance(value, list): return [replace(item, (*path, index)) for index, item in enumerate(value)]
@@ -414,7 +417,7 @@ def bounded_upstream_analysis(payload, source_ids, *, max_bytes=1100):
     return result
 
 
-def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, requested_operations=(), upstream_context=None, include_non_operations=True, questions=(), question_evidence_packets=()):
+def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, requested_operations=(), upstream_context=None, include_non_operations=True, questions=(), question_evidence_packets=(), support_focus=()):
     """Keep complete original observations, not repeated matrix/slot controls."""
     from packages.research.evidence.operations import operation_observations, operation_binding, required_operations
     filter_operations = bool(requested_operations)
@@ -434,6 +437,20 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
     observations = {fact.id: operation_observations(fact) for fact in facts}
     from packages.agents.writer.answer_coverage import question_terms
     question_hints = [question_terms(q['question'], selected['segment_competitor']) for q in questions]
+    focus_hints = set().union(*(question_terms(text, selected['segment_competitor']) for text in support_focus))
+    from packages.agents.writer.subquestion_premises import _scope_objects
+    focus_objects = set().union(*(_scope_objects(text) for text in support_focus))
+    def span_priority(span):
+        hints = question_terms(span['quote'], selected['segment_competitor'])
+        return (100 * len(focus_objects & _scope_objects(span['quote']))
+                + 4 * len(focus_hints & hints)
+                + max((len(terms & hints) for terms in question_hints), default=0))
+    def span_reference(span, index):
+        return (dict(support_ref=f's{index}', quote=span['quote']) if short_refs else
+                {key: span[key] for key in ('span_id', 'source_path', 'start', 'end')})
+    from packages.research.evidence.source_spans import source_span_candidates
+    span_choices = {fact.id: sorted(source_span_candidates(fact), key=span_priority, reverse=True)
+                    for fact in facts} if selected['dimension'] == 'feature' else {}
     fact_hints = {fact.id: question_terms(fact.quote, selected['segment_competitor']) for fact in facts}
     covered_questions = set()
     def candidate_priority(row):
@@ -502,6 +519,10 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
             if short_refs:
                 row['operation_support_refs'] = [f'o{index}' for index in range(operation_ref_count + 1,
                     operation_ref_count + 1 + len(row['operation_observations']))]
+        # Reserve usable support with its original before adding more fact rows.
+        # Otherwise full rows can consume the window and leave no legal s-reference.
+        if span_choices.get(fact.id):
+            row['source_span_candidates'] = [span_reference(span_choices[fact.id][0], span_ref_count + 1)]
         payload['evidence_view']['facts'].append(row)
         if requested_operations:
             payload['missing_operations'] = [op for op in requested_operations if op not in covered | set(targets)]
@@ -513,6 +534,7 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
             continue
         covered.update(targets if requested_operations else action_targets[fact.id])
         operation_ref_count += len(row.get('operation_observations', ()))
+        span_ref_count += len(row.get('source_span_candidates', ()))
         pending = [(len(hints & fact_hints[fact.id]), i) for i, hints in enumerate(question_hints)
                    if i not in covered_questions]
         if pending:
@@ -545,10 +567,12 @@ def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, reque
         from packages.research.evidence.source_spans import source_span_candidates
         originals_by_id = {fact.id: fact for fact in view.facts}
         for row in payload['evidence_view']['facts']:
-            for span in source_span_candidates(originals_by_id[row['id']]):
-                reference = {key: span[key] for key in ('span_id', 'source_path', 'start', 'end')}
-                if short_refs:
-                    reference = dict(support_ref=f's{span_ref_count + 1}', quote=span['quote'])
+            for span in span_choices.get(row['id'], ()):
+                if any((entry.get('quote') == span['quote'] if short_refs else
+                        entry.get('span_id') == span['span_id'])
+                       for entry in row.get('source_span_candidates', ())):
+                    continue
+                reference = span_reference(span, span_ref_count + 1)
                 row.setdefault('source_span_candidates', []).append(reference)
                 if len(compact_prompt_json(payload).encode()) > max_bytes:
                     row['source_span_candidates'].pop()
@@ -717,7 +741,8 @@ class DimensionWriterMixin:
 
     async def _dimension_call_with_gaps(self, record, gaps, **kwargs):
         try:
-            return await self._dimension_llm_response(record, max_output_tokens=1600, **kwargs), gaps
+            return await self._dimension_llm_response(record,
+                max_output_tokens=kwargs.pop('max_output_tokens', 1600), **kwargs), gaps
         except LLMExecutionLimitError:
             # Do not publish this segment's unaudited claims or discard earlier
             # reviews. Integrity errors and cancellation still abort the draft.
@@ -830,8 +855,9 @@ class DimensionWriterMixin:
         from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
         live = self._evidence_live_record(record)
         snapshot = self._current_evidence_snapshot(live)
-        price_answers = server_missing_price_answers(live.detail, snapshot, questions, view.competitor)
         supported = [item.claim for item in audited if item.status == 'supported']
+        price_answers = server_missing_price_answers(live.detail, snapshot, questions, view.competitor,
+            claims=supported)
         from packages.agents.writer.request_clarification import has_lifecycle_rule, server_clarification_answer
         published = [claim.model_dump(mode='json') for claim in supported]
         clarification_candidates = {q['question_id']: answer for q in questions
@@ -894,6 +920,20 @@ class DimensionWriterMixin:
                         claims=[claim.model_dump(mode='json') for claim in supported],
                         required_binding_version=3, facts=view.facts, require_subquestions=True,
                     )
+                    # Preserve a valid review's concrete omission for one local
+                    # repair target. It is never copied into answer prose.
+                    try:
+                        if not isinstance(reviewed, str):
+                            raise ValueError('review unavailable')
+                        rows = parse_json(reviewed)['answers']
+                        incomplete = {item.question_id for item in coverage
+                            if item.binding_version == 3 and item.status != 'answered'}
+                        for row in rows:
+                            if row['question_id'] in incomplete and isinstance(row.get('reason'), str):
+                                compact.setdefault('question_coverage_failures', {})[
+                                    row['question_id']] = row['reason'][:800]
+                    except (TypeError, ValueError, KeyError):
+                        pass
                     if reviewed is None:
                         gaps = tuple(sorted(set(gaps) | {'answer_semantic_review_unavailable'}))
                 else:
@@ -916,6 +956,116 @@ class DimensionWriterMixin:
                 item, published, facts=view.facts) for item in coverage):
             gaps = tuple(sorted(set(gaps) | {'answer_coverage_incomplete'}))
         return coverage, gaps, sizes
+
+    async def _dimension_targeted_question_repair(self, record, questions, compact, audited, coverage,
+            view, use, boundaries, allowed, gaps, *, available_facts):
+        from packages.agents.writer.question_repair import (
+            REPAIR_REVIEW_SYSTEM, REPAIR_SYSTEM, question_repair_context,
+            question_repair_targets, repair_review_batches,
+        )
+        from packages.agents.writer.readable_support import dispatched_span_candidates
+        from packages.research.question_delivery import _expand_text_refs
+        targets = question_repair_targets(questions, coverage, audited,
+            compact.get('question_answer_plans', ()), facts=view.facts, gaps=gaps,
+            semantic_failures=compact.get('question_coverage_failures'))
+        if not targets:
+            return audited, coverage, gaps, []
+        target_ids = {target['question_id'] for target in targets}
+        pending = [question for question in questions if question['question_id'] in target_ids]
+        context, omitted = question_repair_context(view, allowed, pending, targets, audited,
+            max_bytes=min(14000, use.max_bytes))
+        prompt = compact_prompt_json(context)
+        dispatched = _expand_text_refs(parse_json(prompt))
+        sent = {row['id'] for row in dispatched['evidence_view']['facts']}
+        catalog = _support_ref_catalog(dispatched, view.facts, sent)
+        if len(prompt.encode()) > use.max_bytes or not catalog:
+            return audited, coverage, tuple(sorted(set(gaps) | {'question_repair_context_budget_exceeded'})), []
+        if omitted:
+            gaps = tuple(sorted(set(gaps) | {'question_repair_context_omitted'}))
+        self._validate_evidence_use(record, use)
+        self._validate_dimension_upstream(record, compact)
+        start = len(self._evidence_live_record(record).detail.trace_spans)
+        response, gaps = await self._dimension_call_with_gaps(record, gaps, agent='writer',
+            subagent=f'{view.competitor}/{view.dimension}', name='dimension_question_repair',
+            max_output_tokens=1600, system=EVIDENCE_RULES.replace(
+                'Cite only supplied source IDs.',
+                'Cite only supplied support_refs; the server restores their complete source IDs.')
+                + RESOURCE_SCOPE_RULES + REPAIR_SYSTEM
+                + language_instruction(record.detail.output_language), user='\nJSON:\n' + prompt)
+        self._validate_evidence_use(record, use)
+        self._validate_dimension_upstream(record, compact)
+        # Bind the actual prepared payload and actual transport span separately;
+        # no older Writer dispatch is used to authorize newly sent references.
+        spans = [span for span in self._evidence_live_record(record).detail.trace_spans[start:]
+            if span.kind == 'llm' and span.name == 'dimension_question_repair'
+            and span.full_input.endswith('\nJSON:\n' + prompt)]
+        self._trace_local_tool(record, agent='writer', subagent=f'{view.competitor}/{view.dimension}',
+            name='question_repair_dispatch', input_text=encoded(dict(consumption_id=use.id,
+                snapshot_id=view.snapshot_id, question_ids=sorted(target_ids))),
+            output_text=encoded(dict(prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest(),
+                span_ids=[span.id for span in spans], sent_fact_ids=sorted(sent),
+                support_refs=catalog, source_span_ids=sorted(dispatched_span_candidates(dispatched, view.facts, sent)),
+                dispatch_verified=len(spans) == 1 and spans[0].status == 'ok'
+                    and type(spans[0].metadata.get('llm_transport_attempts')) is int
+                    and spans[0].metadata['llm_transport_attempts'] > 0)),
+            metadata={'consumption_id': use.id, 'snapshot_id': view.snapshot_id})
+        try:
+            if response is None:
+                raise ValueError('repair generation unavailable')
+            raw = parse_json(response)
+            if (not isinstance(raw, dict) or not isinstance(raw.get('question_plans'), list)
+                    or sum(len(row.get('atoms', ())) for row in raw['question_plans'] if isinstance(row, dict)) > 4):
+                raise ValueError('repair atom capacity exceeded')
+            candidates = {item['observation_id']: item for row in dispatched['evidence_view']['facts']
+                for item in row.get('operation_observations', ())}
+            claims, invalid, plans = parse_question_claim_plans(response, pending, candidates, sent,
+                use.id + ':targeted-repair', support_refs=catalog,
+                source_facts=[fact for fact in view.facts if fact.id in sent],
+                span_candidates=dispatched_span_candidates(dispatched, view.facts, sent))
+            gaps = tuple(sorted(set(gaps) | invalid))
+        except (TypeError, ValueError):
+            return audited, coverage, tuple(sorted(set(gaps) | {'question_repair_generation_unavailable'})), []
+        retained = {item.claim.text for item in audited if item.status == 'supported'}
+        claims = [claim for claim in claims if claim.text not in retained]
+        valid = [claim for claim in claims if not claim_rule_reasons(claim, view, boundaries,
+            available_facts=available_facts)]
+        batches, omitted = repair_review_batches(valid, view, pending, max_bytes=use.max_bytes)
+        if omitted:
+            gaps = tuple(sorted(set(gaps) | {'question_repair_review_capacity_exceeded'}))
+        reviews, sizes = [], []
+        for batch in batches:
+            payload = compact_prompt_json(batch)
+            sizes.append(len(payload.encode()))
+            response, gaps = await self._dimension_call_with_gaps(record, gaps, agent='qa',
+                subagent=f'{view.competitor}/{view.dimension}', name='dimension_question_repair_review',
+                max_output_tokens=2048, system=RESOURCE_SCOPE_RULES + REPAIR_REVIEW_SYSTEM,
+                user='\nJSON:\n' + payload)
+            self._validate_evidence_use(record, use)
+            self._validate_dimension_upstream(record, compact)
+            try:
+                if response is None:
+                    raise ValueError('repair review unavailable')
+                parsed, invalid = parse_claim_reviews(response, {row['id'] for row in batch['claims']})
+                reviews.extend(parsed)
+                if invalid:
+                    gaps = tuple(sorted(set(gaps) | {'question_repair_review_invalid'}))
+            except ValueError:
+                gaps = tuple(sorted(set(gaps) | {'question_repair_review_invalid'}))
+        additions = audit_report_claims(claims, reviews, view, boundaries,
+            available_facts=available_facts, review_version=3)
+        combined = [*audited, *additions]
+        if not any(item.status == 'supported' for item in additions):
+            return combined, coverage, tuple(sorted(set(gaps) | {'question_repair_no_supported_claims'})), sizes
+        repaired, gaps, coverage_sizes = await self._dimension_question_coverage(
+            record, pending, compact, combined, view, use, gaps)
+        by_id = {item.question_id: item for item in (*coverage, *repaired)}
+        coverage = tuple(by_id[question['question_id']] for question in questions)
+        from packages.agents.writer.answer_coverage import is_qualified_partial_clarification
+        published = [item.claim.model_dump(mode='json') for item in combined if item.status == 'supported']
+        if all(item.status == 'answered' or is_qualified_partial_clarification(item, published, facts=view.facts)
+               for item in coverage):
+            gaps = tuple(reason for reason in gaps if reason != 'answer_coverage_incomplete')
+        return combined, coverage, gaps, [*sizes, *coverage_sizes]
 
     async def _writer_dimension_report_inner(self, record, *, repair_issues=None):
         detail = record.detail
@@ -1285,6 +1435,11 @@ class DimensionWriterMixin:
                     record, questions, compact, audited, view, use, gaps,
                 )
                 sizes.extend(coverage_sizes)
+                if dimension == 'feature' and questions:
+                    audited, coverage, gaps, repair_sizes = await self._dimension_targeted_question_repair(
+                        record, questions, compact, audited, coverage, view, use, boundaries,
+                        allowed, gaps, available_facts=discovery_facts if allowed else view.facts)
+                    sizes.extend(repair_sizes)
                 self._finish_delivery_phase(record, 'qa', f'{product}/{dimension}')
                 for reason in ('promotional_claim_not_concrete', 'operation_object_scope_omitted'):
                     if any(reason in c.rule_reasons for c in audited):
@@ -1526,6 +1681,14 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
                 names['claim_candidate_invalid'] = '个别候选格式或绑定无效，未发表'
                 names['answer_semantic_review_unavailable'] = '回答语义复核未完成'
                 names['answer_review_context_budget_exceeded'] = '完整回答复核资料超出容量'
+                names.update({
+                    'question_repair_context_budget_exceeded': '定向修复的完整证据超出容量',
+                    'question_repair_context_omitted': '定向修复未能选入全部完整证据',
+                    'question_repair_generation_unavailable': '定向修复响应无效或不可用，保留原有缺口',
+                    'question_repair_review_capacity_exceeded': '定向修复审核容量不足，未审主张未发布',
+                    'question_repair_review_invalid': '定向修复审核无效，未审主张未发布',
+                    'question_repair_no_supported_claims': '定向修复未取得可发表的新主张',
+                })
                 gaps = list(dict.fromkeys(names.get(g, "需要补充同维度证据") if zh else g for g in audit.gaps))
                 lines.extend([("- 本段待核验或缺口：" if zh else "- Unverified or missing: ") + "、".join(map(plain, gaps)), ""])
     if partial and any(

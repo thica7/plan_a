@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, time
+from types import SimpleNamespace
 
 from packages.research.evidence.answer_guard import (
     _day,
@@ -12,15 +14,17 @@ from packages.research.evidence.answer_guard import (
     evaluate_answer_boundary,
 )
 from packages.research.evidence.answer_models import AnswerRequirement
+from packages.research.evidence.report_claims import ReportClaim, claim_rule_reasons
 from packages.research.evidence.snapshot import _verify, current_snapshot
-from packages.research.evidence.temporal_conditions import _source_strings
-from packages.research.evidence.views import _qualification
-from packages.research.extraction.billing_rules import billing_rule_text_signal
 from packages.research.evidence.snapshot_models import (
     FACT_MARKET_POLICY_VERSION,
     StageEvidenceView,
     canonical_json,
 )
+from packages.research.evidence.source_spans import projected_source_facts
+from packages.research.evidence.temporal_conditions import _source_strings
+from packages.research.evidence.views import _qualification
+from packages.research.extraction.billing_rules import billing_rule_text_signal
 
 _MARKETS = {
     "CN": r"中国|中国大陆|\bChina\b|\bCN\b",
@@ -445,7 +449,80 @@ def _bill_input_gaps(question, views, as_of):
     return {'cpu_usage'} if cpu_rule and not provided else set()
 
 
-def _incomplete_quote_answer(question, snapshot, market, as_of, context, views):
+def _published_cpu_table_dependency(fact, parent, question, text):
+    """An exact named row supports its own CPU cell; parent text only limits it."""
+    from packages.research.extraction.billing_rules import _cells, billing_table_context
+
+    table = parent.qualifiers.get('table_context')
+    if not table or fact.quote != parent.quote:
+        return False
+    header, row = _cells(table[0]), _cells(fact.quote)
+    if not header or not row or len(header) != len(row):
+        return False
+    requested = _source_matched_request_scope(question, [parent])
+    model = requested.get('usage_model')
+    if (not model or row[0].casefold() != model.casefold()
+            or not re.search(r'(?<![A-Za-z0-9_+-])' + re.escape(model)
+                             + r'(?![A-Za-z0-9_+-])', text, re.I)
+            or not re.search(r'\bCPU\s+(?:time|milliseconds?|seconds?)\b|'
+                             r'CPU\s*(?:时间|耗时|毫秒)', text, re.I)):
+        return False
+    # Replay header/row/footnote completeness using the same admission grammar.
+    prefix = table[0] + '\n|' + '|'.join('---' for _ in header) + '|\n'
+    body = prefix + fact.quote + '\n' + '\n'.join(table[1:]) + '\n'
+    if billing_table_context(body, len(prefix), len(prefix) + len(fact.quote)) != list(table):
+        return False
+    return any(re.search(r'\bCPU\b', label, re.I)
+               and not _unknown_billing_scope(label)
+               and not any(values and values != {requested.get(axis)}
+                           for axis, values in _billing_names(label).items())
+               and _positive_cpu_time_rate(value, label)
+               and not re.search(r'\b(?:free|no charge|not billed|not charged)\b|'
+                                 r'免费|不计费|不收费', value, re.I)
+               for label, value in zip(header, row, strict=True))
+
+
+def _published_cpu_claims(question, product, views, as_of, claims):
+    """Public premises use only replayable published support, never sibling text."""
+    observed_at = datetime.combine(as_of, time.max, tzinfo=UTC)
+    result = []
+    for claim in claims:
+        if claim.competitor != product or claim.kind != 'fact' or not claim.source_span_bindings:
+            continue
+        view = next((view for view in views if view.dimension == claim.dimension), None)
+        if view is None:
+            continue
+        eligible = {source.id for source in view.sources if source.role == 'source'
+                    and source.material_level in {'full_source', 'kb_document'}
+                    and not _qualification(source, observed_at)}
+        if not set(claim.source_ids) <= eligible:
+            continue
+        selected = [fact for fact in view.facts if fact.id in claim.fact_ids]
+        projected, reasons = projected_source_facts(claim, selected)
+        boundary = SimpleNamespace(allowed_fact_ids=view.fact_ids,
+            requirement=SimpleNamespace(intent='facts'), missing_fields=())
+        if reasons or claim_rule_reasons(claim, view, [boundary], available_facts=view.facts):
+            continue
+        # The selected member and the asserted claim must both name an
+        # applicable CPU-time billing dependency. Parent context only limits it.
+        assertion_text = re.sub(
+            r'(?<![A-Za-z0-9_+-])(' + _BILLING_NAME + r')\s*用量模式',
+            lambda match: match[1] + ' usage model ', claim.text,
+        )
+        assertion = SimpleNamespace(quote=assertion_text, value=[assertion_text], qualifiers={})
+        parents = {fact.id: fact for fact in selected}
+        if (_cpu_billing_dependency(assertion, question, product)
+                and any(_cpu_billing_dependency(parents[fact.id], question, product)
+                        and (_published_cpu_table_dependency(
+                            fact, parents[fact.id], question, claim.text)
+                            if parents[fact.id].qualifiers.get('table_context')
+                            else _cpu_billing_dependency(fact, question, product))
+                        for fact in projected)):
+            result.append(claim)
+    return tuple(sorted(result, key=lambda claim: (len(claim.text), claim.id))[:1])
+
+
+def _incomplete_quote_answer(question, snapshot, market, as_of, context, views, claims):
     """Missing request inputs are distinct from absent evidence or a market price."""
     labels = {
         "market": "适用市场／地区", "currency": "报价币种", "plan": "具体产品组合与套餐",
@@ -484,21 +561,32 @@ def _incomplete_quote_answer(question, snapshot, market, as_of, context, views):
     if 'tax_scope' in context:
         known.append('含税' if context['tax_scope'] == 'tax_included' else '不含税')
     known_text = '已给请求条件：' + '、'.join(known) + '。' if known else ''
-    cpu_text = '已准入计费规则包含 CPU 时间计费。' if 'cpu_usage' in missing else ''
+    cpu_claims = (
+        _published_cpu_claims(question['question'], views[0].competitor, views, as_of, claims)
+        if 'cpu_usage' in missing else ()
+    )
+    cpu_text = ' '.join(claim.text for claim in cpu_claims)
     return {
         "question_id": question["question_id"], "question": question["question"],
         "status": "partial", "resolution": "insufficient", "conclusion": "unknown",
         "answer": known_text + cpu_text
                   + f"本次请求及已准入资料不足以核实准确的{'完整账单' if is_bill else '当前报价'}。"
                   + f"请先确认：{fields}；补齐适用的定价资料和输入后，再核验截至 {as_of.isoformat()} 的适用金额。",
-        "claim_ids": (), "evidence_spans": (), "missing_fields": tuple(sorted(missing)),
+        "claim_ids": tuple(claim.id for claim in cpu_claims),
+        "evidence_spans": tuple(
+            {'claim_id': claim.id, 'quote': claim.text} for claim in cpu_claims
+        ),
+        "missing_fields": tuple(sorted(missing)),
         "reason": f"server_missing_quote_inputs;as_of={as_of.isoformat()}",
         "basis_snapshot_id": snapshot.id,
     }
 
 
-def server_missing_price_answers(detail, snapshot, questions, product) -> dict[str, dict]:
+def server_missing_price_answers(detail, snapshot, questions, product, *,
+                                 claims: Sequence[ReportClaim] = ()) -> dict[str, dict]:
     """Resolve admitted-snapshot quote gaps, without asserting market-wide absence."""
+    if any(not isinstance(claim, ReportClaim) for claim in claims):
+        raise TypeError('published billing claims must be ReportClaim objects')
     _validate_snapshot(detail, snapshot, product)
     if any(
         gap.reason == "context_budget_exceeded" and gap.competitor in (None, product)
@@ -520,7 +608,9 @@ def server_missing_price_answers(detail, snapshot, questions, product) -> dict[s
                      if fact.field == 'evidence_terms' and fact.status == 'supported'
                      and fact.source_id in eligible_sources]
         context.update(_source_matched_request_scope(question['question'], originals))
-        incomplete = _incomplete_quote_answer(question, snapshot, market, as_of, context, views)
+        incomplete = _incomplete_quote_answer(
+            question, snapshot, market, as_of, context, views, claims
+        )
         if incomplete is not None:
             result[question["question_id"]] = incomplete
             continue
