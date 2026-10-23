@@ -318,6 +318,9 @@ def claim_rule_reasons(claim, view, boundaries, *, available_facts=None):
                 reasons.append('operation_alternative_condition_promoted')
             reasons.extend(operation_condition_reasons(claim, bound))
     if claim.dimension == 'feature':
+        from packages.agents.writer.question_allocation import document_absence_claim
+        if document_absence_claim(claim.text):
+            reasons.append('source_document_absence_unverified')
         content = [f for f in known if f.field == 'evidence_terms']
         from packages.research.evidence.temporal_conditions import claim_temporal_condition_reasons
         reasons.extend(claim_temporal_condition_reasons(claim, content))

@@ -764,69 +764,44 @@ def refill_case():
     return view, question, targets
 
 
-def test_repair_refills_actual_merged_slack_with_complete_canonical_support(monkeypatch):
+def test_repair_shares_actual_merged_budget_with_complete_canonical_support():
     from packages.agents.writer import dimension_writer
     from packages.agents.writer.question_repair import question_repair_context
     from packages.agents.writer.readable_support import dispatched_span_candidates
     from packages.research.evidence.source_spans import source_span_candidates
 
     view, question, targets = refill_case()
-    original = dimension_writer.compact_dimension_context
-    attempts = []
-
-    def compact(*args, **kwargs):
-        result = original(*args, **kwargs)
-        attempts.append(result[0])
-        return result
-
-    monkeypatch.setattr(dimension_writer, "compact_dimension_context", compact)
-    improved = False
+    has_complete_support = False
     for budget in range(1800, 5001, 100):
-        attempts.clear()
         context, _ = question_repair_context(
             view, {"a", "b"}, [question], targets, [], max_bytes=budget
         )
         assert len(dimension_writer.compact_prompt_json(context).encode()) <= budget
         assert context["questions"] == [question] and context["repair_targets"] == targets
-        assert len(attempts) <= 3
 
         def sent(payload):
             return {row["id"] for row in payload["evidence_view"]["facts"]}
 
-        first = dispatched_span_candidates(attempts[0], view.facts, sent(attempts[0]))
         final = dispatched_span_candidates(context, view.facts, sent(context))
-        if len(final) > len(first):
+        if len(sent(context)) == 2:
             assert all(
                 span["quote"]
                 in [item["quote"] for fact in view.facts for item in source_span_candidates(fact)]
                 for span in final.values()
             )
-            improved = True
+            has_complete_support = True
             break
-    assert improved, (
-        "Separate metadata reservation left actual capacity unused instead of refilling it."
-    )
+    assert has_complete_support, "Originals that fit the merged budget must remain usable."
 
 
-def test_over_budget_refill_is_rejected_without_dropping_original_metadata(monkeypatch):
+def test_metadata_alone_over_budget_preserves_failure_for_caller_to_reject():
     from packages.agents.writer import dimension_writer
     from packages.agents.writer.question_repair import question_repair_context
 
     view, question, targets = refill_case()
-    original = dimension_writer.compact_dimension_context
-    calls = []
-
-    def compact(*args, **kwargs):
-        result, omitted = original(*args, **kwargs)
-        calls.append(kwargs["max_bytes"])
-        if len(calls) > 1:
-            result["diagnostic_padding"] = "x" * 8000
-        return result, omitted
-
-    monkeypatch.setattr(dimension_writer, "compact_dimension_context", compact)
+    targets[0]["coverage_failure"] = "A required original failed coverage. " * 150
     context, _ = question_repair_context(view, {"a", "b"}, [question], targets, [], max_bytes=4000)
-    assert len(calls) > 1
-    assert "diagnostic_padding" not in context
     assert context["questions"] == [question] and context["repair_targets"] == targets
     assert context["retained_supported_claims"] == [] and context["max_new_atoms"] == 4
-    assert len(dimension_writer.compact_prompt_json(context).encode()) <= 4000
+    assert not context["evidence_view"]["facts"]
+    assert len(dimension_writer.compact_prompt_json(context).encode()) > 4000

@@ -92,7 +92,11 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                         or bool(coverage_resolution_reasons(item, published_claims,
                             required_binding_version=required_version, facts=answer_facts,
                             require_subquestions=audit.answer_review_contract is not None)))
-            if ({'question_core_context_budget_exceeded', 'question_exception_context_budget_exceeded'} & set(audit.gaps)
+            from packages.agents.qa.question_context import question_context_blocks
+            request_only_ids = {item.question_id for item in audit.answer_coverage
+                if audit.answer_binding_version == 3 and item == clarification_answers.get(item.question_id)
+                and not answer_invalid(item)}
+            if (question_context_blocks(service, record.detail, snapshot, use, view, audit.gaps, request_only_ids)
                     or any(answer_invalid(item) for item in audit.answer_coverage)
                     or questions and not audit.answer_coverage):
                 reasons.add('answer_coverage_incomplete')

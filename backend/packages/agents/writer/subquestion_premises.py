@@ -56,7 +56,8 @@ def named_resource_outcome_reasons(record, claims):
 
 def _named_action_outcomes(text, items, action):
     """Bind finite named outcomes inside decision clauses, excluding scenario prose."""
-    modal = r"\b(?:can(?:not)?|can['’]t|may|allowed|permitted)\b|不能|无法|可以|能够|不允许|允许"
+    modal = (r"\b(?:can(?:not)?|can['’]t|may|allowed|permitted)\b"
+             r"|不能|无法|可以|能够|不允许|允许|不具备|不具有|具备")
     labels = re.compile(r'(?<![A-Za-z0-9_])(?:' + '|'.join(map(re.escape, items))
                         + r')(?![A-Za-z0-9_])')
     outcomes = set()

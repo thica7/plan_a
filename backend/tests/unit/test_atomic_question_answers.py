@@ -559,7 +559,7 @@ def test_persisted_v3_final_qa_replays_the_same_required_fact_binding_as_live_pa
         assert not issues
 
 
-def test_recorded_price_generator_remains_valid_without_feature_span_under_v3_review():
+def test_recorded_price_generator_remains_valid_without_feature_span_under_v3_review(monkeypatch):
     from claim_review_fixture import supported_review
     from test_missing_price_answers import price_case
     from packages.agents.writer.dimension_writer import recorded_price_claims
@@ -567,6 +567,15 @@ def test_recorded_price_generator_remains_valid_without_feature_span_under_v3_re
     from packages.research.evidence.answer_models import AnswerRequirement
     from packages.research.evidence.views import select_evidence_view
     detail, snapshot, price = price_case()
+    from datetime import datetime
+    from packages.research.evidence import views
+
+    class RecordedClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return detail.created_at.astimezone(tz)
+
+    monkeypatch.setattr(views, 'datetime', RecordedClock)
     view = select_evidence_view(snapshot, agent='writer', competitor=price.competitor, dimension='pricing')
     boundary = evaluate_answer_boundary(view, AnswerRequirement(competitor=price.competitor,
         dimension='pricing', intent='recorded_price', as_of=detail.created_at.date()))

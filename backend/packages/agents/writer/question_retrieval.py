@@ -278,6 +278,25 @@ def _lifecycle_core(question, candidates, quotes, product):
     return selected
 
 
+def _billing_core(question, facts, product):
+    """Reserve a complete applicable CPU row, never a footnote or another mode."""
+    if not re.search(r'账单|总价|\b(?:bill|invoice|total cost)\b', question, re.I):
+        return []
+    from packages.agents.writer.price_answers import (
+        _cpu_billing_dependency, _published_cpu_table_dependency, _source_matched_request_scope,
+    )
+    result = []
+    for fact in facts:
+        if fact.field != 'evidence_terms' or not fact.qualifiers.get('table_context'):
+            continue
+        scope = _source_matched_request_scope(question, [fact])
+        mode = scope.get('usage_model')
+        if (mode and _cpu_billing_dependency(fact, question, product)
+                and _published_cpu_table_dependency(fact, fact, question, f'{mode} CPU time')):
+            result.append(fact.id)
+    return result
+
+
 async def retrieve_question_facts(
     detail,
     snapshot,
@@ -346,7 +365,8 @@ async def retrieve_question_facts(
                 key=lambda key: (-scores[key], -len(terms & quote_hints[key]), key)
             )
         )
-    pool_ids = _round_robin([*lexical_rows, [fact.id for fact in facts]], CANDIDATE_LIMIT)
+    billing_rows = [_billing_core(question['question'], facts, product) for question in questions]
+    pool_ids = _round_robin([*billing_rows, *lexical_rows, [fact.id for fact in facts]], CANDIDATE_LIMIT)
     pool = set(pool_ids)
     lexical_rows = [[key for key in row if key in pool] for row in lexical_rows]
     diagnostic.update(candidate_count=len(pool_ids), capacity_limited=len(facts) > len(pool_ids))
@@ -469,10 +489,9 @@ async def retrieve_question_facts(
     exception_rows = [
         question_exception_fact_ids(question['question'], facts) for question in questions
     ]
-    core_rows = [
-        _lifecycle_core(question['question'], list(dict.fromkeys([*row, *pool_ids])), quotes, product)
-        for question, row in zip(questions, ranked_rows, strict=True)
-    ]
+    core_rows = [list(dict.fromkeys([*billing,
+        *_lifecycle_core(question['question'], list(dict.fromkeys([*row, *pool_ids])), quotes, product)]))
+        for question, row, billing in zip(questions, ranked_rows, billing_rows, strict=True)]
     # Reserve one whole original per question before additional branches compete.
     # Distinct conditions remain distinct even within the same coarse branch.
     by_id = {fact.id: fact for fact in facts}

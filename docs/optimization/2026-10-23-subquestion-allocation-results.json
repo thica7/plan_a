@@ -1,0 +1,2345 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-23",
+  "baseline": "62d97d6f84dffd01c043749f785994b5e304dfc3",
+  "branch": "codex/pastoral-desktop",
+  "scope": {
+    "reviewed_products": [
+      "Bitwarden",
+      "1Password",
+      "Cloudflare",
+      "Trello"
+    ],
+    "pending_products": [],
+    "original_questions_reviewed": 8,
+    "strict_final_denominator": 8,
+    "internal_questions_reviewed": 10,
+    "audit_model_calls": 0,
+    "audit_network_calls": 0,
+    "credentials_or_env_read": false,
+    "production_edits": 0,
+    "unselected_or_parent_text_used_as_support": false,
+    "final_four_product_verdict_pending": false
+  },
+  "rubric": {
+    "pass": "全部原题必要分支已在正式正文作出有完整所选支持的回答；含糊离职可用必要操作/归属澄清处置；CF账单须安全拒绝编金额并实际发表有证CPU收费前提。",
+    "partial": "完成部分分支，但具体请求判断仍缺失。",
+    "fail": "核心可回答目标未发表。",
+    "safe_refusal": "独立列，不替代公开报价性质/有证官方下一步或CPU收费规则。",
+    "selected_support": "仅显式选中span/operation证明新增断言；完整父段只能限制；table_context与quote-only分别列。"
+  },
+  "reviewer": {
+    "agent": "allocation_content_audit",
+    "blind_review": false,
+    "implementation_involvement": false,
+    "note": "同组已曝光样本；无训练。独立审核可见正文，不用隐藏supported补完成。"
+  },
+  "verification": {
+    "backend_passed": 7193,
+    "backend_skipped": 1,
+    "added_cases": 68,
+    "final_quality_related_passed": 257,
+    "qa_spec_passed": true,
+    "qa_quality_passed": true,
+    "writer_spec_passed": true,
+    "writer_quality_passed": true,
+    "ruff_new": "pass",
+    "ruff_existing": "E9/F pass",
+    "public_schema_changed": false,
+    "frontend_changed": false
+  },
+  "overall": {
+    "deliverable": false,
+    "verdict": "fail",
+    "strict_question_verdict_counts": {
+      "pass": 4,
+      "partial": 4
+    },
+    "strict_pass_count": 4,
+    "strict_reviewed_denominator": 8,
+    "strict_final_denominator": 8,
+    "safe_refusal_count": 2,
+    "safe_refusal_pass_count": 2,
+    "visible_unique_formal_claim_count": 18,
+    "visible_occurrences": 24,
+    "visible_full_selected_quote_support": 16,
+    "visible_single_predicate": 12,
+    "persisted_claim_count": 34,
+    "audit_supported_claim_count": 21,
+    "audit_supported_hidden_claim_count": 3,
+    "native_llm_spans": 71,
+    "calls": 68,
+    "provider_tokens_known": 229379,
+    "unknown_usage_transport_spans": 0,
+    "finish_reasons_transported": {
+      "stop": 68
+    },
+    "zero_transport_admission_rejected_spans": 3,
+    "admission_rejection_reasons": {
+      "run_llm_token_budget_exhausted": 3
+    },
+    "qa_severity_counts": {
+      "warn": 15,
+      "blocker": 8
+    },
+    "actual_final_qa_dispositions": {
+      "keep": 17,
+      "superseded": 1
+    },
+    "final_reconciliation_model_calls": 2,
+    "all_reviewed_code_hashes_identical": true,
+    "production_code_sha256": [
+      "7e7745a642a8768207f67450957a8a049da14388de705a68c6cd5b9c55e75466"
+    ],
+    "all_source_hashes_preserved": true,
+    "visible_full_selected_support_including_operations": 16,
+    "selected_span_binding_count": 33,
+    "selected_operation_binding_count": 1,
+    "strict_pass_by_product": {
+      "Bitwarden": 2,
+      "1Password": 1,
+      "Cloudflare": 1,
+      "Trello": 0
+    },
+    "module_execution_status_counts": {
+      "llm": 12
+    },
+    "core_module_fallback_used_count": 0,
+    "limitations": [
+      "样本同组曝光且非盲评，不能推为一般准确率或因果提升。",
+      "执行2026-10-21封存页面，仅生产语义提取/准入与阶段模块；未跑新抓取/发现、完整Graph、发布或生产稠密RAG。",
+      "引用身份合法、模型supported、工程测试通过均不等于内容验收。",
+      "Trello仍有正文类型否定超出该claim所选span，CF请求计量名表头未显式选择；原子性仍未完成。",
+      "1Password独立谓词仍合并到一个subquestion binding，人工内容通过不等于分支格式合同已完全执行。"
+    ]
+  },
+  "diagnostic_first_two": {
+    "actual_calls": 34,
+    "provider_tokens_known": 114740,
+    "unknown_usage_transport_spans": 0,
+    "original_outputs_preserved": true,
+    "not_in_final_eight_question_score": true
+  },
+  "all_current_phase_usage": {
+    "actual_calls": 102,
+    "provider_tokens_known": 344119,
+    "unknown_usage_transport_spans": 0,
+    "scope": "two diagnostic products plus final four products; no provider bill claim"
+  },
+  "products": [
+    {
+      "product": "Bitwarden",
+      "directory": "data/artifacts/subquestion-allocation-2026-10-23/live-bitwarden-contract/execution",
+      "run_id": "run-3b8c4ed4ac824b908aa49777a2a6859d",
+      "runner_status": "execution_complete",
+      "strict_questions": [
+        {
+          "original_question": "Bitwarden-1",
+          "internal_question_ids": [
+            "question-cb40c90e4d944bf23275"
+          ],
+          "verdict": "pass",
+          "branches": [
+            {
+              "branch": "Free organization无法满足3人且3collections的整体请求",
+              "verdict": "answered",
+              "claim_ids": [
+                "claim-9c66c3e8b4aa68a79f3c"
+              ],
+              "reason": "正式答复明确结论否；选中句明确两位用户及最多2collections，至少2collections最大值已足以否定3collections需求；不把“为两位用户提供”擅改为额外最大人数主张。"
+            }
+          ],
+          "note": "题设2026新建为输入；当前选中通用Free规则匹配。每个容量数据在claim原子性中另行评分。"
+        },
+        {
+          "original_question": "Bitwarden-2",
+          "internal_question_ids": [
+            "question-63762e09ae5d8faa1071"
+          ],
+          "verdict": "pass",
+          "branches": [
+            {
+              "branch": "澄清移除成员还是永久删除账户/数据",
+              "verdict": "answered_by_clarification"
+            },
+            {
+              "branch": "澄清个人数据还是组织数据",
+              "verdict": "answered_by_clarification"
+            }
+          ],
+          "note": "按既定rubric，操作与数据归属均含糊时，精确固定澄清是正确处置；没有假装给保留/删除的产品结论。当前答案与两项server固定澄清完整相同且无事实原子。"
+        }
+      ],
+      "calls": 16,
+      "tokens": 52093,
+      "native_spans": 16,
+      "zero_attempts": 0,
+      "unknown_usage": 0,
+      "finish_reasons": {
+        "stop": 16
+      },
+      "qa": {
+        "warn": 4,
+        "blocker": 1
+      },
+      "module_executions": [
+        {
+          "agent": "analyst",
+          "subagent": "feature::Bitwarden",
+          "module_status": "llm",
+          "fallback": {
+            "used": false,
+            "reason": ""
+          },
+          "reason": null,
+          "has_structured_output": true
+        },
+        {
+          "agent": "comparator",
+          "subagent": null,
+          "module_status": "llm",
+          "fallback": {
+            "used": false,
+            "deterministic_fallback": false,
+            "attempts": 1,
+            "max_attempts": 3
+          },
+          "reason": null,
+          "has_structured_output": true
+        },
+        {
+          "agent": "reflector",
+          "subagent": null,
+          "module_status": "llm",
+          "fallback": {
+            "used": false,
+            "deterministic_fallback": false
+          },
+          "reason": null,
+          "has_structured_output": true
+        }
+      ],
+      "stage_calls": {
+        "analyst": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 3294,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-21",
+              "name": "feature_bitwarden_analyst",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 3294,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        },
+        "collector": {
+          "calls": 3,
+          "transport_attempts": 3,
+          "provider_tokens_known": 7428,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 3
+          },
+          "execution_status": {
+            "succeeded": 3
+          },
+          "spans": [
+            {
+              "span_id": "span-1",
+              "name": "collector_semantic_extract",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2582,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-2",
+              "name": "collector_semantic_extract",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 1807,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-4",
+              "name": "collector_question_evidence_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 3039,
+              "max_output_tokens": 700,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 3,
+          "transported_spans": 3,
+          "admission_rejected_spans": 0
+        },
+        "comparator": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 6087,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-30",
+              "name": "comparison_matrix",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 6087,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        },
+        "qa": {
+          "calls": 9,
+          "transport_attempts": 9,
+          "provider_tokens_known": 23148,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 9
+          },
+          "execution_status": {
+            "succeeded": 9
+          },
+          "spans": [
+            {
+              "span_id": "span-50",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2326,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-51",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2316,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-52",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2466,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-53",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2231,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-54",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2339,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-55",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2244,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-56",
+              "name": "dimension_answer_coverage",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2493,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-57",
+              "name": "dimension_answer_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 3981,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-66",
+              "name": "final_question_reconciliation",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2752,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 9,
+          "transported_spans": 9,
+          "admission_rejected_spans": 0
+        },
+        "reflector": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 5547,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-38",
+              "name": "coverage_reflection",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 5547,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        },
+        "writer": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 6589,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-46",
+              "name": "dimension_claim_writer",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 6589,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        }
+      },
+      "budget_check": {
+        "actual_calls": 16,
+        "call_limit": 24,
+        "tokens_charged": 52093,
+        "token_limit": 80000,
+        "observed_usage_within_total": true,
+        "future_admission_can_still_be_denied": false,
+        "note": "未来请求按预留输入+输出入场；实际已用低于80000不保证下一次能入场。"
+      },
+      "writer_gaps": [
+        "claim_candidate_invalid",
+        "context_budget_exceeded",
+        "operation_binding_required",
+        "question_core_context_budget_exceeded"
+      ],
+      "server_assertion_audit": [
+        {
+          "question_id": "question-63762e09ae5d8faa1071",
+          "answer_text": "请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？",
+          "resolution": "clarification",
+          "product_assertions": [],
+          "control_assertions": [
+            {
+              "text": "请确认具体操作：您准备移除成员，还是永久删除账户或数据？",
+              "judgment": "necessary_clarification"
+            },
+            {
+              "text": "请确认数据归属：相关数据属于个人，还是组织？",
+              "judgment": "necessary_clarification"
+            }
+          ],
+          "exact_fixed_clarification_match": true,
+          "required_missing_fields_exact": true,
+          "unquoted_new_product_claims": false
+        }
+      ],
+      "core_gap_qualification": {
+        "span_id": "span-45",
+        "actual_sent_reconciliation": {
+          "sent_fact_ids": [
+            "evidence-fact-record-7bc2341740f87a0245c6c7be4d2c1aff85afc529a1e1a72e24a7a603edbb6c98",
+            "evidence-fact-record-3537b2f78ed5c4d89b85b75fa3fefbed36f586a33ea895f1603ef845d200eab9",
+            "evidence-fact-record-260653e60f481cb310870b083217b96856e3ffad29688cb18669c608c58335b3"
+          ],
+          "questions": [
+            {
+              "question_id": "question-cb40c90e4d944bf23275",
+              "missing_core_fact_ids": [],
+              "missing_exception_fact_ids": [],
+              "minimum_evidence_missing": false
+            },
+            {
+              "question_id": "question-63762e09ae5d8faa1071",
+              "missing_core_fact_ids": [
+                "evidence-fact-record-547af5bc047942e96eb861e56c3f9636b546877a06910f9bed345167c65719a4",
+                "evidence-fact-record-fba67d0032af23133c5609b4b40b18cf2932b95c1e08ec5e80882fac04d60756",
+                "evidence-fact-record-cf0b8e38bbf40c458c4f9bf110a6406d9b7c800aab304d3609c197b35c199056",
+                "evidence-fact-record-9b5f6b0700f36c8df27c46289735210ef800cd2ec46e7a1ca0e300ab35e29798",
+                "evidence-fact-record-7977d56d2aa856527ac0819822981d72ccde8df4fd20c2a3d334802cd3f2b748",
+                "evidence-fact-record-c11a985c6037fb1508172a92c96543354cde0dc559371a8eede9c2607ce1a87d"
+              ],
+              "missing_exception_fact_ids": [],
+              "minimum_evidence_missing": false
+            }
+          ],
+          "gaps": [
+            "question_core_context_budget_exceeded"
+          ]
+        },
+        "core_gap_only_question_id": "question-63762e09ae5d8faa1071",
+        "capacity_question_core_gap_count": 0,
+        "clarification_question_core_gap_count": 6,
+        "current_clarification_has_product_claims": false,
+        "current_clarification_is_exact_fixed_server_text": true,
+        "false_global_coverage_blocker_present": false,
+        "remaining_blocker": "qc-issue-5f2fc245a79e2219: Missing comparison cell for Bitwarden / feature",
+        "retained_q2_warnings": [
+          "qc-issue-2882645b63bdbd49",
+          "qc-issue-122235d4a374f44b",
+          "qc-issue-f848e5978d9bf0f5"
+        ],
+        "note": "core gap真实存在但未用于作产品事实断言；必要澄清按原题正确处置。最终QA没有把它升级成旧全局coverage blocker；历史warn保留仍说明反思与澄清口径不完全一致。"
+      },
+      "subquestion_partition_qualification": null,
+      "input_sha256": "ad5a6acb7174933f62b7c18cfa4d46287f70cde53f9ac966fd1ca3591429afde",
+      "capture_archive_sha256": "1c5392d28db239a22167f4806108e5c909380ec5fc8c802e17fc2f14f457ca4e",
+      "snapshot_id": "evidence-snapshot-1f092df3f68cccd38f9cba8c225a69f3f9d3bd106f4a2582e9374bfe347a69d5",
+      "snapshot_hash": "319c8a324ac93a13bf086bd64534548eebca23fda37d96ce2d3d5180450411fb",
+      "visible_claims": [
+        {
+          "id": "claim-fc573e0d036db9cc8d3a",
+          "text": "在 Bitwarden 中，可以创建一个 Free organization，用于与另一位用户安全地存储和共享数据。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 1,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": true,
+            "verdict": "supported",
+            "reason": "所选完整Free段明确创建Free organization并与一位其他用户存储/共享数据；一个限定共享能力。"
+          }
+        },
+        {
+          "id": "claim-9c66c3e8b4aa68a79f3c",
+          "text": "Free organization 为两位用户提供 Password Manager 的全部核心功能，并支持在最多两个 collections 中安全共享数据。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 2,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": false,
+            "verdict": "supported",
+            "reason": "所选句明确both users及最多two collections；为两位用户提供核心功能和两collection共享是两个独立谓词，未拆。"
+          }
+        },
+        {
+          "id": "claim-e6d22d251063953029a2",
+          "text": "任何计划的任何用户都可以成为一个 Free organization 的所有者。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 1,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": true,
+            "verdict": "supported",
+            "reason": "所选句明确Any user of any plan可拥有one Free organization。"
+          }
+        },
+        {
+          "id": "claim-3fef3dc768f29fb22e3d",
+          "text": "删除账户或组织是永久性的，无法撤销或恢复，并将删除所有关联的 vault 数据。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 1,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": false,
+            "verdict": "supported",
+            "reason": "所选完整警示句明确删除永久/不可撤回恢复及删除全部关联vault数据；不可逆与数据删除两个谓词需分别审核。"
+          }
+        }
+      ],
+      "diagnosis": [
+        "span-45实际Writer reconciliation中容量题missing_core/exception均空；仅离职Q2缺6个core，且minimum_evidence_missing=false。它们覆盖remove、个人/组织归属及Centralize等分支；最终未发表这些保留结论，只给两项精确必要澄清。",
+        "最终无citation/coverage blocker因全局question_core_context_budget_exceeded误阻两题。唯一blocker为Missing comparison cell for Bitwarden / feature，不能误称其为澄清guard误报，也不能从人工2/2内容通过推出整Graph交付。",
+        "最终重核span-66真实调用，superseded容量旧问qc-issue-7f0643a1fa068c17；其余4 historical finding keep，其中Q2澄清仍保留3条历史warn。模型要求澄清直接解决全部保留事实，较本次允许必要澄清的rubric更严；因此QA语义一致性并未全解。",
+        "16 native /16实际transport，52093 provider token，全部stop；3个上游核心模块为llm且fallback=false。"
+      ]
+    },
+    {
+      "product": "1Password",
+      "directory": "data/artifacts/subquestion-allocation-2026-10-23/live-1password-contract/execution",
+      "run_id": "run-2ef236705dd34d4a814e1b320644e3ae",
+      "runner_status": "execution_complete",
+      "strict_questions": [
+        {
+          "original_question": "1Password-1",
+          "internal_question_ids": [
+            "question-60a7010e0c7ca2ae7058"
+          ],
+          "verdict": "pass",
+          "branches": [
+            {
+              "branch": "访客不能同时加入2共享vault",
+              "verdict": "answered",
+              "claim_ids": [
+                "claim-5b9e1b308063379c31ff",
+                "claim-0b851ef0c2f3ac036662"
+              ]
+            },
+            {
+              "branch": "访客没有自己的Private vault",
+              "verdict": "answered",
+              "claim_ids": [
+                "claim-5b9e1b308063379c31ff"
+              ]
+            }
+          ],
+          "note": "两谓词均由可见文字独立否定；persisted subquestion_bindings仍把两问题合一行，结构缺陷另列，不把一条no自动当两条证据。"
+        },
+        {
+          "original_question": "1Password-2",
+          "internal_question_ids": [
+            "question-26d795d67d79bd12e05d"
+          ],
+          "verdict": "partial",
+          "safe_refusal": {
+            "pass": true,
+            "strict_pass_credit": false,
+            "reason": "无编造精确人民币含税总价；承认资料及合同输入缺口。"
+          },
+          "branches": [
+            {
+              "branch": "不编造精确RMB含税总价",
+              "verdict": "safe_refusal_pass"
+            },
+            {
+              "branch": "公开报价性质（需定制合同报价等）有官方证据",
+              "verdict": "missing",
+              "reason": "当前active source只有Families guests页，不含合格Unified Access定价支持。"
+            },
+            {
+              "branch": "有证官方销售/报价下一步",
+              "verdict": "missing",
+              "reason": "通用“补齐资料后再核验”不是有出处的官方联系销售路径。"
+            }
+          ],
+          "note": "一年与300员工只是题设；实际付费席位与适用合同仍可能需核对，不把safe refusal升为完整报价交付。"
+        }
+      ],
+      "calls": 14,
+      "tokens": 44421,
+      "native_spans": 14,
+      "zero_attempts": 0,
+      "unknown_usage": 0,
+      "finish_reasons": {
+        "stop": 14
+      },
+      "qa": {
+        "warn": 3,
+        "blocker": 2
+      },
+      "module_executions": [
+        {
+          "agent": "analyst",
+          "subagent": "feature::1Password",
+          "module_status": "llm",
+          "fallback": {
+            "used": false,
+            "reason": ""
+          },
+          "reason": null,
+          "has_structured_output": true
+        },
+        {
+          "agent": "comparator",
+          "subagent": null,
+          "module_status": "llm",
+          "fallback": {
+            "used": false,
+            "deterministic_fallback": false,
+            "attempts": 1,
+            "max_attempts": 3
+          },
+          "reason": null,
+          "has_structured_output": true
+        },
+        {
+          "agent": "reflector",
+          "subagent": null,
+          "module_status": "llm",
+          "fallback": {
+            "used": false,
+            "deterministic_fallback": false
+          },
+          "reason": null,
+          "has_structured_output": true
+        }
+      ],
+      "stage_calls": {
+        "analyst": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 3501,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-16",
+              "name": "feature_1password_analyst",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 3501,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        },
+        "collector": {
+          "calls": 3,
+          "transport_attempts": 3,
+          "provider_tokens_known": 6029,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 3
+          },
+          "execution_status": {
+            "succeeded": 3
+          },
+          "spans": [
+            {
+              "span_id": "span-1",
+              "name": "collector_semantic_extract",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 1388,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-2",
+              "name": "collector_semantic_extract",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 1364,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-3",
+              "name": "collector_question_evidence_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 3277,
+              "max_output_tokens": 700,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 3,
+          "transported_spans": 3,
+          "admission_rejected_spans": 0
+        },
+        "comparator": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 5975,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-25",
+              "name": "comparison_matrix",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 5975,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        },
+        "qa": {
+          "calls": 7,
+          "transport_attempts": 7,
+          "provider_tokens_known": 17005,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 7
+          },
+          "execution_status": {
+            "succeeded": 7
+          },
+          "spans": [
+            {
+              "span_id": "span-45",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2263,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-46",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2310,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-47",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2703,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-48",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2338,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-49",
+              "name": "dimension_answer_coverage",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2347,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-50",
+              "name": "dimension_answer_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 3826,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-58",
+              "name": "final_question_reconciliation",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 1218,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 7,
+          "transported_spans": 7,
+          "admission_rejected_spans": 0
+        },
+        "reflector": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 5609,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-33",
+              "name": "coverage_reflection",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 5609,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        },
+        "writer": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 6302,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-41",
+              "name": "dimension_claim_writer",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 6302,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        }
+      },
+      "budget_check": {
+        "actual_calls": 14,
+        "call_limit": 24,
+        "tokens_charged": 44421,
+        "token_limit": 80000,
+        "observed_usage_within_total": true,
+        "future_admission_can_still_be_denied": false,
+        "note": "未来请求按预留输入+输出入场；实际已用低于80000不保证下一次能入场。"
+      },
+      "writer_gaps": [
+        "answer_coverage_incomplete",
+        "context_budget_exceeded",
+        "current_price_unverified"
+      ],
+      "server_assertion_audit": [
+        {
+          "question_id": "question-26d795d67d79bd12e05d",
+          "answer_text": "已给请求条件：购买范围 Unified Access、购买期限 12个月、报价币种 人民币、含税。本次请求及已准入资料不足以核实准确的当前报价。请先确认：适用市场／地区、计费周期、适用 SKU／合同及实际购买范围、实际付费席位数量；补齐适用的定价资料和输入后，再核验截至 2026-10-23 的适用金额。",
+          "resolution": "insufficient",
+          "input_echo": "Unified Access/12个月/人民币/含税均来自原问；没有把300员工自动当实际付费席位。",
+          "product_assertions": [],
+          "control_assertions": [
+            {
+              "text": "请求及已准入资料不足以核实准确当前报价",
+              "judgment": "correct_limitation",
+              "reason": "只有guests资料，不含合格Unified Access定价页。"
+            },
+            {
+              "text": "确认地区、周期、SKU/合同、实际购买范围和付费席位",
+              "judgment": "safe_clarification",
+              "reason": "没有杜撰价格或官方销售渠道；下一步仍是通用资料补足。"
+            }
+          ],
+          "safe_refusal": true,
+          "unquoted_new_product_claims": false
+        }
+      ],
+      "core_gap_qualification": null,
+      "subquestion_partition_qualification": {
+        "question_id": "question-60a7010e0c7ca2ae7058",
+        "independent_requested_predicates": [
+          "同时加入2共享vault",
+          "拥有自己的Private vault"
+        ],
+        "persisted_binding_rows": 1,
+        "strict_content_both_answered": true,
+        "structural_partition_complete": false,
+        "note": "实际最终审核仅返回一个question_quote覆盖两请求；两否定可见且均有精确支持，所以内容strict通过，但不宣称分支合同被模型完美执行。"
+      },
+      "input_sha256": "621243fb9ed5459fb9dd6d5b731b738f8b3dc06f5df3292e57355bc01ebd522b",
+      "capture_archive_sha256": "6c9cb9822f1c4cce09f2609ca00d865c3e11aef5e36e2393113ba5790022d8b1",
+      "snapshot_id": "evidence-snapshot-598ed6a729d4bfbbb5bd3c33b5934bc4eec7081405d4d206386cc3f9e5b1a5c0",
+      "snapshot_hash": "cf7a441a18607889a8e61e797786836e5192ac3a71980a6cb4bb72b434f7c71a",
+      "visible_claims": [
+        {
+          "id": "claim-5b9e1b308063379c31ff",
+          "text": "访客账户没有自己的 Private vault，只能访问由你选择的一个共享保险库。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 2,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": false,
+            "verdict": "supported",
+            "reason": "所选句明确无自己的private vault及只访问所选single vault；两个独立请求谓词均有支持，但claim未拆。"
+          }
+        },
+        {
+          "id": "claim-0b851ef0c2f3ac036662",
+          "text": "访客同一时间只能被邀请加入一个保险库；你可以先将其从一个保险库移除，再加入另一个保险库。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 2,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": false,
+            "verdict": "supported",
+            "reason": "所选句明确同一时间single vault及先移除再加入另一vault；上限与更换路径两独立谓词未拆。"
+          }
+        },
+        {
+          "id": "claim-eb8b3464bf3b1362d91a",
+          "text": "访客必须先接受邀请并被确认，之后你才能与其共享保险库。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 1,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": true,
+            "verdict": "supported",
+            "reason": "选中operation_quote直接明确接受邀请并确认是share a vault的前提；完整选中operation支持，不借未选父段。"
+          }
+        }
+      ],
+      "diagnosis": [
+        "最终1Password原生Analyst、Comparator、Reflector均llm/fallback=false；不同于上一阶段曾有Analyst empty_structured_payload，本轮未观察到该fallback。",
+        "最终仍仅Families guests一个active source；统一访问定价性质与官方销售路径都无合格选择支持。safe refusal合理，但没有完整回答报价性质/下一步。",
+        "访客两请求否定在正文均完整可见且支持充分；但两条复合claim未原子化，且最终subquestion_bindings仍将“两个库/Private vault”合一行，这应作为独立结构缺陷保留。",
+        "14 native /14实际transport，44421 provider token，全部stop；最终重核1次，仅提议/实际keep该定价warn，其余结构blocker也保留。最终2 blocker/3 warn。"
+      ]
+    },
+    {
+      "product": "Cloudflare",
+      "directory": "data/artifacts/subquestion-allocation-2026-10-23/live-cloudflare-contract/execution",
+      "run_id": "run-9cb3e55ea9df41c3ba51ec4cd4384004",
+      "runner_status": "execution_complete",
+      "strict_questions": [
+        {
+          "original_question": "Cloudflare-1",
+          "internal_question_ids": [
+            "question-1b7471af0d3dcf4af91c"
+          ],
+          "verdict": "partial",
+          "branches": [
+            {
+              "branch": "Cache Domain Purge特定域权限规则",
+              "verdict": "answered_in_observation",
+              "claim_ids": [
+                "claim-7386f431c2c057fc538e"
+              ]
+            },
+            {
+              "branch": "角色只能被赋予其给定域范围",
+              "verdict": "answered_in_observation",
+              "claim_ids": [
+                "claim-b157f0c67a9f105e142f",
+                "claim-cea0fa9dfa4a50364d7c"
+              ]
+            },
+            {
+              "branch": "example.com角色不能据此清除other.example",
+              "verdict": "missing",
+              "reason": "claim-8faf117d2f74c384065a虽supported但隐藏；正式问题为尚未核实，不替读者完成最终否定。"
+            }
+          ]
+        },
+        {
+          "original_question": "Cloudflare-2",
+          "internal_question_ids": [
+            "question-dd9aeefb8be2a32bc5bf"
+          ],
+          "verdict": "pass",
+          "safe_refusal": {
+            "pass": true,
+            "strict_pass_credit": false,
+            "reason": "不编完整账单，明确CPU总用量与其他输入不足；严格通过还要求实际发表有证CPU计费前提。"
+          },
+          "branches": [
+            {
+              "branch": "不能仅据15M请求报准确完整美元账单",
+              "verdict": "answered",
+              "evidence": "server insufficient答复没有给完整账单金额，明确CPU/完整用量不足。"
+            },
+            {
+              "branch": "CPU为独立用量计费，须CPU输入",
+              "verdict": "answered",
+              "claim_ids": [
+                "claim-35fd1e3d6532eace3d69"
+              ]
+            }
+          ],
+          "note": "报告状态partial不自动决定人工strict评分；CPU规则与必要输入澄清已完成该原题的正确处置。请求价bullet的显式表头缺口另列，不能将其补为任何算式或完整账单。"
+        }
+      ],
+      "calls": 20,
+      "tokens": 66297,
+      "native_spans": 21,
+      "zero_attempts": 1,
+      "unknown_usage": 0,
+      "finish_reasons": {
+        "stop": 20
+      },
+      "qa": {
+        "blocker": 1,
+        "warn": 4
+      },
+      "module_executions": [
+        {
+          "agent": "analyst",
+          "subagent": "feature::Cloudflare",
+          "module_status": "llm",
+          "fallback": {
+            "used": false,
+            "reason": ""
+          },
+          "reason": null,
+          "has_structured_output": true
+        },
+        {
+          "agent": "comparator",
+          "subagent": null,
+          "module_status": "llm",
+          "fallback": {
+            "used": false,
+            "deterministic_fallback": false,
+            "attempts": 1,
+            "max_attempts": 3
+          },
+          "reason": null,
+          "has_structured_output": true
+        },
+        {
+          "agent": "reflector",
+          "subagent": null,
+          "module_status": "llm",
+          "fallback": {
+            "used": false,
+            "deterministic_fallback": false
+          },
+          "reason": null,
+          "has_structured_output": true
+        }
+      ],
+      "stage_calls": {
+        "analyst": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 4513,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-18",
+              "name": "feature_cloudflare_analyst",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 4513,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        },
+        "collector": {
+          "calls": 3,
+          "transport_attempts": 3,
+          "provider_tokens_known": 9090,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 3
+          },
+          "execution_status": {
+            "succeeded": 3
+          },
+          "spans": [
+            {
+              "span_id": "span-1",
+              "name": "collector_semantic_extract",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 3462,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-2",
+              "name": "collector_semantic_extract",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2395,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-3",
+              "name": "collector_question_evidence_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 3233,
+              "max_output_tokens": 700,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 3,
+          "transported_spans": 3,
+          "admission_rejected_spans": 0
+        },
+        "comparator": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 5353,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-27",
+              "name": "comparison_matrix",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 5353,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        },
+        "qa": {
+          "calls": 12,
+          "transport_attempts": 12,
+          "provider_tokens_known": 30770,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 12
+          },
+          "execution_status": {
+            "succeeded": 12,
+            "rejected": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-47",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2332,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-48",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2430,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-49",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2276,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-50",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2353,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-51",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2306,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-52",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2479,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-53",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2345,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-54",
+              "name": "dimension_answer_coverage",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2600,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-55",
+              "name": "dimension_answer_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 3904,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-58",
+              "name": "dimension_question_repair_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2347,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-59",
+              "name": "dimension_question_repair_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2095,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-60",
+              "name": "dimension_answer_coverage",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 3303,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-61",
+              "name": "dimension_answer_review",
+              "status": "error",
+              "finish_reason": null,
+              "total_tokens": null,
+              "max_output_tokens": 1600,
+              "transport_attempts": 0,
+              "admission_status": "rejected",
+              "error": "run_llm_token_budget_exhausted"
+            }
+          ],
+          "native_spans": 13,
+          "transported_spans": 12,
+          "admission_rejected_spans": 1
+        },
+        "reflector": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 5175,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-35",
+              "name": "coverage_reflection",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 5175,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        },
+        "writer": {
+          "calls": 2,
+          "transport_attempts": 2,
+          "provider_tokens_known": 11396,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 2
+          },
+          "execution_status": {
+            "succeeded": 2
+          },
+          "spans": [
+            {
+              "span_id": "span-43",
+              "name": "dimension_claim_writer",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 6400,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-56",
+              "name": "dimension_question_repair",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 4996,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 2,
+          "transported_spans": 2,
+          "admission_rejected_spans": 0
+        }
+      },
+      "budget_check": {
+        "actual_calls": 20,
+        "call_limit": 24,
+        "tokens_charged": 66297,
+        "token_limit": 80000,
+        "observed_usage_within_total": true,
+        "future_admission_can_still_be_denied": true,
+        "note": "未来请求按预留输入+输出入场；实际已用低于80000不保证下一次能入场。"
+      },
+      "writer_gaps": [
+        "answer_coverage_incomplete",
+        "answer_semantic_review_unavailable",
+        "claim_candidate_invalid",
+        "claim_execution_budget_exceeded",
+        "current_price_unverified"
+      ],
+      "server_assertion_audit": [
+        {
+          "question_id": "question-dd9aeefb8be2a32bc5bf",
+          "answer_text": "已给请求条件：购买范围 Workers Paid、报价币种 美元。Workers Paid 计划的 Standard 用量模式每月包含 3000 万 CPU 毫秒，超出部分每增加 100 万 CPU 毫秒收费 0.02 美元。本次请求及已准入资料不足以核实准确的完整账单。请先确认：适用市场／地区、税费口径、CPU 总用量、完整用量明细及其他计费项目；补齐适用的定价资料和输入后，再核验截至 2026-10-23 的适用金额。",
+          "input_echo": "Workers Paid / 美元来自原问",
+          "product_assertions": [
+            {
+              "claim_id": "claim-35fd1e3d6532eace3d69",
+              "text": "Workers Paid 计划的 Standard 用量模式每月包含 3000 万 CPU 毫秒，超出部分每增加 100 万 CPU 毫秒收费 0.02 美元。",
+              "exact_full_claim_copy": true,
+              "supported": true,
+              "selected_support": [
+                {
+                  "binding": {
+                    "span_id": "source-span-9402a05a3228f620a4f3a089",
+                    "fact_id": "evidence-fact-record-d5de3e36a3c641db85d5c0fe18cc3b9b05787d9c0191c6c64507e0d617b0e9bc",
+                    "source_id": "raw-source-52ba7b31b51e937245c1",
+                    "fact_hash": "8f4c6f490e4f423a2c1949e5898c8391d94c20ce1d64081e68b0ab37cef0f45c",
+                    "source_path": "quote",
+                    "start": 0,
+                    "end": 346,
+                    "quote": "| Standard | 10 million included per month +$0.30 per additional million | No charge or limit for duration | 30 million CPU milliseconds included per month +$0.02 per additional million CPU milliseconds Max of 5 minutes of CPU time per invocation (default: 30 seconds) Max of 15 minutes of CPU time per Cron Trigger or Queue Consumer invocation |"
+                  },
+                  "identity_checks": {
+                    "fact_present": true,
+                    "source_id_matches": true,
+                    "fact_hash_matches": true,
+                    "exact_member_offsets_match": true,
+                    "span_id_matches": true
+                  }
+                }
+              ]
+            }
+          ],
+          "control_assertions": [
+            {
+              "text": "请求及已准入资料不足以核实准确完整账单",
+              "judgment": "correct_limitation",
+              "reason": "仅给请求数，没有CPU总用量或完整账户用量。"
+            },
+            {
+              "text": "请确认地区、税费口径、CPU总用量、完整用量及其他项目",
+              "judgment": "safe_clarification",
+              "reason": "未声称所有这些一定产生收费；无完整账单金额。"
+            }
+          ],
+          "safe_refusal": true,
+          "unquoted_new_product_claims": false
+        }
+      ],
+      "core_gap_qualification": null,
+      "subquestion_partition_qualification": null,
+      "input_sha256": "b2a1fa4913c223c3729673a1cf9c50d9670bea2cdff2b450359e9e2e287f32e1",
+      "capture_archive_sha256": "9d491763358a4970d51bb5131f9eb858bbf5019e96e6edb84cb60c1a27eae6a7",
+      "snapshot_id": "evidence-snapshot-cefca40354035460a9a5983ee72510f50faaac405f1a7b7496cc132d4428537b",
+      "snapshot_hash": "ba8d689e483042cb63b26d5d269be2a4dc506e84526aeb33b5501c4e4ad76a5d",
+      "visible_claims": [
+        {
+          "id": "claim-035d3ee8c36e719fa2e7",
+          "text": "Workers Paid 计划的 Standard 用量模式每月包含 1000 万次请求，超出部分每增加 100 万次请求收费 0.30 美元。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 1,
+          "independent_judgment": {
+            "full_selected_quote_support": false,
+            "structured_header_contract_support": {
+              "binding_present": false,
+              "original_table_context_present": true,
+              "mode_allowance_rate_match": true,
+              "restriction_only": "原始Requests表头与完整脚注确在同fact.qualifiers.table_context，但不是显式selected binding；strict quote-only缺口保留。"
+            },
+            "single_predicate": true,
+            "verdict": "partial_selected_support",
+            "reason": "Standard行给出10M/月与$0.30/million，但requests计量名不在显式选中quote；原始Requests表头仅作结构限制，不补新的计量谓词。Workers Paid沿用题设给定模式范围，不据此新增所有计划资格结论。"
+          }
+        },
+        {
+          "id": "claim-b157f0c67a9f105e142f",
+          "text": "域范围角色（Domain-scoped roles）仅适用于账户内某个给定域。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 1,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": true,
+            "verdict": "supported",
+            "reason": "Domain-scoped roles apply for a given domain支持域范围封闭于给定域。"
+          }
+        },
+        {
+          "id": "claim-cea0fa9dfa4a50364d7c",
+          "text": "角色只能被赋予其给定范围（Roles can only ever be assigned to their given scope）。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 1,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": true,
+            "verdict": "supported",
+            "reason": "所选完整段明确Roles can only ever be assigned to their given scope。"
+          }
+        },
+        {
+          "id": "claim-35fd1e3d6532eace3d69",
+          "text": "Workers Paid 计划的 Standard 用量模式每月包含 3000 万 CPU 毫秒，超出部分每增加 100 万 CPU 毫秒收费 0.02 美元。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 2,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": {
+              "binding_present": false,
+              "original_table_context_present": true,
+              "cpu_meter_in_selected_quote": true,
+              "mode_allowance_rate_match": true,
+              "restriction_only": "CPU前提自身完整；同原始表头与脚注可复验模式、CPU列和适用范围，只限制不补新事实。"
+            },
+            "single_predicate": true,
+            "verdict": "supported",
+            "reason": "所选Standard行自身明文30 million CPU milliseconds/月及+$0.02/additional million CPU milliseconds；Workers Paid作为原问给定范围，不推断计划独占资格。表头/脚注只限制适用性，无需为CPU计量补新事实。"
+          }
+        },
+        {
+          "id": "claim-7386f431c2c057fc538e",
+          "text": "Cloudflare 的 Cache Domain Purge 角色授予清除特定域边缘缓存（purge the edge cache for a specific domain）的权限，并允许读取域设置。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 1,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": false,
+            "verdict": "supported",
+            "reason": "所选角色整行明确specific-domain purge及reading zone settings，完整支持；两个独立动作仍应拆分。"
+          }
+        }
+      ],
+      "diagnosis": [
+        "初稿原生输出9原子，初轮持久审核保留7条并留claim_candidate_invalid/claim_execution_budget_exceeded gap；局部修复span-56返回3原子；两个修复原子supported（角色规则与场景否定），其中否定隐藏；另一general-scoping原子错绑角色句被拒。",
+        "21个native LLM span中20个实际transport；span-61 final answer_review因run_llm_token_budget_exhausted在0 transport入场拒绝。span-60 coverage提议已回答，但独立复核缺失后保守unverified，不能把草稿提议作正式回答。",
+        "CPU计费主张确在正文bullet及服务器不足答复出现；同一审核claim文本完整复制、相同source可追溯。无金额编造、没有计算总账单。",
+        "最终3条Reflector finding均keep，1 blocker/4 warn；无最终重核模型调用。QA blocker改为answer_coverage_incomplete；首轮对$0.30的withheld_or_unsupported_amount blocker未复现。"
+      ]
+    },
+    {
+      "product": "Trello",
+      "directory": "data/artifacts/subquestion-allocation-2026-10-23/live-trello-contract/execution",
+      "run_id": "run-10d0f366b52b4be496c67481c60fde52",
+      "runner_status": "execution_complete",
+      "strict_questions": [
+        {
+          "original_question": "Trello-1",
+          "internal_question_ids": [
+            "question-659854eaa5bf118b8901",
+            "question-00e2382d7575b5384c9a",
+            "question-1305198ad16f108bf375"
+          ],
+          "verdict": "partial",
+          "branches": [
+            {
+              "branch": "A投票否定及启用条件",
+              "verdict": "answered",
+              "claim_ids": [
+                "claim-f9c22736749232a69c5b"
+              ]
+            },
+            {
+              "branch": "B投票允许及启用条件",
+              "verdict": "answered",
+              "claim_ids": [
+                "claim-7f7179b5278020bceedd"
+              ]
+            },
+            {
+              "branch": "下载A卡片附件",
+              "verdict": "answered",
+              "claim_ids": [
+                "claim-510c3421ba0c92519a6e"
+              ]
+            },
+            {
+              "branch": "导出A",
+              "verdict": "answered",
+              "claim_ids": [
+                "claim-d0478ae8ef4f1d99671d"
+              ]
+            },
+            {
+              "branch": "允许投票不推出每卡强制义务",
+              "verdict": "missing",
+              "reason": "仍尚未核实，修复原子错选禁止编辑句而被拒；不能从草稿补正文。"
+            }
+          ],
+          "note": "Trello第一原题内部3行，总分母仍1原题。"
+        },
+        {
+          "original_question": "Trello-2",
+          "internal_question_ids": [
+            "question-a5be8c7a210d770f2ea7"
+          ],
+          "verdict": "partial",
+          "branches": [
+            {
+              "branch": "Workspace不能统一设Observer",
+              "verdict": "answered_in_observation",
+              "claim_ids": [
+                "claim-32675690edd91bfea5ba"
+              ]
+            },
+            {
+              "branch": "A改权不自动决定B具体权限",
+              "verdict": "partial",
+              "reason": "可见逐板规则，应用到B的完整推理claim-824c5cd861469fe13243虽supported但隐藏，不能补正式答复。"
+            },
+            {
+              "branch": "谁可把A现有成员设Observer",
+              "verdict": "answered_in_observation",
+              "claim_ids": [
+                "claim-3c0dc62e4887bd525110"
+              ]
+            },
+            {
+              "branch": "仅凭Observer标签不能确定免费/计费",
+              "verdict": "missing",
+              "reason": "claim-2c2157363fd1f20deb68虽supported但隐藏；问题行未交付该判断。"
+            }
+          ]
+        }
+      ],
+      "calls": 18,
+      "tokens": 66568,
+      "native_spans": 20,
+      "zero_attempts": 2,
+      "unknown_usage": 0,
+      "finish_reasons": {
+        "stop": 18
+      },
+      "qa": {
+        "blocker": 4,
+        "warn": 4
+      },
+      "module_executions": [
+        {
+          "agent": "analyst",
+          "subagent": "feature::Trello",
+          "module_status": "llm",
+          "fallback": {
+            "used": false,
+            "reason": ""
+          },
+          "reason": null,
+          "has_structured_output": true
+        },
+        {
+          "agent": "comparator",
+          "subagent": null,
+          "module_status": "llm",
+          "fallback": {
+            "used": false,
+            "deterministic_fallback": false,
+            "attempts": 1,
+            "max_attempts": 3
+          },
+          "reason": null,
+          "has_structured_output": true
+        },
+        {
+          "agent": "reflector",
+          "subagent": null,
+          "module_status": "llm",
+          "fallback": {
+            "used": false,
+            "deterministic_fallback": false
+          },
+          "reason": null,
+          "has_structured_output": true
+        }
+      ],
+      "stage_calls": {
+        "analyst": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 4162,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-15",
+              "name": "feature_trello_analyst",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 4162,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        },
+        "collector": {
+          "calls": 2,
+          "transport_attempts": 2,
+          "provider_tokens_known": 5383,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 2
+          },
+          "execution_status": {
+            "succeeded": 2
+          },
+          "spans": [
+            {
+              "span_id": "span-1",
+              "name": "collector_semantic_extract",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 1693,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-2",
+              "name": "collector_question_evidence_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 3690,
+              "max_output_tokens": 700,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 2,
+          "transported_spans": 2,
+          "admission_rejected_spans": 0
+        },
+        "comparator": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 6399,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-24",
+              "name": "comparison_matrix",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 6399,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        },
+        "qa": {
+          "calls": 11,
+          "transport_attempts": 11,
+          "provider_tokens_known": 32659,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 11
+          },
+          "execution_status": {
+            "succeeded": 11,
+            "rejected": 2
+          },
+          "spans": [
+            {
+              "span_id": "span-44",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2240,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-45",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2371,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-46",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2725,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-47",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2233,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-48",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2807,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-49",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2722,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-50",
+              "name": "dimension_claim_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2751,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-51",
+              "name": "dimension_answer_coverage",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 3576,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-52",
+              "name": "dimension_answer_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 6001,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-55",
+              "name": "dimension_question_repair_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2946,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-56",
+              "name": "dimension_question_repair_review",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 2287,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-57",
+              "name": "dimension_answer_coverage",
+              "status": "error",
+              "finish_reason": null,
+              "total_tokens": null,
+              "max_output_tokens": 1600,
+              "transport_attempts": 0,
+              "admission_status": "rejected",
+              "error": "run_llm_token_budget_exhausted"
+            },
+            {
+              "span_id": "span-58",
+              "name": "dimension_answer_review",
+              "status": "error",
+              "finish_reason": null,
+              "total_tokens": null,
+              "max_output_tokens": 1600,
+              "transport_attempts": 0,
+              "admission_status": "rejected",
+              "error": "run_llm_token_budget_exhausted"
+            }
+          ],
+          "native_spans": 13,
+          "transported_spans": 11,
+          "admission_rejected_spans": 2
+        },
+        "reflector": {
+          "calls": 1,
+          "transport_attempts": 1,
+          "provider_tokens_known": 6015,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 1
+          },
+          "execution_status": {
+            "succeeded": 1
+          },
+          "spans": [
+            {
+              "span_id": "span-32",
+              "name": "coverage_reflection",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 6015,
+              "max_output_tokens": 2048,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 1,
+          "transported_spans": 1,
+          "admission_rejected_spans": 0
+        },
+        "writer": {
+          "calls": 2,
+          "transport_attempts": 2,
+          "provider_tokens_known": 11950,
+          "unknown_usage_spans": 0,
+          "finish_reasons": {
+            "stop": 2
+          },
+          "execution_status": {
+            "succeeded": 2
+          },
+          "spans": [
+            {
+              "span_id": "span-40",
+              "name": "dimension_claim_writer",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 6701,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            },
+            {
+              "span_id": "span-53",
+              "name": "dimension_question_repair",
+              "status": "ok",
+              "finish_reason": "stop",
+              "total_tokens": 5249,
+              "max_output_tokens": 1600,
+              "transport_attempts": 1,
+              "admission_status": "admitted",
+              "error": null
+            }
+          ],
+          "native_spans": 2,
+          "transported_spans": 2,
+          "admission_rejected_spans": 0
+        }
+      },
+      "budget_check": {
+        "actual_calls": 18,
+        "call_limit": 24,
+        "tokens_charged": 66568,
+        "token_limit": 80000,
+        "observed_usage_within_total": true,
+        "future_admission_can_still_be_denied": true,
+        "note": "未来请求按预留输入+输出入场；实际已用低于80000不保证下一次能入场。"
+      },
+      "writer_gaps": [
+        "answer_coverage_incomplete",
+        "answer_semantic_review_unavailable",
+        "claim_count_limit_exceeded",
+        "claim_execution_budget_exceeded",
+        "context_budget_exceeded",
+        "duplicate_or_off_target_operation_claim",
+        "operation_binding_required",
+        "question_core_context_budget_exceeded",
+        "question_repair_context_omitted"
+      ],
+      "server_assertion_audit": [],
+      "core_gap_qualification": null,
+      "subquestion_partition_qualification": null,
+      "input_sha256": "f6ecc084babe6c3073b56b0c14c0d8b3cc1670b89bb21c4b842848f80791d8f9",
+      "capture_archive_sha256": "bd236c5b14373e40b1e87459a9066fdc2a982fbd73458514042f10172cf7daa6",
+      "snapshot_id": "evidence-snapshot-9c61d5410a136ecb6dbd4420022e14631f153b44ad113e88303aeda6a4009a4c",
+      "snapshot_hash": "42ef056221686777e3c6ffc574ff5a2a6824317b4f37dbaec29e100d4aa49c60",
+      "visible_claims": [
+        {
+          "id": "claim-510c3421ba0c92519a6e",
+          "text": "Observer 可以下载卡片附件。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 2,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": true,
+            "verdict": "supported",
+            "reason": "所选完整许可句明确download card attachments；投票括号不限定下载。"
+          }
+        },
+        {
+          "id": "claim-32675690edd91bfea5ba",
+          "text": "由于 Observer 是看板成员权限而非成员类型，目前无法在 Workspace 层级把用户统一设置为 Observer，每位 Observer 需按成员、按看板单独设置。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 1,
+          "independent_judgment": {
+            "full_selected_quote_support": false,
+            "structured_header_contract_support": null,
+            "single_predicate": false,
+            "verdict": "partial_selected_support",
+            "reason": "所选Workspace句没有not a membership type，“而非成员类型”依赖未选另一段；Workspace不可统一及逐成员逐板有完整支持，但复合谓词未拆。",
+            "supported_parts": [
+              "Observer是看板成员权限",
+              "Workspace不可统一设置",
+              "逐成员逐看板单独设置"
+            ],
+            "unsupported_parts": [
+              "而非成员类型"
+            ]
+          }
+        },
+        {
+          "id": "claim-f9c22736749232a69c5b",
+          "text": "看板 A 未启用卡片投票，因此即使小林是 A 的 Observer，也不能在 A 上投票。",
+          "kind": "inference",
+          "audit_status": "supported",
+          "visible_occurrences": 1,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": true,
+            "verdict": "supported",
+            "reason": "题设给定A未启用且小林为A的Observer；所选许可句限定投票须启用。条件推理有效。"
+          }
+        },
+        {
+          "id": "claim-d0478ae8ef4f1d99671d",
+          "text": "Observer 可以导出看板。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 2,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": true,
+            "verdict": "supported",
+            "reason": "所选完整许可句明确export the board；独立导出动作。"
+          }
+        },
+        {
+          "id": "claim-7f7179b5278020bceedd",
+          "text": "看板 B 已启用投票，因此作为 B 的 Observer，小林可以在 B 上投票。",
+          "kind": "inference",
+          "audit_status": "supported",
+          "visible_occurrences": 1,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": true,
+            "verdict": "supported",
+            "reason": "题设给定B启用并允许该Observer投票；所选完整许可句支持此条件下投票。"
+          }
+        },
+        {
+          "id": "claim-3c0dc62e4887bd525110",
+          "text": "在已订阅 Trello Premium 的 Workspace 中，看板管理员可以把 Workspace 成员或访客设置为某看板的 Observer。",
+          "kind": "fact",
+          "audit_status": "supported",
+          "visible_occurrences": 1,
+          "independent_judgment": {
+            "full_selected_quote_support": true,
+            "structured_header_contract_support": null,
+            "single_predicate": true,
+            "verdict": "supported",
+            "reason": "所选句明确Premium Workspace、board admin、Workspace members与guests及设置Observer的同一操作。"
+          }
+        }
+      ],
+      "diagnosis": [
+        "初稿原生输出11原子，初轮持久审核保留8条；局部修复span-53返回2计划共3原子，未超过4上限。新who/admin及billing分类推理审核supported；义务原子错选Observers不能move/edit等句，无法证明其permission-entailment而被拒。",
+        "最终存在8条audit supported但仅6条可见；B权限推理与标签计费推理均隐藏，不能补正文。",
+        "20个native LLM span中18个实际transport；span-57 coverage、span-58 answer_review均0 transport的run_llm_token_budget_exhausted，不能称传输超时或provider未知usage。",
+        "最终6条Reflector finding全部keep，最终4 blocker/4 warn；无最终重核模型调用。原始历史缺口与真实正文未交付共存。"
+      ]
+    }
+  ],
+  "production_packages_sha256": "4388e78e17a2e074e15d241e5a298d8e2e71ac5357130705d737aae628a9c17f",
+  "same_code_and_packages": true,
+  "training_performed": false,
+  "fresh_web_capture": false,
+  "e2e": false,
+  "reference_answers_in_model_input": false,
+  "local_artifact_directory": "data/artifacts/subquestion-allocation-2026-10-23",
+  "limitations": [
+    "样本同组曝光且非盲评，不能推为一般准确率或因果提升。",
+    "执行2026-10-21封存页面，仅生产语义提取/准入与阶段模块；未跑新抓取/发现、完整Graph、发布或生产稠密RAG。",
+    "引用身份合法、模型supported、工程测试通过均不等于内容验收。",
+    "Trello仍有正文类型否定超出该claim所选span，CF请求计量名表头未显式选择；原子性仍未完成。",
+    "1Password独立谓词仍合并到一个subquestion binding，人工内容通过不等于分支格式合同已完全执行。"
+  ],
+  "next_priorities": [
+    "按实际任务ID执行单谓词生成、完整前提与引用选择，明确配额及deferred；失败仅重做该任务。",
+    "表头／条件／例外做成显式可重放引用，逐谓词审核整句，保留拒绝边界。",
+    "保护最终答案与QA的实际入场预算，缩减无关背景及重复审核；区分局部问答和完整比较资格。",
+    "补验1Password合格官方报价来源及下一步，再用未曝光样本验证。"
+  ]
+}

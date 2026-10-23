@@ -522,7 +522,11 @@ def test_annotations_are_budgeted_and_unsent_span_cannot_acquire_reference():
                     value=['Organizations own all collections.', 'Members retain private items.'])
     full, _ = context([original])
     assert all('support_ref' in span for span in full['evidence_view']['facts'][0]['source_span_candidates'])
-    budget = len(writer.compact_prompt_json(full).encode()) - 1
+    # Optional task-reference hints can shrink before any source is omitted.
+    without_hints = copy.deepcopy(full)
+    for task in without_hints.get('atom_tasks', ()):
+        task.pop('support_refs', None)
+    budget = len(writer.compact_prompt_json(without_hints).encode()) - 1
     bounded, _ = context([original], max_bytes=budget)
     assert len(writer.compact_prompt_json(bounded).encode()) <= budget
     sent = {row['id'] for row in bounded['evidence_view']['facts']}

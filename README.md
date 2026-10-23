@@ -191,7 +191,9 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.p
 
 ## 验证与交付边界
 
-最新[子问定向选证与局部重写](docs/optimization/2026-10-23-targeted-question-repair.md)（2026-10-23）：后端 **7125通过／1跳过**，较基线新增106项。完整规则提案、单轮子问修复、支持引用预留、CPU事实绑定合同及最终QA重核已接入。两轮四家固定页面真实回放共 **119调用／已知395823 token，另2条usage未知**；最终轮73调用／242831 token，全部stop。原始八题严格完成 **4/8**，另四题仍不完整；**报告仍未达标**。1Password核心限制已进入正文，Trello逐项/计费前提仍漏答且有过宽断言，Cloudflare CPU规则未发表，Bitwarden有效澄清仍被全局旧context gap误阻。上游另有一次Analyst空结构回退；不是新抓取、全Graph或生产稠密RAG验收，未训练。[结构化结果](docs/optimization/2026-10-23-targeted-question-repair-results.json)。
+最新[子问证据分配、原子主张与QA归属](docs/optimization/2026-10-23-subquestion-allocation.md)（2026-10-23）：后端 **7193通过／1跳过**，新增68项；子问完整资料分配、统一14KB实际派送门、条件推断原问绑定、严格缺项分离及QA问题归属已接入。最终四家同版固定页面真实回放 **68次实际调用／229379 token**，另3次零transport预算拒绝；首两家诊断另34次／114740 token，全部保留。原始八题严格 **4/8**，报告仍未达标：CPU规则已进正文，Trello的A/B与下载、导出恢复，但义务／第二题仍漏答；Cloudflare权限结论因最终审核预算不足未发表；Bitwarden旧core gap覆盖误阻已消除，矩阵阻断仍保留。精确支持、复合主张和报价来源仍有缺口。不是新抓取／全Graph／发布／生产稠密RAG验收，未训练。[结构化结果](docs/optimization/2026-10-23-subquestion-allocation-results.json)。
+
+上一轮[子问定向选证与局部重写](docs/optimization/2026-10-23-targeted-question-repair.md)（2026-10-23）：后端 **7125通过／1跳过**，较基线新增106项。完整规则提案、单轮子问修复、支持引用预留、CPU事实绑定合同及最终QA重核已接入。两轮四家固定页面真实回放共 **119调用／已知395823 token，另2条usage未知**；最终轮73调用／242831 token，全部stop。原始八题严格完成 **4/8**，另四题仍不完整；**报告仍未达标**。1Password核心限制已进入正文，Trello逐项/计费前提仍漏答且有过宽断言，Cloudflare CPU规则未发表，Bitwarden有效澄清仍被全局旧context gap误阻。上游另有一次Analyst空结构回退；不是新抓取、全Graph或生产稠密RAG验收，未训练。[结构化结果](docs/optimization/2026-10-23-targeted-question-repair-results.json)。
 
 上一轮[子问前提与正文／QA一致性](docs/optimization/2026-10-23-subquestion-decision.md)（2026-10-23）：后端 **7019通过／1跳过**，新增97项；最终复审Prompt调整后89项专项通过，OpenAPI/前端构建与变更审查通过。可读引用、逐子问前提摘要、精确支持隔离和统一问题块已接入。两轮四家固定页面真实回放共 **123调用／391144 token**；最终轮61调用／193421 token。原始八题严格完成 **3/8**，正式可见主张11/11完整支持、9/11单谓词，但另有CPU服务器事实漏绑。**报告仍未达标**：1Password漏选、Trello并列对象/第二题漏答及早期Reflector与最终QA冲突仍待修。不是新抓取、全Graph或生产稠密RAG验收，未训练。[结构化结果](docs/optimization/2026-10-23-subquestion-decision-results.json)。
 

@@ -3,6 +3,7 @@
 import re
 
 from packages.agents.writer.answer_coverage import is_qualified_partial_clarification
+from packages.agents.writer.question_allocation import SCENARIO_REVIEW_SYSTEM
 
 REPAIR_SYSTEM = (
     "Repair only the supplied failed questions using their complete current evidence_view. "
@@ -17,7 +18,9 @@ REPAIR_SYSTEM = (
     "versus must/only-if: an available upgrade is not a requirement or a prohibition. "
     "Use one complete s-reference for a non-operation assertion; only a supplied complete "
     "source_exception_bindings pair permits two. Every operation assertion requires its own "
-    "legal o-reference. Parent source context can restrict but cannot support a sibling assertion. "
+    "legal o-reference for its catalogued read/comment/edit/create/share/manage_access predicate. "
+    "Other actions use their own complete s-reference. Parent source context can restrict "
+    "but cannot support a sibling assertion. "
     "For explicit per-resource questions publish separate conditional inference atoms applying "
     "the supported rule to each requested item, including each item's yes/no outcome and scenario "
     "conditions. Questions supply conditional request inputs only, never product facts. "
@@ -28,6 +31,9 @@ REPAIR_SYSTEM = (
     '"missing_fields":["exact required field IDs"],"atoms":[{"text":"plain complete text",'
     '"kind":"fact|inference","support_refs":["s1 or o1"]}]}]}. '
     "Exactly one plan per supplied question; "
+    "Copy missing_fields ONLY from question_plan_missing_fields for that question, including "
+    "an empty array. repair_targets.missing_fields describe answer/evidence gaps and must "
+    "never be copied into question_plans.missing_fields. "
     "return empty atoms if no supported repair is available."
 )
 
@@ -52,6 +58,7 @@ REPAIR_REVIEW_SYSTEM = (
     '"verdict":"supported|unsupported|uncertain","claim_span":"exact text"}]}]}. '
     "Return exactly one review per claim."
 )
+REPAIR_REVIEW_SYSTEM += SCENARIO_REVIEW_SYSTEM
 
 
 def _unpublished_question_support(question, product, facts, supported):
@@ -76,6 +83,7 @@ def question_repair_targets(
     questions, coverage, audited, plans, *, facts=(), gaps=(), semantic_failures=None
 ):
     """Transport failures are not semantic failures and must not trigger retries."""
+    from packages.research.evidence.report_claims import required_claim_checks
     if set(gaps) & {
         "claim_execution_budget_exceeded",
         "claim_generation_unavailable",
@@ -114,6 +122,12 @@ def question_repair_targets(
                 text=item.claim.text,
                 rule_reasons=list(item.rule_reasons),
                 review_reason=item.review.reason if item.review else None,
+                selected_support_quotes=(
+                    [item.claim.operation_binding.operation_quote] if item.claim.operation_binding else
+                    [span.quote for span in item.claim.source_span_bindings]),
+                failed_checks=[rule['kind'] for rule in required_claim_checks(item.claim)
+                    if item.review and any(check.check_id == rule['check_id']
+                        and check.verdict != 'supported' for check in item.review.checks)],
             )
             for item in audited
             if item.status != "supported"
@@ -169,6 +183,8 @@ def question_repair_context(view, allowed, questions, targets, audited, *, max_b
         compact_dimension_context,
         compact_prompt_json,
     )
+    from packages.agents.writer.question_allocation import compact_repair_targets
+    targets = compact_repair_targets(targets)
 
     retained = [
         item.claim.model_dump(
@@ -192,6 +208,9 @@ def question_repair_context(view, allowed, questions, targets, audited, *, max_b
         retained_supported_claims=retained,
         max_new_atoms=4,
     )
+    from packages.research.evidence.source_exceptions import _missing_question_inputs
+    metadata['question_plan_missing_fields'] = [dict(question_id=q['question_id'],
+        missing_fields=_missing_question_inputs(q['question'])) for q in questions]
     focus_texts = {
         target["question_id"]: " ".join(
             [
@@ -211,7 +230,6 @@ def question_repair_context(view, allowed, questions, targets, audited, *, max_b
         if text
     ]
     from packages.agents.writer.answer_coverage import question_terms
-    from packages.agents.writer.readable_support import dispatched_span_candidates
     from packages.agents.writer.subquestion_premises import _scope_objects
 
     focus = {qid: question_terms(text, view.competitor) for qid, text in focus_texts.items()}
@@ -265,16 +283,17 @@ def question_repair_context(view, allowed, questions, targets, audited, *, max_b
             )
         return groups
 
-    def pack(source_budget):
+    def pack():
         context, omitted = compact_dimension_context(
             dict(segment_competitor=view.competitor, dimension=view.dimension),
             view,
             allowed,
             questions=questions,
             support_focus=support_focus,
-            max_bytes=source_budget,
+            atom_limit=4,
+            repair_metadata=metadata,
+            max_bytes=max_bytes,
         )
-        context.update(metadata)
         # Reorder complete members without changing aliases, canonical identity,
         # source text or the original request. Focus is never evidence.
         for row in context["evidence_view"]["facts"]:
@@ -286,39 +305,22 @@ def question_repair_context(view, allowed, questions, targets, audited, *, max_b
                     )
                 )
             )
-        context["question_support_order"] = support_order(context)
+        # Ordering is advisory. Spend only actual remaining bytes on aliases;
+        # complete source rows and repair identities already share one budget.
+        order = support_order(context)
+        for limit in (8, 4, 2, 0):
+            candidate = dict(context, question_support_order=[
+                dict(row, support_refs=row["support_refs"][:limit]) for row in order
+            ])
+            if len(compact_prompt_json(candidate).encode()) <= max_bytes:
+                context = candidate
+                break
         return context, omitted
 
-    def support_count(context):
-        sent_ids = {row["id"] for row in context["evidence_view"]["facts"]}
-        return len(dispatched_span_candidates(context, view.facts, sent_ids))
-
-    reserve = len(compact_prompt_json(metadata).encode()) + 128
-    source_budget = max(0, max_bytes - reserve)
-    context, omitted = pack(source_budget)
-    while (
-        len(compact_prompt_json(context).encode()) > max_bytes and context["evidence_view"]["facts"]
-    ):
-        context["evidence_view"]["facts"].pop()
-        context["question_support_order"] = support_order(context)
-        omitted = True
-    # Metadata and source originals may share losslessly compressed strings.
-    # Spend only their actual merged slack, with at most two bounded refills.
-    for _ in range(2):
-        slack = max_bytes - len(compact_prompt_json(context).encode())
-        next_budget = min(max_bytes, source_budget + slack)
-        if slack <= 0 or next_budget <= source_budget:
-            break
-        candidate, candidate_omitted = pack(next_budget)
-        source_budget = next_budget
-        if len(compact_prompt_json(candidate).encode()) > max_bytes:
-            break
-        if support_count(candidate) > support_count(context):
-            context, omitted = candidate, candidate_omitted
-    return context, omitted
+    return pack()
 
 
-def repair_review_batches(claims, view, questions, *, max_bytes):
+def repair_review_batches(claims, view, questions, *, max_bytes, plans=()):
     """At most two batches, two atoms and ten explicit checks per batch."""
     from packages.agents.writer.dimension_writer import compact_prompt_json, review_payload
     from packages.research.evidence.report_claims import (
@@ -329,10 +331,7 @@ def repair_review_batches(claims, view, questions, *, max_bytes):
     batches, batch, omitted = [], [], False
 
     def payload(rows):
-        result = review_payload(rows, view, review_version=3)
-        if any(claim.kind == "inference" for claim in rows):
-            result["scenario_questions"] = questions
-        return result
+        return review_payload(rows, view, review_version=3, questions=questions, plans=plans)
 
     def fits(rows):
         checks = sum(
