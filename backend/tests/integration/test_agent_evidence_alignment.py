@@ -90,6 +90,7 @@ class InputReplay(RunService):
                 demo_mode=True,
                 analyst_react_enabled=react,
                 writer_structured_report_enabled=False,
+                writer_task_execution_enabled=False,
             ),
             journal=RunJournal(tmp_path / "journal.db"),
             kb_cache=KBCache.in_memory(),

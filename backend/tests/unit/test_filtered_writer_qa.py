@@ -87,7 +87,7 @@ async def test_final_qa_replays_question_filtered_generation_view():
         d, snap, generic, filtered, loginfact, size = picked
         service = RunService(
             SkillRegistry.from_default_path(),
-            Settings(demo_mode=True),
+            Settings(demo_mode=True, writer_task_execution_enabled=False),
             journal=RunJournal.in_memory(),
             kb_cache=KBCache.in_memory(),
             graph_checkpointer=GraphCheckpointer.in_memory(),

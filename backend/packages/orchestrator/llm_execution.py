@@ -79,6 +79,7 @@ class LLMExecutionMixin:
         budget = record.llm_budget
         from packages.agents.writer.dimension_writer import dimension_writing_enabled
         dimension_mode = dimension_writing_enabled(record.detail)
+        task_segments = self._task_delivery_segments(record, dimension_mode=dimension_mode)
         if dimension_mode or (record.detail.execution_mode == 'real' and budget.max_tokens):
             products = list(record.detail.plan.competitors)
             target = record.detail.plan.target_product
@@ -90,25 +91,49 @@ class LLMExecutionMixin:
             phases += [f'collector:{segment}' for segment in segments]
             phases += [f'analyst:{segment}' for segment in segments]
             phases += ['comparator:run', 'reflector:run']
+            if task_segments:
+                phases += [f'answer:{segment}' for segment in task_segments]
+                phases += ['final_qa:run']
             # Leave acquisition room and a shared conservative request envelope.
             # Only core stages may borrow the envelope; actual/unknown usage is
             # still charged against the same global hard cap.
             fractions = {'collector': .10, 'analyst': .16, 'comparator': .10,
                          'reflector': .06, 'writer': .16 if dimension_mode else .28, 'qa': .12}
+            if task_segments:
+                # Final answer and final QA both receive complete request
+                # envelopes, independent of task drafting/review. Earlier
+                # acquisition/analysis share 23%; task drafting/review use
+                # shared headroom while keeping their independent call floors.
+                fractions = {'collector': .06, 'analyst': .10, 'comparator': .04,
+                             'reflector': .03, 'writer': .0, 'qa': .0}
             checkpoint = record.detail.llm_budget_checkpoint
-            budget.stage_headroom = min(12000, int(budget.max_tokens * .06)) if budget.max_tokens else 0
+            budget.stage_headroom = min(12000, int(budget.max_tokens * (.04 if task_segments else .06))) if budget.max_tokens else 0
             adding_phases = any(phase not in budget.delivery_reserves for phase in phases)
+            persisted_phases = {phase for phase in phases
+                                if task_segments and f'delivery_limit:{phase}' in checkpoint}
             for phase in phases:
                 agent = phase.split(':', 1)[0]
                 count = 1 if agent in {'comparator', 'reflector'} or (agent == 'writer' and not dimension_mode) else max(1, len(segments))
-                desired = min(32000, int(budget.max_tokens * fractions[agent] / count)) if budget.max_tokens else 32000
+                if agent == 'answer':
+                    desired = min(20000, int(budget.max_tokens * .25)) if budget.max_tokens else 20000
+                    desired //= len(task_segments)
+                elif agent == 'final_qa':
+                    # 6KB complete-finding window + system/framing + 1600 output.
+                    desired = min(10000, int(budget.max_tokens * .125)) if budget.max_tokens else 10000
+                else:
+                    desired = min(32000, int(budget.max_tokens * fractions[agent] / count)) if budget.max_tokens else 32000
                 if phase in budget.delivery_reserves:
-                    if adding_phases:
+                    if adding_phases and phase not in persisted_phases:
                         budget.delivery_reserves[phase] = min(budget.delivery_reserves[phase], desired)
                     continue
                 budget.delivery_reserves[phase] = int(checkpoint.get(f'delivery_limit:{phase}', desired))
                 budget.delivery_charged[phase] = int(checkpoint.get(f'delivery_charged:{phase}', 0))
                 budget.delivery_calls[phase] = int(checkpoint.get(f'delivery_calls:{phase}', 0))
+                # A legacy checkpoint cannot gain the task profile's new
+                # call floors; explicitly persisted floors survive rollback.
+                default_calls = budget.delivery_calls[phase] if task_segments and restoring and checkpoint else 1
+                budget.delivery_call_reserves[phase] = int(checkpoint.get(
+                    f'delivery_call_limit:{phase}', default_calls))
                 if checkpoint.get(f'delivery_finished:{phase}'):
                     budget.delivery_finished.add(phase)
             for phase in budget.delivery_reserves.keys() - set(phases):
@@ -126,16 +151,51 @@ class LLMExecutionMixin:
                 if rate > 0:
                     available = min(available, int(remaining_cost * 1_000_000 / rate))
             available = max(0, available - budget.stage_headroom)
-            if protected > available and (restoring or adding_phases):
+            adjustable = {phase for phase in budget.delivery_reserves
+                          if phase not in budget.delivery_finished and phase not in persisted_phases}
+            adjustable_protected = sum(max(0, budget.delivery_reserves[phase] - budget.delivery_charged.get(phase, 0))
+                                       for phase in adjustable)
+            # Persisted task allowances already survived admission. Recovery
+            # must not turn them into headroom that earlier tasks can spend.
+            available = max(0, available - (protected - adjustable_protected))
+            if adjustable_protected > available and (restoring or adding_phases):
                 available = int(available * .70)
-                for phase, amount in list(budget.delivery_reserves.items()):
-                    if phase not in budget.delivery_finished:
-                        charged = budget.delivery_charged.get(phase, 0)
-                        budget.delivery_reserves[phase] = charged + int(max(0, amount - charged) * available / protected)
+                for phase in adjustable:
+                    amount = budget.delivery_reserves[phase]
+                    charged = budget.delivery_charged.get(phase, 0)
+                    budget.delivery_reserves[phase] = charged + int(max(0, amount - charged) * available / adjustable_protected)
         return budget
 
-    @staticmethod
-    def _llm_phase(agent, subagent):
+    def _task_delivery_segments(self, record, *, dimension_mode=None):
+        if (record is None or not self._settings.writer_task_execution_enabled
+                or record.detail.execution_mode != 'real'):
+            return []
+        if dimension_mode is None:
+            from packages.agents.writer.dimension_writer import dimension_writing_enabled
+            dimension_mode = dimension_writing_enabled(record.detail)
+        if not dimension_mode or 'feature' not in record.detail.plan.dimensions:
+            return []
+        from packages.research.question_scope import research_questions
+        products = list(record.detail.plan.competitors)
+        target = record.detail.plan.target_product
+        if target and target.name not in products:
+            products.append(target.name)
+        return [f'{product}/feature' for product in products
+                if research_questions(record.detail, product, 'feature')]
+
+    def _llm_phase(self, agent, subagent, *, name=None, record=None):
+        if name is not None:
+            task_segments = self._task_delivery_segments(record)
+            if task_segments:
+                if agent == 'qa' and name == 'final_question_reconciliation' and subagent is None:
+                    return 'final_qa:run'
+                if subagent in task_segments:
+                    if name in {'dimension_task_plan', 'dimension_task_generation'}:
+                        return f'writer:{subagent}'
+                    if name == 'dimension_task_review':
+                        return f'qa:{subagent}'
+                    if name == 'dimension_answer_review':
+                        return f'answer:{subagent}'
         if agent in {'comparator', 'reflector'} or (agent == 'writer' and not subagent):
             return f'{agent}:run'
         if agent in {'collector', 'analyst'} and subagent and '::' in subagent:
@@ -162,6 +222,7 @@ class LLMExecutionMixin:
                 f'delivery_limit:{phase}': amount,
                 f'delivery_charged:{phase}': budget.delivery_charged.get(phase, 0),
                 f'delivery_calls:{phase}': budget.delivery_calls.get(phase, 0),
+                f'delivery_call_limit:{phase}': budget.delivery_call_reserves.get(phase, 1),
                 f'delivery_finished:{phase}': int(phase in budget.delivery_finished),
             })
         self._persist_run(record.detail.id)
@@ -249,7 +310,7 @@ class LLMExecutionMixin:
         execution = LLMCallExecution(
             self._run_llm_budget(record),
             is_repair=is_repair or record.pending_graph_redo is not None,
-            phase=self._llm_phase(agent, subagent),
+            phase=self._llm_phase(agent, subagent, name=name, record=record),
             # UTF-8 bytes bound ordinary text tokenization conservatively;
             # framing/schema instructions reserve additional room.
             input_tokens=len(input_text.encode("utf-8")) + 256,

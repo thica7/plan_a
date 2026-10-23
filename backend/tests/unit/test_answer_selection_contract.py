@@ -268,7 +268,7 @@ async def test_writer_publishes_bound_plan_rules_and_final_qa_rejects_changed_an
         for index, quote in enumerate(quotes)
     ]
     service = RunService(
-        SkillRegistry.from_default_path(), Settings(demo_mode=True),
+        SkillRegistry.from_default_path(), Settings(demo_mode=True, writer_task_execution_enabled=False),
         journal=RunJournal.in_memory(), kb_cache=KBCache.in_memory(),
         graph_checkpointer=GraphCheckpointer.in_memory(),
     )

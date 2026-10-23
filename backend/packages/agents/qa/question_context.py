@@ -17,15 +17,23 @@ CORE_GAP = "question_core_context_budget_exceeded"
 EXCEPTION_GAP = "question_exception_context_budget_exceeded"
 
 
-def _observations(detail, name, consumption_id):
+def _observations(detail, name, consumption_id, *, optional=False, scope=None):
     result = []
     for span in detail.trace_spans:
         if span.name == name:
             value = json.loads(span.full_output)
             if value.get("consumption_id") == consumption_id:
-                if span.kind != "tool" or span.agent != "writer" or span.status != "ok":
+                if (
+                    span.kind != "tool"
+                    or span.agent != "writer"
+                    or span.status != "ok"
+                    or scope is not None
+                    and span.subagent != scope
+                ):
                     raise ValueError("question observation producer changed")
                 result.append(value)
+    if optional and not result:
+        return None
     if len(result) != 1:
         raise ValueError("question observation missing or ambiguous")
     return result[0]
@@ -69,6 +77,121 @@ def _validate_dispatched_support(payload, originals, sent_ids):
         refs.extend(span["support_ref"] for span in spans)
     if len(refs) != len(set(refs)) or set(refs) != set(catalog):
         raise ValueError("question dispatched support catalog missing or changed")
+
+
+def _dispatched_originals(detail, snapshot, use, view, packets, dispatch, name):
+    """Validate one actual transport with the existing original/support contract."""
+    packet = packets[0]
+    spans = [span for span in detail.trace_spans if span.id == dispatch["span_id"]]
+    if len(spans) != 1:
+        raise ValueError("question dispatch span missing or ambiguous")
+    span = spans[0]
+    attempts = span.metadata.get("llm_transport_attempts")
+    if (
+        span.kind != "llm"
+        or span.name != name
+        or span.agent != "writer"
+        or span.subagent != f"{use.competitor}/{use.dimension}"
+        or span.status != "ok"
+        or type(attempts) is not int
+        or attempts <= 0
+        or hashlib.sha256(span.full_input.encode()).hexdigest() != dispatch["full_input_sha256"]
+    ):
+        raise ValueError("question transport unverified")
+    raw = span.full_input.split("\nJSON:\n", 1)[1]
+    if len(raw.encode()) + len("\nJSON:\n") > use.max_bytes:
+        raise ValueError("question dispatch context exceeded")
+    payload = _expand_text_refs(json.loads(raw))
+    facts = payload["evidence_view"]["facts"]
+    if (
+        payload["segment_competitor"] != use.competitor
+        or payload["dimension"] != use.dimension
+        or payload["questions"] != packet["questions"]
+        or not isinstance(facts, list)
+    ):
+        raise ValueError("question dispatched scope changed")
+    sent_ids = [fact["id"] for fact in facts]
+    if len(sent_ids) != len(set(sent_ids)) or not set(sent_ids) <= set(view.fact_ids):
+        raise ValueError("question dispatched originals not in the generation view")
+    actual = reconcile_packet_originals(packet, snapshot, facts)
+    if set(actual["sent_fact_ids"]) != set(sent_ids) or payload[
+        "question_evidence_packets"
+    ] != prompt_packets(packets, snapshot, facts):
+        raise ValueError("question dispatched originals or packet content changed")
+    _validate_dispatched_support(payload, view.facts, sent_ids)
+    return facts
+
+
+def _task_delivery_originals(detail, snapshot, use, view, packets, receipt):
+    from packages.agents.writer.task_protocol import CONTRACT, parse_tasks
+
+    packet = packets[0]
+    tasks, dispatches = receipt["tasks"], receipt["dispatches"]
+    if (
+        receipt["contract"] != CONTRACT
+        or receipt["snapshot_id"] != snapshot.id
+        or receipt["packet_ids"] != [packet["packet_id"]]
+        or receipt["question_ids"] != [q["question_id"] for q in packet["questions"]]
+        or receipt["planning"] not in {"model_request_plan", "bounded_request_fallback"}
+        or not isinstance(tasks, list)
+        or not tasks
+        or not isinstance(dispatches, list)
+        or not dispatches
+        or any(not isinstance(task, dict) for task in tasks)
+    ):
+        raise ValueError("question task receipt identity changed")
+    # Outcome labels are display observations. Rebuild identities from the exact
+    # request fragments, including the server's named-resource expansion.
+    observed = [
+        {
+            key: value
+            for key, value in task.items()
+            if key not in {"state", "reason", "claim_id", "diagnostic"}
+        }
+        for task in tasks
+    ]
+    plan = []
+    for task in tasks:
+        row = {key: task[key] for key in ("question_id", "question_quote", "focus")}
+        if row not in plan:
+            plan.append(row)
+    canonical = parse_tasks(
+        json.dumps({"tasks": plan}), packet["questions"], f"{use.competitor}/{use.dimension}"
+    )
+    expected = [
+        {key: value for key, value in task.items() if key not in {"state", "reason"}}
+        for task in canonical
+    ]
+    if observed != expected:
+        raise ValueError("question task identities changed")
+    known = {task["task_id"]: task for task in observed}
+    if len(known) != len(observed):
+        raise ValueError("question task identity ambiguous")
+    sent, seen_spans, seen_tasks = {}, set(), set()
+    for dispatch in dispatches:
+        ids = dispatch["task_ids"]
+        if (
+            not isinstance(ids, list)
+            or not ids
+            or len(ids) != len(set(ids))
+            or not set(ids) <= known.keys()
+            or seen_tasks.intersection(ids)
+            or dispatch["span_id"] in seen_spans
+        ):
+            raise ValueError("question task dispatch identity ambiguous")
+        facts = _dispatched_originals(
+            detail, snapshot, use, view, packets, dispatch, "dimension_task_generation"
+        )
+        span = next(span for span in detail.trace_spans if span.id == dispatch["span_id"])
+        payload = _expand_text_refs(json.loads(span.full_input.split("\nJSON:\n", 1)[1]))
+        if payload["tasks"] != [known[tid] for tid in ids] or dispatch["fact_ids"] != sorted(
+            fact["id"] for fact in facts
+        ):
+            raise ValueError("question task batch or originals changed")
+        seen_spans.add(dispatch["span_id"])
+        seen_tasks.update(ids)
+        sent.update((fact["id"], fact) for fact in facts)
+    return list(sent.values())
 
 
 def _question_replays(service, detail, snapshot, use, view):
@@ -121,46 +244,25 @@ def _question_replays(service, detail, snapshot, use, view):
             ids = row.get(key, ())
             if not isinstance(ids, (list, tuple)) or any(fid not in eligible for fid in ids):
                 raise ValueError("question obligation original unverified")
-    dispatch = _observations(detail, "question_evidence_dispatch", use.id)
-    if dispatch["snapshot_id"] != snapshot.id or dispatch["packet_ids"] != [packet["packet_id"]]:
-        raise ValueError("question dispatch packet changed")
-    spans = [span for span in detail.trace_spans if span.id == dispatch["span_id"]]
-    if len(spans) != 1:
-        raise ValueError("question dispatch span missing or ambiguous")
-    span = spans[0]
-    attempts = span.metadata.get("llm_transport_attempts")
-    if (
-        span.kind != "llm"
-        or span.name != "dimension_claim_writer"
-        or span.agent != "writer"
-        or span.subagent != f"{use.competitor}/{use.dimension}"
-        or span.status != "ok"
-        or type(attempts) is not int
-        or attempts <= 0
-        or hashlib.sha256(span.full_input.encode()).hexdigest() != dispatch["full_input_sha256"]
-    ):
-        raise ValueError("question transport unverified")
-    raw = span.full_input.split("\nJSON:\n", 1)[1]
-    if len(raw.encode()) + len("\nJSON:\n") > use.max_bytes:
-        raise ValueError("question dispatch context exceeded")
-    payload = _expand_text_refs(json.loads(raw))
-    facts = payload["evidence_view"]["facts"]
-    if (
-        payload["segment_competitor"] != use.competitor
-        or payload["dimension"] != use.dimension
-        or payload["questions"] != packet["questions"]
-        or not isinstance(facts, list)
-    ):
-        raise ValueError("question dispatched scope changed")
-    sent_ids = [fact["id"] for fact in facts]
-    if len(sent_ids) != len(set(sent_ids)) or not set(sent_ids) <= set(view.fact_ids):
-        raise ValueError("question dispatched originals not in the generation view")
+    receipt = _observations(
+        detail,
+        "question_task_delivery",
+        use.id,
+        optional=True,
+        scope=f"{use.competitor}/{use.dimension}",
+    )
+    if receipt is not None:
+        facts = _task_delivery_originals(detail, snapshot, use, view, packets, receipt)
+    else:
+        dispatch = _observations(detail, "question_evidence_dispatch", use.id)
+        if dispatch["snapshot_id"] != snapshot.id or dispatch["packet_ids"] != [
+            packet["packet_id"]
+        ]:
+            raise ValueError("question dispatch packet changed")
+        facts = _dispatched_originals(
+            detail, snapshot, use, view, packets, dispatch, "dimension_claim_writer"
+        )
     actual = reconcile_packet_originals(packet, snapshot, facts)
-    if set(actual["sent_fact_ids"]) != set(sent_ids) or payload[
-        "question_evidence_packets"
-    ] != prompt_packets(packets, snapshot, facts):
-        raise ValueError("question dispatched originals or packet content changed")
-    _validate_dispatched_support(payload, view.facts, sent_ids)
     return (reconcile_packet_originals(packet, snapshot, view.facts), actual)
 
 

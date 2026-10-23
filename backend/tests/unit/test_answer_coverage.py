@@ -383,7 +383,7 @@ async def test_oversized_question_set_keeps_all_tasks_without_calling_model(monk
         source.url = TypeAdapter(HttpUrl).validate_python(source.url)
     service = RunService(
         SkillRegistry.from_default_path(),
-        Settings(demo_mode=True),
+        Settings(demo_mode=True, writer_task_execution_enabled=False),
         journal=RunJournal.in_memory(),
         kb_cache=KBCache.in_memory(),
         graph_checkpointer=GraphCheckpointer.in_memory(),
@@ -448,7 +448,7 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
     ]
     service = RunService(
         SkillRegistry.from_default_path(),
-        Settings(demo_mode=True),
+        Settings(demo_mode=True, writer_task_execution_enabled=False),
         journal=RunJournal.in_memory(),
         kb_cache=KBCache.in_memory(),
         graph_checkpointer=GraphCheckpointer.in_memory(),

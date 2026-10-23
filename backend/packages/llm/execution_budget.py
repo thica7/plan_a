@@ -29,13 +29,14 @@ class RunLLMBudget:
     delivery_reserves: dict[str, int] = field(default_factory=dict)
     delivery_charged: dict[str, int] = field(default_factory=dict)
     delivery_calls: dict[str, int] = field(default_factory=dict)
+    delivery_call_reserves: dict[str, int] = field(default_factory=dict)
     delivery_finished: set[str] = field(default_factory=set)
 
     def protected_tokens(self, phase: str | None) -> int:
         protected = sum(max(0, amount - self.delivery_charged.get(key, 0))
                    for key, amount in self.delivery_reserves.items()
                    if key != phase and key not in self.delivery_finished)
-        core = ('analyst:', 'comparator:', 'reflector:', 'writer:', 'qa:')
+        core = ('analyst:', 'comparator:', 'reflector:', 'writer:', 'qa:', 'answer:', 'final_qa:')
         if not (phase or '').startswith(core) and any(
             key.startswith(core) and key not in self.delivery_finished for key in self.delivery_reserves
         ):
@@ -43,7 +44,7 @@ class RunLLMBudget:
         return protected
 
     def protected_calls(self, phase: str | None) -> int:
-        return sum(not self.delivery_calls.get(key, 0)
+        return sum(max(0, self.delivery_call_reserves.get(key, 1) - self.delivery_calls.get(key, 0))
                    for key in self.delivery_reserves
                    if key != phase and key not in self.delivery_finished)
 

@@ -18,6 +18,7 @@ from packages.research.evidence.source_spans import projected_source_facts
 from packages.research.question_scope import research_questions
 
 MAX_REVIEW_BYTES = 14000
+TASK_REVIEW_BYTES = 6000
 MAX_FINDINGS = 10
 RECEIPT_NAME = "final_question_reconciliation_receipt"
 SYSTEM = (
@@ -192,6 +193,7 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
     """At most one bounded review; failures keep every original finding intact."""
     historical = [issue for issue in issues if issue.detected_by == "reflector"]
     if not historical:
+        service._finish_delivery_phase(record, 'final_qa', None)
         return issues
     detail = record.detail
     snapshot = service._final_qa_snapshot(record)
@@ -239,6 +241,18 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
                 support_digest=candidate["support_digest"],
             )
             candidates.append(candidate)
+    review_limit = TASK_REVIEW_BYTES if service._task_delivery_segments(record) else MAX_REVIEW_BYTES
+    if review_limit == TASK_REVIEW_BYTES:
+        # Pack whole findings, never shorten a claim or source prerequisite.
+        # Unsent findings retain their initial keep disposition.
+        selected = []
+        for candidate in candidates:
+            trial = dict(version=1, basis_hash=basis_hash, findings=[*selected, candidate])
+            if len(('\nJSON:\n' + canonical_json(trial)).encode()) <= review_limit:
+                selected.append(candidate)
+            else:
+                decisions[candidate['issue_id']]['reason'] = 'Complete finding exceeded the bounded final QA context.'
+        candidates = selected
     payload = dict(version=1, basis_hash=basis_hash, findings=candidates)
     model_review = None
     if candidates and len(candidates) <= MAX_FINDINGS:
@@ -267,7 +281,7 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
                     record, agent="qa", fact_ids=fact_ids, source_ids=source_ids
                 )
                 user = "\nJSON:\n" + canonical_json(payload)
-                if len(user.encode()) > min(MAX_REVIEW_BYTES, use.max_bytes) or not set(
+                if len(user.encode()) > min(review_limit, use.max_bytes) or not set(
                     fact_ids
                 ) <= set(view.fact_ids):
                     raise ValueError("final question review context omitted")
@@ -364,4 +378,5 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
                 }
             )
         result.append(issue)
+    service._finish_delivery_phase(record, 'final_qa', None)
     return result

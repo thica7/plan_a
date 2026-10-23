@@ -154,8 +154,9 @@ async def test_lifecycle_capacity_gap_keeps_whole_originals(monkeypatch):
     assert all(fact.quote in CORE for fact in snapshot.facts if fact.id in selected)
 
 
-def service_for(detail):
-    service = RunService(SkillRegistry.from_default_path(), Settings(demo_mode=True),
+def service_for(detail, *, task_execution=False):
+    service = RunService(SkillRegistry.from_default_path(), Settings(demo_mode=True,
+        writer_task_execution_enabled=task_execution),
         journal=RunJournal.in_memory(), kb_cache=KBCache.in_memory(),
         graph_checkpointer=GraphCheckpointer.in_memory())
     record = RunRecord(detail)

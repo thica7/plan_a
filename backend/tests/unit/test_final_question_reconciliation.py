@@ -350,6 +350,30 @@ async def test_oversized_final_reconciliation_context_keeps_findings_without_a_c
 
 
 @pytest.mark.asyncio
+async def test_task_final_qa_packs_whole_findings_and_keeps_unsent_ones(monkeypatch):
+    from dataclasses import replace
+    detail, service, record = await scope_case(monkeypatch)
+    service._settings = replace(service._settings, writer_task_execution_enabled=True)
+    original = service._build_reflector_qa_issues(detail)[0]
+    large = original.model_copy(update={'id': 'oversized-finding', 'problem': 'Q1: ' + 'diagnostic ' * 1000})
+    calls = []
+
+    async def model(record, **kwargs):
+        assert len(kwargs['user'].encode()) <= 6000
+        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        assert [row['issue_id'] for row in payload['findings']] == [original.id]
+        assert payload['findings'][0]['claims'][0]['source_span_bindings']
+        calls.append(payload)
+        return reviewed(payload)
+
+    monkeypatch.setattr(service, '_trace_llm_text', model)
+    result = await api()(service, record, [original, large], evidence_issues=[])
+    assert [row.id for row in result] == [large.id]
+    assert len(calls) == 1
+    assert 'final_qa:run' in service._run_llm_budget(record).delivery_finished
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "finding",
     [

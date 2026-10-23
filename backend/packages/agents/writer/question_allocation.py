@@ -146,7 +146,7 @@ def task_support_score(task, quote, question, product):
     from packages.agents.writer.answer_coverage import question_terms
 
     request = task.get("request", question)
-    action = _ACTIONS.get(task["focus"])
+    action = _ACTIONS.get(task['focus'].removeprefix('rule_'))
     if task["focus"] == "permission_not_obligation":
         action = _ACTIONS.get(next(iter(sorted(requested_answer_actions(question))), ""))
     score = 20 * bool(action and re.search(action, quote, re.I))

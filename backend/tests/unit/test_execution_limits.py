@@ -24,6 +24,7 @@ async def _service(**limits):
         llm_timeout_seconds=1,
         llm_temperature=0.2,
         llm_retry_backoff_seconds=0,
+        writer_task_execution_enabled=False,
     )
     for key, value in limits.items():
         object.__setattr__(settings, key, value)

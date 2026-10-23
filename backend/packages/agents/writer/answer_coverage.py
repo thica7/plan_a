@@ -62,7 +62,7 @@ def question_fact_ids(detail, snapshot, product, dimension):
     return tuple(picked[:8]) or None
 
 
-def answer_review_payload(questions, claims, view, *, additional_fact_ids=(), include_originals=True):
+def answer_review_payload(questions, claims, view, *, additional_fact_ids=(), include_originals=True, compact_semantics=False):
     """Published atoms prove answers; unselected originals can only restrict them."""
     ids = {fid for claim in claims for fid in claim.fact_ids} | set(additional_fact_ids)
     from packages.research.evidence.temporal_conditions import temporal_constraints
@@ -89,6 +89,11 @@ def answer_review_payload(questions, claims, view, *, additional_fact_ids=(), in
                     supports.append(dict(claim_id=claim.id, fact_id=bound['fact_id'],
                         source_id=bound['source_id'], quote=bound['operation_quote'],
                         condition_evidence=bound['condition_evidence']))
+                    if compact_semantics:
+                        supports[-1]['operation_conditions'] = {key: bound[key] for key in (
+                            'operation', 'role', 'plan', 'access_scope', 'object_type', 'object_quote', 'effect',
+                            'recipient_quote', 'excluded_roles', 'prerequisites', 'condition_groups',
+                        ) if key in bound}
                 continue
             originals = [fact for fact in view.facts if fact.id in claim.fact_ids]
             projected, errors = projected_source_facts(claim, originals)
@@ -106,6 +111,13 @@ def answer_review_payload(questions, claims, view, *, additional_fact_ids=(), in
                     purpose="reject_or_qualify_only", temporal_constraints=temporal,
                     source_exceptions=exceptions))
         payload.update(published_supports=supports, restrictive_source_context=restrictions)
+    if compact_semantics:
+        # Identity/coordinates are checked and retained by the server. This model
+        # audits the complete selected quotes and conditions, not duplicate hashes.
+        for row in payload['claims']:
+            for key in ('source_span_bindings', 'operation_binding', 'competitor', 'dimension',
+                        'fact_ids', 'source_ids'):
+                row.pop(key, None)
     return payload
 
 

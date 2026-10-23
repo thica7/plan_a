@@ -57,7 +57,7 @@ async def test_protected_writer_projects_new_semantic_source_and_replays_its_pro
                 for q in research_questions(live_detail, competitor, dimension)]}
 
     monkeypatch.setattr('packages.agents.writer.question_retrieval.retrieve_question_facts', semantic_ids)
-    service = RunService(SkillRegistry.from_default_path(), Settings(demo_mode=True),
+    service = RunService(SkillRegistry.from_default_path(), Settings(demo_mode=True, writer_task_execution_enabled=False),
         journal=RunJournal.in_memory(), kb_cache=KBCache.in_memory(),
         graph_checkpointer=GraphCheckpointer.in_memory())
     record = RunRecord(detail)

@@ -300,7 +300,7 @@ async def test_real_writer_claim_review_answer_and_final_qa_replay_the_same_orig
             'qualifiers': original.qualifiers,
         }]
     snapshot = seal_snapshot(detail, phase='analysis', canonical_documents={})
-    service = RunService(SkillRegistry.from_default_path(), Settings(demo_mode=True),
+    service = RunService(SkillRegistry.from_default_path(), Settings(demo_mode=True, writer_task_execution_enabled=False),
                          journal=RunJournal.in_memory(), kb_cache=KBCache.in_memory(),
                          graph_checkpointer=GraphCheckpointer.in_memory())
     record = RunRecord(detail)
