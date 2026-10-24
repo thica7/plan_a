@@ -79,7 +79,8 @@ def _validate_dispatched_support(payload, originals, sent_ids):
         raise ValueError("question dispatched support catalog missing or changed")
 
 
-def _dispatched_originals(detail, snapshot, use, view, packets, dispatch, name):
+def _dispatched_originals(detail, snapshot, use, view, packets, dispatch, name, *,
+                          service=None, handoff_version=None):
     """Validate one actual transport with the existing original/support contract."""
     packet = packets[0]
     spans = [span for span in detail.trace_spans if span.id == dispatch["span_id"]]
@@ -102,6 +103,25 @@ def _dispatched_originals(detail, snapshot, use, view, packets, dispatch, name):
     if len(raw.encode()) + len("\nJSON:\n") > use.max_bytes:
         raise ValueError("question dispatch context exceeded")
     payload = _expand_text_refs(json.loads(raw))
+    from packages.agents.writer.task_execution import has_task_handoff_system
+    if (has_task_handoff_system(span.full_input) or handoff_version is not None
+            or 'task_handoff_version' in payload or 'request_context' in payload):
+        from types import SimpleNamespace
+
+        from packages.agents.writer.task_execution import (
+            ADVISORY_PROJECTION_SYSTEM_IDENTITY,
+            HANDOFF_VERSION,
+            task_request_context_version,
+            validate_task_handoff,
+        )
+        if (type(handoff_version) is not int or handoff_version != HANDOFF_VERSION
+                or service is None):
+            raise ValueError('question task handoff version changed')
+        system = span.full_input.split('\nJSON:\n', 1)[0]
+        validate_task_handoff(service, SimpleNamespace(detail=detail, evidence_origin=None),
+                              payload, view, projection_version=(
+                                  2 if ADVISORY_PROJECTION_SYSTEM_IDENTITY in system else 1),
+                              request_context_version=task_request_context_version(span.full_input))
     facts = payload["evidence_view"]["facts"]
     expected_questions = packet["questions"]
     if name == "dimension_task_generation":
@@ -136,10 +156,19 @@ def _dispatched_originals(detail, snapshot, use, view, packets, dispatch, name):
     return facts
 
 
-def _task_delivery_originals(detail, snapshot, use, view, packets, receipt):
+def _task_delivery_originals(detail, snapshot, use, view, packets, receipt, *, service=None):
+    from packages.agents.writer.task_execution import (
+        HANDOFF_VERSION,
+        has_two_phase_generation_system,
+        task_request_context_version,
+    )
     from packages.agents.writer.task_protocol import CONTRACT, parse_tasks
 
     packet = packets[0]
+    if 'advisory_delivery' in receipt and (
+            type(receipt.get('task_handoff_version')) is not int
+            or receipt['task_handoff_version'] != HANDOFF_VERSION):
+        raise ValueError('question task handoff version missing or changed')
     tasks, dispatches = receipt["tasks"], receipt["dispatches"]
     if (
         receipt["contract"] != CONTRACT
@@ -194,6 +223,8 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt):
     if len(known) != len(observed):
         raise ValueError("question task identity ambiguous")
     sent, seen_spans, seen_tasks, repaired = {}, set(), set(), False
+    two_phase_tasks = set()
+    parent_v2_tasks = set()
     for dispatch in dispatches:
         ids = dispatch["task_ids"]
         attempt = dispatch.get("attempt", 0)
@@ -211,9 +242,14 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt):
         ):
             raise ValueError("question task dispatch identity ambiguous")
         facts = _dispatched_originals(
-            detail, snapshot, use, view, packets, dispatch, "dimension_task_generation"
+            detail, snapshot, use, view, packets, dispatch, "dimension_task_generation",
+            service=service, handoff_version=receipt.get('task_handoff_version'),
         )
         span = next(span for span in detail.trace_spans if span.id == dispatch["span_id"])
+        if has_two_phase_generation_system(span.full_input):
+            two_phase_tasks.update(ids)
+        if task_request_context_version(span.full_input) == 2:
+            parent_v2_tasks.update(ids)
         payload = _expand_text_refs(json.loads(span.full_input.split("\nJSON:\n", 1)[1]))
         if attempt == 1:
             repairs = payload.get("task_repair", [])
@@ -227,6 +263,32 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt):
         seen_spans.add(dispatch["span_id"])
         seen_tasks.update(ids)
         sent.update((fact["id"], fact) for fact in facts)
+    from packages.agents.writer.task_execution import (
+        ADVISORY_REVIEW_SYSTEM_IDENTITY,
+        HANDOFF_SYSTEM_IDENTITY,
+        validate_task_handoff,
+    )
+    review_ids = {task.get('review_span_id') for task in tasks}
+    for task in tasks:
+        if task['task_id'] not in two_phase_tasks or not task.get('review_span_id'):
+            continue
+        matches = [span for span in detail.trace_spans if span.id == task['review_span_id']]
+        if len(matches) != 1 or not matches[0].full_input.startswith(
+                HANDOFF_SYSTEM_IDENTITY + ADVISORY_REVIEW_SYSTEM_IDENTITY) or (
+                task['task_id'] in parent_v2_tasks
+                and task_request_context_version(matches[0].full_input) != 2):
+            raise ValueError('question task advisory review phase changed')
+    for span in detail.trace_spans:
+        if span.id not in review_ids or not span.full_input.startswith(
+                HANDOFF_SYSTEM_IDENTITY + ADVISORY_REVIEW_SYSTEM_IDENTITY):
+            continue
+        from types import SimpleNamespace
+        if service is None:
+            raise ValueError('question task advisory review cannot be rebuilt')
+        payload = _expand_text_refs(json.loads(span.full_input.split('\nJSON:\n', 1)[1]))
+        validate_task_handoff(service, SimpleNamespace(detail=detail, evidence_origin=None),
+                              payload, view,
+                              request_context_version=task_request_context_version(span.full_input))
     return list(sent.values())
 
 
@@ -288,7 +350,8 @@ def _question_replays(service, detail, snapshot, use, view):
         scope=f"{use.competitor}/{use.dimension}",
     )
     if receipt is not None:
-        facts = _task_delivery_originals(detail, snapshot, use, view, packets, receipt)
+        facts = _task_delivery_originals(
+            detail, snapshot, use, view, packets, receipt, service=service)
     else:
         dispatch = _observations(detail, "question_evidence_dispatch", use.id)
         if dispatch["snapshot_id"] != snapshot.id or dispatch["packet_ids"] != [

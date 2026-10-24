@@ -1,0 +1,1032 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-25",
+  "stage": "agent_isolation_handoff",
+  "base_commit": "4165b0418f12920bd1ef3eff7304d29f983838b1",
+  "acceptance_status": "not_deliverable",
+  "training_performed": false,
+  "docker_executed": false,
+  "writer_task_execution_default_enabled": false,
+  "scope": {
+    "products": [
+      "Trello",
+      "Cloudflare",
+      "Bitwarden",
+      "1Password"
+    ],
+    "original_questions": 8,
+    "internal_questions": 10,
+    "captured_pages_date": "2026-10-21",
+    "model_alias": "deepseek-flash",
+    "temperature": 0,
+    "retries": 0,
+    "default_max_output_tokens": 2048,
+    "max_calls_per_run": 24,
+    "max_tokens_per_run": 80000,
+    "underlying_model_version_independently_verified": false,
+    "fresh_web_capture": false,
+    "e2e": false,
+    "production_semantic_rag_exercised": false,
+    "blind": false,
+    "reference_snapshot_gold_loaded": false
+  },
+  "verification": {
+    "backend": {
+      "passed": 7656,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 229.89,
+      "new_tests_vs_base": 135,
+      "log": "backend-acceptance-final.log",
+      "log_sha256": "bff50da76103b155c0196f28462649a3dedbfe5c17f4ce784b4adcbac4979ff8"
+    },
+    "new_tests_vs_base": 135,
+    "changed_python_files": 13,
+    "new_ruff_diagnostics": [],
+    "diff_check": "passed",
+    "spec_review": {
+      "status": "passed",
+      "independent_tests": 258
+    },
+    "quality_review": {
+      "status": "passed",
+      "independent_tests": 238
+    },
+    "prior_originals_unchanged": 216,
+    "final_originals_locked": 24
+  },
+  "source": {
+    "production_code_sha256": "4de828e3d2969431ecb303cdb710d181099f5f22ca6b13313d174cd7b3c923c1",
+    "production_packages_sha256": "cb97162b23d2422c256f44eb2564457d7123076fdadc232b2994e1944923fe97",
+    "freeze_manifest_sha256": "48429275efd55a07acec5a3ad8b647f83a513f368146dff437354a909440ee0a",
+    "replay_lock_sha256": "2979d78a2efd68ff7459fca65b4ab2d52e82b4f0f9c91331dee467f6a4354314",
+    "isolation_tool_sha256": "7277041a53a8b800bbffbde875905c65278423f2f549cf0d5a8c1a464f77e191"
+  },
+  "implementation": {
+    "advisory_projection_version": 2,
+    "request_context_version": 2,
+    "candidate_then_selected_generation": true,
+    "upstream_advice_is_not_fact": true,
+    "dependencies_require_actual_generation_transport": true,
+    "whole_originals_and_prerequisites_preserved": true,
+    "legacy_system_based_replay": true,
+    "lossless_single_payload_sha_and_facts_sha": true
+  },
+  "final_pipeline": {
+    "calls": 70,
+    "known_provider_tokens": 194658,
+    "unknown_usage_transports": 0,
+    "qa_calls": 15,
+    "qa_counts": {
+      "planned_issue_ids": 27,
+      "sent_issue_ids": 23,
+      "valid_review_issue_ids": 23,
+      "unsent_issue_ids": 4,
+      "model_unreviewed_issue_ids": 4,
+      "timeout_issue_ids": 0,
+      "unresolved_timeout_issue_ids": 0
+    },
+    "qa_independent_counts": {
+      "planned_issue_ids": 10,
+      "sent_issue_ids": 9,
+      "valid_review_issue_ids": 9
+    },
+    "products": {
+      "trello": {
+        "calls": 22,
+        "known_provider_tokens": 62497,
+        "unknown_usage_transports": 0,
+        "actual_transport_by_agent": {
+          "planner": 1,
+          "collector": 2,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 8,
+          "qa": 8
+        },
+        "zero_transport_llm_spans": {
+          "dimension_task_generation": 2
+        },
+        "finish_reasons": {
+          "stop": 22
+        },
+        "shared_collector_cost": {
+          "calls": 2,
+          "known_tokens": 5562,
+          "unknown_usage_spans": 0
+        },
+        "actual_task_generation_deliveries": [
+          {
+            "span_id": "span-44",
+            "full_input_bytes": 15926,
+            "actual_input_observable": true,
+            "upstream_keys_present": {
+              "upstream_analysis": true,
+              "comparison_assessment": true,
+              "reflection_constraints": true
+            },
+            "parent_count": 1,
+            "binding_count": 2,
+            "task_count": 2
+          },
+          {
+            "span_id": "span-47",
+            "full_input_bytes": 14912,
+            "actual_input_observable": true,
+            "upstream_keys_present": {
+              "upstream_analysis": true,
+              "comparison_assessment": true,
+              "reflection_constraints": true
+            },
+            "parent_count": 1,
+            "binding_count": 1,
+            "task_count": 1
+          }
+        ],
+        "qa_calls": 6,
+        "qa_counts": {
+          "planned_issue_ids": 9,
+          "sent_issue_ids": 8,
+          "valid_review_issue_ids": 8,
+          "unsent_issue_ids": 1,
+          "model_unreviewed_issue_ids": 1,
+          "timeout_issue_ids": 0,
+          "unresolved_timeout_issue_ids": 0
+        },
+        "qa_independent_counts": {
+          "planned_issue_ids": 4,
+          "sent_issue_ids": 4,
+          "valid_review_issue_ids": 4
+        },
+        "task_states": {
+          "deferred": 5,
+          "supported": 2,
+          "insufficient_evidence": 4
+        },
+        "module_status_counts": {
+          "llm": 3
+        },
+        "production_code_sha256": "4de828e3d2969431ecb303cdb710d181099f5f22ca6b13313d174cd7b3c923c1",
+        "production_code_changed_during_run": false,
+        "replay_network_guard_blocks": 0,
+        "raw_outputs_sha256": {
+          "inputs.json": "f6ecc084babe6c3073b56b0c14c0d8b3cc1670b89bb21c4b842848f80791d8f9",
+          "run.json": "5a00ce7b8e4af41faf1f15713b258f803330c866f18686caa46b6012356a5b90",
+          "report.md": "c64233befcf05c31a5564723cc85e94dc0a0948efd1e4ad7edb42c781745314f",
+          "snapshot.json": "a760471e9b6ca4b3ce1919a4b13e6d15eb3399777608c2629e9031818c73e7d8",
+          "trace.json": "043b7ccd37b64778ca9ad3c55610e57c14775854a19c43fb2769957437b3d8ac",
+          "summary.json": "7afd6218b774c9099e7c1a09c6409a028666733aee8fa27277948d7abb81bb91"
+        }
+      },
+      "cloudflare": {
+        "calls": 17,
+        "known_provider_tokens": 48654,
+        "unknown_usage_transports": 0,
+        "actual_transport_by_agent": {
+          "planner": 1,
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 5,
+          "qa": 5
+        },
+        "zero_transport_llm_spans": {},
+        "finish_reasons": {
+          "stop": 17
+        },
+        "shared_collector_cost": {
+          "calls": 3,
+          "known_tokens": 9150,
+          "unknown_usage_spans": 0
+        },
+        "actual_task_generation_deliveries": [
+          {
+            "span_id": "span-47",
+            "full_input_bytes": 13569,
+            "actual_input_observable": true,
+            "upstream_keys_present": {
+              "upstream_analysis": true,
+              "comparison_assessment": true,
+              "reflection_constraints": true
+            },
+            "parent_count": 1,
+            "binding_count": 1,
+            "task_count": 1
+          },
+          {
+            "span_id": "span-50",
+            "full_input_bytes": 12898,
+            "actual_input_observable": true,
+            "upstream_keys_present": {
+              "upstream_analysis": true,
+              "comparison_assessment": true,
+              "reflection_constraints": true
+            },
+            "parent_count": 1,
+            "binding_count": 1,
+            "task_count": 1
+          }
+        ],
+        "qa_calls": 2,
+        "qa_counts": {
+          "planned_issue_ids": 4,
+          "sent_issue_ids": 4,
+          "valid_review_issue_ids": 4,
+          "unsent_issue_ids": 0,
+          "model_unreviewed_issue_ids": 0,
+          "timeout_issue_ids": 0,
+          "unresolved_timeout_issue_ids": 0
+        },
+        "qa_independent_counts": {
+          "planned_issue_ids": 2,
+          "sent_issue_ids": 2,
+          "valid_review_issue_ids": 2
+        },
+        "task_states": {
+          "insufficient_evidence": 2,
+          "partial": 1
+        },
+        "module_status_counts": {
+          "llm": 3
+        },
+        "production_code_sha256": "4de828e3d2969431ecb303cdb710d181099f5f22ca6b13313d174cd7b3c923c1",
+        "production_code_changed_during_run": false,
+        "replay_network_guard_blocks": 0,
+        "raw_outputs_sha256": {
+          "inputs.json": "b2a1fa4913c223c3729673a1cf9c50d9670bea2cdff2b450359e9e2e287f32e1",
+          "run.json": "6895061a7b51d8206a70da97aa5e331b94b223826cc411f65eb4e1091046a5db",
+          "report.md": "badfde0b1d75e82d7fb6e6a05b494af0439872d4aee9bce985ccea19060cfec3",
+          "snapshot.json": "42e183729fd1733d979f0a18d0ddee0135dae9bf2e38de4762d1505203864254",
+          "trace.json": "401deb7dcf273de2055b7537d7da3e1df498f97bd18ffdd94a52ec81b22c22ff",
+          "summary.json": "6a9bb70b614a5f2b2caa0439a4e62eac6b255eb2a69f7fdb705c65a8d8d7b1da"
+        }
+      },
+      "bitwarden": {
+        "calls": 16,
+        "known_provider_tokens": 43759,
+        "unknown_usage_transports": 0,
+        "actual_transport_by_agent": {
+          "planner": 1,
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 3,
+          "qa": 6
+        },
+        "zero_transport_llm_spans": {},
+        "finish_reasons": {
+          "stop": 16
+        },
+        "shared_collector_cost": {
+          "calls": 3,
+          "known_tokens": 7515,
+          "unknown_usage_spans": 0
+        },
+        "actual_task_generation_deliveries": [
+          {
+            "span_id": "span-50",
+            "full_input_bytes": 13522,
+            "actual_input_observable": true,
+            "upstream_keys_present": {
+              "upstream_analysis": true,
+              "comparison_assessment": true,
+              "reflection_constraints": true
+            },
+            "parent_count": 1,
+            "binding_count": 1,
+            "task_count": 1
+          }
+        ],
+        "qa_calls": 4,
+        "qa_counts": {
+          "planned_issue_ids": 7,
+          "sent_issue_ids": 7,
+          "valid_review_issue_ids": 7,
+          "unsent_issue_ids": 0,
+          "model_unreviewed_issue_ids": 0,
+          "timeout_issue_ids": 0,
+          "unresolved_timeout_issue_ids": 0
+        },
+        "qa_independent_counts": {
+          "planned_issue_ids": 2,
+          "sent_issue_ids": 2,
+          "valid_review_issue_ids": 2
+        },
+        "task_states": {
+          "supported": 1,
+          "server_clarification": 1
+        },
+        "module_status_counts": {
+          "llm": 3
+        },
+        "production_code_sha256": "4de828e3d2969431ecb303cdb710d181099f5f22ca6b13313d174cd7b3c923c1",
+        "production_code_changed_during_run": false,
+        "replay_network_guard_blocks": 0,
+        "raw_outputs_sha256": {
+          "inputs.json": "ad5a6acb7174933f62b7c18cfa4d46287f70cde53f9ac966fd1ca3591429afde",
+          "run.json": "a068f5f57a47b14156f9ac6f9f9f571e3238acc75dcb1711387b8ae744032601",
+          "report.md": "22d84b29bcbeb5f4e0a3150a5fec8d7fdc7dec0137ce1dd1a80a114a37faae8a",
+          "snapshot.json": "ee2feb6e37fbadaf91ffe0ff34e1c5b2dab654190ad7f68a07014edfbcb8ad95",
+          "trace.json": "9399c39831dc5e4d43852d42f5eb3abc5a8ba66768e89012b497f5634f7cb174",
+          "summary.json": "b3d84442dcecb9d41c382b9bab7bac81e2206de62a4d911af5246525270b7d58"
+        }
+      },
+      "1password": {
+        "calls": 15,
+        "known_provider_tokens": 39748,
+        "unknown_usage_transports": 0,
+        "actual_transport_by_agent": {
+          "planner": 1,
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 3,
+          "qa": 5
+        },
+        "zero_transport_llm_spans": {},
+        "finish_reasons": {
+          "stop": 15
+        },
+        "shared_collector_cost": {
+          "calls": 3,
+          "known_tokens": 6035,
+          "unknown_usage_spans": 0
+        },
+        "actual_task_generation_deliveries": [
+          {
+            "span_id": "span-45",
+            "status": "ok",
+            "actual_input_observable": false,
+            "reason": "exact_prompt_not_recoverable_or_transport_failed"
+          }
+        ],
+        "qa_calls": 3,
+        "qa_counts": {
+          "planned_issue_ids": 7,
+          "sent_issue_ids": 4,
+          "valid_review_issue_ids": 4,
+          "unsent_issue_ids": 3,
+          "model_unreviewed_issue_ids": 3,
+          "timeout_issue_ids": 0,
+          "unresolved_timeout_issue_ids": 0
+        },
+        "qa_independent_counts": {
+          "planned_issue_ids": 2,
+          "sent_issue_ids": 1,
+          "valid_review_issue_ids": 1
+        },
+        "task_states": {
+          "supported": 2,
+          "insufficient_evidence": 1
+        },
+        "module_status_counts": {
+          "llm": 3
+        },
+        "production_code_sha256": "4de828e3d2969431ecb303cdb710d181099f5f22ca6b13313d174cd7b3c923c1",
+        "production_code_changed_during_run": false,
+        "replay_network_guard_blocks": 0,
+        "raw_outputs_sha256": {
+          "inputs.json": "621243fb9ed5459fb9dd6d5b731b738f8b3dc06f5df3292e57355bc01ebd522b",
+          "run.json": "adf279467a22245f76d859157deceea3a9923ed33127e4ad480d5c23f5c22b2e",
+          "report.md": "4701492486ef6a92a5fc3f6f2743b62c4eb661d3777ebb4d952fed38004d424d",
+          "snapshot.json": "4efc8be3046b05d2d30554e1d6d6531cb587d93312cc3bbca7959be3cdc6b628",
+          "trace.json": "75361abfac4b4047ef8b0917b4e57ab72bfd6bf90ee6f4e81932d07701abb396",
+          "summary.json": "dfcb569517f9be0571783312e80085275a3e93edc1df6ea8ac2620884fb9586d"
+        }
+      }
+    }
+  },
+  "final_comparison_cost": {
+    "pipeline": {
+      "calls": 70,
+      "known_provider_tokens": 194658
+    },
+    "shared_collector": {
+      "calls": 11,
+      "known_provider_tokens": 28262
+    },
+    "single_added": {
+      "calls": 4,
+      "known_provider_tokens": 53558,
+      "unknown_usage_count": 0
+    },
+    "single_including_shared": {
+      "calls": 15,
+      "known_provider_tokens": 81820
+    },
+    "seven_role_isolation": {
+      "calls": 7,
+      "known_provider_tokens": 26349,
+      "unknown_usage_count": 0
+    },
+    "provider_bill_usd": null
+  },
+  "diagnostic_runs": [
+    {
+      "mode": "single",
+      "name": "trello",
+      "status": "diagnostic_complete",
+      "cost": {
+        "transport_calls": 1,
+        "known_prompt_tokens": 6674,
+        "known_completion_tokens": 1053,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "shared_collector_cost": {
+        "transport_calls": 2,
+        "known_prompt_tokens": 4781,
+        "known_completion_tokens": 781,
+        "known_total_tokens": 5562,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 5562,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "single_plus_shared_cost": {
+        "transport_calls": 3,
+        "known_prompt_tokens": 11455,
+        "known_completion_tokens": 1834,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0
+      },
+      "integrity_unchanged": true,
+      "source": "data/artifacts/agent-isolation-handoff-2026-10-25/live-trello-acceptance/execution",
+      "error": null
+    },
+    {
+      "mode": "single",
+      "name": "cloudflare",
+      "status": "diagnostic_complete",
+      "cost": {
+        "transport_calls": 1,
+        "known_prompt_tokens": 12922,
+        "known_completion_tokens": 675,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "shared_collector_cost": {
+        "transport_calls": 3,
+        "known_prompt_tokens": 8447,
+        "known_completion_tokens": 703,
+        "known_total_tokens": 9150,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 9150,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "single_plus_shared_cost": {
+        "transport_calls": 4,
+        "known_prompt_tokens": 21369,
+        "known_completion_tokens": 1378,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0
+      },
+      "integrity_unchanged": true,
+      "source": "data/artifacts/agent-isolation-handoff-2026-10-25/live-cloudflare-acceptance/execution",
+      "error": null
+    },
+    {
+      "mode": "single",
+      "name": "bitwarden",
+      "status": "diagnostic_complete",
+      "cost": {
+        "transport_calls": 1,
+        "known_prompt_tokens": 24385,
+        "known_completion_tokens": 949,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "shared_collector_cost": {
+        "transport_calls": 3,
+        "known_prompt_tokens": 6462,
+        "known_completion_tokens": 1053,
+        "known_total_tokens": 7515,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 7515,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "single_plus_shared_cost": {
+        "transport_calls": 4,
+        "known_prompt_tokens": 30847,
+        "known_completion_tokens": 2002,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0
+      },
+      "integrity_unchanged": true,
+      "source": "data/artifacts/agent-isolation-handoff-2026-10-25/live-bitwarden-acceptance/execution",
+      "error": null
+    },
+    {
+      "mode": "single",
+      "name": "1password",
+      "status": "diagnostic_complete",
+      "cost": {
+        "transport_calls": 1,
+        "known_prompt_tokens": 6462,
+        "known_completion_tokens": 438,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "shared_collector_cost": {
+        "transport_calls": 3,
+        "known_prompt_tokens": 5614,
+        "known_completion_tokens": 421,
+        "known_total_tokens": 6035,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 6035,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "single_plus_shared_cost": {
+        "transport_calls": 4,
+        "known_prompt_tokens": 12076,
+        "known_completion_tokens": 859,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0
+      },
+      "integrity_unchanged": true,
+      "source": "data/artifacts/agent-isolation-handoff-2026-10-25/live-1password-acceptance/execution",
+      "error": null
+    },
+    {
+      "mode": "isolate",
+      "name": "planner",
+      "status": "diagnostic_complete",
+      "cost": {
+        "transport_calls": 1,
+        "known_prompt_tokens": 406,
+        "known_completion_tokens": 177,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "shared_collector_cost": {
+        "transport_calls": 2,
+        "known_prompt_tokens": 4781,
+        "known_completion_tokens": 781,
+        "known_total_tokens": 5562,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 5562,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "single_plus_shared_cost": null,
+      "integrity_unchanged": true,
+      "source": "data/artifacts/agent-isolation-handoff-2026-10-25/live-trello-acceptance/execution",
+      "error": null
+    },
+    {
+      "mode": "isolate",
+      "name": "collector",
+      "status": "diagnostic_complete",
+      "cost": {
+        "transport_calls": 1,
+        "known_prompt_tokens": 1458,
+        "known_completion_tokens": 273,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "shared_collector_cost": {
+        "transport_calls": 2,
+        "known_prompt_tokens": 4781,
+        "known_completion_tokens": 781,
+        "known_total_tokens": 5562,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 5562,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "single_plus_shared_cost": null,
+      "integrity_unchanged": true,
+      "source": "data/artifacts/agent-isolation-handoff-2026-10-25/live-trello-acceptance/execution",
+      "error": null
+    },
+    {
+      "mode": "isolate",
+      "name": "analyst",
+      "status": "diagnostic_complete",
+      "cost": {
+        "transport_calls": 1,
+        "known_prompt_tokens": 3014,
+        "known_completion_tokens": 903,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "shared_collector_cost": {
+        "transport_calls": 2,
+        "known_prompt_tokens": 4781,
+        "known_completion_tokens": 781,
+        "known_total_tokens": 5562,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 5562,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "single_plus_shared_cost": null,
+      "integrity_unchanged": true,
+      "source": "data/artifacts/agent-isolation-handoff-2026-10-25/live-trello-acceptance/execution",
+      "error": null
+    },
+    {
+      "mode": "isolate",
+      "name": "comparator",
+      "status": "diagnostic_complete",
+      "cost": {
+        "transport_calls": 1,
+        "known_prompt_tokens": 5871,
+        "known_completion_tokens": 560,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "shared_collector_cost": {
+        "transport_calls": 2,
+        "known_prompt_tokens": 4781,
+        "known_completion_tokens": 781,
+        "known_total_tokens": 5562,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 5562,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "single_plus_shared_cost": null,
+      "integrity_unchanged": true,
+      "source": "data/artifacts/agent-isolation-handoff-2026-10-25/live-trello-acceptance/execution",
+      "error": null
+    },
+    {
+      "mode": "isolate",
+      "name": "reflector",
+      "status": "diagnostic_complete",
+      "cost": {
+        "transport_calls": 1,
+        "known_prompt_tokens": 5920,
+        "known_completion_tokens": 700,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "shared_collector_cost": {
+        "transport_calls": 2,
+        "known_prompt_tokens": 4781,
+        "known_completion_tokens": 781,
+        "known_total_tokens": 5562,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 5562,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "single_plus_shared_cost": null,
+      "integrity_unchanged": true,
+      "source": "data/artifacts/agent-isolation-handoff-2026-10-25/live-trello-acceptance/execution",
+      "error": null
+    },
+    {
+      "mode": "isolate",
+      "name": "writer",
+      "status": "diagnostic_complete",
+      "cost": {
+        "transport_calls": 1,
+        "known_prompt_tokens": 4222,
+        "known_completion_tokens": 117,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "shared_collector_cost": {
+        "transport_calls": 2,
+        "known_prompt_tokens": 4781,
+        "known_completion_tokens": 781,
+        "known_total_tokens": 5562,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 5562,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "single_plus_shared_cost": null,
+      "integrity_unchanged": true,
+      "source": "data/artifacts/agent-isolation-handoff-2026-10-25/live-trello-acceptance/execution",
+      "error": null
+    },
+    {
+      "mode": "isolate",
+      "name": "qa",
+      "status": "diagnostic_complete",
+      "cost": {
+        "transport_calls": 1,
+        "known_prompt_tokens": 2195,
+        "known_completion_tokens": 533,
+        "usage_unknown_count": 0,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "shared_collector_cost": {
+        "transport_calls": 2,
+        "known_prompt_tokens": 4781,
+        "known_completion_tokens": 781,
+        "known_total_tokens": 5562,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 5562,
+        "timeout_count": 0,
+        "length_count": 0,
+        "provider_bill_usd": null
+      },
+      "single_plus_shared_cost": null,
+      "integrity_unchanged": true,
+      "source": "data/artifacts/agent-isolation-handoff-2026-10-25/live-trello-acceptance/execution",
+      "error": null
+    }
+  ],
+  "independent_content_review": {
+    "status": "complete_diagnostic",
+    "audit_path": "data/artifacts/agent-isolation-handoff-2026-10-25/independent-content-audit-acceptance.json",
+    "audit_sha256": "e3fd9b44b092d28a756ea94cf3d7610621500ed65d14efcf156089d2ea4a3c45",
+    "summary": {
+      "full": {
+        "pass": 3,
+        "partial": 5,
+        "fail": 0,
+        "not_exercised": 0,
+        "denominator": 8
+      },
+      "single": {
+        "pass": 6,
+        "partial": 2,
+        "fail": 0,
+        "not_exercised": 0,
+        "denominator": 8
+      },
+      "full_visible_unique_formal_claims": 6,
+      "full_complete_selected_support": 6,
+      "full_single_predicate": 3,
+      "roles": {
+        "pass": 4,
+        "partial": 2,
+        "fail": 1,
+        "not_exercised": 0
+      },
+      "locally_supported_content": true,
+      "all_report_clean": false,
+      "complete_report_acceptable": false,
+      "default_entry_ready": false,
+      "all_15_jobs_present": true
+    },
+    "case_verdicts": [
+      {
+        "original_question_id": "Trello-1",
+        "full": "partial",
+        "single": "pass"
+      },
+      {
+        "original_question_id": "Trello-2",
+        "full": "partial",
+        "single": "pass"
+      },
+      {
+        "original_question_id": "Cloudflare-1",
+        "full": "partial",
+        "single": "pass"
+      },
+      {
+        "original_question_id": "Cloudflare-2",
+        "full": "partial",
+        "single": "partial"
+      },
+      {
+        "original_question_id": "Bitwarden-1",
+        "full": "pass",
+        "single": "pass"
+      },
+      {
+        "original_question_id": "Bitwarden-2",
+        "full": "pass",
+        "single": "pass"
+      },
+      {
+        "original_question_id": "1Password-1",
+        "full": "pass",
+        "single": "pass"
+      },
+      {
+        "original_question_id": "1Password-2",
+        "full": "partial",
+        "single": "partial"
+      }
+    ],
+    "role_model_request_results": [
+      {
+        "role": "planner",
+        "verdict": "pass",
+        "finding": "保留Trello/feature范围，decision brief为请求上下文，不作为产品证据；提出投票、下载、导出、义务、逐板权限和计费身份问题。",
+        "tool_admission_parser_persistence": "not_exercised"
+      },
+      {
+        "role": "collector",
+        "verdict": "partial",
+        "finding": "六条语义规则均能由排版归一对应实际body，未发现词汇编造；生产HTML来源定位不允许通用归一，实际纯semantic_extraction仅准入禁止操作句1/6，故请求相关许可/权限/计费quote可用覆盖不足。",
+        "tool_admission_parser_persistence": "only_offline_semantic_extraction_parser_exercised_no_fetch_or_persistence"
+      },
+      {
+        "role": "analyst",
+        "verdict": "pass",
+        "finding": "本实际输入样本中保留Premium、board permission、投票启用、操作禁止和billable/nonbillable身份，source_ids正确；产出可用结构树并把角色/身份分开。",
+        "tool_admission_parser_persistence": "not_exercised"
+      },
+      {
+        "role": "comparator",
+        "verdict": "pass",
+        "finding": "保持单产品winner=null，按题设给A不能/B可投票、下载导出、逐板权限和标签不足判断；没有把hypothetical前提当产品事实。",
+        "tool_admission_parser_persistence": "not_exercised"
+      },
+      {
+        "role": "reflector",
+        "verdict": "pass",
+        "finding": "warn且blocking_gaps为空；实际约束允许从if-enabled作A/B条件判断，明确下载/导出不因投票禁用被阻断，并要求区分permission与duty及保留B身份未知。",
+        "tool_admission_parser_persistence": "not_exercised"
+      },
+      {
+        "role": "writer",
+        "verdict": "partial",
+        "finding": "下载任务仅选s1且断言被支持；rule_vote任务附加comment这一独立操作，违反one independent predicate/source_rule only requested predicate。",
+        "tool_admission_parser_persistence": "not_exercised"
+      },
+      {
+        "role": "qa",
+        "verdict": "fail",
+        "finding": "回显IDs/哈希和keep disposition正确，发现export及其他未发表分支；但理由错误要求请求假设Premium/Observer前提绑定产品来源，违背SYSTEM明确hypothetical inputs。",
+        "tool_admission_parser_persistence": "not_exercised"
+      }
+    ],
+    "citation_metrics": {
+      "full_unique_formal_claims": 6,
+      "full_complete_selected_support": 6,
+      "full_single_predicate": 3,
+      "single_protocol": "source-level bindings; not the same metric as full selected supports"
+    },
+    "report_findings": [
+      "四份流水线报告均未达到完整交付标准；题目通过数不能代替报告内额外断言、原子性、展示一致性及审核完整性。",
+      "单Agent的Cloudflare、1Password报告仍有额外断言或误读；六题通过不代表所有报告合格。",
+      "Collector隔离返回语义经布局归一可对应6/6，但同HTML窗口的生产原文定位仅准入1/6，其余5条not_original；不是词汇编造，也不能放宽原文准入凑通过。",
+      "Bitwarden容量否定与合理澄清已在问答区发表；观察区暂无观察是事实/推断分区文案，不重判为漏答。",
+      "Trello投票义务子问在实际selector中绑定v2父题设；已选证据后的generation被预算拒绝且transport为0，不算已发送。",
+      "1Password一组生成/审核输入被导出脱敏，完整实际输入独立观察未验；Trello/1Password部分Comparator producer不能从脱敏导出重算完整哈希，不用依赖字段相同替代验证。"
+    ],
+    "root_causes": [
+      {
+        "layer": "child_agent_model_judgment",
+        "product": "trello",
+        "evidence": "实际selector43有许可s1+完整v2父题设，却将直接duty task09b1判insufficient；actualgen44又把rule_vote写成read/download/comment/vote/export全能力列表，触发operation_binding_required。",
+        "result": "T1缺vote/duty并非父题设仍unbound或所有锅归Writer。"
+      },
+      {
+        "layer": "budget_or_unsent",
+        "product": "trello",
+        "evidence": "gen50/53 metadata transport0/admission rejected，分别run used45682/49213 of80000且delivery protected23000；admin/billing为task_selected_support_context_budget_exceeded。",
+        "result": "准备好的完整advice/parent不等于模型收到；保留实际预算失败，不扩大预算重跑凑分。"
+      },
+      {
+        "layer": "input_selection_scope",
+        "product": "trello",
+        "evidence": "selector46只有Workspace/逐板设置catalog，却同时分派A vote和export；selector49给permission catalog却含A→B task。",
+        "result": "错配窗口的insufficient不能称模型在已给相应规则时拒绝；任务/事实分配仍有缺口。"
+      },
+      {
+        "layer": "child_agent_model_judgment",
+        "product": "cloudflare",
+        "evidence": "selector46实际s3为Cache Domain Purge specific-domain，s2为Standard requests/CPU计费完整表，主purge和billing仍insufficient。task_plan44还将purge误分permission_not_obligation，server改回purge_cache。",
+        "result": "未发表具名范围No与CPU前提是有证据后的选择/理解失败，不是全部catalog被advice挤空。"
+      },
+      {
+        "layer": "postprocessing_state_projection",
+        "product": "cloudflare",
+        "evidence": "仅source-rule task生成一般given-scope，QA48/51均task_fulfilled=false；修复后的domain-scoped规则未替换首条保留claim。",
+        "result": "完整支持的一般规则不替代具名场景回答；metadata尚未核实不把该局部规则判错。"
+      },
+      {
+        "layer": "child_agent_model_judgment_and_guard",
+        "product": "bitwarden_and_1password",
+        "evidence": "BW51与1P46 QA把两个独立谓词的claim全部supported，未正确落实atomicity；BW正式答案却已发表，不能沿用第三轮draft被拒结论。",
+        "result": "内容正确/引用完整与单谓词守卫效果分开；BW推断按分区只在答案区发表，观察区暂无观察文案容易误解，不重判为漏答。"
+      },
+      {
+        "layer": "collection_input_handoff",
+        "product": "1password",
+        "evidence": "封存pipeline-captures的previous_capture_diagnostics可见tailored pricing + sales quote句；实际Collector pricing span4仅收到有限静态body、返回facts=[]，无pricing canonical fact，single也未发送。",
+        "result": "1P2安全缺价不能替代公开定制报价性质/有证销售下一步；错误位于可用材料提取/准入链，不让Writer借未发送诊断补答。"
+      },
+      {
+        "layer": "qa_semantic_judgment",
+        "product": "trello",
+        "evidence": "隔离QA正确keep但要求hypothetical Premium/Observer有published source；full BW/1P原子审核通过复合。",
+        "result": "有效IDs/JSON/keep不能授予语义质量通过。"
+      },
+      {
+        "layer": "not_observable",
+        "product": "1password",
+        "evidence": "generation/review raw export脱敏。",
+        "result": "不猜核心输入缺失，不授予完整actual输入验收。"
+      },
+      {
+        "layer": "collector_model_output_to_locator_contract",
+        "product": "trello_isolation",
+        "evidence": "同一实际body/window、semantic_page_allowed=True，纯semantic_extraction准入1/6，其余5 not_original；HTML metadata format=null，通用空格/布局归一不是生产允许的恢复。",
+        "result": "语义归一6/6不等于实际准入6/6；格式/定位契合失败影响下游证据覆盖。没有词汇改写造假，fetch及持久化未验。"
+      }
+    ],
+    "next_steps_without_training": [
+      "针对任务/事实窗口错配和permission/resource-scope/CPU的selector判断做离线合同与语义用例，再决定下一轮实现范围；当前冻结失败保留。",
+      "把selected generation、review、finalQA的完整父题设与advice预算一起调度，明确未发送状态，不能把准备好的payload当模型消费。",
+      "按独立动作/ownership/capacity/不同单位上限拆原子；核实QA的整claim atomicity，消除正文区域与答案区域状态不一致。",
+      "补齐封存disclosure进入Collector实际可用body及canonical事实的边界；先验证准入链，再讨论pricing回答，不让模型借未发送FAQ。",
+      "在新、未曝光任务上再做完整报告验收；当前固定8非盲n=1仅诊断，不训练权重，不据此宣称通用多Agent优势。"
+    ],
+    "limitations": [
+      "原八题已曝光、每请求一次、固定模型别名与历史资料，仅用于诊断。",
+      "七角色结果仅为各一条模型请求隔离，不授予整角色的抓取、准入、解析和持久化通过。",
+      "单Agent与流水线同规范资料，但提示、分析和审核不同；不能作通用多Agent优劣的因果结论。"
+    ]
+  },
+  "historical_rounds": [
+    {
+      "round": "first",
+      "pipeline_calls": 73,
+      "pipeline_tokens": 192141,
+      "single_added_calls": 3,
+      "single_added_tokens": 42597,
+      "bitwarden_single": "budget_blocked_before_transport",
+      "isolation_calls": 0
+    },
+    {
+      "round": "second",
+      "pipeline_calls": 55,
+      "pipeline_tokens": 150679,
+      "single_added_calls": 4,
+      "single_added_tokens": 53362,
+      "isolation_calls": 7,
+      "isolation_tokens": 25155,
+      "regression": "Trello candidate catalog squeezed empty"
+    },
+    {
+      "round": "third",
+      "pipeline_calls": 67,
+      "pipeline_tokens": 190700,
+      "single_added_calls": 0,
+      "isolation_calls": 0,
+      "regression": "server-added presentation space left Trello duty parent unbound"
+    }
+  ],
+  "total_actual_model_usage": {
+    "calls": 290,
+    "known_provider_tokens": 929199,
+    "unknown_usage_count": 0,
+    "setup_failed_transport_calls": 0,
+    "setup_failure_instances": 1
+  },
+  "limitations": [
+    "Exposed fixed eight questions; n=1 per request and no causal/quality-generalization claim.",
+    "Single has all canonical facts from the same Collector; prompt and QA work differ from the pipeline.",
+    "Isolation covers one actual request per role, not full tool/admission/persistence acceptance.",
+    "Generation user envelope is bounded at 14000 bytes; SYSTEM bytes are separately included in token reservation.",
+    "No current web capture, automatic discovery, full Graph, UI or production dense RAG acceptance.",
+    "Raw snapshots and reports are local ignored artifacts; GitHub alone does not contain the corpus.",
+    "Configured trace USD estimates are not provider billing; report tokens and calls only."
+  ],
+  "artifact_root": "data/artifacts/agent-isolation-handoff-2026-10-25"
+}

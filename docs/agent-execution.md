@@ -2,7 +2,9 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-当前验证见[任务谓词、实际载荷与范围绑定复验](optimization/2026-10-24-task-predicate-budget.md)（2026-10-24）：后端 **7521通过／1跳过**，新增52项；紧凑完整选证、按所选规范事实生成、有限复合守卫及范围召回已进实验入口。四家同版回放 **63实际调用／175187 token**，12个分析／比较／反思模块均真LLM、无回退；最终QA13次，28项27合法、1历史项未送，10个内部原问均送且合法。**固定原八题仍3/8，报告未达标，实验默认关闭**；全文所选支持6/7、单谓词2/7。BW容量恢复但附加人数解释漏绑，CF跨域结论仍缺且账单CPU正文退缺；Trello3次预算拒绝转至生成／审核，并有共享Observer前提丢失。合法身份重放不替代内容验收，未训练，未验新抓取、全Graph或生产语义RAG。[结构化结果](optimization/2026-10-24-task-predicate-budget-results.json)。
+本轮[子 Agent 隔离验收与实际交付](optimization/2026-10-25-agent-isolation-handoff.md)（2026-10-25）：后端 **7656通过／1跳过**，新增135项。已修复实验逐任务Writer缺少三类上游内容、拆题共享前提失绑及真实规模装包顺序；预算与默认关闭保持。固定资料同版对照：流水线 **3/8通过，70次调用／194658 token**；单Agent **6/8通过，含共享采集15次／81820 token**（新增生成4次／53558 token）。七角色各一条请求隔离为4通过／2部分／1失败，不能当完整Agent闭环。**四份流水线报告仍未达标**：Collector原文定位准入、选证误拒、原子写作与尾部预算／审核仍有缺口；正式主张6/6完整支持、3/6单谓词。最终QA计划27项仅23项送达合法，内部原问10项仅9项送达。四次迭代及对照／隔离累计290实际调用／929199已知token，未知0，失败均保留。原八题已曝光且每请求一次，不作泛化或因果结论；未训练、未验新抓取／全Graph／生产稠密RAG。[结构化结果](optimization/2026-10-25-agent-isolation-handoff-results.json)。
+
+上一轮验证见[任务谓词、实际载荷与范围绑定复验](optimization/2026-10-24-task-predicate-budget.md)（2026-10-24）：后端 **7521通过／1跳过**，新增52项；紧凑完整选证、按所选规范事实生成、有限复合守卫及范围召回已进实验入口。四家同版回放 **63实际调用／175187 token**，12个分析／比较／反思模块均真LLM、无回退；最终QA13次，28项27合法、1历史项未送，10个内部原问均送且合法。**固定原八题仍3/8，报告未达标，实验默认关闭**；全文所选支持6/7、单谓词2/7。BW容量恢复但附加人数解释漏绑，CF跨域结论仍缺且账单CPU正文退缺；Trello3次预算拒绝转至生成／审核，并有共享Observer前提丢失。合法身份重放不替代内容验收，未训练，未验新抓取、全Graph或生产语义RAG。[结构化结果](optimization/2026-10-24-task-predicate-budget-results.json)。
 
 上一轮验证见[已采证据选用、原子写作与剩余QA调度复验](optimization/2026-10-24-selected-support-writing.md)（2026-10-24）：后端 **7469通过／1跳过**，新增45项。逐任务ref选证、限定支持写作与完整派送验证进入实验入口；最终QA严格整题ID回显，局部支持另列，并有界推进剩余窗口。四家真实回放 **62调用／187976 token**，另3次零transport预算拒绝；QA29项中28项合法，1项完整上下文超窗未送，未出现失效返回。**原八题仍3/8，报告未达标，默认关闭**；可见主张完整支持8/8、单谓词3/8。1Password访客恢复、BW容量遗漏，复合写作和Trello预算仍待修。12个分析／比较／反思模块均实际LLM执行无回退，不代表整题或完整Agent系统已合格；未验新抓取、全Graph、发布或生产语义RAG，未训练。[结构化结果](optimization/2026-10-24-selected-support-writing-results.json)。
 
@@ -37,6 +39,38 @@
 上一轮真实验证见[Collector逐题交付](optimization/2026-10-19-collector-question-delivery.md)：后端5811通过/1跳过；四组30次真实调用，正文3正确/5遗漏、记录2正确/6遗漏，0/4完整报告可交付。三组核心下游Agent实际执行，Dropbox采集阻断未调用下游。合同已接线不代表全召回或语义合格；抓取、选窗、Writer原始选证及最终回答状态仍有明确缺口。
 
 此前真实验证见[完整证据与答案发表恢复](optimization/2026-10-18-evidence-recovery-delivery.md)：5664项后端通过，四组40次真实调用；正文3正确／1错误／4遗漏，记录2正确／6遗漏，仍0/4报告达标。下面是有限规则及实际入口；中文数量结论误拒、下载规则投影遗漏、计费行／FAQ漏提取和错误缺证陈述仍未解决。实现检查通过不等于语义验收。
+
+## 子 Agent 隔离与 Writer 交付合同（2026-10-25）
+
+实验逐任务入口在实际生成前，从当前快照验证 Analyst、Comparator、Reflector 三类产物，并传入 `upstream_analysis`、`comparison_assessment`、`reflection_constraints`。这些内容是可出错的分析建议，不能替代规范事实及引用。仅真实生成 transport 验证后，才登记实际发送的上游依赖；零 transport 不记消费成功。
+
+比较与反思使用第2版有界投影：保留状态与完整条目，明确记录省略数量，仍遵守原1800／1600字节配额；整块超界不能静默丢失或截断条件。历史第1版按旧整体装入规则重放，服务端SYSTEM代际身份用于防止字段删除后重算哈希的降级。真实输入规模仍须核查，字段在小fixture中存在不能证明整条生产请求已发送。
+
+候选选证优先装入完整任务、父题设和规范事实；三项建议在选证后交给生成及任务审核，发送前后都重验。新generation的两阶段SYSTEM身份绑定对应的新review标记；删除新review标记不能降级，历史无此generation身份的真实审核继续原路径。原件因窗口不足未装入时为预算延期，真正无原件或无合法引用时为缺证；不会为了送达而提高14000／10000字节上限。
+
+[`question_scope.py`](../backend/packages/research/question_scope.py) 从同产品唯一的原始请求行恢复完整父题设，生成版本、父身份和子问绑定。选择、生成、任务审核、最终回答及独立 QA 保留该上下文。人数、套餐和 A/B 设置仍是请求条件；子问本身继续作为召回主意图，父题设只辅助，不能让“下载”和“导出”退化成相同查询。跨产品、歧义父请求不借前提。
+
+父上下文第2版另复用服务器原有的拆分／分组纯逻辑，验证同一原始行能否精确产生完整子问，修复“？请将……”被拆成“？ 请将……”后的失绑；没有删除任意空白或跨行模糊匹配。父文本、公开子问全文及ID保持。generation／review的固定SYSTEM身份选择重建版本，新代不能靠改JSON版本或删除单处审核标记降级；没有新身份的历史实际请求按第1版原样重放。
+
+新格式在服务端 SYSTEM 中带代际身份；回放会重新验证 canonical 子问全文、父题设和当前上游产物。删除新字段后重算普通哈希不能降级到旧格式；真实旧格式仍可回放。此处是服务端交付一致性检查，不提供全库同时伪造下的密码学签名保证。实验默认关闭，24 次／80000 token、最终回答与 QA 预留保持。
+
+[`eval_agent_isolation.py`](../backend/scripts/eval_agent_isolation.py) 只读已完成封存阶段运行，按原提示哈希恢复实际 system/user/schema；Planner、Collector、Analyst、Comparator、Reflector、Writer、QA 各重放一条实际模型请求。无实际请求时标记未验证。它验证的是**模型请求隔离**；网页抓取、工具执行、规范准入、持久化及完整 Graph 须另外验收。
+
+```sh
+# 未加 --live：本地预检，不加载模型凭据、不发请求；输出目录必须不存在
+PYTHONPATH=backend .venv/bin/python -m scripts.eval_agent_isolation \
+  --source-run /absolute/path/to/completed-replay/execution \
+  --output /absolute/path/to/new-isolation --mode isolate --role writer
+
+# 同批已采规范事实与完整原题，直接生成短报告；显式启用模型
+PYTHONPATH=backend .venv/bin/python -m scripts.eval_agent_isolation \
+  --source-run /absolute/path/to/completed-replay/execution \
+  --output /absolute/path/to/new-single --mode single --live
+```
+
+单 Agent 不读取旧报告或参考答案；流水线与它共享已采证据，但提示布局、上游分析和运行时审核不同。成本分别列流水线总量、共享 Collector、直接生成新增量及含采集总量。每请求一次、已曝光开发题、同模型别名和温度并不能提供统计或因果结论；底层模型版本也未独立验证。
+
+直接对照的完整重复对象及文本使用无损共享，服务端展开后对payload／facts双SHA校验；事实主行ID、source_id和问题正文／ID保留字面，原题sources数组可以共享，解码后的完整原题与输入必须全等。未知、循环、歧义引用拒绝。输入预留与生产一致，为逻辑消息UTF-8字节加256，不把HTTP JSON的二次转义重复计入；此方法仍是保守估计，不是精确tokenizer。
 
 ## 1. 执行顺序
 

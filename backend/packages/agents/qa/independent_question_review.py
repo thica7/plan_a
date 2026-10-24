@@ -25,7 +25,7 @@ from packages.agents.writer.task_answers import reviewed_task_answer_rows
 from packages.llm.errors import LLMExecutionLimitError
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.research.evidence.snapshot_models import canonical_json
-from packages.research.question_scope import research_questions
+from packages.research.question_scope import question_request_context, research_questions
 from packages.schema.decision_brief import safe_decision_brief_text
 from packages.schema.models import QCIssue, RedoScope
 
@@ -33,19 +33,20 @@ MAX_ATTEMPTS_PER_FINDING = 2
 MAX_REVIEW_BATCHES = 6
 PROTOCOL = "independent_questions_v2"
 INDEPENDENT_SYSTEM = SYSTEM + (
-    " Independently audit every independent_question_check against EVERY request in its complete "
-    "original question, whether or not a historical objection exists. The visible_answer is the "
-    "actual published local text; structured answer metadata is not proof of publication. Check "
-    "omitted branches, unsupported premises, and exact selected source support. For an independent "
-    "check, finding_fully_addressed=true and superseded mean the entire question is safely "
-    "answered; "
-    "otherwise use keep and enumerate remaining_gaps. Diagnostic checks can never approve a "
-    "question or clear a historical issue. Historical findings require their original full "
-    "objection to be resolved as well. Echo only IDs belonging to this batch. "
-    "For each finding, copy expected_claim_ids EXACTLY into claim_ids, including an empty []. "
-    "These are the whole answer's echo identities, not a selection task. "
-    "task_support_claim_ids identify visible local support to inspect; never substitute them "
-    "for expected_claim_ids or promote their local conclusions to a complete answer."
+    " Audit EVERY independent_question_check against every request and shared premise in the "
+    "complete original question and bound request_context, even without a historical objection. "
+    "Request premises are hypothetical inputs, never product evidence. "
+    "visible_answer is the actual "
+    "local publication; answer metadata proves no publication. Check omitted branches, unsupported "
+    "premises and exact selected sources. Only a fully answered independent check may set "
+    "finding_fully_addressed=true and superseded; otherwise use keep and enumerate remaining_gaps. "
+    "Diagnostic checks cannot approve a question or clear historical issues. "
+    "Resolve each historical objection in full. Echo only batch IDs. "
+    "Copy expected_claim_ids EXACTLY to claim_ids, including "
+    "[]. They identify the whole answer. Inspect task_support_claim_ids as visible local support; "
+    "never replace expected_claim_ids or promote local conclusions to complete coverage."
+    " Parent requests resolve shared actors, roles, plans, prerequisites; they cannot supply "
+    "unsupported product assertions."
 )
 MAX_REVIEW_OUTPUT_TOKENS = 1600
 FINAL_QA_REQUEST_RESERVE = (
@@ -103,6 +104,8 @@ def _question_context(service, record, snapshot, question, audit, *, verified):
     return dict(
         question_id=qid,
         question=question["question"],
+        request_context=question_request_context(
+            detail, audit.competitor, audit.dimension, [question]),
         answer=answer.model_dump(mode="json")
         if answer
         else dict(

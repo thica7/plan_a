@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import httpx
 import pytest
-from test_final_question_reconciliation import reviewed, scope_case
+from test_final_question_reconciliation import QUESTION, finding_context, reviewed, scope_case
 from test_task_delivery_budget import task_service
 
 from packages.agents.qa.question_reconciliation import reconcile_question_findings
@@ -14,7 +14,7 @@ from packages.orchestrator.llm_execution import LLMExecutionMixin
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("second_batch", ["valid", "foreign", "unavailable"])
-async def test_two_batches_use_real_admission_and_bounded_partial_cache_resume(
+async def test_complete_context_batches_use_real_admission_and_bounded_partial_cache_resume(
     monkeypatch, second_batch
 ):
     detail, service, record = await scope_case(monkeypatch)
@@ -53,6 +53,7 @@ async def test_two_batches_use_real_admission_and_bounded_partial_cache_resume(
     ]
     requests = []
     first_response = None
+    failed_batch_ids = []
     question_id = detail.report_dimension_audits[0].answer_coverage[0].question_id
     independent_id = f"final-question-{question_id}"
 
@@ -62,15 +63,21 @@ async def test_two_batches_use_real_admission_and_bounded_partial_cache_resume(
         batch = json.loads(user.split("\nJSON:\n", 1)[1])
         requests.append(batch)
         assert len(user.encode()) <= 6000
-        assert [row["issue_id"] for row in batch["findings"]] == (
-            [independent_id, "issue-0"] if len(requests) == 1 else ["issue-1"])
+        batch_ids = [row["issue_id"] for row in batch["findings"]]
+        assert batch_ids and set(batch_ids) <= {independent_id, "issue-0", "issue-1"}
+        for row in batch["findings"]:
+            context = finding_context(batch, row)
+            assert context["question"] == QUESTION
+            assert context["request_context"]["parents"][0]["text"] == QUESTION
         response = reviewed(batch)
         if len(requests) == 1:
             first_response = response
-        elif second_batch == "foreign":
-            response = first_response
-        elif second_batch == "unavailable":
-            return httpx.Response(503, text="Controlled offline unavailability")
+        if "issue-1" in batch_ids and second_batch != "valid":
+            failed_batch_ids[:] = batch_ids
+            if second_batch == "foreign":
+                response = first_response
+            else:
+                return httpx.Response(503, text="Controlled offline unavailability")
         # Deliberately omit usage: each attempted request must retain its full
         # byte-bound input plus output reservation, including the failed batch.
         return httpx.Response(200, json={"choices": [{"message": {"content": response}}]})
@@ -79,10 +86,15 @@ async def test_two_batches_use_real_admission_and_bounded_partial_cache_resume(
     result = await reconcile_question_findings(service, record, issues, evidence_issues=[])
     expected_kept = [] if second_batch == "valid" else ["issue-1"]
     assert [issue.id for issue in result] == expected_kept
-    assert len(requests) == 2
+    # Complete parent context now requires three bounded requests; its text is
+    # retained rather than forcing the previous two-request fixture layout.
+    assert len(requests) == 3
+    assert [row["issue_id"] for batch in requests for row in batch["findings"]] == [
+        independent_id, "issue-0", "issue-1"]
     spans = [span for span in detail.trace_spans if span.name == "final_question_reconciliation"]
-    assert len(spans) == 2
+    assert len(spans) == 3
     assert [span.status for span in spans] == [
+        "ok",
         "ok",
         "error" if second_batch == "unavailable" else "ok",
     ]
@@ -96,11 +108,11 @@ async def test_two_batches_use_real_admission_and_bounded_partial_cache_resume(
     assert sum(span.metadata["llm_tokens_charged"] for span in spans) == conservative_charge
     assert service._run_llm_budget(record) is budget
     assert budget.tokens_used == conservative_charge
-    assert budget.calls == 2 and budget.tokens_reserved == 0
+    assert budget.calls == 3 and budget.tokens_reserved == 0
     assert budget.max_calls == 24 and budget.max_tokens == 80000
     assert budget.tokens_used <= budget.max_tokens
     receipt = json.loads(detail.trace_spans[-1].full_output)
-    assert receipt["planned_batches"] == 2
+    assert receipt["planned_batches"] == 3
     assert receipt["unsent_issue_ids"] == []
     assert [row["issue_id"] for row in receipt["model_review"]["reviews"]] == (
         [independent_id, "issue-0", "issue-1"]
@@ -110,8 +122,11 @@ async def test_two_batches_use_real_admission_and_bounded_partial_cache_resume(
 
     cached_result = await reconcile_question_findings(service, record, issues, evidence_issues=[])
     assert [issue.id for issue in cached_result] == expected_kept
-    expected_calls = 2 if second_batch == 'valid' else 3
+    expected_calls = 3 if second_batch == 'valid' else 4
     assert len(requests) == expected_calls
+    if second_batch != 'valid':
+        assert [row['issue_id'] for row in requests[-1]['findings']] == failed_batch_ids
+        assert failed_batch_ids == ['issue-1']
     assert (
         len([span for span in detail.trace_spans if span.name == "final_question_reconciliation"])
         == expected_calls

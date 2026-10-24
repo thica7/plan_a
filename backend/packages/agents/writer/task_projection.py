@@ -9,7 +9,7 @@ from packages.agents.writer.task_protocol import CONTRACT, FOCUSES, task_atom_re
 from packages.research.question_scope import research_questions
 
 
-def _review_matches(detail, audit, task, claim):
+def _review_matches(detail, audit, task, claim, *, handoff_version=None, dispatches=()):
     from packages.agents.writer.dimension_writer import parse_json
     from packages.research.evidence.report_claims import ClaimReview
     from packages.research.question_delivery import _expand_text_refs
@@ -27,6 +27,60 @@ def _review_matches(detail, audit, task, claim):
     ):
         return False
     payload = _expand_text_refs(parse_json(span.full_input.split("\nJSON:\n", 1)[1]))
+    from packages.agents.writer.task_execution import (
+        has_task_handoff_system,
+        task_request_context_version,
+    )
+    if (has_task_handoff_system(span.full_input) or handoff_version is not None
+            or 'task_handoff_version' in payload or 'request_context' in payload):
+        from packages.agents.writer.task_execution import HANDOFF_VERSION
+        from packages.research.question_scope import question_request_context, questions_match_scope
+        if (type(handoff_version) is not int or handoff_version != HANDOFF_VERSION
+                or payload.get('task_handoff_version') != HANDOFF_VERSION
+                or not questions_match_scope(detail, audit.competitor, audit.dimension,
+                                             payload.get('questions'))
+                or task['question_id'] not in {q['question_id'] for q in payload['questions']}
+                or payload.get('request_context') != question_request_context(
+                    detail, audit.competitor, audit.dimension, payload['questions'],
+                    version=task_request_context_version(span.full_input))):
+            return False
+    from packages.agents.writer.task_execution import (
+        ADVISORY_KEYS,
+        ADVISORY_REVIEW_SYSTEM_IDENTITY,
+        HANDOFF_SYSTEM_IDENTITY,
+        has_two_phase_generation_system,
+    )
+    advisory_review = span.full_input.startswith(
+        HANDOFF_SYSTEM_IDENTITY + ADVISORY_REVIEW_SYSTEM_IDENTITY)
+    generations, two_phase, parent_v2 = [], False, False
+    for dispatch in dispatches:
+        if task['task_id'] not in dispatch['task_ids']:
+            continue
+        for generation in detail.trace_spans:
+            if (generation.id == dispatch['span_id']
+                    and generation.kind == 'llm' and generation.agent == 'writer'
+                    and generation.subagent == f'{audit.competitor}/{audit.dimension}'
+                    and generation.name == 'dimension_task_generation'
+                    and generation.status == 'ok'
+                    and type(generation.metadata.get('llm_transport_attempts')) is int
+                    and generation.metadata['llm_transport_attempts'] > 0
+                    and hashlib.sha256(generation.full_input.encode()).hexdigest()
+                    == dispatch['full_input_sha256']):
+                two_phase |= has_two_phase_generation_system(generation.full_input)
+                parent_v2 |= task_request_context_version(generation.full_input) == 2
+                generations.append(_expand_text_refs(parse_json(
+                    generation.full_input.split('\nJSON:\n', 1)[1])))
+    if two_phase and not advisory_review:
+        return False
+    if parent_v2 and task_request_context_version(span.full_input) != 2:
+        return False
+    if advisory_review:
+        # Final QA separately rebuilds both inputs against current producers.
+        keys = (*ADVISORY_KEYS, 'upstream_projection_version', 'upstream_context_gaps')
+        if (not generations or payload.get('upstream_projection_version') != 2
+                or any({k: payload[k] for k in keys if k in payload}
+                       != {k: row[k] for k in keys if k in row} for row in generations)):
+            return False
     assignments = [a for a in payload["task_assignments"] if a["task_id"] == task["task_id"]]
     expected = {
         k: task[k]
@@ -135,7 +189,9 @@ def reviewed_task_results(detail, audit):
                 or not set(claim.fact_ids) <= set(uses[0].fact_ids)
                 or not set(claim.source_ids) <= set(uses[0].source_ids)
                 or task_atom_reasons(task, claim.text, kind=claim.kind)
-                or not _review_matches(detail, audit, task, claim)
+                or not _review_matches(detail, audit, task, claim,
+                    handoff_version=receipt.get('task_handoff_version'),
+                    dispatches=receipt.get('dispatches', ()))
             ):
                 continue
             seen.add(expected)

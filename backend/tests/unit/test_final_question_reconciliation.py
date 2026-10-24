@@ -143,6 +143,10 @@ def reviewed(payload, disposition="superseded"):
     )
 
 
+def finding_context(payload, row):
+    return {**row, **payload.get("question_contexts", {}).get(row.get("context_id"), {})}
+
+
 @pytest.mark.asyncio
 async def test_experimental_final_qa_diagnoses_integrity_gaps_without_clearing_them(monkeypatch):
     detail, service, record = await scope_case(monkeypatch)
@@ -155,7 +159,9 @@ async def test_experimental_final_qa_diagnoses_integrity_gaps_without_clearing_t
         payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
         calls.append(payload)
         assert payload['findings'][0]['diagnostic_only'] is True
-        assert payload['findings'][0]['question'] == QUESTION
+        context = finding_context(payload, payload['findings'][0])
+        assert context['question'] == QUESTION
+        assert context['request_context']['parents'][0]['text'] == QUESTION
         return reviewed(payload)
 
     monkeypatch.setattr(service, '_trace_llm_text', model)
@@ -210,7 +216,8 @@ async def test_task_diagnostic_excludes_another_questions_visible_claims(monkeyp
 
     async def model(record, **kwargs):
         payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
-        seen.extend(c['id'] for r in payload['findings'] for c in r.get('claims', []))
+        seen.extend(c['id'] for r in payload['findings']
+                    for c in finding_context(payload, r).get('claims', []))
         return reviewed(payload)
 
     monkeypatch.setattr(service, '_trace_llm_text', model)

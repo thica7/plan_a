@@ -419,6 +419,60 @@ def bounded_upstream_analysis(payload, source_ids, *, max_bytes=1100):
     return result
 
 
+def bounded_advisory_content(content, bound, detail, view, *, max_bytes):
+    """Project complete advisory entries inside the existing producer envelope cap."""
+    from copy import deepcopy
+
+    from packages.agents.writer.answer_coverage import question_terms
+    from packages.research.question_scope import research_questions
+
+    if len(encoded(dict(bound, content=content)).encode()) <= max_bytes:
+        return content
+    if bound['kind'] == 'comparator':
+        assessment = content.get('assessment') or {}
+        result = dict(dimension=view.dimension, assessment={key: assessment[key]
+            for key in ('status', 'winner') if key in assessment})
+        groups = [(f'assessment.{key}', [assessment[key]], False)
+                  for key in ('rationale', 'scenario') if assessment.get(key)]
+        groups += [(f'assessment.{key}', assessment.get(key, []), True)
+                   for key in ('gaps', 'tradeoffs', 'source_ids')]
+        groups.append(('decision_cards', content.get('decision_cards', []), True))
+    else:
+        result = {key: content[key] for key in ('iteration', 'gate_status') if key in content}
+        groups = [(key, content.get(key, []), True) for key in (
+            'writer_constraints', 'blocking_gaps', 'coverage_gaps', 'confidence_outliers',
+            'cross_competitor_gaps', 'suggested_redos')]
+    result.update(projection_version=2, for_competitor=view.competitor,
+                  for_dimension=view.dimension, omission_reason='context_budget_exceeded',
+                  omitted_entries={path: len(items) for path, items, _ in groups})
+    questions = research_questions(detail, view.competitor, view.dimension)
+    hints = question_terms(' '.join(q['question'] for q in questions), view.competitor)
+    def priority(entry):
+        text = encoded(entry[1])
+        return (-int(any(q['question_id'] in text for q in questions)),
+                -int(view.competitor.casefold() in text.casefold()),
+                -len(hints & question_terms(text, view.competitor)))
+
+    ranked = [sorted([(path, item, multiple) for item in items], key=priority)
+              for path, items, multiple in groups]
+    candidates = [entry for index in range(max(map(len, ranked), default=0))
+                  for group in ranked for entry in group[index:index + 1]]
+    for path, item, multiple in candidates:
+        candidate = deepcopy(result)
+        parent = candidate
+        keys = path.split('.')
+        for key in keys[:-1]:
+            parent = parent[key]
+        if multiple:
+            parent.setdefault(keys[-1], []).append(item)
+        else:
+            parent[keys[-1]] = item
+        candidate['omitted_entries'][path] -= 1
+        if len(encoded(dict(bound, content=candidate)).encode()) <= max_bytes:
+            result = candidate
+    return result
+
+
 def compact_dimension_context(selected, view, allowed, *, max_bytes=14000, requested_operations=(), upstream_context=None, include_non_operations=True, questions=(), question_evidence_packets=(), support_focus=(), atom_limit=8, repair_metadata=None, fact_order=(), span_limit=None):
     """Keep complete original observations, not repeated matrix/slot controls."""
     from packages.research.evidence.operations import operation_observations, operation_binding, required_operations
@@ -776,7 +830,7 @@ class DimensionWriterMixin:
             # reviews. Integrity errors and cancellation still abort the draft.
             return None, tuple(sorted(set(gaps) | {'claim_execution_budget_exceeded'}))
 
-    def _dimension_upstream_context(self, record, view):
+    def _dimension_upstream_context(self, record, view, *, projection_version=2):
         """Verified producer outputs remain advisory, separate from original facts."""
         live = self._evidence_live_record(record)
         detail = live.detail
@@ -788,13 +842,14 @@ class DimensionWriterMixin:
         comparison_content = {'dimension': view.dimension, 'assessment': assessment.model_dump(mode='json') if assessment else None}
         if detail.decision_card_bundle:
             comparison_content['decision_cards'] = [card.model_dump(mode='json') for card in detail.decision_card_bundle.cards if card.subject == view.dimension]
-            while comparison_content['decision_cards'] and len(encoded(comparison_content).encode()) > 1300:
+            while (projection_version == 1 and comparison_content['decision_cards']
+                    and len(encoded(comparison_content).encode()) > 1300):
                 comparison_content['decision_cards'].pop()
                 comparison_content['omitted_decision_cards'] = comparison_content.get('omitted_decision_cards', 0) + 1
         candidates.append(('comparison_assessment', 'comparator', comparison, comparison_content, None, None, 1800))
         reflection = detail.reflections[-1].model_dump(mode='json') if detail.reflections else None
         candidates.append(('reflection_constraints', 'reflector', reflection, reflection, None, None, 1600))
-        result, gaps = {}, []
+        result, gaps = ({'upstream_projection_version': 2} if projection_version == 2 else {}), []
         for key, kind, payload, content, competitor, dimension, budget in candidates:
             if payload is None or not self._evidence_artifact_valid(record, kind=kind, payload=payload,
                     competitor=competitor, dimension=dimension):
@@ -805,8 +860,13 @@ class DimensionWriterMixin:
             value = {'kind': kind, 'competitor': competitor, 'dimension': dimension,
                      'snapshot_id': view.snapshot_id, 'producer_hash': dependency.payload_hash,
                      'content': content}
+            if projection_version == 2 and kind in {'comparator', 'reflector'}:
+                value['content'] = bounded_advisory_content(
+                    content, value, detail, view, max_bytes=budget)
             if len(encoded(value).encode()) <= budget:
                 result[key] = value
+                if any(value['content'].get('omitted_entries', {}).values()):
+                    gaps.append(kind + '_advisory_entries_omitted')
             else:
                 gaps.append(kind + '_context_budget_exceeded')
         result['upstream_context_gaps'] = gaps
@@ -924,6 +984,9 @@ class DimensionWriterMixin:
                 }) for item in coverage]
                 if task_workflow:
                     from packages.agents.writer.task_answers import task_answer_plan
+                    from packages.research.question_scope import question_request_context
+                    review_payload['request_context'] = question_request_context(
+                        live.detail, view.competitor, view.dimension, pending)
                     server_partition = task_answer_plan(pending, compact['question_task_ledger'],
                         {c.id for c in supported})
                     review_payload['server_partition'] = server_partition

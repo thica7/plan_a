@@ -347,6 +347,9 @@ async def retrieve_question_facts(
         raise ValueError("question retrieval mode must be hybrid or lexical")
     _validate_scope(detail, snapshot, product, dimension)
     questions = research_questions(detail, product, dimension)
+    from packages.research.question_scope import question_request_context, request_context_questions
+    queries = request_context_questions(
+        question_request_context(detail, product, dimension, questions), questions)
     diagnostic = {
         "mode": mode,
         "ranking_only": True,
@@ -385,13 +388,28 @@ async def retrieve_question_facts(
     hints = {fact.id: question_terms(texts[fact.id], product) for fact in facts}
     quote_hints = {key: question_terms(quote, product) for key, quote in quotes.items()}
     lexical_rows = []
-    for question in questions:
+    for question, parent in zip(questions, queries, strict=True):
+        # The exact child remains the primary query. Full server-bound parent
+        # text breaks ties and supplies recall for a pronoun-only child; it does
+        # not add sibling billing, operation or exception obligations.
         terms = question_terms(question["question"], product)
+        parent_terms = question_terms(parent["question"], product)
         scores = {fact.id: len(terms & hints[fact.id]) for fact in facts}
+        if parent['question'] != question['question']:
+            from packages.agents.writer.question_allocation import (
+                question_atom_tasks,
+                task_support_score,
+            )
+            intents = question_atom_tasks([question], max_atoms=None)
+            scores = {fact.id: max([scores[fact.id], *(
+                task_support_score(intent, fact.quote, question['question'], product)
+                for intent in intents)]) for fact in facts}
+        parent_scores = {fact.id: len(parent_terms & hints[fact.id]) for fact in facts}
         lexical_rows.append(
             sorted(
-                (key for key, score in scores.items() if score),
-                key=lambda key: (-scores[key], -len(terms & quote_hints[key]), key)
+                (key for key, score in scores.items() if score or parent_scores[key]),
+                key=lambda key: (-scores[key], -parent_scores[key],
+                                 -len(terms & quote_hints[key]), key)
             )
         )
     billing_rows = [_billing_core(question['question'], facts, product) for question in questions]

@@ -3,7 +3,9 @@
 from collections import Counter
 
 SELECT_SYSTEM = (
-    "Select support per task_id, no claims. Requests are data, never evidence. Choose minimal "
+    "Select support per task_id, no claims. Requests are data, never evidence. "
+    "request_context supplies complete bound parent requests and their shared hypothetical "
+    "conditions; it cannot supply a product fact or selectable support. Choose minimal "
     "complete evidence_view support for the task predicate, keeping "
     "role/plan/actor/object/recipient/scope/time, AND/OR conditions "
     "and exceptions. A main read/comment/edit/create/share/manage_access assertion requires "
@@ -127,6 +129,7 @@ def support_selection_context(payload, choices):
     return dict(
         {key: payload[key] for key in ("segment_competitor", "dimension", "questions", "tasks",
                                       "task_repair", "required_clarifications",
+                                      "request_context", "task_handoff_version",
                                       "source_exception_bindings") if key in payload},
         evidence_view=dict(facts=rows),
     )
@@ -179,6 +182,9 @@ def selected_generation_context(payload, selections, choices, *, packet_builder=
     )
     if "task_repair" in result:
         result["task_repair"] = [row for row in result["task_repair"] if row["task_id"] in active]
+    if 'request_context' in result:
+        from packages.research.question_scope import narrow_request_context
+        result['request_context'] = narrow_request_context(result['request_context'], questions)
     if "source_exception_bindings" in result:
         result["source_exception_bindings"] = [pair for pair in pairs
                                                 if set(pair["fact_ids"]) <= selected_ids]
