@@ -29,6 +29,21 @@ async def task_service(**settings):
     return service, record
 
 
+@pytest.mark.asyncio
+async def test_late_task_can_run_while_bounded_answer_and_final_qa_remain_protected():
+    service, record = await task_service()
+    budget = service._run_llm_budget(record)
+    for phase in list(budget.delivery_reserves):
+        if phase.startswith(("collector:", "analyst:", "comparator:", "reflector:")):
+            budget.finish_delivery(phase)
+    budget.tokens_used = 45000
+    call = LLMCallExecution(budget, False, phase="writer:Example Suite/feature",
+                           input_tokens=11000, max_output_tokens=1600)
+    call.reserve()
+    assert budget.protected_tokens(call.phase) >= 22000
+    assert budget.tokens_used + budget.tokens_reserved + budget.protected_tokens(call.phase) <= 80000
+
+
 def test_task_writer_setting_defaults_off_and_env_can_opt_in(monkeypatch):
     assert getattr(Settings(), "writer_task_execution_enabled", None) is False
     monkeypatch.setenv("COMPETISCOPE_LOAD_ENV_FILES", "0")
@@ -50,7 +65,7 @@ def test_task_writer_setting_defaults_off_and_env_can_opt_in(monkeypatch):
 async def test_task_profile_keeps_separate_final_answer_and_run_review_floors():
     service, record = await task_service()
     budget = service._run_llm_budget(record)
-    assert budget.delivery_reserves.get("answer:Example Suite/feature", 0) >= 18000
+    assert budget.delivery_reserves.get("answer:Example Suite/feature", 0) == 12000
     assert budget.delivery_reserves.get("final_qa:run", 0) == 10000
     assert budget.delivery_call_reserves["answer:Example Suite/feature"] == 1
     assert budget.delivery_call_reserves["final_qa:run"] == 1
@@ -65,7 +80,7 @@ async def test_task_generation_and_review_share_headroom_but_keep_call_floors():
     for phase in ("writer:Example Suite/feature", "qa:Example Suite/feature"):
         assert budget.delivery_reserves[phase] == 0
         assert budget.delivery_call_reserves[phase] == 1
-    assert budget.delivery_reserves["answer:Example Suite/feature"] == 20000
+    assert budget.delivery_reserves["answer:Example Suite/feature"] == 12000
     assert budget.delivery_reserves["final_qa:run"] == 10000
 
 
@@ -101,7 +116,7 @@ async def test_collector_real_request_envelopes_enter_without_spending_final_flo
         assert span.metadata["llm_transport_attempts"] == 1
     assert len(requests) == 2
     assert budget.tokens_used == 31301 and budget.tokens_reserved == 0
-    assert budget.delivery_reserves["answer:Example Suite/feature"] == 20000
+    assert budget.delivery_reserves["answer:Example Suite/feature"] == 12000
     assert budget.delivery_reserves["final_qa:run"] == 10000
 
 
@@ -137,8 +152,8 @@ async def test_reflector_twenty_k_envelope_enters_after_twenty_five_k_charged():
     assert len(requests) == 1
     assert record.detail.trace_spans[-1].metadata["llm_reserved_input_tokens"] == 19447
     assert budget.tokens_used == 46047 and budget.tokens_reserved == 0
-    assert budget.protected_tokens("reflector:run") == 30000
-    assert budget.delivery_reserves["answer:Example Suite/feature"] == 20000
+    assert budget.protected_tokens("reflector:run") == 22000
+    assert budget.delivery_reserves["answer:Example Suite/feature"] == 12000
     assert budget.delivery_reserves["final_qa:run"] == 10000
 
 
@@ -153,7 +168,7 @@ async def test_real_admission_blocks_task_spending_and_admits_complete_final_pay
             budget.finish_delivery(phase)
     # An anonymous task replay consumes all nonfinal token headroom.
     prior = LLMCallExecution(
-        budget, False, input_tokens=50000, phase="writer:Example Suite/feature"
+        budget, False, input_tokens=58000, phase="writer:Example Suite/feature"
     )
     prior.reserve()
     prior.settle()
@@ -175,8 +190,8 @@ async def test_real_admission_blocks_task_spending_and_admits_complete_final_pay
             user="one more task",
         )
     assert not requests
-    payload = json.dumps({"complete_exact_support": "x" * 13920})
-    assert len(payload.encode()) <= 14000
+    payload = json.dumps({"complete_exact_support": "x" * 7400})
+    assert len(payload.encode()) <= 7600
     await service._trace_llm_text(
         record,
         agent="qa",
@@ -360,7 +375,7 @@ async def test_pending_unknown_task_charge_cannot_consume_final_floors():
         if not phase.startswith(("answer:", "final_qa:")):
             budget.finish_delivery(phase)
     first = LLMCallExecution(
-        budget, False, input_tokens=50000, phase="writer:Example Suite/feature"
+        budget, False, input_tokens=58000, phase="writer:Example Suite/feature"
     )
     first.reserve()
     blocked = LLMCallExecution(budget, False, input_tokens=1, phase="writer:Example Suite/feature")
@@ -370,8 +385,8 @@ async def test_pending_unknown_task_charge_cannot_consume_final_floors():
     first.settle()
     with pytest.raises(LLMExecutionLimitError, match="reserved_for_delivery"):
         await waiting
-    assert budget.tokens_used == 50000 and budget.calls == 1
-    assert budget.protected_tokens("writer:Example Suite/feature") == 30000
+    assert budget.tokens_used == 58000 and budget.calls == 1
+    assert budget.protected_tokens("writer:Example Suite/feature") == 22000
 
 
 @pytest.mark.asyncio
@@ -385,6 +400,8 @@ async def test_critical_checkpoint_keeps_final_floors_and_task_refusal(settled, 
     for phase in list(budget.delivery_reserves):
         if not phase.startswith(("answer:", "final_qa:")):
             budget.finish_delivery(phase)
+    # Emulate an existing run with the prior 20k answer allowance.
+    budget.delivery_reserves["answer:Example Suite/feature"] = 20000
     budget.delivery_reserves["final_qa:run"] = qa_floor
     prior_tokens = 80000 - 20000 - qa_floor
     task = LLMCallExecution(
@@ -428,6 +445,7 @@ async def test_new_scope_can_only_reserve_capacity_after_persisted_final_floors(
     service, record = await task_service()
     record.detail.plan.decision_brief = DecisionBrief(decision_question="能否让访客评论文档？")
     budget = service._run_llm_budget(record)
+    budget.delivery_reserves["answer:Example Suite/feature"] = 20000
     for phase in list(budget.delivery_reserves):
         if not phase.startswith(("answer:", "final_qa:")):
             budget.finish_delivery(phase)

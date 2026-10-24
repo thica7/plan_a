@@ -69,11 +69,13 @@ TASK_ANSWER_SYSTEM = (
     "prerequisites and exceptions. Preserve can versus must and if versus only-if. "
     "published_supports verify selected claims but cannot supply an unpublished answer; "
     "restrictive_source_context only rejects or qualifies. Unknown evidence never proves no. "
-    "Partition each COMPLETE original question into ordered contiguous question_quote excerpts, "
-    "copying every character except whitespace between excerpts. Attach preceding scenarios to "
-    "the first requested decision and trailing format instructions to the last. Separate each "
-    "independently decidable predicate, including distinct resources and private versus shared "
-    "access. A scenario sentence is not a yes branch. Each branch selects its own complete "
+    "server_partition supplies COMPLETE ordered contiguous request segments, including the "
+    "preceding scenario and trailing instructions. Echo each segment_id in that exact order; "
+    "never rephrase, drop, merge or repartition them. Check EVERY independently decidable "
+    "predicate in each segment, including distinct resources and private versus shared access. "
+    "A proposed segment is not proof that its tasks cover all its predicates. Unknown omitted "
+    "predicates require unknown/partial, never promote a plan to approval. "
+    "A scenario sentence is not a yes branch. Each branch selects its own complete "
     "published premises. No branch borrows a missing predicate from another branch or reason. "
     "For no/explicit_negative, published text must deny that SAME predicate. "
     "A numeric upper_bound "
@@ -95,7 +97,7 @@ TASK_ANSWER_SYSTEM = (
     '"resolution":"direct|conditional|clarification|unresolved",'
     '"conclusion":"yes|no|depends|unknown|not_applicable","missing_fields":[],'
     '"reason":"specific gap",'
-    '"subquestions":[{"question_quote":"exact contiguous excerpt","claim_ids":["published ID"],'
+    '"subquestions":[{"segment_id":"server segment ID","claim_ids":["published ID"],'
     '"conclusion":"yes|no|depends|unknown|not_applicable",'
     '"relation":"direct|explicit_negative|upper_bound|resource_scope|permission_entailment|'
     'destructive_effect|unresolved"}]}]}. Exactly one row per input question. '
@@ -133,6 +135,11 @@ def task_instruction(task):
         f"Answer ONLY {focus}{resource}; do not answer sibling actions "
         "or recite the source's capability list."
     )
+
+
+def task_review_diagnostic(item):
+    return dict(purpose="repair_only_not_evidence", rule_reasons=list(item.rule_reasons),
+                review=item.review.model_dump(mode="json") if item.review else None)
 
 
 def parse_task_decisions(rows, assignments):
@@ -584,6 +591,8 @@ async def execute_question_tasks(
                             else "task_review_not_supported"
                         ),
                     )
+                    if item.status != "supported":
+                        task["diagnostic"] = task_review_diagnostic(item)
                     if (
                         item.status == "supported"
                         and accepted[task["claim_id"]]["task_fulfilled"]

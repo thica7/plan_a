@@ -101,7 +101,7 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                     or questions and not audit.answer_coverage):
                 reasons.add('answer_coverage_incomplete')
             if not question_coverage_matches(record.detail.report_md, audit, record.detail.output_language,
-                                             audits=record.detail.report_dimension_audits):
+                                             audits=record.detail.report_dimension_audits, detail=record.detail):
                 reasons.add('published_answer_missing_or_changed')
         for reason in sorted(reasons):
             problem = f"主张引用审核失败：{reason}。请重新生成该产品和维度的报告内容。"

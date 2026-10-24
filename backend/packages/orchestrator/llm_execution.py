@@ -115,7 +115,8 @@ class LLMExecutionMixin:
                 agent = phase.split(':', 1)[0]
                 count = 1 if agent in {'comparator', 'reflector'} or (agent == 'writer' and not dimension_mode) else max(1, len(segments))
                 if agent == 'answer':
-                    desired = min(20000, int(budget.max_tokens * .25)) if budget.max_tokens else 20000
+                    from packages.agents.writer.task_answers import TASK_ANSWER_RESERVE
+                    desired = min(TASK_ANSWER_RESERVE, int(budget.max_tokens * .15)) if budget.max_tokens else TASK_ANSWER_RESERVE
                     desired //= len(task_segments)
                 elif agent == 'final_qa':
                     # 6KB complete-finding window + system/framing + 1600 output.

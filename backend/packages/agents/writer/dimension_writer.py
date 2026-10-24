@@ -923,6 +923,10 @@ class DimensionWriterMixin:
                     'answer', 'evidence_spans', 'binding_version', 'reason',
                 }) for item in coverage]
                 if task_workflow:
+                    from packages.agents.writer.task_answers import task_answer_plan
+                    server_partition = task_answer_plan(pending, compact['question_task_ledger'],
+                        {c.id for c in supported})
+                    review_payload['server_partition'] = server_partition
                     review_payload['proposed_answers'] = [{
                         'question_id': q['question_id'],
                         'claim_ids': [t['claim_id'] for t in compact['question_task_ledger']
@@ -953,8 +957,11 @@ class DimensionWriterMixin:
                 review_limit = use.max_bytes
                 if task_workflow:
                     from packages.agents.writer.task_execution import TASK_ANSWER_SYSTEM
+                    from packages.agents.writer.task_answers import TASK_ANSWER_REQUEST_BYTES
                     review_system = TASK_ANSWER_SYSTEM
-                    review_limit = min(14000, use.max_bytes)
+                    review_limit = min(use.max_bytes, TASK_ANSWER_REQUEST_BYTES
+                        - len((review_system + language_instruction(record.detail.output_language)).encode())
+                        - len('\n\n\nJSON:\n'.encode()))
                 # A proposal never survives an unavailable or invalid semantic review.
                 coverage = unverified_coverage(pending, 'Answer semantic review was not completed.')
                 if len(review_prompt.encode()) <= review_limit:
@@ -967,6 +974,9 @@ class DimensionWriterMixin:
                     )
                     self._validate_evidence_use(record, use)
                     self._validate_dimension_upstream(record, compact)
+                    if task_workflow:
+                        from packages.agents.writer.task_answers import restore_task_segments
+                        reviewed = restore_task_segments(reviewed, server_partition)
                     coverage = parse_answer_coverage(
                         reviewed, pending, {claim.id for claim in supported},
                         claims=[claim.model_dump(mode='json') for claim in supported],
@@ -1754,7 +1764,7 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
                 lines.extend([f"- {prefix}{plain(item.claim.text)} {citations}", ""])
             if not supported:
                 lines.extend(["- 暂无通过主张审核的证据观察。" if zh else "- No observation passed claim review.", ""])
-            lines.extend(question_coverage_lines(audit, detail.output_language))
+            lines.extend(question_coverage_lines(audit, detail.output_language, detail=task_projection_detail or detail))
             if audit.gaps and not partial:
                 names = {"billing_interval": "付款周期", "market": "地区", "tax_scope": "税费", "seat_type": "席位类型", "context_budget_exceeded": "已采资料超出本段上下文，未全部选入", "no_reviewed_claims": "未取得已审核主张"}
                 names.update({"plan": "套餐", "amount": "报价金额", "currency": "币种", "current_price": "适用价格", "supporting_facts": "可支持主张的原始证据", "claim_review_invalid": "审核响应无效，主张未发布", "claim_review_context_budget_exceeded": "完整审核证据超出容量，主张未发布", "promotional_claim_not_concrete": "套餐宣传未证明具体功能", "operation_object_scope_omitted": "操作对象限定被遗漏，主张未发布"})

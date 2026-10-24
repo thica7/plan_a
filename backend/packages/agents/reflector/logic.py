@@ -123,6 +123,9 @@ class ReflectorAgentMixin:
         fallback: dict[str, object] = {"used": False, "deterministic_fallback": False}
         from packages.schema.decision_brief import decision_brief_prompt_context
         delivery_scope = _question_delivery_scope(detail)
+        from packages.research.question_state import question_state
+        question_states = [question_state(q) for packet in self._question_packet_prompt(
+            record, question_packets, view.facts) for q in packet['questions']]
         try:
             payload = await self._trace_question_llm_json(
                 record, evidence_view=view, evidence_use=use, question_packets=question_packets,
@@ -139,6 +142,9 @@ class ReflectorAgentMixin:
                     "questions do not require additional competitors or an exhaustive feature comparison. "
                     "Question evidence packets bind each question to complete originals in Evidence View JSON. "
                     "Review each actual question against its supplied rules and all prerequisites. "
+                    "question_states separates available source context from context omissions and "
+                    "unverified evidence. No answer has been written at this stage; never classify "
+                    "not_reviewed as a collection failure. Available text is not entailment approval. "
                     "A published limit or access scope can answer a requested quantity or domain without "
                     "repeating the user value; a logical negative need not be stated a second time verbatim. "
                     "Do not require the source to repeat the question. Missing packet originals are context "
@@ -154,6 +160,7 @@ class ReflectorAgentMixin:
                 user=(
                     decision_brief_prompt_context(detail.plan.decision_brief)
                     + f"Delivery scope: {json.dumps(delivery_scope, ensure_ascii=False)}\n"
+                    + f"Question states: {json.dumps(question_states, ensure_ascii=False)}\n"
                     + f"Competitors: {', '.join(detail.plan.competitors)}\n"
                     f"Dimensions: {', '.join(detail.plan.dimensions)}\n"
                     f"Comparison Matrix JSON: "

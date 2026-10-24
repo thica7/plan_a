@@ -53,9 +53,9 @@ def _review_matches(detail, audit, task, claim):
     )
 
 
-def projected_task_claim_ids(detail, audit):
+def reviewed_task_results(detail, audit):
     if audit.claim_review_version != 3:
-        return set()
+        return ()
     scope = f"{audit.competitor}/{audit.dimension}"
     uses = [u for u in detail.evidence_consumptions if u.id == audit.consumption_id]
     if (
@@ -68,7 +68,7 @@ def projected_task_claim_ids(detail, audit):
         or (uses[0].agent, uses[0].competitor, uses[0].dimension)
         != ("writer", audit.competitor, audit.dimension)
     ):
-        return set()
+        return ()
     receipts = []
     for span in detail.trace_spans:
         if span.name != "question_task_delivery":
@@ -80,20 +80,20 @@ def projected_task_claim_ids(detail, audit):
         if isinstance(row, dict) and row.get("consumption_id") == audit.consumption_id:
             receipts.append((span, row))
     if len(receipts) != 1:
-        return set()
+        return ()
     span, receipt = receipts[0]
     if (
         (span.kind, span.agent, span.subagent, span.status) != ("tool", "writer", scope, "ok")
         or receipt.get("contract") != CONTRACT
         or receipt.get("snapshot_id") != detail.evidence_snapshot_id
     ):
-        return set()
+        return ()
     questions = {
         q["question_id"]: q["question"]
         for q in research_questions(detail, audit.competitor, audit.dimension)
     }
     supported = {a.claim.id: a.claim for a in audit.claims if a.status == "supported"}
-    result, seen = set(), set()
+    result, seen = [], set()
     for task in receipt.get("tasks", ()):
         try:
             identity = [
@@ -138,7 +138,11 @@ def projected_task_claim_ids(detail, audit):
             ):
                 continue
             seen.add(expected)
-            result.add(claim.id)
+            result.append(dict(task, question=questions[task["question_id"]]))
         except (KeyError, TypeError, ValueError, IndexError, AttributeError):
             continue
-    return result
+    return tuple(result)
+
+
+def projected_task_claim_ids(detail, audit):
+    return {row["claim_id"] for row in reviewed_task_results(detail, audit)}

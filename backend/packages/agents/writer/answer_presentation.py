@@ -64,7 +64,7 @@ def answer_decision_lines(answer, language):
     return ["  " + decisions[answer.conclusion]]
 
 
-def question_coverage_lines(audit, language):
+def question_coverage_lines(audit, language, *, detail=None):
     if not audit.answer_coverage:
         return []
     zh = language.startswith("zh")
@@ -76,6 +76,8 @@ def question_coverage_lines(audit, language):
         "unverified": "尚未核实",
     }
     supported = {item.claim.id: item.claim for item in audit.claims if item.status == "supported"}
+    from packages.agents.writer.task_answers import reviewed_task_answer_rows, task_answer_lines
+    tasks = reviewed_task_answer_rows(detail, audit) if detail is not None else []
     for answer in audit.answer_coverage:
         status = names[answer.status] if zh else answer.status
         lines.append(f"- {plain(answer.question)} — {status}")
@@ -95,12 +97,13 @@ def question_coverage_lines(audit, language):
                 if zh
                 else "  The reviewed evidence does not yet fully answer this question."
             )
+        lines.extend(task_answer_lines([t for t in tasks if t['question_id'] == answer.question_id], language))
     return [*lines, ""]
 
 
-def question_coverage_matches(report, audit, language, *, audits=()):
+def question_coverage_matches(report, audit, language, *, audits=(), detail=None):
     """Check the complete status/decision/answer block in its own audit section."""
-    expected = question_coverage_lines(audit, language)
+    expected = question_coverage_lines(audit, language, detail=detail)
     if not expected:
         return True
     lines = report.splitlines()
@@ -122,7 +125,7 @@ def question_coverage_matches(report, audit, language, *, audits=()):
     # A duplicate intact block elsewhere cannot excuse a changed local block.
     exact = "\n".join(expected).rstrip("\n")
     expected_count = (
-        sum(question_coverage_lines(other, language) == expected for other in audits) or 1
+        sum(question_coverage_lines(other, language, detail=detail) == expected for other in audits) or 1
     )
     return (
         report.count(exact) == expected_count

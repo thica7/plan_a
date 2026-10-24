@@ -185,6 +185,33 @@ async def test_experimental_final_qa_includes_gaps_beside_eligible_findings(monk
 
 
 @pytest.mark.asyncio
+async def test_task_diagnostic_excludes_another_questions_visible_claims(monkeypatch):
+    from dataclasses import replace
+
+    detail, service, record = await scope_case(monkeypatch)
+    service._settings = replace(service._settings, writer_task_execution_enabled=True)
+    issues = service._build_reflector_qa_issues(detail)
+    existing = detail.report_dimension_audits[0]
+    claim = existing.claims[0]
+    # An unrelated visible observation must not be copied into every question's QA envelope.
+    unrelated = claim.model_copy(update={'claim': claim.claim.model_copy(update={
+        'id': 'unrelated-claim', 'text': 'Unrelated subject. ' * 200})})
+    detail.report_dimension_audits[0] = existing.model_copy(update={
+        'claims': (*existing.claims, unrelated)})
+    seen = []
+
+    async def model(record, **kwargs):
+        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        seen.extend(c['id'] for r in payload['findings'] for c in r.get('claims', []))
+        return reviewed(payload)
+
+    monkeypatch.setattr(service, '_trace_llm_text', model)
+    await api()(service, record, issues, evidence_issues=['integrity problem'])
+    assert 'unrelated-claim' not in seen
+    assert claim.claim.id in seen
+
+
+@pytest.mark.asyncio
 async def test_final_scope_no_reconciles_old_blocker_with_receipt_and_keeps_history(monkeypatch):
     detail, service, record = await scope_case(monkeypatch)
     history = detail.reflections[-1].model_dump_json()
