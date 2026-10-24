@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from packages.agents.writer.task_protocol import CONTRACT, FOCUSES
+from packages.agents.writer.task_protocol import CONTRACT, FOCUSES, task_atom_reasons
 from packages.research.question_scope import research_questions
 
 
@@ -134,6 +134,7 @@ def reviewed_task_results(detail, audit):
                 != hashlib.sha256(claim.model_dump_json().encode()).hexdigest()
                 or not set(claim.fact_ids) <= set(uses[0].fact_ids)
                 or not set(claim.source_ids) <= set(uses[0].source_ids)
+                or task_atom_reasons(task, claim.text, kind=claim.kind)
                 or not _review_matches(detail, audit, task, claim)
             ):
                 continue

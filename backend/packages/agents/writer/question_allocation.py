@@ -178,6 +178,13 @@ def task_support_score(task, quote, question, product):
     if task["focus"] == "permission_not_obligation":
         action = _ACTIONS.get(next(iter(sorted(requested_answer_actions(question))), ""))
     score = 20 * bool(action and re.search(action, quote, re.I))
+    from packages.agents.writer.task_predicates import explicit_scope_assignment
+
+    if task["focus"] == "source_rule" and explicit_scope_assignment(request) and re.search(
+        r"\broles?\b[^.!?]{0,80}\b(?:assigned|apply)\b[^.!?]{0,60}\b(?:scope|domain)\b"
+        r"|角色[^。]{0,60}(?:给定范围|指定域名)", quote, re.I,
+    ):
+        score += 40
     for requested, sourced in (
         (
             r"层级|统一|自动.*(?:权限|改权)|\b(?:level|automatically)\b",

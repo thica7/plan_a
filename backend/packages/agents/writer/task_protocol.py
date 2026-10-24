@@ -164,6 +164,45 @@ def fallback_tasks(questions, scope):
     return parse_tasks(json.dumps({"tasks": rows}), questions, scope)
 
 
+def with_scope_rule_tasks(tasks, questions, scope):
+    """New executions explicitly plan scope dependencies; old plans replay as written."""
+    from packages.agents.writer.task_predicates import explicit_scope_assignment
+
+    rows = [dict((key, task[key]) for key in ("question_id", "question_quote", "focus"))
+            for task in tasks]
+    additions = []
+    for question in questions:
+        fragment = explicit_scope_assignment(question["question"])
+        domains = set(re.findall(r"\b[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+\b", question["question"]))
+        if fragment and len(domains) > 1 and any(t["question_id"] == question["question_id"] and
+                            t["focus"] in _ACTIONS for t in tasks):
+            row = dict(question_id=question["question_id"], question_quote=fragment,
+                       focus="source_rule")
+            if row not in rows:
+                additions.append((question, row))
+    additions = additions[:max(0, 48 - len(tasks))]
+    if not additions:
+        return tasks
+    expanded = list(tasks)
+    planned = sum(task["state"] == "planned" for task in tasks)
+    for question, row in additions:
+        # Only the new request enters the model-plan parser. Replaying all
+        # server-expanded rows would erase deferrals and exceed its 48-row cap.
+        candidate = next(task for task in parse_tasks(
+            json.dumps(dict(tasks=[row])), [question], scope)
+            if all(task[key] == row[key] for key in row))
+        if planned >= MAX_TASKS:
+            candidate.update(state="deferred", reason="task_capacity_exceeded")
+        else:
+            planned += 1
+        expanded.append(candidate)
+    groups = {question["question_id"]: [] for question in questions}
+    for task in expanded:
+        groups[task["question_id"]].append(task)
+    return [group[index] for index in range(max(map(len, groups.values()), default=0))
+            for group in groups.values() if index < len(group)]
+
+
 def parse_results(text, tasks):
     payload = _json(text)
     if (
@@ -250,6 +289,8 @@ def task_atom_reasons(task, text, *, kind=None):
         )
         for pattern in _ACTIONS.values()
     )
-    if sibling:
+    from packages.agents.writer.task_predicates import contains_sibling_properties
+
+    if sibling or contains_sibling_properties(assertion):
         return ("task_contains_sibling_predicate",)
     return ()

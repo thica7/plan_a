@@ -297,6 +297,35 @@ def _billing_core(question, facts, product):
     return result
 
 
+def _scope_core(question, facts):
+    """Recall a role's same-source scope restriction before creating its use."""
+    from packages.agents.writer.answer_action_scope import _ACTIONS, requested_answer_actions
+    from packages.agents.writer.task_predicates import explicit_scope_assignment
+
+    fragment = explicit_scope_assignment(question)
+    domains = set(re.findall(r"\b[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+\b", question))
+    role = re.search(r"的\s*(.+?)\s*角色$", fragment or "")
+    actions = requested_answer_actions(question)
+    if len(domains) < 2 or not role or not actions:
+        return []
+    anchors = [fact for fact in facts if role[1].casefold() in fact.quote.casefold()
+               and any(re.search(_ACTIONS[action], fact.quote, re.I) for action in actions)]
+    if not anchors:
+        return []
+    anchor = min(anchors, key=lambda fact: (len(fact.quote), fact.id))
+    dependencies = [fact for fact in facts if fact.source_id == anchor.source_id and re.search(
+        r"\broles?\b[^.!?]{0,80}\b(?:assigned|apply)\b[^.!?]{0,60}\b(?:scope|domain)\b"
+        r"|角色[^。]{0,60}(?:给定范围|指定域名)", fact.quote, re.I,
+    )]
+    if not dependencies:
+        return []
+    dependency = min(dependencies, key=lambda fact: (
+        -int(bool(re.search(r"\bassigned\b[^.!?]{0,60}\bscope\b", fact.quote, re.I))),
+        len(fact.quote), fact.id,
+    ))
+    return list(dict.fromkeys([anchor.id, dependency.id]))
+
+
 async def retrieve_question_facts(
     detail,
     snapshot,
@@ -366,7 +395,9 @@ async def retrieve_question_facts(
             )
         )
     billing_rows = [_billing_core(question['question'], facts, product) for question in questions]
-    pool_ids = _round_robin([*billing_rows, *lexical_rows, [fact.id for fact in facts]], CANDIDATE_LIMIT)
+    scope_rows = [_scope_core(question['question'], facts) for question in questions]
+    pool_ids = _round_robin(
+        [*billing_rows, *scope_rows, *lexical_rows, [fact.id for fact in facts]], CANDIDATE_LIMIT)
     pool = set(pool_ids)
     lexical_rows = [[key for key in row if key in pool] for row in lexical_rows]
     diagnostic.update(candidate_count=len(pool_ids), capacity_limited=len(facts) > len(pool_ids))
@@ -489,9 +520,11 @@ async def retrieve_question_facts(
     exception_rows = [
         question_exception_fact_ids(question['question'], facts) for question in questions
     ]
-    core_rows = [list(dict.fromkeys([*billing,
-        *_lifecycle_core(question['question'], list(dict.fromkeys([*row, *pool_ids])), quotes, product)]))
-        for question, row, billing in zip(questions, ranked_rows, billing_rows, strict=True)]
+    core_rows = [list(dict.fromkeys([*billing, *scope_rules,
+        *_lifecycle_core(question['question'], list(dict.fromkeys([*row, *pool_ids])),
+                         quotes, product)]))
+        for question, row, billing, scope_rules in zip(
+            questions, ranked_rows, billing_rows, scope_rows, strict=True)]
     # Reserve one whole original per question before additional branches compete.
     # Distinct conditions remain distinct even within the same coarse branch.
     by_id = {fact.id: fact for fact in facts}

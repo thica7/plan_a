@@ -95,6 +95,40 @@ def test_supported_task_inference_is_visible_without_promoting_the_whole_questio
     assert audit.answer_coverage[0].status == "unverified"
 
 
+@pytest.mark.parametrize("text,expected", [
+    ("Guests have no personal area and can access only one shared vault.", False),
+    ("免费组织最多支持两个 collections，因此题设我与另外一名用户使用三个 collections "
+     "的请求不能满足。", True),
+    ("The free plan supports at most two collections, so the requested three collections "
+     "with one other user cannot be accommodated.", True),
+    ("The free plan supports at most two users and up to two collections.", False),
+])
+def test_persisted_rehashed_task_and_review_respect_the_same_predicate_boundary(text, expected):
+    from packages.agents.writer.task_projection import reviewed_task_results
+
+    record, audit, receipt_span, receipt = projected_case()
+    task = receipt["tasks"][0]
+    assert reviewed_task_results(record.detail, audit)
+    changed = next(a.claim for a in audit.claims if a.claim.id == task["claim_id"]).model_copy(
+        update={"text": text}
+    )
+    audit = audit.model_copy(update={"claims": tuple(
+        a.model_copy(update={"claim": changed}) if a.claim.id == changed.id else a
+        for a in audit.claims
+    )})
+    task["claim_digest"] = hashlib.sha256(changed.model_dump_json().encode()).hexdigest()
+    review = next(s for s in record.detail.trace_spans if s.id == task["review_span_id"])
+    payload = json.loads(review.full_input.split("\nJSON:\n", 1)[1])
+    payload["claims"][0]["text"] = text
+    payload["task_assignments"][0]["claim_digest"] = task["claim_digest"]
+    review.full_input = "SYSTEM\nJSON:\n" + json.dumps(payload)
+    task["review_input_sha256"] = hashlib.sha256(review.full_input.encode()).hexdigest()
+    receipt_span.full_output = json.dumps(receipt)
+    persisted = type(record.detail).model_validate_json(record.detail.model_dump_json())
+    persisted_audit = type(audit).model_validate_json(audit.model_dump_json())
+    assert bool(reviewed_task_results(persisted, persisted_audit)) is expected
+
+
 @pytest.mark.parametrize(
     "change",
     [

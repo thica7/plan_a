@@ -12,6 +12,7 @@ from packages.agents.writer.task_protocol import (
     parse_results,
     parse_tasks,
     task_atom_reasons,
+    with_scope_rule_tasks,
 )
 
 PLAN_SYSTEM = (
@@ -45,8 +46,10 @@ GENERATE_SYSTEM = (
     "scope or billing question publish the directly answering sourced rule. For permission vs "
     "obligation explain only the logical non-entailment, "
     "never claim the whole document has no obligation. "
-    "Use an o-reference for its exact catalogued operation; "
-    "other predicates use a complete s-reference. "
+    "Only a main read/comment/edit/create/share/manage_access assertion uses its exact "
+    "catalogued o-reference. Quantity, ownership, scope and non-catalogued actions such as "
+    "download/export/vote/purge_cache use their complete s-reference, even when the support "
+    "mentions sharing or a Share UI button. "
     "A parent original can restrict a quote but cannot support "
     "an assertion outside that selected quote. "
     "Missing evidence means insufficient_evidence with null atom, never an invented denial. "
@@ -55,8 +58,16 @@ GENERATE_SYSTEM = (
     '"status":"generated|insufficient_evidence",'
     '"atom":{"text":"complete plain text","kind":"fact|inference","support_refs":["s1 or o1"]}}]}. '
     "Exactly one result per task; atom is null only for insufficient_evidence."
-    " A source_rule or rule_ACTION task publishes that action's complete rule as kind=fact without "
-    "assuming the scenario. A task with resource applies that rule to only that resource "
+    " A source_rule publishes only its requested predicate, never the whole source's rule list. "
+    "A direct product rule uses kind=fact; a quantity scenario can use kind=inference: one "
+    "explicit same-object/unit upper bound that the requested count exceeds suffices to deny "
+    "a conjunctive request. State the sourced limit and given condition, never turn a scenario "
+    "count into a product fact or add unsupported limits for other units. "
+    "Private ownership and shared-container capacity are separate predicates; billing allowance "
+    "and rate do not license runtime limits. Level availability and per-member/per-board "
+    "configuration instructions are separate predicates. A rule_ACTION publishes only that "
+    "action's complete "
+    "rule as kind=fact. A task with resource applies that rule to only that resource "
     "as a conditional inference. Scoped answers need both the rule and its application."
     " For task_repair, correct only its listed binding/scope failure using the sent catalog. "
     "Diagnostics are not evidence; do not append sibling facts."
@@ -130,9 +141,20 @@ def task_instruction(task):
             "inference from the permission rule."
         )
     if focus == "source_rule":
+        from packages.agents.writer.task_predicates import explicit_scope_assignment
+
+        if explicit_scope_assignment(task["question_quote"]):
+            return (
+                "Publish only the sourced role assignment scope rule as fact. The assignment "
+                "in the question is a hypothetical premise, never a product fact. "
+                "Do not append the role's capabilities or the scenario outcome."
+            )
         return (
             "Publish one complete product rule answering this exact request; "
-            "omit explanations adding other predicates."
+            "omit explanations adding other predicates. For a quantity scenario, an explicitly "
+            "sourced same-unit upper bound can support a conditional inference denying the "
+            "whole request; do not publish every sibling limit or capability. A level-availability "
+            "question needs only that level rule, without separate per-member/per-board setup."
         )
     resource = f" for resource {task['resource']}" if task.get("resource") else ""
     return (
@@ -317,6 +339,7 @@ async def execute_question_tasks(
         SELECT_SYSTEM,
         parse_support_selections,
         selected_generation_context,
+        support_selection_context,
     )
     from packages.i18n.language import language_instruction
     from packages.research.evidence.report_claims import audit_report_claims, claim_rule_reasons
@@ -339,6 +362,7 @@ async def execute_question_tasks(
     except (ValueError, TypeError, AttributeError):
         tasks = fallback_tasks(questions, scope)
         planning = "bounded_request_fallback"
+    tasks = with_scope_rule_tasks(tasks, questions, scope)
     claims, reviews, sizes, dispatches, sent_ids = [], [], [], [], set()
     support_selections = []
     upstream = service._dimension_upstream_context(record, view)
@@ -384,15 +408,16 @@ async def execute_question_tasks(
                 task.update(state="insufficient_evidence", reason="task_evidence_unavailable")
             continue
         choices = dispatched_support_choices(dispatched, view.facts, sent)
+        selection_prompt = compact_prompt_json(support_selection_context(dispatched, choices))
         selection_start = len(service._evidence_live_record(record).detail.trace_spans)
         response, gaps = await service._dimension_call_with_gaps(
             record, gaps, agent="writer", subagent=scope,
             name="dimension_task_support_selection", system=SELECT_SYSTEM,
-            user="\nJSON:\n" + prompt, max_output_tokens=600, max_request_attempts=1,
+            user="\nJSON:\n" + selection_prompt, max_output_tokens=600, max_request_attempts=1,
         )
         service._validate_evidence_use(record, use)
         service._validate_dimension_upstream(record, dict(selected, **upstream))
-        sizes.append(len(prompt.encode()))
+        sizes.append(len(selection_prompt.encode()))
         selection_spans = [
             span
             for span in service._evidence_live_record(record).detail.trace_spans[selection_start:]
@@ -400,7 +425,7 @@ async def execute_question_tasks(
             and span.agent == "writer" and span.subagent == scope and span.status == "ok"
             and type(span.metadata.get("llm_transport_attempts")) is int
             and span.metadata["llm_transport_attempts"] > 0
-            and span.full_input == SELECT_SYSTEM + "\n\n\nJSON:\n" + prompt
+            and span.full_input == SELECT_SYSTEM + "\n\n\nJSON:\n" + selection_prompt
             and isinstance(response, str) and span.full_output == response
         ]
         verified = len(selection_spans) == 1
@@ -427,7 +452,10 @@ async def execute_question_tasks(
         batch = [task for task in batch if selections[task["task_id"]]["state"] == "selected"]
         if not batch:
             continue
-        payload = selected_generation_context(dispatched, selections, choices)
+        payload = selected_generation_context(
+            dispatched, selections, choices,
+            packet_builder=lambda rows: service._question_packet_prompt(record, packets, rows),
+        )
         prompt = compact_prompt_json(payload)
         if len(("\nJSON:\n" + prompt).encode()) > min(14000, use.max_bytes):
             for task in batch:
@@ -435,6 +463,9 @@ async def execute_question_tasks(
                     state="deferred", reason="task_selected_support_context_budget_exceeded"
                 )
             continue
+        dispatched = _expand_text_refs(parse_json(prompt))
+        sent = {row["id"] for row in dispatched["evidence_view"]["facts"]}
+        catalog = _support_ref_catalog(dispatched, view.facts, sent)
         start = len(service._evidence_live_record(record).detail.trace_spans)
         generation_system = GENERATE_SYSTEM + language_instruction(record.detail.output_language)
         generation_user = "\nJSON:\n" + prompt
@@ -598,8 +629,11 @@ async def execute_question_tasks(
                 '"relation":"direct|explicit_negative|upper_bound|resource_scope|'
                 'permission_entailment|destructive_effect"}]. State the reviewed conclusion '
                 "and its actual inference relation for THIS request fragment. "
-                "A source_rule or rule_ACTION task "
-                "needs that complete rule; "
+                "A source_rule needs only its requested predicate, not every sibling property "
+                "of the source. A quantity scenario may be denied by a complete explicit upper "
+                "bound for the same object/unit that the requested count exceeds; this can "
+                "settle a conjunctive request without asserting the other unit's limit. "
+                "A rule_ACTION task needs only that action's complete rule; "
                 "a resource task needs that resource's conditional outcome. "
                 "billing_inputs needs the applicable sourced billing dependency, "
                 "not a computed full bill. "
@@ -698,14 +732,21 @@ async def execute_question_tasks(
                             ).hexdigest()
             claims.extend(current)
             reviews.extend(parsed_reviews)
+    retired_claims = set()
     for task in tasks:
+        if task.get("repair_prior_state") == "partial" and task["state"] == "supported":
+            retired_claims.add(task["repair_prior_claim_id"])
         if task.get("repair_prior_state") == "partial" and task["state"] != "supported":
+            if task.get("claim_id") != task["repair_prior_claim_id"]:
+                retired_claims.add(task.get("claim_id"))
             task["repair_outcome"] = task["state"]
             task.update(
                 state="partial",
                 claim_id=task["repair_prior_claim_id"],
                 reason="supported_claim_retained_after_failed_repair",
             )
+    claims = [claim for claim in claims if claim.id not in retired_claims]
+    reviews = [review for review in reviews if review.claim_id not in retired_claims]
     service._finish_delivery_phase(record, "writer", scope)
     receipt = dict(
         contract=CONTRACT,

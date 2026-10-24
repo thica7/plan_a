@@ -1,0 +1,1794 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-24",
+  "stage": "task_predicate_budget",
+  "base_commit": "abb176853f3f42ac8ec66627647a747dd22e28e9",
+  "acceptance_status": "not_deliverable",
+  "writer_task_execution_default_enabled": false,
+  "training_performed": false,
+  "docker_executed": false,
+  "scope": {
+    "products": [
+      "Trello",
+      "Cloudflare",
+      "Bitwarden",
+      "1Password"
+    ],
+    "original_questions": 8,
+    "internal_questions": 10,
+    "captured_pages_date": "2026-10-21",
+    "input_mode": "captured_page_replay",
+    "fresh_web_capture": false,
+    "e2e": false,
+    "runtime_input_fields": [
+      "id",
+      "product",
+      "question",
+      "sources"
+    ],
+    "reference_snapshot_gold_loaded": false,
+    "model_alias": "deepseek-flash",
+    "underlying_model_version_independently_verified": false,
+    "max_calls_per_run": 24,
+    "max_tokens_per_run": 80000
+  },
+  "verification": {
+    "backend": {
+      "passed": 7521,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 217.75,
+      "new_tests_vs_base": 52,
+      "log": "data/artifacts/task-predicate-budget-2026-10-24/backend-final.log",
+      "log_sha256": "b5e3c8cf19458e9ef40a03f933e1814b7a7d94f388d2f9eb30da18f570bc10b1"
+    },
+    "changed_python_files": 9,
+    "new_ruff_diagnostics": [],
+    "diff_check": "passed",
+    "spec_review": "passed_after_fixes",
+    "quality_review": "passed_after_row_cap_fix"
+  },
+  "implementation": {
+    "selection": "Compact server-verified complete support catalog with full restrictions and exact transport verification.",
+    "generation": "Selected canonical facts plus verified exception partners, rebuilt question packets, unchanged reference IDs and replay guards.",
+    "predicates": "Finite independent-property rejection shared at live and projection entrances; request counts remain conditional premises, not product facts. Unknown grammar remains for independent review.",
+    "scope": "Same-source eligible role/scope dependencies selected before evidence use for explicit Chinese role assignment and two-domain action requests. New scope tasks preserve old states and obey 12 active / 48 total capacity.",
+    "repair": "Retire old partial only after supported replacement; otherwise retain prior support and retire replacement draft.",
+    "unchanged_limits": {
+      "calls": 24,
+      "tokens": 80000,
+      "answer_reserve": 12000,
+      "final_qa_reserve": 11000,
+      "final_qa_user_bytes": 6000
+    }
+  },
+  "offline_payload_diagnostic": {
+    "schema_version": 1,
+    "baseline": "abb176853f3f42ac8ec66627647a747dd22e28e9",
+    "critical_state": {
+      "used": 46055,
+      "calls": 13,
+      "protected_tokens": 23000,
+      "headroom": 3200,
+      "max_calls": 24,
+      "max_tokens": 80000,
+      "output": 600
+    },
+    "selection": [
+      {
+        "product": "trello",
+        "span_id": "span-41",
+        "task_count": 3,
+        "verified_ref_count": 6,
+        "old": {
+          "system_bytes": 1312,
+          "user_bytes": 10091,
+          "full_input_bytes": 11405,
+          "full_input_sha256": "4e4ea5eab0eb97a595a21f03d3a143c2fe71bf8a8b57944703abb85b0f777b92"
+        },
+        "new": {
+          "system_bytes": 1299,
+          "user_bytes": 5098,
+          "full_input_bytes": 6399,
+          "full_input_sha256": "439c60c8ad9eac83a642ab0b1eaab008e22b4eef680b250140af0ce029d8ef21"
+        },
+        "saved_full_input_bytes": 5006
+      },
+      {
+        "product": "trello",
+        "span_id": "span-44",
+        "task_count": 3,
+        "verified_ref_count": 6,
+        "old": {
+          "system_bytes": 1312,
+          "user_bytes": 10893,
+          "full_input_bytes": 12207,
+          "full_input_sha256": "0147c7305749a3567f81f9d773df727fbac87a1a5716ff69773cc07356bbdc01"
+        },
+        "new": {
+          "system_bytes": 1299,
+          "user_bytes": 5748,
+          "full_input_bytes": 7049,
+          "full_input_sha256": "8a6ac5693d26ff1451829566caa5680688b10e3ccb4a9505d851a9026cd942ce"
+        },
+        "saved_full_input_bytes": 5158
+      },
+      {
+        "product": "trello",
+        "span_id": "span-48",
+        "task_count": 3,
+        "verified_ref_count": 4,
+        "old": {
+          "system_bytes": 1312,
+          "user_bytes": 10543,
+          "full_input_bytes": 11857,
+          "full_input_sha256": "199b572df3f4d27467d0454584cfac3cf4109efdf1ab4ec72e452dff41f829e8"
+        },
+        "new": {
+          "system_bytes": 1299,
+          "user_bytes": 5576,
+          "full_input_bytes": 6877,
+          "full_input_sha256": "37257524fff516b5174862da17ad69e20dfc794b72544be3f174dca37b3244d5"
+        },
+        "saved_full_input_bytes": 4980,
+        "old_critical_admission": {
+          "admitted": false,
+          "error": "run_llm_budget_reserved_for_delivery",
+          "transport_attempts": 0,
+          "input_reserved": 12113,
+          "charged": 0,
+          "final_tokens_used": 46055,
+          "final_calls_used": 13,
+          "protected_tokens": 23000,
+          "stage_headroom": 3200,
+          "usage_source": null,
+          "note": "Real production adapter/admission; local HTTP response stub, no provider call or invented provider usage."
+        },
+        "new_critical_admission": {
+          "admitted": true,
+          "error": null,
+          "transport_attempts": 1,
+          "input_reserved": 7133,
+          "charged": 7733,
+          "final_tokens_used": 53788,
+          "final_calls_used": 14,
+          "protected_tokens": 23000,
+          "stage_headroom": 3200,
+          "usage_source": "estimate",
+          "note": "Real production adapter/admission; local HTTP response stub, no provider call or invented provider usage."
+        }
+      },
+      {
+        "product": "trello",
+        "span_id": "span-49",
+        "task_count": 1,
+        "verified_ref_count": 6,
+        "old": {
+          "system_bytes": 1312,
+          "user_bytes": 8920,
+          "full_input_bytes": 10234,
+          "full_input_sha256": "71eac8792bdef06ebfe523b0ea17ab4a7461dad37ba8970653ab3d0f9ea4474c"
+        },
+        "new": {
+          "system_bytes": 1299,
+          "user_bytes": 4795,
+          "full_input_bytes": 6096,
+          "full_input_sha256": "75129af9850e2d6b00d22a925eb1670b93b4b392e6e4ba8ab8cc4fbe00f4b9a6"
+        },
+        "saved_full_input_bytes": 4138,
+        "old_critical_admission": {
+          "admitted": false,
+          "error": "run_llm_budget_reserved_for_delivery",
+          "transport_attempts": 0,
+          "input_reserved": 10490,
+          "charged": 0,
+          "final_tokens_used": 46055,
+          "final_calls_used": 13,
+          "protected_tokens": 23000,
+          "stage_headroom": 3200,
+          "usage_source": null,
+          "note": "Real production adapter/admission; local HTTP response stub, no provider call or invented provider usage."
+        },
+        "new_critical_admission": {
+          "admitted": true,
+          "error": null,
+          "transport_attempts": 1,
+          "input_reserved": 6352,
+          "charged": 6952,
+          "final_tokens_used": 53007,
+          "final_calls_used": 14,
+          "protected_tokens": 23000,
+          "stage_headroom": 3200,
+          "usage_source": "estimate",
+          "note": "Real production adapter/admission; local HTTP response stub, no provider call or invented provider usage."
+        }
+      },
+      {
+        "product": "trello",
+        "span_id": "span-50",
+        "task_count": 1,
+        "verified_ref_count": 6,
+        "old": {
+          "system_bytes": 1312,
+          "user_bytes": 9436,
+          "full_input_bytes": 10750,
+          "full_input_sha256": "ea741ca4606ae70198a9810585b37f9e9f937e53e0614f8c607dd1693628a3c3"
+        },
+        "new": {
+          "system_bytes": 1299,
+          "user_bytes": 5387,
+          "full_input_bytes": 6688,
+          "full_input_sha256": "8caceda3c6260a696c1e5b583d0f8009dd767b3fcc88d15c37b6662e32d74411"
+        },
+        "saved_full_input_bytes": 4062,
+        "old_critical_admission": {
+          "admitted": false,
+          "error": "run_llm_budget_reserved_for_delivery",
+          "transport_attempts": 0,
+          "input_reserved": 11006,
+          "charged": 0,
+          "final_tokens_used": 46055,
+          "final_calls_used": 13,
+          "protected_tokens": 23000,
+          "stage_headroom": 3200,
+          "usage_source": null,
+          "note": "Real production adapter/admission; local HTTP response stub, no provider call or invented provider usage."
+        },
+        "new_critical_admission": {
+          "admitted": true,
+          "error": null,
+          "transport_attempts": 1,
+          "input_reserved": 6944,
+          "charged": 7544,
+          "final_tokens_used": 53599,
+          "final_calls_used": 14,
+          "protected_tokens": 23000,
+          "stage_headroom": 3200,
+          "usage_source": "estimate",
+          "note": "Real production adapter/admission; local HTTP response stub, no provider call or invented provider usage."
+        }
+      },
+      {
+        "product": "cloudflare",
+        "span_id": "span-44",
+        "task_count": 2,
+        "verified_ref_count": 3,
+        "old": {
+          "system_bytes": 1312,
+          "user_bytes": 9929,
+          "full_input_bytes": 11243,
+          "full_input_sha256": "7c4f1b650d34f087916066955f6201896e721c77cc2c3d91058edf45babc7bcd"
+        },
+        "new": {
+          "system_bytes": 1299,
+          "user_bytes": 3378,
+          "full_input_bytes": 4679,
+          "full_input_sha256": "139059874427e35e18794b15d9a21f641f161d4e22a9d842d3eef9e64b2d2239"
+        },
+        "saved_full_input_bytes": 6564
+      },
+      {
+        "product": "cloudflare",
+        "span_id": "span-47",
+        "task_count": 2,
+        "verified_ref_count": 3,
+        "old": {
+          "system_bytes": 1312,
+          "user_bytes": 9351,
+          "full_input_bytes": 10665,
+          "full_input_sha256": "8742e62da69a8dbd48fd8b6912a843bbd04ffb0a7f1a5e770190fd3dc3d58161"
+        },
+        "new": {
+          "system_bytes": 1299,
+          "user_bytes": 2955,
+          "full_input_bytes": 4256,
+          "full_input_sha256": "fbb54afd786ed6a498f0e741de0a82d217bada1d5174236bdec8ffcfec24584a"
+        },
+        "saved_full_input_bytes": 6409
+      },
+      {
+        "product": "bitwarden",
+        "span_id": "span-47",
+        "task_count": 1,
+        "verified_ref_count": 5,
+        "old": {
+          "system_bytes": 1312,
+          "user_bytes": 7388,
+          "full_input_bytes": 8702,
+          "full_input_sha256": "8abe293ecc353ac1f61db83a8267fe6607c9eb22c81834c543068c2fc3e6bc4b"
+        },
+        "new": {
+          "system_bytes": 1299,
+          "user_bytes": 2973,
+          "full_input_bytes": 4274,
+          "full_input_sha256": "90db3604b7e800d4d7c047337dd42f611d6cd9aaa3d7b79e332116a120550b21"
+        },
+        "saved_full_input_bytes": 4428
+      },
+      {
+        "product": "bitwarden",
+        "span_id": "span-50",
+        "task_count": 1,
+        "verified_ref_count": 5,
+        "old": {
+          "system_bytes": 1312,
+          "user_bytes": 7557,
+          "full_input_bytes": 8871,
+          "full_input_sha256": "97522efdce57eb1fd39bcaa94c3fd8ebb7d332d70dcd9c016679e8d44edc0e82"
+        },
+        "new": {
+          "system_bytes": 1299,
+          "user_bytes": 3142,
+          "full_input_bytes": 4443,
+          "full_input_sha256": "22886a8ad9c62b837e699a869f44d3a035bd253b215230d6b1f36d5ffe20dcc5"
+        },
+        "saved_full_input_bytes": 4428
+      },
+      {
+        "product": "1password",
+        "span_id": "span-42",
+        "task_count": 3,
+        "verified_ref_count": 7,
+        "old": {
+          "system_bytes": 1312,
+          "user_bytes": 9881,
+          "full_input_bytes": 11195,
+          "full_input_sha256": "41cc88adae8631749e2d186c27ac263c61f1de29f55961f90de1e362e6e45a46"
+        },
+        "new": {
+          "system_bytes": 1299,
+          "user_bytes": 4467,
+          "full_input_bytes": 5768,
+          "full_input_sha256": "3aa84e7f36690583ede5ecfa8760ccaf1cc9ece7702d8db8576375e986b80e1b"
+        },
+        "saved_full_input_bytes": 5427
+      }
+    ],
+    "generation": [
+      {
+        "product": "trello",
+        "span_id": "span-42",
+        "old": {
+          "system_bytes": 2348,
+          "user_bytes": 10526,
+          "full_input_bytes": 12876,
+          "full_input_sha256": "629b3761e224fdfc25bee2520e8803fc2b7e79b394e42f24d1fbeb34872320e1"
+        },
+        "new": {
+          "system_bytes": 3147,
+          "user_bytes": 7500,
+          "full_input_bytes": 10649,
+          "full_input_sha256": "ce5ffa476939f5d6e0313c87dacf295b1989faf51b6b397b300681632f1afc04"
+        },
+        "old_fact_count": 2,
+        "new_fact_count": 1,
+        "saved_full_input_bytes": 2227
+      },
+      {
+        "product": "trello",
+        "span_id": "span-45",
+        "old": {
+          "system_bytes": 2348,
+          "user_bytes": 11465,
+          "full_input_bytes": 13815,
+          "full_input_sha256": "a47d32134187f4f9b7701454623d31c7b43cd589decce6b084e7bb88b573a80d"
+        },
+        "new": {
+          "system_bytes": 3147,
+          "user_bytes": 11750,
+          "full_input_bytes": 14899,
+          "full_input_sha256": "f88779235ab71ed809354e5a515c3ee37981957cabb89c49ff8bebf687658a67"
+        },
+        "old_fact_count": 2,
+        "new_fact_count": 2,
+        "saved_full_input_bytes": -1084
+      },
+      {
+        "product": "cloudflare",
+        "span_id": "span-45",
+        "old": {
+          "system_bytes": 2348,
+          "user_bytes": 10312,
+          "full_input_bytes": 12662,
+          "full_input_sha256": "0d92ca1179e87353ca1e4437420a05c347aae6c6617fdc59d0f55e81bb10029b"
+        },
+        "new": {
+          "system_bytes": 3147,
+          "user_bytes": 10312,
+          "full_input_bytes": 13461,
+          "full_input_sha256": "79b83c2774cec15f3b8a46f0d65cf5ad8a4e3dcb9d5c2b3d7c89b7347faecc22"
+        },
+        "old_fact_count": 2,
+        "new_fact_count": 2,
+        "saved_full_input_bytes": -799
+      },
+      {
+        "product": "cloudflare",
+        "span_id": "span-48",
+        "old": {
+          "system_bytes": 2348,
+          "user_bytes": 8559,
+          "full_input_bytes": 10909,
+          "full_input_sha256": "dcb44561f8813b2abc7b25a603b73f4125e868a05fc099f40e95363a426ede7f"
+        },
+        "new": {
+          "system_bytes": 3147,
+          "user_bytes": 5528,
+          "full_input_bytes": 8677,
+          "full_input_sha256": "45dbc68af97414a7f914541041088bfac615d3d1149fe874faa9e93078f2605c"
+        },
+        "old_fact_count": 2,
+        "new_fact_count": 1,
+        "saved_full_input_bytes": 2232
+      },
+      {
+        "product": "bitwarden",
+        "span_id": "span-48",
+        "old": {
+          "system_bytes": 2348,
+          "user_bytes": 8209,
+          "full_input_bytes": 10559,
+          "full_input_sha256": "497ee858c0370c4b869636cf3643c237e02510d128215ed58b5a1492f7162372"
+        },
+        "new": {
+          "system_bytes": 3147,
+          "user_bytes": 5373,
+          "full_input_bytes": 8522,
+          "full_input_sha256": "f83b1043680edbfa6f38e8f93ef133df812a09e584aa08b59763fc9c8f383d46"
+        },
+        "old_fact_count": 2,
+        "new_fact_count": 1,
+        "saved_full_input_bytes": 2037
+      },
+      {
+        "product": "bitwarden",
+        "span_id": "span-51",
+        "old": {
+          "system_bytes": 2348,
+          "user_bytes": 8378,
+          "full_input_bytes": 10728,
+          "full_input_sha256": "b9294be3a9cad1dbacb51415cc3e1ba1ee1d2a258fde3545c029cf08911d07b4"
+        },
+        "new": {
+          "system_bytes": 3147,
+          "user_bytes": 5542,
+          "full_input_bytes": 8691,
+          "full_input_sha256": "01c1bb59269429c078c1b82f14253437e65324a72ebd3caa8e7a1aef93c0e9f6"
+        },
+        "old_fact_count": 2,
+        "new_fact_count": 1,
+        "saved_full_input_bytes": 2037
+      },
+      {
+        "product": "1password",
+        "span_id": "span-43",
+        "old": {
+          "system_bytes": 2348,
+          "user_bytes": 9205,
+          "full_input_bytes": 11555,
+          "full_input_sha256": "efaf7ff6739bfa40a6b2b7bba13d8b24e2f15b8ad8193bf42fae4a71b40b1cc0"
+        },
+        "new": {
+          "system_bytes": 3147,
+          "user_bytes": 5899,
+          "full_input_bytes": 9048,
+          "full_input_sha256": "6c7313c1854dba9593aca44fb6602ab68e322986db1c898fee1f78d5804e4aa1"
+        },
+        "old_fact_count": 3,
+        "new_fact_count": 1,
+        "saved_full_input_bytes": 2507
+      }
+    ],
+    "scope_retrieval": {
+      "rows": [
+        {
+          "question_id": "question-1b7471af0d3dcf4af91c",
+          "core_fact_ids": [
+            "evidence-fact-record-3f094b3df16b1ed4ab108d03427f97ff08fe74dfe9e2e7e801d3fb5f71c74f71",
+            "evidence-fact-record-f7fbf750551bdf48505f46a16e9051383e99ce12db05863f9d1e69abbec5faa8"
+          ],
+          "selected_in_new_retrieval": true,
+          "quotes": [
+            "| Cache Domain Purge | Grants access to purge the edge cache for a specific domain and allows the reading of zone settings. |",
+            "Roles can only ever be assigned to their given scope and multiple roles can be assigned to a given policy."
+          ]
+        }
+      ],
+      "original_bytes": 13689,
+      "max_bytes": 14000,
+      "selected_count": 5
+    },
+    "limitation": "Offline payload and production-adapter admission diagnostics do not establish live model quality or whole-run call sufficiency."
+  },
+  "overall": {
+    "deliverable": false,
+    "verdict": "fail",
+    "default_entry_gate": "not_approved",
+    "strict_pass_count": 3,
+    "strict_final_denominator": 8,
+    "strict_question_verdict_counts": {
+      "partial": 5,
+      "pass": 3
+    },
+    "strict_pass_by_product": {
+      "Trello": 0,
+      "Cloudflare": 0,
+      "Bitwarden": 2,
+      "1Password": 1
+    },
+    "safe_refusal_count": 2,
+    "safe_refusal_pass_count": 2,
+    "persisted_claim_count": 10,
+    "visible_unique_formal_claim_count": 7,
+    "visible_occurrences": 15,
+    "visible_full_selected_quote_support": 6,
+    "visible_single_predicate": 2,
+    "visible_task_conclusion_count": 6,
+    "visible_task_focus_decisions_source_supported": 5,
+    "visible_task_focus_decisions_single_predicate": 5,
+    "visible_task_whole_explanations_full_selected_support": 5,
+    "visible_task_whole_explanations_single_predicate": 2,
+    "calls": 63,
+    "native_llm_spans": 66,
+    "provider_tokens_known": 175187,
+    "unknown_usage_transport_spans": 0,
+    "budget_tokens_charged": 175187,
+    "zero_transport_admission_rejected_spans": 3,
+    "normal_finish_reasons": {
+      "stop": 63
+    },
+    "qa": {
+      "planned": 28,
+      "sent": 27,
+      "raw_returned": 27,
+      "valid": 27,
+      "invalid_returned": 0,
+      "unsent": 1,
+      "timeout": 0,
+      "successful_transport_batches": 13,
+      "independent_planned": 10,
+      "independent_sent": 10,
+      "independent_valid": 10
+    },
+    "qa_model_execution_by_product": {
+      "Trello": "completed",
+      "Cloudflare": "completed",
+      "Bitwarden": "completed",
+      "1Password": "partial"
+    },
+    "qa_legal_review_dispositions": {
+      "keep": 26,
+      "superseded": 1
+    },
+    "module_execution_status_counts": {
+      "llm": 12
+    },
+    "core_module_fallback_used_count": 0,
+    "task_state_counts": {
+      "deferred": 5,
+      "partial": 1,
+      "insufficient_evidence": 5,
+      "supported": 6,
+      "rejected": 1,
+      "server_clarification": 1
+    },
+    "task_projection_replay_count": 6,
+    "task_projection_replay_all_valid": true,
+    "all_source_hashes_preserved": true,
+    "production_code_sha256": [
+      "4c657313167aeac634dd93884eae294bd8e9cb286763d26bea26b4614149f073"
+    ],
+    "all_reviewed_code_hashes_identical": true,
+    "previous_originals_checked": 120,
+    "previous_originals_changed": [],
+    "qa_candidate_note": "10 independent question checks are internal runtime questions (Trello 4, others 2 each), not a changed original denominator or proof all original shared premises entered every downstream review.",
+    "interpretation": "严格仍 3/8：BW容量恢复 pass、CF账单从 pass 退 partial；CF权限有范围规则局部恢复但核心跨域未回答。可见主张 7 条，逐词完整所选支持 6 条、单谓词 2 条。预算/QA局部进展与正文内容失败分别记录。"
+  },
+  "comparison": {
+    "previous_strict": 3,
+    "current_strict": 3,
+    "fixed_denominator": 8,
+    "previous_visible_full_support": [
+      8,
+      8
+    ],
+    "current_visible_full_support": [
+      6,
+      7
+    ],
+    "previous_visible_single_predicate": [
+      3,
+      8
+    ],
+    "current_visible_single_predicate": [
+      2,
+      7
+    ],
+    "previous_calls": 62,
+    "current_calls": 63,
+    "previous_known_provider_tokens": 187976,
+    "current_known_provider_tokens": 175187,
+    "previous_qa": {
+      "planned": 29,
+      "sent": 28,
+      "valid": 28,
+      "invalid": 0,
+      "unsent": 1,
+      "independent_planned": 10,
+      "independent_sent": 9,
+      "independent_valid": 9
+    },
+    "current_qa": {
+      "planned": 28,
+      "sent": 27,
+      "raw_returned": 27,
+      "valid": 27,
+      "invalid_returned": 0,
+      "unsent": 1,
+      "timeout": 0,
+      "successful_transport_batches": 13,
+      "independent_planned": 10,
+      "independent_sent": 10,
+      "independent_valid": 10
+    },
+    "interpretation": "严格仍 3/8：BW容量恢复 pass、CF账单从 pass 退 partial；CF权限有范围规则局部恢复但核心跨域未回答。可见主张 7 条，逐词完整所选支持 6 条、单谓词 2 条。预算/QA局部进展与正文内容失败分别记录。",
+    "causal_or_general_accuracy_claim": false
+  },
+  "products": [
+    {
+      "product": "Trello",
+      "original_questions": [
+        {
+          "original_question": "Trello-1",
+          "original_input_id": "claim-semantics-candidate-20261020-trello-001",
+          "original_question_text": "假设 Trello Workspace 已订阅 Premium，小林已分别被设为看板 A 和 B 的 Observer；A 未启用卡片投票，B 已启用且允许该 Observer 投票。仅依据所给官方页面，逐项判断：小林能在 A、B 投票吗？他能下载 A 的卡片附件并导出 A 吗？B 允许投票，是否意味着他必须给每张卡片投票？请将可以执行的操作、启用条件与是否存在强制义务分别说明。",
+          "verdict": "partial",
+          "previous_verdict": "partial",
+          "branches": [
+            {
+              "branch": "A投票否定及启用条件",
+              "verdict": "answered",
+              "claim_ids": [
+                "claim-ca591d7c01f5ff2a2f19"
+              ],
+              "reason": "正式子任务明确 A 否，且保留启用条件。"
+            },
+            {
+              "branch": "B投票允许及启用条件",
+              "verdict": "missing",
+              "claim_ids": [
+                "claim-ac77a2e9e592397fca37"
+              ],
+              "reason": "有正确隐藏草稿，span-50 预算零派送后未审核未发表。"
+            },
+            {
+              "branch": "下载A卡片附件",
+              "verdict": "rule_visible_scenario_not_published",
+              "claim_ids": [
+                "claim-475ff35624004b25a1c9"
+              ],
+              "reason": "一般 Observer 下载规则在正文可见，但原子任务 quote 仍是下载并导出；review task_fulfilled=false，未发表 A 的下载场景结论。"
+            },
+            {
+              "branch": "导出A",
+              "verdict": "missing",
+              "claim_ids": [
+                "claim-96107de615a612c92d71"
+              ],
+              "reason": "隐藏草稿在 span-47 仅收到下载/导出内部片段，因缺小林 Observer 前提拒绝；完整原题本来有该前提。"
+            },
+            {
+              "branch": "允许投票不推出每卡强制义务",
+              "verdict": "missing",
+              "claim_ids": [
+                "claim-1c2be68843cb5a16a53c"
+              ],
+              "reason": "首轮 generator 返回 insufficient；后轮生成但审核零派送，未交付。"
+            }
+          ],
+          "note": "仅 A 投票场景完整发表；下载一般规则、未发表的导出/B/义务稿不能补齐原题。"
+        },
+        {
+          "original_question": "Trello-2",
+          "original_input_id": "claim-semantics-candidate-20261020-trello-002",
+          "original_question_text": "假设某 Trello Workspace 已订阅 Premium，管理员把看板 A 上现有协作者小周的权限改成了 Observer。同一 Workspace 另有看板 B，但题设没有说明小周是否加入 B、在 B 上的权限，或他属于 Workspace 成员还是哪一种 guest。仅依据所给页面，逐项回答：能否在 Workspace 层级把他统一设置成 Observer，A 上这次改权是否自动决定他在 B 的权限；谁有权把 A 的现有成员改为 Observer；只凭 A 上的 Observer 标签，能否确定他一定免费或一定计费？不要推定题设未说明的成员资格。",
+          "verdict": "partial",
+          "previous_verdict": "partial",
+          "branches": [
+            {
+              "branch": "Workspace不能统一设Observer",
+              "verdict": "answered",
+              "claim_ids": [
+                "claim-0c339f1ac40ff71139c8"
+              ],
+              "reason": "正式子任务 No 有精确所选支持。"
+            },
+            {
+              "branch": "A改权不自动决定B具体权限",
+              "verdict": "missing",
+              "claim_ids": [],
+              "reason": "span-48 selector 对此 task 返回 no_complete_task_support，未生成；正文每成员每板一般规则不补明确 A/B 判断。"
+            },
+            {
+              "branch": "谁可把A现有成员设Observer",
+              "verdict": "missing",
+              "claim_ids": [],
+              "reason": "span-51 已选 s1，明确 only Workspace admins and board admins；span-52 generation 零派送，不能笼统归为无资料。"
+            },
+            {
+              "branch": "仅凭Observer标签不能确定免费/计费",
+              "verdict": "missing",
+              "claim_ids": [],
+              "reason": "span-51 已选 s4，明示 billable Workspace/multi-board guest 与 non-billable single-board guest；span-52 generation 零派送。"
+            }
+          ],
+          "note": "只完成 Workspace 层级否定；其余三分支缺失，未推定成员/guest 类型。"
+        }
+      ],
+      "diagnosis": [
+        "五个 selector 全真实调用，局部准入较前轮改善；后续一 review/两 generation 仍零派送。",
+        "span-50 在 used 46965、protected 23000、headroom 3200、reserved_input 9901、output 1600 时拒绝；span-52/54 的 used 为 48627/50322，reserved_input 为 13290/10215；三者 error 均 run_llm_budget_reserved_for_delivery。",
+        "span-51 已选完整管理员授权句和计费类型句；span-52 未生成。不得归为“资料不足”。",
+        "span-47 导出审核仅带内部下载/导出问题，未携原题共享 Observer 前提；正文不交付导出。",
+        "span-39 模型计划的 rule_vote 首稿仍合写 read/download/comment/vote/export，绑定阶段 operation_binding_required 拒收；选择成功不等于写作原子化。",
+        "Trello 最终无 dimension_answer_review 调用；gaps 含 answer_review_context_budget_exceeded 与 question_core_context_budget_exceeded。"
+      ],
+      "strict_pass_count": 0,
+      "calls": 22,
+      "provider_tokens_known": 62474,
+      "unknown_usage_transports": [],
+      "qa_counts": {
+        "planned": 10,
+        "sent": 10,
+        "raw_returned": 10,
+        "valid": 10,
+        "invalid_returned": 0,
+        "unsent": 0,
+        "timeout": 0,
+        "successful_transport_batches": 5,
+        "independent_planned": 4,
+        "independent_sent": 4,
+        "independent_valid": 4
+      },
+      "task_states": {
+        "deferred": 5,
+        "partial": 1,
+        "insufficient_evidence": 2,
+        "supported": 2,
+        "rejected": 1
+      },
+      "task_projection_replay": [
+        {
+          "task": {
+            "question_id": "question-a5be8c7a210d770f2ea7",
+            "question_quote": "能否在 Workspace 层级把他统一设置成 Observer",
+            "focus": "source_rule",
+            "task_id": "task-08ec42e482b8b0ad97ff",
+            "state": "supported",
+            "claim_id": "claim-0c339f1ac40ff71139c8",
+            "reason": "independent_task_and_source_review",
+            "decision": {
+              "task_id": "task-08ec42e482b8b0ad97ff",
+              "claim_id": "claim-0c339f1ac40ff71139c8",
+              "task_fulfilled": true,
+              "conclusion": "no",
+              "relation": "explicit_negative"
+            },
+            "claim_digest": "062d44c070f4ab5981cf4f3e8693da6128755389b677505f4f4d199fa361bdd6",
+            "review_span_id": "span-46",
+            "review_input_sha256": "96e9efc59466f679ecb3de06dd5be2f2b86478a050706c2f7ea669517ef2252d"
+          },
+          "actual_assignment": {
+            "task_id": "task-08ec42e482b8b0ad97ff",
+            "claim_id": "claim-0c339f1ac40ff71139c8",
+            "question_id": "question-a5be8c7a210d770f2ea7",
+            "question_quote": "能否在 Workspace 层级把他统一设置成 Observer",
+            "focus": "source_rule",
+            "claim_digest": "062d44c070f4ab5981cf4f3e8693da6128755389b677505f4f4d199fa361bdd6",
+            "consumption_id": "question-evidence-use-d175fc9ea3b04f96baf85fb0a56e458d-b40a3dac8c3327e5ca5e56d3295fc38078d578708cd2b1093fc9d377c9b086b3"
+          },
+          "raw_task_decision": {
+            "task_id": "task-08ec42e482b8b0ad97ff",
+            "claim_id": "claim-0c339f1ac40ff71139c8",
+            "task_fulfilled": true,
+            "conclusion": "no",
+            "relation": "explicit_negative"
+          },
+          "raw_review": {
+            "claim_id": "claim-0c339f1ac40ff71139c8",
+            "verdict": "supported",
+            "reason": "The selected quote states that observer is a board member permission, cannot currently be set at Workspace level, and each observer is set individually per member per board, matching the claim's causal and necessity assertions.",
+            "checks": [
+              {
+                "check_id": "claim-check-a672ba3c74f300aeff34fe72",
+                "verdict": "supported",
+                "claim_span": "因为 Observer 是看板成员权限，目前无法在 Workspace 层级将用户统一设置为 Observer，每个 Observer 需按成员、按看板单独设置。"
+              },
+              {
+                "check_id": "claim-check-556a9a76d86577bca1137dd6",
+                "verdict": "supported",
+                "claim_span": "因为 Observer 是看板成员权限，目前无法在 Workspace 层级将用户统一设置为 Observer，每个 Observer 需按成员、按看板单独设置。"
+              }
+            ]
+          },
+          "checks": {
+            "claim_digest_matches": true,
+            "assignment_digest_matches": true,
+            "assignment_use_matches": true,
+            "review_actual_transport": true,
+            "review_input_hash_matches": true,
+            "claim_row_exact": true,
+            "decision_replay_exact": true,
+            "review_replay_exact": true,
+            "use_current": true,
+            "selected_facts_in_use": true,
+            "selected_sources_in_use": true
+          },
+          "review_scenario_questions": [
+            {
+              "question_id": "question-659854eaa5bf118b8901",
+              "question": "Trello: 假设 Trello Workspace 已订阅 Premium，小林已分别被设为看板 A 和 B 的 Observer；A 未启用卡片投票，B 已启用且允许该 Observer 投票。仅依据所给官方页面，逐项判断：小林能在 A、B 投票吗？"
+            }
+          ],
+          "visible": true
+        },
+        {
+          "task": {
+            "question_id": "question-659854eaa5bf118b8901",
+            "question_quote": "小林能在 A、B 投票吗？",
+            "focus": "vote",
+            "resource": "A",
+            "task_id": "task-1ad58a0b7d52ac2b61f1",
+            "state": "supported",
+            "claim_id": "claim-ca591d7c01f5ff2a2f19",
+            "reason": "independent_task_and_source_review",
+            "decision": {
+              "task_id": "task-1ad58a0b7d52ac2b61f1",
+              "claim_id": "claim-ca591d7c01f5ff2a2f19",
+              "task_fulfilled": true,
+              "conclusion": "no",
+              "relation": "explicit_negative"
+            },
+            "claim_digest": "6d687e8cdc5863117ac02d3a3287a26ed5806efa52fe02b5493994cbb6d92868",
+            "review_span_id": "span-46",
+            "review_input_sha256": "96e9efc59466f679ecb3de06dd5be2f2b86478a050706c2f7ea669517ef2252d"
+          },
+          "actual_assignment": {
+            "task_id": "task-1ad58a0b7d52ac2b61f1",
+            "claim_id": "claim-ca591d7c01f5ff2a2f19",
+            "question_id": "question-659854eaa5bf118b8901",
+            "question_quote": "小林能在 A、B 投票吗？",
+            "focus": "vote",
+            "claim_digest": "6d687e8cdc5863117ac02d3a3287a26ed5806efa52fe02b5493994cbb6d92868",
+            "consumption_id": "question-evidence-use-d175fc9ea3b04f96baf85fb0a56e458d-b40a3dac8c3327e5ca5e56d3295fc38078d578708cd2b1093fc9d377c9b086b3",
+            "resource": "A"
+          },
+          "raw_task_decision": {
+            "task_id": "task-1ad58a0b7d52ac2b61f1",
+            "claim_id": "claim-ca591d7c01f5ff2a2f19",
+            "task_fulfilled": true,
+            "conclusion": "no",
+            "relation": "explicit_negative"
+          },
+          "raw_review": {
+            "claim_id": "claim-ca591d7c01f5ff2a2f19",
+            "verdict": "supported",
+            "reason": "The source quote supports that Observers can vote on cards if enabled for the board; the scenario question states board A has voting disabled, so the conditional denial for A follows.",
+            "checks": [
+              {
+                "check_id": "claim-check-c6fff7981c89d37d21d0d290",
+                "verdict": "supported",
+                "claim_span": "Observer 可以在看板上对卡片投票（前提是该看板已启用投票）；题设中看板 A 未启用卡片投票，因此小林不能在 A 上投票。"
+              },
+              {
+                "check_id": "claim-check-ce64a112933fa1d9ffd6f653",
+                "verdict": "supported",
+                "claim_span": "Observer 可以在看板上对卡片投票（前提是该看板已启用投票）；题设中看板 A 未启用卡片投票，因此小林不能在 A 上投票。"
+              }
+            ]
+          },
+          "checks": {
+            "claim_digest_matches": true,
+            "assignment_digest_matches": true,
+            "assignment_use_matches": true,
+            "review_actual_transport": true,
+            "review_input_hash_matches": true,
+            "claim_row_exact": true,
+            "decision_replay_exact": true,
+            "review_replay_exact": true,
+            "use_current": true,
+            "selected_facts_in_use": true,
+            "selected_sources_in_use": true
+          },
+          "review_scenario_questions": [
+            {
+              "question_id": "question-659854eaa5bf118b8901",
+              "question": "Trello: 假设 Trello Workspace 已订阅 Premium，小林已分别被设为看板 A 和 B 的 Observer；A 未启用卡片投票，B 已启用且允许该 Observer 投票。仅依据所给官方页面，逐项判断：小林能在 A、B 投票吗？"
+            }
+          ],
+          "visible": true
+        }
+      ],
+      "zero_transport_rejections": [
+        {
+          "name": "dimension_task_review",
+          "status": "error",
+          "error": "run_llm_budget_reserved_for_delivery",
+          "metadata": {
+            "llm_transport_attempts": 0,
+            "error": "run_llm_budget_reserved_for_delivery",
+            "delivery_tokens_protected": 23000,
+            "delivery_calls_protected": 6,
+            "stage_headroom_tokens": 3200,
+            "run_llm_calls_used": 15,
+            "run_llm_tokens_used": 46965,
+            "llm_reserved_input_tokens": 9901,
+            "llm_max_output_tokens": 1600
+          }
+        },
+        {
+          "name": "dimension_task_generation",
+          "status": "error",
+          "error": "run_llm_budget_reserved_for_delivery",
+          "metadata": {
+            "llm_transport_attempts": 0,
+            "error": "run_llm_budget_reserved_for_delivery",
+            "delivery_tokens_protected": 23000,
+            "delivery_calls_protected": 6,
+            "stage_headroom_tokens": 3200,
+            "run_llm_calls_used": 16,
+            "run_llm_tokens_used": 48627,
+            "llm_reserved_input_tokens": 13290,
+            "llm_max_output_tokens": 1600
+          }
+        },
+        {
+          "name": "dimension_task_generation",
+          "status": "error",
+          "error": "run_llm_budget_reserved_for_delivery",
+          "metadata": {
+            "llm_transport_attempts": 0,
+            "error": "run_llm_budget_reserved_for_delivery",
+            "delivery_tokens_protected": 23000,
+            "delivery_calls_protected": 6,
+            "stage_headroom_tokens": 3200,
+            "run_llm_calls_used": 17,
+            "run_llm_tokens_used": 50322,
+            "llm_reserved_input_tokens": 10215,
+            "llm_max_output_tokens": 1600
+          }
+        }
+      ],
+      "module_executions": [
+        {
+          "summary_execution": {
+            "agent": "analyst",
+            "subagent": "feature::Trello",
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "reason": ""
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          "actual_span_ids": [
+            "span-15"
+          ],
+          "actual_output_nonempty": true,
+          "real_transport_verified": true
+        },
+        {
+          "summary_execution": {
+            "agent": "comparator",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false,
+              "attempts": 1,
+              "max_attempts": 3
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          "actual_span_ids": [
+            "span-24"
+          ],
+          "actual_output_nonempty": true,
+          "real_transport_verified": true
+        },
+        {
+          "summary_execution": {
+            "agent": "reflector",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          "actual_span_ids": [
+            "span-32"
+          ],
+          "actual_output_nonempty": true,
+          "real_transport_verified": true
+        }
+      ],
+      "raw_outputs_sha256": {
+        "inputs.json": "f6ecc084babe6c3073b56b0c14c0d8b3cc1670b89bb21c4b842848f80791d8f9",
+        "report.md": "8156ec83c2a21b54f91d489a8e2627aa74807532b5ffe7acbf937142d8f4c212",
+        "run.json": "24d279b4647dbb4a56e216f869d198b21bc06de97f70923f336b0eb6136a0771",
+        "snapshot.json": "c981c7acf0acc4e96147cf6104092885fca0a28297e0bcff22df2626af8b1d24",
+        "summary.json": "6c190b844498511bb5dacf64e2a57add1f98328d6c912683179894e28731ab00",
+        "trace.json": "3319616554080b93182ce216385543da81f98c500fa016d7744f07e69f6d3348"
+      }
+    },
+    {
+      "product": "Cloudflare",
+      "original_questions": [
+        {
+          "original_question": "Cloudflare-1",
+          "original_input_id": "agent-readiness-holdout-v1-007",
+          "original_question_text": "同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？",
+          "verdict": "partial",
+          "previous_verdict": "fail",
+          "branches": [
+            {
+              "branch": "Cache Domain Purge特定域权限规则",
+              "verdict": "missing",
+              "claim_ids": [],
+              "reason": "selector 窗口有 s3 特定域角色行，但该角色能力未选、未生成、未发表。"
+            },
+            {
+              "branch": "角色只能被赋予其给定域范围",
+              "verdict": "answered_general_scope_rule",
+              "claim_ids": [
+                "claim-e2cfa18ea97dd05a5fe9"
+              ],
+              "reason": "只发表 given scope 一般规则；此局部有证内容保留，不能抹掉。"
+            },
+            {
+              "branch": "example.com角色不能据此清除other.example",
+              "verdict": "missing",
+              "claim_ids": [],
+              "reason": "purge_cache task 在 span-44 返回 insufficient_evidence，未发表跨域否定；新 scope task 的 yes 只指题设角色片段。"
+            }
+          ],
+          "note": "比上轮无权限正文恢复了一条必要范围规则，故 partial；核心跨域场景仍未回答，不得 pass。"
+        },
+        {
+          "original_question": "Cloudflare-2",
+          "original_input_id": "agent-readiness-holdout-v1-008",
+          "original_question_text": "我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？",
+          "verdict": "partial",
+          "previous_verdict": "pass",
+          "branches": [
+            {
+              "branch": "不能仅据15M请求报准确完整美元账单",
+              "verdict": "safe_refusal_pass",
+              "claim_ids": [],
+              "reason": "正式正文拒绝编完整准确金额并要求 CPU 等输入。"
+            },
+            {
+              "branch": "CPU为独立用量计费，须CPU输入",
+              "verdict": "missing_sourced_fee_rule",
+              "claim_ids": [],
+              "reason": "正文 CPU 总用量只在通用补输入清单；未发表任何有证 CPU 收费规则。span-44 中 Standard 行 s2 与 CPU 表头/脚注在候选窗口可见，但 billing_inputs 返回 no_complete_task_support，未选到生成。"
+            }
+          ],
+          "note": "安全拒额正确但不能替代有证 CPU 收费前提；按冻结旧 rubric 从 pass 退为 partial。",
+          "safe_refusal": {
+            "pass": true,
+            "strict_pass_credit_alone": false
+          }
+        }
+      ],
+      "diagnosis": [
+        "Cache Domain Purge 行与 Standard CPU 行确实进入 span-44 候选窗口，selector 对两个原任务都返回 insufficient_evidence；只选择新增 given-scope source_rule。",
+        "原任务未进入生成；没有运行时预算拒绝。范围一般规则恢复但操作能力与跨域 No 缺失，CPU 收费正文退缺失。",
+        "新增 scope task 的决策链来源身份合法，不代表其 yes 对切下来的假设授权片段具有实质答题意义。"
+      ],
+      "strict_pass_count": 0,
+      "calls": 13,
+      "provider_tokens_known": 37488,
+      "unknown_usage_transports": [],
+      "qa_counts": {
+        "planned": 4,
+        "sent": 4,
+        "raw_returned": 4,
+        "valid": 4,
+        "invalid_returned": 0,
+        "unsent": 0,
+        "timeout": 0,
+        "successful_transport_batches": 2,
+        "independent_planned": 2,
+        "independent_sent": 2,
+        "independent_valid": 2
+      },
+      "task_states": {
+        "insufficient_evidence": 2,
+        "supported": 1
+      },
+      "task_projection_replay": [
+        {
+          "task": {
+            "question_id": "question-1b7471af0d3dcf4af91c",
+            "question_quote": "只被授予 example.com 的 Cache Domain Purge 角色",
+            "focus": "source_rule",
+            "task_id": "task-ce773497738ea0cda188",
+            "state": "supported",
+            "claim_id": "claim-e2cfa18ea97dd05a5fe9",
+            "reason": "independent_task_and_source_review",
+            "decision": {
+              "task_id": "task-ce773497738ea0cda188",
+              "claim_id": "claim-e2cfa18ea97dd05a5fe9",
+              "task_fulfilled": true,
+              "conclusion": "yes",
+              "relation": "direct"
+            },
+            "claim_digest": "89c6a57064c77c7d6016c7cc9671ac63f668f20eafcbe2d845455849703c2c73",
+            "review_span_id": "span-46",
+            "review_input_sha256": "73e06ef3e590eef6f3e94de4f715caf19449ffcc89889e38d5f55434996f84f6"
+          },
+          "actual_assignment": {
+            "task_id": "task-ce773497738ea0cda188",
+            "claim_id": "claim-e2cfa18ea97dd05a5fe9",
+            "question_id": "question-1b7471af0d3dcf4af91c",
+            "question_quote": "只被授予 example.com 的 Cache Domain Purge 角色",
+            "focus": "source_rule",
+            "claim_digest": "89c6a57064c77c7d6016c7cc9671ac63f668f20eafcbe2d845455849703c2c73",
+            "consumption_id": "question-evidence-use-63ddc53981b9422ca46fb9b8cf4bc921-99ce6fbaaecb1bf8763584e626d9a65753f5313bec722b612040ab9f2000beb0"
+          },
+          "raw_task_decision": {
+            "task_id": "task-ce773497738ea0cda188",
+            "claim_id": "claim-e2cfa18ea97dd05a5fe9",
+            "task_fulfilled": true,
+            "conclusion": "yes",
+            "relation": "direct"
+          },
+          "raw_review": {
+            "claim_id": "claim-e2cfa18ea97dd05a5fe9",
+            "verdict": "supported",
+            "reason": "The selected quote explicitly states that roles can only ever be assigned to their given scope, matching the claim's single predicate and its 'only' restriction.",
+            "checks": [
+              {
+                "check_id": "claim-check-2c92184d77970b5e2845631b",
+                "verdict": "supported",
+                "claim_span": "Cloudflare 角色只能被分配到其给定范围（Roles can only ever be assigned to their given scope）。"
+              },
+              {
+                "check_id": "claim-check-ee7372a8f8aac83e8038227d",
+                "verdict": "supported",
+                "claim_span": "Cloudflare 角色只能被分配到其给定范围（Roles can only ever be assigned to their given scope）。"
+              }
+            ]
+          },
+          "checks": {
+            "claim_digest_matches": true,
+            "assignment_digest_matches": true,
+            "assignment_use_matches": true,
+            "review_actual_transport": true,
+            "review_input_hash_matches": true,
+            "claim_row_exact": true,
+            "decision_replay_exact": true,
+            "review_replay_exact": true,
+            "use_current": true,
+            "selected_facts_in_use": true,
+            "selected_sources_in_use": true
+          },
+          "review_scenario_questions": [],
+          "visible": true
+        }
+      ],
+      "zero_transport_rejections": [],
+      "module_executions": [
+        {
+          "summary_execution": {
+            "agent": "analyst",
+            "subagent": "feature::Cloudflare",
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "reason": ""
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          "actual_span_ids": [
+            "span-18"
+          ],
+          "actual_output_nonempty": true,
+          "real_transport_verified": true
+        },
+        {
+          "summary_execution": {
+            "agent": "comparator",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false,
+              "attempts": 1,
+              "max_attempts": 3
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          "actual_span_ids": [
+            "span-27"
+          ],
+          "actual_output_nonempty": true,
+          "real_transport_verified": true
+        },
+        {
+          "summary_execution": {
+            "agent": "reflector",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          "actual_span_ids": [
+            "span-35"
+          ],
+          "actual_output_nonempty": true,
+          "real_transport_verified": true
+        }
+      ],
+      "raw_outputs_sha256": {
+        "inputs.json": "b2a1fa4913c223c3729673a1cf9c50d9670bea2cdff2b450359e9e2e287f32e1",
+        "report.md": "a7ce04a09b9ee2e5b2401d3991928970cc920bda98b6b900b2ec840952539155",
+        "run.json": "d60ea9ff985355f9620e7c69d02d517846a212e011c3b5d11e2dfcbffb185944",
+        "snapshot.json": "494f66b77be945dc3507232ece045ead9af14856a9947bab38639a7ed767ea7b",
+        "summary.json": "2f4c6df507e03534002a315c8bff68575499821ab497df2b086dfdaa3eaaf829",
+        "trace.json": "3b0a27ecb03cbf66673cde937665ac6655accfafc838a7773f0f0a885bbca0eb"
+      }
+    },
+    {
+      "product": "Bitwarden",
+      "original_questions": [
+        {
+          "original_question": "Bitwarden-1",
+          "original_input_id": "agent-readiness-holdout-v1-001",
+          "original_question_text": "我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？",
+          "verdict": "pass",
+          "previous_verdict": "fail",
+          "branches": [
+            {
+              "branch": "Free organization无法满足3人且3collections整体请求",
+              "verdict": "answered_by_visible_supported_upper_bound",
+              "claim_ids": [
+                "claim-781713d623218a0fb1b9"
+              ],
+              "reason": "正式 No 明确应用 3 人/3 collections；精确 s3 的 up to two collections 已足以否定整项合取需求，无须同时证明全部人数限制。"
+            }
+          ],
+          "note": "保留已发表且有证的容量 No，不因整题状态 unverified/answer_plan_exclusivity_unverified 抹掉；额外人数解释全文支持不足与复合主张另列，未因此把完整 claim 算作通过。"
+        },
+        {
+          "original_question": "Bitwarden-2",
+          "original_input_id": "agent-readiness-holdout-v1-002",
+          "original_question_text": "我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？",
+          "verdict": "pass",
+          "previous_verdict": "pass",
+          "branches": [
+            {
+              "branch": "澄清移除成员还是永久删除账户/数据",
+              "verdict": "answered_by_necessary_clarification",
+              "claim_ids": [],
+              "reason": "正文明确请求确认操作。"
+            },
+            {
+              "branch": "澄清个人数据还是组织数据",
+              "verdict": "answered_by_necessary_clarification",
+              "claim_ids": [],
+              "reason": "正文明确请求确认数据归属。"
+            }
+          ],
+          "note": "沿用冻结口径，两项必要澄清是对含糊删掉的正确处置；没有捏造密码必留/必删。QA diagnostic keep 不改变此人工 rubric。"
+        }
+      ],
+      "diagnosis": [
+        "容量 No 已正式发表；2 collections 上界足以否定全部需求，不因 whole-question unverified 丢弃。",
+        "所选 span s3 不等于可见完整 parent/operation 条件；本轮没有 operation binding。人数排他解释的完整文字支持不足，且人数/collections 复合。",
+        "离职问题两项必要澄清正确；不需把未确定的保留/删除结论编成事实。",
+        "answer review 的 plan_exclusivity guard 阻断整体回答资格；最终 QA 为 diagnostic_only，不能拿 keep/状态代替人工内容判断。"
+      ],
+      "strict_pass_count": 2,
+      "calls": 14,
+      "provider_tokens_known": 37543,
+      "unknown_usage_transports": [],
+      "qa_counts": {
+        "planned": 7,
+        "sent": 7,
+        "raw_returned": 7,
+        "valid": 7,
+        "invalid_returned": 0,
+        "unsent": 0,
+        "timeout": 0,
+        "successful_transport_batches": 3,
+        "independent_planned": 2,
+        "independent_sent": 2,
+        "independent_valid": 2
+      },
+      "task_states": {
+        "supported": 1,
+        "server_clarification": 1
+      },
+      "task_projection_replay": [
+        {
+          "task": {
+            "question_id": "question-cb40c90e4d944bf23275",
+            "question_quote": "想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？",
+            "focus": "source_rule",
+            "task_id": "task-ab57533043392384433f",
+            "state": "supported",
+            "claim_id": "claim-781713d623218a0fb1b9",
+            "reason": "independent_task_and_source_review",
+            "decision": {
+              "task_id": "task-ab57533043392384433f",
+              "claim_id": "claim-781713d623218a0fb1b9",
+              "task_fulfilled": true,
+              "conclusion": "no",
+              "relation": "upper_bound"
+            },
+            "claim_digest": "f4a6b423e77f9ecbfa7f2d61189909194cd47bc5fcb38f95f7447a734ac6f167",
+            "review_span_id": "span-49",
+            "review_input_sha256": "a9769395017f9a85c66f906e8d234f466c6be9c3c36c9377a449c513c85fdce3"
+          },
+          "actual_assignment": {
+            "task_id": "task-ab57533043392384433f",
+            "claim_id": "claim-781713d623218a0fb1b9",
+            "question_id": "question-cb40c90e4d944bf23275",
+            "question_quote": "想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？",
+            "focus": "source_rule",
+            "claim_digest": "f4a6b423e77f9ecbfa7f2d61189909194cd47bc5fcb38f95f7447a734ac6f167",
+            "consumption_id": "question-evidence-use-d57769c0911b4eb5a537e97d751b1d76-eebb46ec764bc1d1b7a8d6bf2a700c793ba2b917af2c30eccf143ba1b47dda23"
+          },
+          "raw_task_decision": {
+            "task_id": "task-ab57533043392384433f",
+            "claim_id": "claim-781713d623218a0fb1b9",
+            "task_fulfilled": true,
+            "conclusion": "no",
+            "relation": "upper_bound"
+          },
+          "raw_review": {
+            "claim_id": "claim-781713d623218a0fb1b9",
+            "verdict": "supported",
+            "reason": "The selected quote states Free organizations offer both users core features and secure data sharing in up to two collections. The scenario question supplies the hypothetical request: 3 people including the asker, 3 collections. The claim's user limit (two users, i.e., creator plus one other) is a reasonable reading of 'both users' and the collection cap of two is explicit; the 3-person/3-collection request exceeds both, so the free organization cannot satisfy it. The atom states its scenario conditions and follows from the sourced rule.",
+            "checks": [
+              {
+                "check_id": "claim-check-a67463dd3323827c4017358e",
+                "verdict": "supported",
+                "claim_span": "Bitwarden 的 Free organization 仅支持两名用户（即除创建者外再共享给一位其他用户），且最多提供两个 collections 的安全数据共享；因此，包含你在内的 3 人使用 3 个 collections 共享密码的需求无法被该免费组织满足。"
+              },
+              {
+                "check_id": "claim-check-315a62510335af687313a355",
+                "verdict": "supported",
+                "claim_span": "Bitwarden 的 Free organization 仅支持两名用户（即除创建者外再共享给一位其他用户），且最多提供两个 collections 的安全数据共享；因此，包含你在内的 3 人使用 3 个 collections 共享密码的需求无法被该免费组织满足。"
+              }
+            ]
+          },
+          "checks": {
+            "claim_digest_matches": true,
+            "assignment_digest_matches": true,
+            "assignment_use_matches": true,
+            "review_actual_transport": true,
+            "review_input_hash_matches": true,
+            "claim_row_exact": true,
+            "decision_replay_exact": true,
+            "review_replay_exact": true,
+            "use_current": true,
+            "selected_facts_in_use": true,
+            "selected_sources_in_use": true
+          },
+          "review_scenario_questions": [
+            {
+              "question_id": "question-cb40c90e4d944bf23275",
+              "question": "Bitwarden: 我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？"
+            }
+          ],
+          "visible": true
+        }
+      ],
+      "zero_transport_rejections": [],
+      "module_executions": [
+        {
+          "summary_execution": {
+            "agent": "analyst",
+            "subagent": "feature::Bitwarden",
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "reason": ""
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          "actual_span_ids": [
+            "span-21"
+          ],
+          "actual_output_nonempty": true,
+          "real_transport_verified": true
+        },
+        {
+          "summary_execution": {
+            "agent": "comparator",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false,
+              "attempts": 1,
+              "max_attempts": 3
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          "actual_span_ids": [
+            "span-30"
+          ],
+          "actual_output_nonempty": true,
+          "real_transport_verified": true
+        },
+        {
+          "summary_execution": {
+            "agent": "reflector",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          "actual_span_ids": [
+            "span-38"
+          ],
+          "actual_output_nonempty": true,
+          "real_transport_verified": true
+        }
+      ],
+      "raw_outputs_sha256": {
+        "inputs.json": "ad5a6acb7174933f62b7c18cfa4d46287f70cde53f9ac966fd1ca3591429afde",
+        "report.md": "6809df58dc0cd2a7ee7a087730a4f812529df2b576b87718aa3fc80ee9ace80c",
+        "run.json": "536e13edd0a4c9109b9dfcfdaa4b1dacbbd13af6ce87d93d0fe7d610c35de8b4",
+        "snapshot.json": "827036e20390f57fe606019996b8a463ed62f03d53d7e4ac51cf6684e24bb425",
+        "summary.json": "029646abc178e04b897fc38a0220e78d9f094252d39ef773655ed6ec579a6f91",
+        "trace.json": "8bfcacc7fc07bc29e064e638f5150d4644cac22c6b41b0886bff7f3aca6803d8"
+      }
+    },
+    {
+      "product": "1Password",
+      "original_questions": [
+        {
+          "original_question": "1Password-1",
+          "original_input_id": "agent-readiness-holdout-v1-003",
+          "original_question_text": "在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？",
+          "verdict": "pass",
+          "previous_verdict": "pass",
+          "branches": [
+            {
+              "branch": "访客不能同时加入2共享vault",
+              "verdict": "answered_in_visible_body",
+              "claim_ids": [
+                "claim-c459255a33891da9b63c"
+              ],
+              "reason": "正式 No 配合 single-vault access 限制完整回答；第二条 s5 还有独立邀请限制支持。"
+            },
+            {
+              "branch": "访客没有自己的Private vault",
+              "verdict": "answered_in_visible_body",
+              "claim_ids": [
+                "claim-c459255a33891da9b63c"
+              ],
+              "reason": "no private vaults 精确绑定并正式发表。"
+            }
+          ],
+          "note": "两分支明确否定且有精确支持；本轮完整访客原问真实送入独立 QA 并合法返回 superseded。两条说明仍复合，另有一个历史 guest finding 未送，均不抹掉正文题目 pass。"
+        },
+        {
+          "original_question": "1Password-2",
+          "original_input_id": "agent-readiness-holdout-v1-004",
+          "original_question_text": "我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。",
+          "verdict": "partial",
+          "previous_verdict": "partial",
+          "branches": [
+            {
+              "branch": "不编造精确RMB含税总价",
+              "verdict": "safe_refusal_pass",
+              "claim_ids": [],
+              "reason": "正文拒绝编造精确总额。"
+            },
+            {
+              "branch": "公开报价性质有官方证据",
+              "verdict": "missing",
+              "claim_ids": [],
+              "reason": "无正式定价页主张；上游 pricing semantic_extract 返回 facts=[]，不是本轮 writer 预算拒绝。"
+            },
+            {
+              "branch": "有证官方销售/报价下一步",
+              "verdict": "missing",
+              "claim_ids": [],
+              "reason": "通用补市场/SKU/席位清单不是有证官方销售渠道。"
+            }
+          ],
+          "note": "拒编金额正确；公开报价性质和有证官方销售下一步均未交付，仍 partial。",
+          "safe_refusal": {
+            "pass": true,
+            "strict_pass_credit_alone": false
+          }
+        }
+      ],
+      "diagnosis": [
+        "两条已选 span 各自精确支持 no-private/single-vault 与 invitation/reassignment；没有借单一 access 句新增邀请操作。",
+        "正文两项访客限制完整，whole-question QA 候选 expected IDs 为当前两条正式 claim，support digest 与当前发表文字吻合，合法 superseded；每条正文仍复合。",
+        "价格页 semantic_extract 实际 facts=[]，无有证公开报价性质/官方 sales 下一步；没有该产品 writer 预算零派送。",
+        "未送项是 qc-issue-bb286e6caebd9c4f 历史 guest finding，完整上下文超 bounded final QA bytes；已送独立 guest 整题不再是未送项。"
+      ],
+      "strict_pass_count": 1,
+      "calls": 14,
+      "provider_tokens_known": 37682,
+      "unknown_usage_transports": [],
+      "qa_counts": {
+        "planned": 7,
+        "sent": 6,
+        "raw_returned": 6,
+        "valid": 6,
+        "invalid_returned": 0,
+        "unsent": 1,
+        "timeout": 0,
+        "successful_transport_batches": 3,
+        "independent_planned": 2,
+        "independent_sent": 2,
+        "independent_valid": 2
+      },
+      "task_states": {
+        "supported": 2,
+        "insufficient_evidence": 1
+      },
+      "task_projection_replay": [
+        {
+          "task": {
+            "question_id": "question-60a7010e0c7ca2ae7058",
+            "question_quote": "他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？",
+            "focus": "source_rule",
+            "task_id": "task-94d084b94b298e92c7d2",
+            "state": "supported",
+            "claim_id": "claim-c459255a33891da9b63c",
+            "reason": "independent_task_and_source_review",
+            "decision": {
+              "task_id": "task-94d084b94b298e92c7d2",
+              "claim_id": "claim-c459255a33891da9b63c",
+              "task_fulfilled": true,
+              "conclusion": "no",
+              "relation": "explicit_negative"
+            },
+            "claim_digest": "6508eb843219820f755432da0c6ed46ab207d642828c28447c451cac8cbe5ae1",
+            "review_span_id": "span-44",
+            "review_input_sha256": "c746a1fde930f1c025c4d5d9e987a3faf7a2fdbac8280b7e6e72912a02ba580e"
+          },
+          "actual_assignment": {
+            "task_id": "task-94d084b94b298e92c7d2",
+            "claim_id": "claim-c459255a33891da9b63c",
+            "question_id": "question-60a7010e0c7ca2ae7058",
+            "question_quote": "他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？",
+            "focus": "source_rule",
+            "claim_digest": "6508eb843219820f755432da0c6ed46ab207d642828c28447c451cac8cbe5ae1",
+            "consumption_id": "question-evidence-use-d009689cf92940b79e0c323e63948875-a6a535a265ba76fc2eb06cc4914d76e880c1fc458feb6e6a9f21377c84237f23"
+          },
+          "raw_task_decision": {
+            "task_id": "task-94d084b94b298e92c7d2",
+            "claim_id": "claim-c459255a33891da9b63c",
+            "task_fulfilled": true,
+            "conclusion": "no",
+            "relation": "explicit_negative"
+          },
+          "raw_review": {
+            "claim_id": "claim-c459255a33891da9b63c",
+            "verdict": "supported",
+            "reason": "The selected quote states guests have no private vaults and only access a single vault chosen by the account owner, matching both conjuncts of the claim.",
+            "checks": [
+              {
+                "check_id": "claim-check-1babffb26b0aea3026578e7d",
+                "verdict": "supported",
+                "claim_span": "访客账户没有自己的 Private vault，且只能访问一个由你选择的共享保险库。"
+              },
+              {
+                "check_id": "claim-check-ff372ce0c0fa861629eeebae",
+                "verdict": "supported",
+                "claim_span": "访客账户没有自己的 Private vault，且只能访问一个由你选择的共享保险库。"
+              }
+            ]
+          },
+          "checks": {
+            "claim_digest_matches": true,
+            "assignment_digest_matches": true,
+            "assignment_use_matches": true,
+            "review_actual_transport": true,
+            "review_input_hash_matches": true,
+            "claim_row_exact": true,
+            "decision_replay_exact": true,
+            "review_replay_exact": true,
+            "use_current": true,
+            "selected_facts_in_use": true,
+            "selected_sources_in_use": true
+          },
+          "review_scenario_questions": [],
+          "visible": true
+        },
+        {
+          "task": {
+            "question_id": "question-60a7010e0c7ca2ae7058",
+            "question_quote": "1Password: 在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库",
+            "focus": "source_rule",
+            "task_id": "task-02a135a0dd1a531f2d05",
+            "state": "supported",
+            "claim_id": "claim-efe91056f7c9481290d0",
+            "reason": "independent_task_and_source_review",
+            "decision": {
+              "task_id": "task-02a135a0dd1a531f2d05",
+              "claim_id": "claim-efe91056f7c9481290d0",
+              "task_fulfilled": true,
+              "conclusion": "no",
+              "relation": "explicit_negative"
+            },
+            "claim_digest": "941d31b01b7a30cfca4828eebafcb0d2cfe17d9c599bd698f398a99f4e523677",
+            "review_span_id": "span-44",
+            "review_input_sha256": "c746a1fde930f1c025c4d5d9e987a3faf7a2fdbac8280b7e6e72912a02ba580e"
+          },
+          "actual_assignment": {
+            "task_id": "task-02a135a0dd1a531f2d05",
+            "claim_id": "claim-efe91056f7c9481290d0",
+            "question_id": "question-60a7010e0c7ca2ae7058",
+            "question_quote": "1Password: 在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库",
+            "focus": "source_rule",
+            "claim_digest": "941d31b01b7a30cfca4828eebafcb0d2cfe17d9c599bd698f398a99f4e523677",
+            "consumption_id": "question-evidence-use-d009689cf92940b79e0c323e63948875-a6a535a265ba76fc2eb06cc4914d76e880c1fc458feb6e6a9f21377c84237f23"
+          },
+          "raw_task_decision": {
+            "task_id": "task-02a135a0dd1a531f2d05",
+            "claim_id": "claim-efe91056f7c9481290d0",
+            "task_fulfilled": true,
+            "conclusion": "no",
+            "relation": "explicit_negative"
+          },
+          "raw_review": {
+            "claim_id": "claim-efe91056f7c9481290d0",
+            "verdict": "supported",
+            "reason": "The selected quote states a guest can only be invited to a single vault at a time, but can be removed from one vault and added to another, matching the claim's limit and the allowed remove-then-add path.",
+            "checks": [
+              {
+                "check_id": "claim-check-3effe32b3b23a1a788e5c04f",
+                "verdict": "supported",
+                "claim_span": "访客一次只能被邀请加入一个保险库，但你可以先将其从一个保险库移除，再加入另一个保险库。"
+              },
+              {
+                "check_id": "claim-check-aea122f21613455eaf34534b",
+                "verdict": "supported",
+                "claim_span": "访客一次只能被邀请加入一个保险库，但你可以先将其从一个保险库移除，再加入另一个保险库。"
+              }
+            ]
+          },
+          "checks": {
+            "claim_digest_matches": true,
+            "assignment_digest_matches": true,
+            "assignment_use_matches": true,
+            "review_actual_transport": true,
+            "review_input_hash_matches": true,
+            "claim_row_exact": true,
+            "decision_replay_exact": true,
+            "review_replay_exact": true,
+            "use_current": true,
+            "selected_facts_in_use": true,
+            "selected_sources_in_use": true
+          },
+          "review_scenario_questions": [],
+          "visible": true
+        }
+      ],
+      "zero_transport_rejections": [],
+      "module_executions": [
+        {
+          "summary_execution": {
+            "agent": "analyst",
+            "subagent": "feature::1Password",
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "reason": ""
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          "actual_span_ids": [
+            "span-16"
+          ],
+          "actual_output_nonempty": true,
+          "real_transport_verified": true
+        },
+        {
+          "summary_execution": {
+            "agent": "comparator",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false,
+              "attempts": 1,
+              "max_attempts": 3
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          "actual_span_ids": [
+            "span-25"
+          ],
+          "actual_output_nonempty": true,
+          "real_transport_verified": true
+        },
+        {
+          "summary_execution": {
+            "agent": "reflector",
+            "subagent": null,
+            "module_status": "llm",
+            "fallback": {
+              "used": false,
+              "deterministic_fallback": false
+            },
+            "reason": null,
+            "has_structured_output": true
+          },
+          "actual_span_ids": [
+            "span-33"
+          ],
+          "actual_output_nonempty": true,
+          "real_transport_verified": true
+        }
+      ],
+      "raw_outputs_sha256": {
+        "inputs.json": "621243fb9ed5459fb9dd6d5b731b738f8b3dc06f5df3292e57355bc01ebd522b",
+        "report.md": "196e84dec43c3b8157eb3a1aaa952b4ab3bad06499d4ed6c6e84839adc596944",
+        "run.json": "85ce8b1a089a0a67ed62a90d4aa97fe1d5f47f6320463befc2f2162ce9404508",
+        "snapshot.json": "2f5e1b293880137080cb55480f72d32ae1ef94ed09862199c1f9a087f9cd44ad",
+        "summary.json": "d3a2a98a642ec6bdecdab3bc87b40c8937c5bb84008bc573e97429d9c28c7425",
+        "trace.json": "2114ba29703445f81917f43c7f6186b920aa1462a479cea19636ad5f29a73b6f"
+      }
+    }
+  ],
+  "next_step_priorities": [
+    "先修复 Trello 整条选择→生成→审核的预算闭环与原题共享前提传播；管理员/计费句已有所选资料，不能把其零派送当证据缺失。",
+    "按一个实际谓词写作并独立检查整段依据；BW 用有证 collections 上界给最小 No，勿从未选完整段补人数；1P分开两个 vault 限制和切换操作。",
+    "CF 保留范围局部规则，同时交付 Cache Domain Purge 特定域能力与 example.com 不扩展 other.example；保留有证 CPU 收费前提和拒编完整账单。",
+    "消除最终QA的未送历史项，保持独立原题必要分支与当前 exact support 的完整可见性；合法返回和 normal stop 不作为内容通过。"
+  ],
+  "preservation": {
+    "previous_originals_checked": 120,
+    "previous_originals_changed": [],
+    "current_originals_count": 24,
+    "production_code_sha256": "4c657313167aeac634dd93884eae294bd8e9cb286763d26bea26b4614149f073",
+    "all_four_same_source": true,
+    "fresh_web_capture": false,
+    "reference_snapshot_gold_loaded": false,
+    "production_packages_sha256": "a1f44d0e45b39ce178d9c52112f6e8e1f52ee273b2ddc0def68887b7fb33845f",
+    "independent_audit_sha256": "0097da0ed0ff7c4d6ee1cfc3c306353036efffb1071ddb851411d6913082cbe5",
+    "frozen_audit_rubric_sha256": "c8359becc877114fc69b503fe0b901473c75fbd0b94591f3b5bac5401fe6afbe"
+  },
+  "artifact_directory": "data/artifacts/task-predicate-budget-2026-10-24",
+  "limitations": [
+    "固定原8题已曝光、非盲评；同组回放不能外推一般准确率或因果改善。",
+    "官方页封存于2026-10-21；非实时新网页抓取或端到端生产验收。",
+    "本审计未读业务实现/runner代码、env、未调用模型/网络/训练，未改原件和 rubric，未提交。",
+    "120旧原件及24新原件 SHA 独立核对；四家相同生产hash且运行前后 manifest 一致。",
+    "完整所选支持、单谓词、最小有证局部结论、整题资格分别评分；没有以 hidden草稿、父段背景或整题unverified替代可见内容判断。",
+    "BW选中both users窄句没有完整one-other关系，故全文支持严格记不通过；其显式2 collections上界仍足以证明已发表整体No。"
+  ]
+}
