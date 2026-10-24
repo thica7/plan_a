@@ -169,6 +169,33 @@ def test_multiple_verified_task_dispatches_reconcile_their_union_before_request_
     assert not blocks(args)
 
 
+def test_one_explicit_local_repair_replays_the_same_task_and_complete_support():
+    args = delivery_case()
+    _, detail, _, _, _, receipt = args
+    source = detail.trace_spans[1]
+    repaired = source.model_copy(update={"id": "task-repair"})
+    payload = json.loads(repaired.full_input.split("\nJSON:\n", 1)[1])
+    payload["task_repair"] = [
+        dict(task_id=t["task_id"], diagnostic="binding rejected") for t in payload["tasks"]
+    ]
+    repaired.full_input = "SYSTEM\nJSON:\n" + compact_prompt_json(payload)
+    detail.trace_spans.insert(-1, repaired)
+    dispatch = dict(
+        receipt["dispatches"][0],
+        span_id=repaired.id,
+        attempt=1,
+        full_input_sha256=hashlib.sha256(repaired.full_input.encode()).hexdigest(),
+    )
+    receipt["dispatches"].append(dispatch)
+    save_receipt(detail, receipt)
+    assert not blocks(args)
+    duplicate = repaired.model_copy(update={"id": "second-repair"})
+    detail.trace_spans.insert(-1, duplicate)
+    receipt["dispatches"].append(dict(dispatch, span_id=duplicate.id))
+    save_receipt(detail, receipt)
+    assert blocks(args)
+
+
 @pytest.mark.parametrize("label", ["supported", "insufficient_evidence", "deferred", "rejected"])
 def test_task_outcome_labels_never_replace_transport_or_reconciliation(label):
     args = delivery_case()

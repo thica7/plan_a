@@ -12,7 +12,14 @@ def observation_claims(detail, audit):
     has_questions = bool(
         audit.answer_coverage or research_questions(detail, audit.competitor, audit.dimension)
     )
-    return tuple(item for item in supported if not has_questions or item.claim.kind == "fact")
+    from packages.agents.writer.task_projection import projected_task_claim_ids
+
+    projected = projected_task_claim_ids(detail, audit) if has_questions else set()
+    selected = {cid for answer in audit.answer_coverage
+                if answer.status in {"answered", "partial"} and answer.answer
+                for cid in answer.claim_ids}
+    return tuple(item for item in supported if not has_questions or item.claim.kind == "fact"
+                 or item.claim.id in projected - selected)
 
 
 def audit_heading(audit, language):

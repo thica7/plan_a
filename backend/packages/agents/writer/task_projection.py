@@ -1,0 +1,144 @@
+"""Publish reviewed local task deductions without granting whole-question coverage."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+
+from packages.agents.writer.task_protocol import CONTRACT, FOCUSES
+from packages.research.question_scope import research_questions
+
+
+def _review_matches(detail, audit, task, claim):
+    from packages.agents.writer.dimension_writer import parse_json
+    from packages.research.evidence.report_claims import ClaimReview
+    from packages.research.question_delivery import _expand_text_refs
+
+    spans = [s for s in detail.trace_spans if s.id == task.get("review_span_id")]
+    if len(spans) != 1:
+        return False
+    span = spans[0]
+    if (
+        (span.kind, span.agent, span.subagent, span.name, span.status)
+        != ("llm", "qa", f"{audit.competitor}/{audit.dimension}", "dimension_task_review", "ok")
+        or type(span.metadata.get("llm_transport_attempts")) is not int
+        or span.metadata["llm_transport_attempts"] <= 0
+        or hashlib.sha256(span.full_input.encode()).hexdigest() != task.get("review_input_sha256")
+    ):
+        return False
+    payload = _expand_text_refs(parse_json(span.full_input.split("\nJSON:\n", 1)[1]))
+    assignments = [a for a in payload["task_assignments"] if a["task_id"] == task["task_id"]]
+    expected = {
+        k: task[k]
+        for k in ("task_id", "question_id", "question_quote", "focus", "claim_id", "claim_digest")
+    }
+    expected["consumption_id"] = audit.consumption_id
+    if task.get("resource") is not None:
+        expected["resource"] = task["resource"]
+    if assignments != [expected]:
+        return False
+    claim_rows = [c for c in payload["claims"] if c["id"] == claim.id]
+    raw = parse_json(span.full_output)
+    decisions = [
+        d for d in raw["decisions"] if isinstance(d, dict) and d.get("task_id") == task["task_id"]
+    ]
+    reviews = [r for r in raw["reviews"] if isinstance(r, dict) and r.get("claim_id") == claim.id]
+    audited = next(a for a in audit.claims if a.claim.id == claim.id)
+    return (
+        len(claim_rows) == 1
+        and claim_rows[0]["text"] == claim.text
+        and decisions == [task["decision"]]
+        and len(reviews) == 1
+        and ClaimReview.model_validate(reviews[0]) == audited.review
+    )
+
+
+def projected_task_claim_ids(detail, audit):
+    if audit.claim_review_version != 3:
+        return set()
+    scope = f"{audit.competitor}/{audit.dimension}"
+    uses = [u for u in detail.evidence_consumptions if u.id == audit.consumption_id]
+    if (
+        len(uses) != 1
+        or uses[0].status not in {"validated", "reused"}
+        or uses[0].snapshot_id != detail.evidence_snapshot_id
+        or uses[0].validated_snapshot_id != detail.evidence_snapshot_id
+        or (uses[0].run_id, uses[0].workspace_id, uses[0].project_id)
+        != (detail.id, detail.workspace_id, detail.project_id)
+        or (uses[0].agent, uses[0].competitor, uses[0].dimension)
+        != ("writer", audit.competitor, audit.dimension)
+    ):
+        return set()
+    receipts = []
+    for span in detail.trace_spans:
+        if span.name != "question_task_delivery":
+            continue
+        try:
+            row = json.loads(span.full_output)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(row, dict) and row.get("consumption_id") == audit.consumption_id:
+            receipts.append((span, row))
+    if len(receipts) != 1:
+        return set()
+    span, receipt = receipts[0]
+    if (
+        (span.kind, span.agent, span.subagent, span.status) != ("tool", "writer", scope, "ok")
+        or receipt.get("contract") != CONTRACT
+        or receipt.get("snapshot_id") != detail.evidence_snapshot_id
+    ):
+        return set()
+    questions = {
+        q["question_id"]: q["question"]
+        for q in research_questions(detail, audit.competitor, audit.dimension)
+    }
+    supported = {a.claim.id: a.claim for a in audit.claims if a.status == "supported"}
+    result, seen = set(), set()
+    for task in receipt.get("tasks", ()):
+        try:
+            identity = [
+                CONTRACT,
+                scope,
+                task["question_id"],
+                task["question_quote"],
+                task["focus"],
+                task.get("resource"),
+            ]
+            expected = (
+                "task-"
+                + hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()[:20]
+            )
+            claim = supported[task["claim_id"]]
+            decision = task["decision"]
+            if (
+                task["task_id"] != expected
+                or expected in seen
+                or task["state"] != "supported"
+                or task["focus"] not in FOCUSES
+                or not task["question_quote"]
+                or task["question_quote"] not in questions[task["question_id"]]
+                or decision["task_id"] != expected
+                or decision["claim_id"] != claim.id
+                or decision["task_fulfilled"] is not True
+                or decision.get("conclusion") not in {"yes", "no", "depends", "not_applicable"}
+                or decision.get("relation")
+                not in {
+                    "direct",
+                    "explicit_negative",
+                    "upper_bound",
+                    "resource_scope",
+                    "permission_entailment",
+                    "destructive_effect",
+                }
+                or task["claim_digest"]
+                != hashlib.sha256(claim.model_dump_json().encode()).hexdigest()
+                or not set(claim.fact_ids) <= set(uses[0].fact_ids)
+                or not set(claim.source_ids) <= set(uses[0].source_ids)
+                or not _review_matches(detail, audit, task, claim)
+            ):
+                continue
+            seen.add(expected)
+            result.add(claim.id)
+        except (KeyError, TypeError, ValueError, IndexError, AttributeError):
+            continue
+    return result

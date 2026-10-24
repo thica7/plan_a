@@ -103,10 +103,16 @@ def _dispatched_originals(detail, snapshot, use, view, packets, dispatch, name):
         raise ValueError("question dispatch context exceeded")
     payload = _expand_text_refs(json.loads(raw))
     facts = payload["evidence_view"]["facts"]
+    expected_questions = packet["questions"]
+    if name == "dimension_task_generation":
+        active_ids = {task["question_id"] for task in payload["tasks"]}
+        narrowed = [q for q in packet["questions"] if q["question_id"] in active_ids]
+        if payload["questions"] == narrowed:
+            expected_questions = narrowed
     if (
         payload["segment_competitor"] != use.competitor
         or payload["dimension"] != use.dimension
-        or payload["questions"] != packet["questions"]
+        or payload["questions"] != expected_questions
         or not isinstance(facts, list)
     ):
         raise ValueError("question dispatched scope changed")
@@ -114,9 +120,17 @@ def _dispatched_originals(detail, snapshot, use, view, packets, dispatch, name):
     if len(sent_ids) != len(set(sent_ids)) or not set(sent_ids) <= set(view.fact_ids):
         raise ValueError("question dispatched originals not in the generation view")
     actual = reconcile_packet_originals(packet, snapshot, facts)
-    if set(actual["sent_fact_ids"]) != set(sent_ids) or payload[
-        "question_evidence_packets"
-    ] != prompt_packets(packets, snapshot, facts):
+    expected_packets = prompt_packets(packets, snapshot, facts)
+    if expected_questions != packet["questions"]:
+        active_ids = {q["question_id"] for q in expected_questions}
+        expected_packets = [
+            dict(p, questions=[q for q in p["questions"] if q["question_id"] in active_ids])
+            for p in expected_packets
+        ]
+    if (
+        set(actual["sent_fact_ids"]) != set(sent_ids)
+        or payload["question_evidence_packets"] != expected_packets
+    ):
         raise ValueError("question dispatched originals or packet content changed")
     _validate_dispatched_support(payload, view.facts, sent_ids)
     return facts
@@ -146,7 +160,19 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt):
         {
             key: value
             for key, value in task.items()
-            if key not in {"state", "reason", "claim_id", "diagnostic"}
+            if key
+            not in {
+                "state",
+                "reason",
+                "claim_id",
+                "diagnostic",
+                "decision",
+                "claim_digest",
+                "review_span_id",
+                "review_input_sha256",
+                "repair_attempted",
+            }
+            | {"repair_prior_state", "repair_prior_claim_id", "repair_outcome"}
         }
         for task in tasks
     ]
@@ -167,15 +193,20 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt):
     known = {task["task_id"]: task for task in observed}
     if len(known) != len(observed):
         raise ValueError("question task identity ambiguous")
-    sent, seen_spans, seen_tasks = {}, set(), set()
+    sent, seen_spans, seen_tasks, repaired = {}, set(), set(), False
     for dispatch in dispatches:
         ids = dispatch["task_ids"]
+        attempt = dispatch.get("attempt", 0)
         if (
             not isinstance(ids, list)
             or not ids
+            or len(ids) > 3
             or len(ids) != len(set(ids))
             or not set(ids) <= known.keys()
-            or seen_tasks.intersection(ids)
+            or type(attempt) is not int
+            or attempt not in (0, 1)
+            or (attempt == 0 and bool(seen_tasks.intersection(ids)))
+            or (attempt == 1 and (repaired or len(ids) > 2 or not set(ids) <= seen_tasks))
             or dispatch["span_id"] in seen_spans
         ):
             raise ValueError("question task dispatch identity ambiguous")
@@ -184,6 +215,11 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt):
         )
         span = next(span for span in detail.trace_spans if span.id == dispatch["span_id"])
         payload = _expand_text_refs(json.loads(span.full_input.split("\nJSON:\n", 1)[1]))
+        if attempt == 1:
+            repairs = payload.get("task_repair", [])
+            if len(repairs) != len(ids) or {r["task_id"] for r in repairs} != set(ids):
+                raise ValueError("question repair does not bind the original tasks")
+            repaired = True
         if payload["tasks"] != [known[tid] for tid in ids] or dispatch["fact_ids"] != sorted(
             fact["id"] for fact in facts
         ):

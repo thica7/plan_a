@@ -141,6 +141,50 @@ def reviewed(payload, disposition="superseded"):
 
 
 @pytest.mark.asyncio
+async def test_experimental_final_qa_diagnoses_integrity_gaps_without_clearing_them(monkeypatch):
+    detail, service, record = await scope_case(monkeypatch)
+    service._settings = service._settings.__class__(writer_task_execution_enabled=True)
+    issues = service._build_reflector_qa_issues(detail)
+    calls = []
+
+    async def model(record, **kwargs):
+        assert kwargs['name'] == 'final_question_reconciliation'
+        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        calls.append(payload)
+        assert payload['findings'][0]['diagnostic_only'] is True
+        assert payload['findings'][0]['question'] == QUESTION
+        return reviewed(payload)
+
+    monkeypatch.setattr(service, '_trace_llm_text', model)
+    result = await api()(service, record, issues, evidence_issues=issues)
+    assert len(calls) == 1
+    assert result == issues
+    assert json.loads(detail.trace_spans[-1].full_output)['model_review'] is not None
+
+
+@pytest.mark.asyncio
+async def test_experimental_final_qa_includes_gaps_beside_eligible_findings(monkeypatch):
+    detail, service, record = await scope_case(monkeypatch)
+    service._settings = service._settings.__class__(writer_task_execution_enabled=True)
+    issues = service._build_reflector_qa_issues(detail)
+    issues.append(issues[0].model_copy(update={
+        'id': 'mixed-source-finding', 'problem': 'Q1: source missing for this condition.'}))
+    calls = []
+
+    async def model(record, **kwargs):
+        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        calls.append(payload)
+        return reviewed(payload)
+
+    monkeypatch.setattr(service, '_trace_llm_text', model)
+    result = await api()(service, record, issues, evidence_issues=[])
+    assert len(calls) == 1
+    assert len(calls[0]['findings']) == 2
+    assert calls[0]['findings'][1]['diagnostic_only'] is True
+    assert len(result) == 1 and result[0].id == issues[1].id
+
+
+@pytest.mark.asyncio
 async def test_final_scope_no_reconciles_old_blocker_with_receipt_and_keeps_history(monkeypatch):
     detail, service, record = await scope_case(monkeypatch)
     history = detail.reflections[-1].model_dump_json()

@@ -2,7 +2,9 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-当前验证见[按任务 ID 执行与交付预算复验](optimization/2026-10-24-task-execution.md)（2026-10-24）：最终后端 **7306通过／1跳过**，较基线新增113项。任务协议、逐项生成／审核及派送重放已实现；真实内容回归后保持**默认关闭**。两轮四家封存页面回放共74次实际调用／228320已知token；最终轮41次／130248 token，12个分析／比较／反思模块均实际调用，最终QA模型重核0次。原八题严格1/8，低于旧4/8；Trello仍有漏答和预算延期，Cloudflare关键稿未发表，BW有证否定被最终守卫挡回，1Password复合主张被拒。机制测试不等于报告交付，未训练。[结构化结果](optimization/2026-10-24-task-execution-results.json)。
+当前验证见[已审核任务投影、局部修复与最终 QA 复验](optimization/2026-10-24-task-projection.md)（2026-10-24）：后端 **7346通过／1跳过**，新增40项；局部主张投影凭据、任务失败修复及最终QA诊断进入实际入口。两轮四家封存页面真实回放共100次实际调用／304236已知token，最终QA共8次；最终轮原八题严格 **2/8**，低于历史旧流程4/8。最终轮12个分析／比较／反思模块均真实调用且无回退，但最终QA只送达11/20项，另9项保留待审。**报告仍未达标，实验保持默认关闭**；任务决策尚未编译为完整最终答案，Trello／Cloudflare／Bitwarden／1Password仍有遗漏或不完整。未验新抓取、全Graph、发布或生产稠密RAG，未训练。[结构化结果](optimization/2026-10-24-task-projection-results.json)。
+
+上一轮验证见[按任务 ID 执行与交付预算复验](optimization/2026-10-24-task-execution.md)（2026-10-24）：最终后端 **7306通过／1跳过**，较基线新增113项。任务协议、逐项生成／审核及派送重放已实现；真实内容回归后保持**默认关闭**。两轮四家封存页面回放共74次实际调用／228320已知token；最终轮41次／130248 token，12个分析／比较／反思模块均实际调用，最终QA模型重核0次。原八题严格1/8，低于旧4/8；Trello仍有漏答和预算延期，Cloudflare关键稿未发表，BW有证否定被最终守卫挡回，1Password复合主张被拒。机制测试不等于报告交付，未训练。[结构化结果](optimization/2026-10-24-task-execution-results.json)。
 
 上一轮验证见[子问证据分配、原子主张与QA归属](optimization/2026-10-23-subquestion-allocation.md)（2026-10-23）：后端 **7193通过／1跳过**，新增68项；子问完整资料分配、统一14KB实际派送门、条件推断原问绑定、严格缺项分离及QA问题归属已接入。最终四家同版固定页面真实回放 **68次实际调用／229379 token**，另3次零transport预算拒绝；首两家诊断另34次／114740 token，全部保留。原始八题严格 **4/8**，报告仍未达标：CPU规则已进正文，Trello的A/B与下载、导出恢复，但义务／第二题仍漏答；Cloudflare权限结论因最终审核预算不足未发表；Bitwarden旧core gap覆盖误阻已消除，矩阵阻断仍保留。精确支持、复合主张和报价来源仍有缺口。不是新抓取／全Graph／发布／生产稠密RAG验收，未训练。[结构化结果](optimization/2026-10-23-subquestion-allocation-results.json)。
 
@@ -138,13 +140,17 @@ Analyst、Comparator、Reflector、Writer 现共用 [`question_packets.py`](../b
 
 ### Writer：把有效分析写入报告
 
-默认关闭的实验逐题入口（`WRITER_TASK_EXECUTION_ENABLED=1` 显式测试）使用 [`task_protocol.py`](../backend/packages/agents/writer/task_protocol.py) 和 [`task_execution.py`](../backend/packages/agents/writer/task_execution.py)。小型规划只接收原问，输出必须是原文片段与有限 focus，不能产生来源事实；服务端派生绑定产品、维度、原题、片段、动作和对象的稳定任务 ID。规划无效时记录有限规则回退。每批最多2项、每项最多1条原子、最多12个活动任务；超额、无响应或无审核额度显式延期，一个无效项不会删除其它项。命名对象分别推理，另有按动作区分的 `rule_ACTION` 规则任务。请求场景仅供条件推断，不能变成产品事实。
+默认关闭的实验逐题入口（`WRITER_TASK_EXECUTION_ENABLED=1` 显式测试）使用 [`task_protocol.py`](../backend/packages/agents/writer/task_protocol.py) 和 [`task_execution.py`](../backend/packages/agents/writer/task_execution.py)。小型规划只接收原问，输出必须是原文片段与有限 focus，不能产生来源事实；服务端派生绑定产品、维度、原题、片段、动作和对象的稳定任务 ID。规划无效时记录有限规则回退。普通生成每批最多3项、每项最多1条原子、最多12个活动任务；独立审核每组最多2条原子、10项检查，三任务必要时最多3组；超额、无响应或无审核额度显式延期，一个无效项不会删除其它项。命名对象分别推理，另有按动作区分的 `rule_ACTION` 规则任务。请求场景仅供条件推断，不能变成产品事实。
 
-各批从当前准入视图交错优先安排任务的完整原文，再按真实字节窗填充；不切断角色、套餐、访问范围、AND／OR或例外。原子只能引用该批实际发送的规范目录，服务端恢复完整绑定。主张审核和 task→predicate 完成度分别核对，所选合法 ID 不代表整句成立。`question_task_delivery` 保存每次实际 transport span、请求 hash、任务与 fact IDs；QA 逐次校验规范原文、支持和完整原题，再合并真实送达事实。任务状态和本地选择标记不能替代派送证明。
+各批只携带任务所属的完整原问及对应逐题资料，不带其他原问的重复包；从当前准入视图交错优先安排任务的完整原文，再按真实字节窗填充；不切断角色、套餐、访问范围、AND／OR或例外。原子只能引用该批实际发送的规范目录，服务端恢复完整绑定。主张审核和 task→predicate 完成度分别核对，所选合法 ID 不代表整句成立。`question_task_delivery` 保存每次实际 transport span、请求 hash、任务与 fact IDs；QA 逐次校验规范原文、支持和完整原题，再合并真实送达事实。任务状态和本地选择标记不能替代派送证明。
 
 最终原题答复只消费已支持主张，执行一次独立 `dimension_answer_review`，继续 v3 完整子问与引用合同；紧凑模型载荷去掉重复 hash／坐标，保留完整选中原文和操作条件，完整身份仍保存服务端。没有完成此审核不能自动标记已回答。`answer:<scope>` 与 `final_qa:run` 单独预留额度，完成／复用后释放，checkpoint 恢复不压缩已持久化的最终预留；不提高原24调用、80000 token、1600写作输出或14KB实际JSON上限。`WRITER_TASK_EXECUTION_ENABLED=0` 回滚以下旧逐题生成／修复路径；非功能、无题及操作定向重做也沿原入口。
 
-这些是执行合同，尚非语义效果保证：任务审核目前保存完成布尔值，最终答案仍由模型重新判断整题关系，支持项可能在最后的关系／子问守卫被拒而未进正文；单原子结构也不能保证没有复合谓词。真实复验只发生2次最终回答审核、0次最终QA模型重核，不可宣称最终审核已端到端验证。实验最终QA最多装入6000 bytes的完整finding，不能装下的整项保留，来源条件不截断；离线预算验证不能代替这一步真实执行。
+新增 [`task_projection.py`](../backend/packages/agents/writer/task_projection.py)：任务审核保存有限完成度、`conclusion/relation`，最终模型接收明确任务决策。只有当前运行／快照／消费、稳定任务身份、完整主张摘要及实际独立审核 span、输入 SHA、assignment 和原始审核结果全部一致的局部推断，才可在整题未核实时进入正文；不自动升级整题状态。Writer 隔离草稿通过独立 live 凭据参数重放新消费，不把本地自洽 task 状态当成证明；QA 使用同一展示函数。
+
+来源支持而任务不完整时保留 claim、记为 partial；最多一轮、两个 rejected／partial 任务修复，沿原 ID、规范来源及独立审核，失败不删除已有支持。`task_repair` 诊断不进入证据。默认旧修复打包器仍最多两组；普通三项任务生成必要时最多三组审核，每组原有上限不变。
+
+这些是执行合同，尚非语义效果保证：当前发表已支持 claim 文本，没有把完整 task decision 编译成最终答案，最终模型仍重新判断整题关系／分区；部分支持不能自动填补未发表的场景结论。最终四家真实回放发生3次最终回答审核、4次最终QA模型重核，但仅11/20项finding送达，9项未送，不能宣称最终审核已完整验证。实验最终QA最多装入6000 bytes的完整finding，不能装下的整项保留，来源条件不截断。Trello仍有三次零transport预算拒绝和五任务延期，三项生成批次未证明解决预算问题。
 
 新增 [`question_repair.py`](../backend/packages/agents/writer/question_repair.py) 的逐子问定向修复入口：失败诊断用于检索排序，不能成为事实。事实装窗时先预留合法完整引用，缺失谓词在裁窗前参与排序；修复上下文将失败原问、失败检查、已通过主张和完整资料放在同一个实际压缩窗口内装入，不再分开预估后回填；长审核评语留在原审计中，只带有界诊断，不增14KB上限。一次最多4个新原子、2批独立主张审核、2次受影响答案复核，总额外调用最多5次；Writer输出仍1600。坏响应/传输失败不盲重试，原支持和成功答案保持。审核主张与原文回写目标使用字面字符串，模型不能回传 `text_ref` 对象代替严格字符串审核。明确的多对象请求逐项校验，未知自然语言仍需语义审核。
 
@@ -195,6 +201,8 @@ v3 逐条隔离支持审核：仅选定 operation quote／source span 及完整�
 ### QA：审核与重做决策
 
 新增 [`question_reconciliation.py`](../backend/packages/agents/qa/question_reconciliation.py)：在最终 QA 对可明确映射的历史 Reflector 问题复核当前正文和精确支持，最多一次1600输出调用、14KB输入；保留原反思，记录 `keep/superseded/current_limitation` 和快照/Writer/支持摘要收据。真实证据错误存在时保守保留旧问题；来源、矩阵、混合缺口或无法映射的问题不凭回答状态消除。预算/模型失败保留问题，不能将复核入口已接线当作旧问题已解决。
+
+实验逐题路径另将无解除资格的问题作为 `diagnostic_only` 送最终QA，包括有证据阻断或混有可解除候选的情况；模型意见只作诊断，不能消除原阻断。完整原问、当前回答及支持摘要在6000 bytes内整项装入，未送项注明原因、保持keep。`model_execution` 区分未请求、不可用和已完成，实际调用次数仍按native transport计算，缓存重用不算新调用。最终轮实际4次调用只覆盖11项，另9项未送；QA真实运行不等于历史问题已解决。
 
 新增 [`question_context.py`](../backend/packages/agents/qa/question_context.py)：按当前快照、消费／选择凭据、真实成功Writer派送及完整原文／操作／引用身份，重放context缺口属于哪个问题。只有与服务器精确必要澄清完全一致的纯请求问题，才可关闭自身core遗漏的最终coverage误阻；事实问题、例外缺口、未知归属、旧凭据或篡改继续阻断。原gap和派送遥测保留，`answered` 标签不能获得豁免。资料摘录的沉默不能证明整页不存在规则；有限缺席守卫不误把有原文支持的“导出文档不含评论”当成来源缺证。
 

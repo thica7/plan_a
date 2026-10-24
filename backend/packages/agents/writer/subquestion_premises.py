@@ -166,6 +166,7 @@ def _counts(text, *, upper=False):
                     continue
                 limit = re.search(
                     r"(?:\bonly|\bup\s+to|\bmaximum\s+of|最多|至多|上限为?|仅限)\s*$"
+                    r"|(?:最多|至多)(?:只能|仅能|可|可以)?(?:使用|提供|拥有|包含)\s*$"
                     r"|(?:只能|仅能|只可|仅可)(?:访问|加入)(?:由[^，。；;!?？\n]{1,40}选择的)?\s*$",
                     before,
                     re.I,

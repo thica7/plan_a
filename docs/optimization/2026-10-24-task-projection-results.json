@@ -1,0 +1,1046 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-24",
+  "phase": "reviewed-task-projection-local-repair-final-qa",
+  "implementation_base_commit": "2d229656a8d87a196bc34e80500ac97a67e52e6a",
+  "acceptance": {
+    "deliverable": false,
+    "experimental_default_enabled": false,
+    "live_replay_explicit_opt_in": true,
+    "strict_pass_count_final": 2,
+    "strict_original_question_denominator": 8,
+    "model_trained": false,
+    "production_source_sha256": "be6fd402587aba659a45050ca70badc23efd9688de59a945860fb78dcfe1b5bb"
+  },
+  "scope": {
+    "products": [
+      "Trello",
+      "Cloudflare",
+      "Bitwarden",
+      "1Password"
+    ],
+    "input": "official pages captured on 2026-10-21",
+    "model_alias": "deepseek-flash",
+    "stages": [
+      "collector_semantic_extraction_and_admission",
+      "analyst",
+      "comparator",
+      "reflector",
+      "writer",
+      "qa"
+    ],
+    "fresh_web_capture": false,
+    "full_graph": false,
+    "report_publication": false,
+    "production_dense_rag": false,
+    "blind_evaluation": false,
+    "reference_answers_sent_to_model": false,
+    "docker_execution": false,
+    "frontend_changed_or_revalidated": false,
+    "public_schema_changed": false
+  },
+  "engineering": {
+    "backend_tests": {
+      "passed": 7346,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 216.54,
+      "additional_vs_base": 40,
+      "log": "data/artifacts/task-projection-2026-10-24/backend-contract.log"
+    },
+    "independent_review_related_tests_passed": 203,
+    "source_hash_matches_final_live_replay": true,
+    "new_and_owned_files_full_ruff": true,
+    "legacy_changed_files_ruff_rules": [
+      "E9",
+      "F"
+    ],
+    "original_run_files_preserved": 48,
+    "original_run_files_total": 48,
+    "runtime_artifacts_git_ignored": true
+  },
+  "comparison": {
+    "historical_pre_task_workflow": {
+      "strict_pass": 4,
+      "denominator": 8,
+      "document": "2026-10-23-subquestion-allocation.md"
+    },
+    "immediate_prior_task_experiment": {
+      "strict_pass": 1,
+      "denominator": 8,
+      "document": "2026-10-24-task-execution.md"
+    },
+    "first_round": {
+      "strict_pass": 3,
+      "denominator": 8
+    },
+    "final_round": {
+      "strict_pass": 2,
+      "denominator": 8
+    },
+    "general_accuracy_or_causal_gain_demonstrated": false,
+    "token_efficiency_gain_demonstrated": false
+  },
+  "rounds": {
+    "first": {
+      "source_audit": "data/artifacts/task-projection-2026-10-24/current-content-audit-first.json",
+      "overall": {
+        "deliverable": false,
+        "verdict": "fail",
+        "strict_question_verdict_counts": {
+          "partial": 3,
+          "fail": 2,
+          "pass": 3
+        },
+        "strict_pass_count": 3,
+        "strict_reviewed_denominator": 8,
+        "strict_final_denominator": 8,
+        "safe_refusal_count": 2,
+        "safe_refusal_pass_count": 2,
+        "visible_unique_formal_claim_count": 7,
+        "visible_occurrences": 7,
+        "visible_full_selected_quote_support": 6,
+        "visible_single_predicate": 4,
+        "persisted_claim_count": 10,
+        "audit_supported_claim_count": 7,
+        "audit_supported_hidden_claim_count": 0,
+        "selected_span_binding_count": 8,
+        "selected_operation_binding_count": 2,
+        "native_llm_spans": 53,
+        "calls": 50,
+        "provider_tokens_known": 152931,
+        "unknown_usage_transport_spans": 0,
+        "finish_reasons_transported": {
+          "stop": 50
+        },
+        "zero_transport_admission_rejected_spans": 3,
+        "admission_rejection_reasons": {
+          "run_llm_budget_reserved_for_delivery": 3
+        },
+        "qa_severity_counts": {
+          "blocker": 9,
+          "warn": 16
+        },
+        "actual_final_qa_dispositions": {
+          "keep": 16
+        },
+        "answer_review_model_calls": 3,
+        "final_reconciliation_model_calls": 4,
+        "qa_model_reviewed_findings": 14,
+        "qa_findings_outside_bounded_context": 2,
+        "all_reviewed_code_hashes_identical": true,
+        "production_code_sha256": [
+          "5df522a4bbb2731d5ee3ba44c148337854365f0ac71ca11c44ac0c1fbfd50127"
+        ],
+        "all_source_hashes_preserved": true,
+        "strict_pass_by_product": {
+          "Trello": 0,
+          "Cloudflare": 1,
+          "Bitwarden": 2,
+          "1Password": 0
+        },
+        "module_execution_status_counts": {
+          "llm": 12
+        },
+        "core_module_fallback_used_count": 0,
+        "task_state_counts": {
+          "deferred": 5,
+          "partial": 2,
+          "supported": 5,
+          "rejected": 2,
+          "server_clarification": 1,
+          "insufficient_evidence": 1
+        },
+        "task_projection_replay_count": 5,
+        "task_projection_replay_all_valid": true,
+        "task_repair_attempted_count": 5,
+        "limitations": [
+          "原8题已曝光、非盲评；一次同组回放不能外推一般准确率或因果改进。",
+          "封存2026-10-21官方页面，非新抓取/完整Graph/发布/生产稠密RAG验收。",
+          "本审核无模型/网络/训练调用、未读env、未修改业务或原输出。",
+          "来源身份合法、task decision重放有效、真实QA调用和7336passed1skipped工程结果不能替代正文验收。",
+          "whole-question状态与可见局部内容分别核对；没有用隐藏支持补正文，也不因状态unverified抹掉已实际发表且有证的完整场景回答。"
+        ]
+      },
+      "products": [
+        {
+          "product": "Trello",
+          "run_id": "run-ddfa50e5de2f4cd28043a6d2d0f7472f",
+          "input_mode": "captured_page_replay",
+          "capture_date": "2026-10-21",
+          "fresh_web_capture": false,
+          "e2e": false,
+          "reference_snapshot_gold_loaded": false,
+          "production_code_sha256": "5df522a4bbb2731d5ee3ba44c148337854365f0ac71ca11c44ac0c1fbfd50127",
+          "production_code_changed_during_run": false,
+          "deliverable": false,
+          "questions": [
+            {
+              "original_question": "Trello-1",
+              "verdict": "partial",
+              "branches": [
+                {
+                  "branch": "A投票否定及启用条件",
+                  "verdict": "answered_in_observation",
+                  "claim_ids": [
+                    "claim-0a8ebff83479f0081254"
+                  ]
+                },
+                {
+                  "branch": "B投票允许及启用条件",
+                  "verdict": "missing"
+                },
+                {
+                  "branch": "下载A卡片附件",
+                  "verdict": "answered",
+                  "claim_ids": [
+                    "claim-a42805a65ead7bd06c08"
+                  ]
+                },
+                {
+                  "branch": "导出A",
+                  "verdict": "answered",
+                  "claim_ids": [
+                    "claim-168aa8f7a1d2f3bdad82"
+                  ]
+                },
+                {
+                  "branch": "允许投票不推出每卡强制义务",
+                  "verdict": "answered_in_observation",
+                  "claim_ids": [
+                    "claim-730a5a7df7aaf23b9c14"
+                  ]
+                }
+              ],
+              "note": "A否定、义务模态、下载/导出可见；B具体投票应用未发表，仍partial。Trello10 task不换原题2题分母。",
+              "original_input_id": "claim-semantics-candidate-20261020-trello-001",
+              "original_question_text": "假设 Trello Workspace 已订阅 Premium，小林已分别被设为看板 A 和 B 的 Observer；A 未启用卡片投票，B 已启用且允许该 Observer 投票。仅依据所给官方页面，逐项判断：小林能在 A、B 投票吗？他能下载 A 的卡片附件并导出 A 吗？B 允许投票，是否意味着他必须给每张卡片投票？请将可以执行的操作、启用条件与是否存在强制义务分别说明。"
+            },
+            {
+              "original_question": "Trello-2",
+              "verdict": "partial",
+              "branches": [
+                {
+                  "branch": "Workspace不能统一设Observer",
+                  "verdict": "answered_in_observation",
+                  "claim_ids": [
+                    "claim-fbbac340148fbe68f6ad"
+                  ]
+                },
+                {
+                  "branch": "A改权不自动决定B具体权限",
+                  "verdict": "missing",
+                  "reason": "仅一般逐板规则可见，未发表对B的请求判断"
+                },
+                {
+                  "branch": "谁可把A现有成员设Observer",
+                  "verdict": "missing"
+                },
+                {
+                  "branch": "仅凭Observer标签不能确定免费/计费",
+                  "verdict": "missing"
+                }
+              ],
+              "note": "Workspace主张含一个未选支持的类型否定，不能把整条model supported当完整证据通过。",
+              "original_input_id": "claim-semantics-candidate-20261020-trello-002",
+              "original_question_text": "假设某 Trello Workspace 已订阅 Premium，管理员把看板 A 上现有协作者小周的权限改成了 Observer。同一 Workspace 另有看板 B，但题设没有说明小周是否加入 B、在 B 上的权限，或他属于 Workspace 成员还是哪一种 guest。仅依据所给页面，逐项回答：能否在 Workspace 层级把他统一设置成 Observer，A 上这次改权是否自动决定他在 B 的权限；谁有权把 A 的现有成员改为 Observer；只凭 A 上的 Observer 标签，能否确定他一定免费或一定计费？不要推定题设未说明的成员资格。"
+            }
+          ],
+          "task_state_counts": {
+            "deferred": 5,
+            "partial": 1,
+            "supported": 4
+          },
+          "qa_severity_counts": {
+            "blocker": 2,
+            "warn": 4
+          },
+          "actual_final_qa_dispositions": {
+            "keep": 4
+          },
+          "answer_review_model_calls": 1,
+          "final_reconciliation_model_calls": 1,
+          "qa_model_reviewed_findings": 3,
+          "qa_findings_outside_bounded_context": 1,
+          "native_llm_spans": 17,
+          "calls": 14,
+          "provider_tokens_known": 47565,
+          "unknown_usage_transport_spans": 0,
+          "finish_reasons_transported": {
+            "stop": 14
+          },
+          "immutable_source_files_preserved": true,
+          "trace_matches_run": true,
+          "source_bindings_identity_valid": true,
+          "summary_usage_matches_actual": true,
+          "task_repair_attempted_count": 2,
+          "diagnosis": [
+            "正文可见A投票否定、permission≠obligation、下载与导出；投票整问和义务行仍unverified，不能用状态抹掉已发表局部回答，也不能用一般投票规则替读者补B场景判断。原题1仍partial，唯一主要缺分支是B允许投票的明确应用。",
+            "第二题仅Workspace一般规则可见；“而非成员类型”仍超所选span，B具体权限、改权角色和计费判断未交付。原题2partial。",
+            "完整decision链4条（permission、Workspace、A投票、export）均具真实review span/input hash、当前use assignment、claim_digest及原review重放。下载task因question_quote含下载+导出被判task_fulfilled=false而partial；修复失败后支持claim保留，最终下载/导出回答仍完成。",
+            "ledger为supported4、partial1、deferred5。原4个尾任务（B权限、B投票、角色、计费）仍延期；rule_vote初稿因operation_binding_required拒后参加一轮修复，也因预算延期；下载partial的修复同样0transport，原支持未丢。",
+            "span-47/48/49三次0transport run_llm_budget_reserved_for_delivery；已用41252，input12680/11419/11745+output1600+protected30000+headroom3200仍超过80000。将生成/审核缩到所属原题后尚未解决尾部调度。",
+            "最终answer_review真实1次、最终QA真实1次。QA模型诊断3 finding均keep，另1完整finding超6KB界未送模型而keep。QA把许可不推出义务解释为必须有产品原句证明不存在义务，和旧rubric的permission-entailment处置不一致；本审核按同一原题语义接受已发表模态解释，不改变其它分支要求。"
+          ]
+        },
+        {
+          "product": "Cloudflare",
+          "run_id": "run-260b2d8501584be490c180931bd4decf",
+          "input_mode": "captured_page_replay",
+          "capture_date": "2026-10-21",
+          "fresh_web_capture": false,
+          "e2e": false,
+          "reference_snapshot_gold_loaded": false,
+          "production_code_sha256": "5df522a4bbb2731d5ee3ba44c148337854365f0ac71ca11c44ac0c1fbfd50127",
+          "production_code_changed_during_run": false,
+          "deliverable": false,
+          "questions": [
+            {
+              "original_question": "Cloudflare-1",
+              "verdict": "fail",
+              "branches": [
+                {
+                  "branch": "Cache Domain Purge特定域权限规则",
+                  "verdict": "missing"
+                },
+                {
+                  "branch": "角色只能被赋予其给定域范围",
+                  "verdict": "missing"
+                },
+                {
+                  "branch": "example.com角色不能据此清除other.example",
+                  "verdict": "missing"
+                }
+              ],
+              "note": "权限题未发表相关规则或场景结论；正文CPU计价与权限题无关，不能补此题。",
+              "original_input_id": "agent-readiness-holdout-v1-007",
+              "original_question_text": "同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？"
+            },
+            {
+              "original_question": "Cloudflare-2",
+              "verdict": "pass",
+              "safe_refusal": {
+                "strict_pass_credit": false,
+                "pass": true
+              },
+              "branches": [
+                {
+                  "branch": "不能仅据15M请求报准确完整美元账单",
+                  "verdict": "safe_refusal_pass"
+                },
+                {
+                  "branch": "CPU为独立用量计费，须CPU输入",
+                  "verdict": "answered_in_observation",
+                  "claim_ids": [
+                    "claim-fee192d516547e56a7df"
+                  ]
+                }
+              ],
+              "note": "CPU收费规则在正式bullet可见，配合不编造完整账单及CPU用量澄清，符合旧rubric；safe refusal独立不增加strict。",
+              "original_input_id": "agent-readiness-holdout-v1-008",
+              "original_question_text": "我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？"
+            }
+          ],
+          "task_state_counts": {
+            "rejected": 1,
+            "partial": 1
+          },
+          "qa_severity_counts": {
+            "blocker": 2,
+            "warn": 3
+          },
+          "actual_final_qa_dispositions": {
+            "keep": 2
+          },
+          "answer_review_model_calls": 1,
+          "final_reconciliation_model_calls": 1,
+          "qa_model_reviewed_findings": 2,
+          "qa_findings_outside_bounded_context": 0,
+          "native_llm_spans": 13,
+          "calls": 13,
+          "provider_tokens_known": 39400,
+          "unknown_usage_transport_spans": 0,
+          "finish_reasons_transported": {
+            "stop": 13
+          },
+          "immutable_source_files_preserved": true,
+          "trace_matches_run": true,
+          "source_bindings_identity_valid": true,
+          "summary_usage_matches_actual": true,
+          "task_repair_attempted_count": 2,
+          "diagnosis": [
+            "Cache Domain Purge两次生成均附读取zone settings等额外动作，分别因operation_binding_required被挡，修复未拆净；正文无权限规则或场景否定，原题1fail。",
+            "CPU初稿review把复合性与Workers Paid题设归属混同成unsupported；一轮修复仍复制有证计费与调用限制整行，review支持而task_fulfilled=false，source支持的fact保留partial并实际发表。CPU收费前提加服务器安全拒总额，按旧rubric原题2pass；不是仅靠安全拒价升分。",
+            "服务器不足答复本身无CPU产品事实、claim_ids空；CPU前提由正文正式bullet提供，须和最终问题状态/服务器控制语句分开。完整所选表格行自身有CPU计量，无需借未选Requests表头。",
+            "全部13个native均实际transport、无预算拒绝，12模块组内3个均LLM。最终answer_review1次、最终QA1次，模型诊断2项均keep；QA仍要求精确账单结果原文出现，没有把正确拒价+CPU前提视为解决，和人工strict处置分离。QA reason还把已发表CPU主张误述为10M请求/$0.30定价，不能用该reason补正文或计算金额。"
+          ]
+        },
+        {
+          "product": "Bitwarden",
+          "run_id": "run-1c1d365e4b194f37836ce6a70d08dc54",
+          "input_mode": "captured_page_replay",
+          "capture_date": "2026-10-21",
+          "fresh_web_capture": false,
+          "e2e": false,
+          "reference_snapshot_gold_loaded": false,
+          "production_code_sha256": "5df522a4bbb2731d5ee3ba44c148337854365f0ac71ca11c44ac0c1fbfd50127",
+          "production_code_changed_during_run": false,
+          "deliverable": false,
+          "questions": [
+            {
+              "original_question": "Bitwarden-1",
+              "verdict": "pass",
+              "branches": [
+                {
+                  "branch": "Free organization无法满足3人且3collections整体请求",
+                  "verdict": "answered_in_observation",
+                  "claim_ids": [
+                    "claim-2c72f65a42845e4c1f64"
+                  ]
+                }
+              ],
+              "note": "同旧正文rubric：明确3人3collections不能满足的有证场景否定在正式bullet可见；整问unverified另记合同不一致。",
+              "original_input_id": "agent-readiness-holdout-v1-001",
+              "original_question_text": "我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？"
+            },
+            {
+              "original_question": "Bitwarden-2",
+              "verdict": "pass",
+              "branches": [
+                {
+                  "branch": "澄清移除成员还是永久删除账户/数据",
+                  "verdict": "answered_by_clarification"
+                },
+                {
+                  "branch": "澄清个人数据还是组织数据",
+                  "verdict": "answered_by_clarification"
+                }
+              ],
+              "note": "沿用旧rubric：操作及数据归属含糊时，两项精确必要澄清为正确处置；没有捏造密码保留/删除结论。",
+              "original_input_id": "agent-readiness-holdout-v1-002",
+              "original_question_text": "我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？"
+            }
+          ],
+          "task_state_counts": {
+            "supported": 1,
+            "server_clarification": 1
+          },
+          "qa_severity_counts": {
+            "blocker": 2,
+            "warn": 5
+          },
+          "actual_final_qa_dispositions": {
+            "keep": 5
+          },
+          "answer_review_model_calls": 1,
+          "final_reconciliation_model_calls": 1,
+          "qa_model_reviewed_findings": 4,
+          "qa_findings_outside_bounded_context": 1,
+          "native_llm_spans": 11,
+          "calls": 11,
+          "provider_tokens_known": 31562,
+          "unknown_usage_transport_spans": 0,
+          "finish_reasons_transported": {
+            "stop": 11
+          },
+          "immutable_source_files_preserved": true,
+          "trace_matches_run": true,
+          "source_bindings_identity_valid": true,
+          "summary_usage_matches_actual": true,
+          "task_repair_attempted_count": 0,
+          "diagnosis": [
+            "容量否定的source支持、task decision upper_bound与review收据均可核验；文本kind=fact但实含有限场景推断，已在正式bullet可见。整问仍因answer_subquestion_negative_unproven退unverified，说明正文局部交付恢复而整问合同尚不一致。按旧只看实际可见回答口径，容量题pass。",
+            "离职题仍为actual_action/data_ownership两项固定必要澄清，未引入产品保留/删除主张，旧rubric pass。因此BW2/2，恢复上一轮容量fail。",
+            "11个native全部真实transport、无预算拒绝；3核心模块均LLM。最终answer_review和最终QA各1。QA模型诊断4项keep，另1完整finding超有界上下文未送模型而keep；比较矩阵blocker及必要澄清历史warn仍在，不能因内容2/2宣称整个系统报告交付。"
+          ]
+        },
+        {
+          "product": "1Password",
+          "run_id": "run-9e89c7ad366546a1aee3bed7396df2f3",
+          "input_mode": "captured_page_replay",
+          "capture_date": "2026-10-21",
+          "fresh_web_capture": false,
+          "e2e": false,
+          "reference_snapshot_gold_loaded": false,
+          "production_code_sha256": "5df522a4bbb2731d5ee3ba44c148337854365f0ac71ca11c44ac0c1fbfd50127",
+          "production_code_changed_during_run": false,
+          "deliverable": false,
+          "questions": [
+            {
+              "original_question": "1Password-1",
+              "verdict": "fail",
+              "branches": [
+                {
+                  "branch": "访客不能同时加入2共享vault",
+                  "verdict": "missing"
+                },
+                {
+                  "branch": "访客没有自己的Private vault",
+                  "verdict": "missing"
+                }
+              ],
+              "note": "初稿与一轮修复均因复合且未选支持被拒，正文尚未核实；两个隐藏拒绝稿不能补回答。",
+              "original_input_id": "agent-readiness-holdout-v1-003",
+              "original_question_text": "在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？"
+            },
+            {
+              "original_question": "1Password-2",
+              "verdict": "partial",
+              "safe_refusal": {
+                "strict_pass_credit": false,
+                "pass": true
+              },
+              "branches": [
+                {
+                  "branch": "不编造精确RMB含税总价",
+                  "verdict": "safe_refusal_pass"
+                },
+                {
+                  "branch": "公开报价性质有官方证据",
+                  "verdict": "missing"
+                },
+                {
+                  "branch": "有证官方销售/报价下一步",
+                  "verdict": "missing"
+                }
+              ],
+              "note": "只有Families guests active source；请求的一年/人民币/含税为输入复述，通用补资料提示不是官方销售渠道。",
+              "original_input_id": "agent-readiness-holdout-v1-004",
+              "original_question_text": "我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。"
+            }
+          ],
+          "task_state_counts": {
+            "rejected": 1,
+            "insufficient_evidence": 1
+          },
+          "qa_severity_counts": {
+            "blocker": 3,
+            "warn": 4
+          },
+          "actual_final_qa_dispositions": {
+            "keep": 5
+          },
+          "answer_review_model_calls": 0,
+          "final_reconciliation_model_calls": 1,
+          "qa_model_reviewed_findings": 5,
+          "qa_findings_outside_bounded_context": 0,
+          "native_llm_spans": 12,
+          "calls": 12,
+          "provider_tokens_known": 34404,
+          "unknown_usage_transport_spans": 0,
+          "finish_reasons_transported": {
+            "stop": 12
+          },
+          "immutable_source_files_preserved": true,
+          "trace_matches_run": true,
+          "source_bindings_identity_valid": true,
+          "summary_usage_matches_actual": true,
+          "task_repair_attempted_count": 1,
+          "diagnosis": [
+            "访客两个原请求仍合成一个task；首稿与一轮修复均仅选single-vault/no-private句，分别附加未选邀请/换库或需升级规则，均被拒。已证部分仍未拆出恢复，正文guest题fail。",
+            "报价安全拒绝精确RMB含税总价，未编造金额；只有guests资料，没有公开报价性质或有证官方销售路径，原题2partial。",
+            "12个native均实际transport、无预算拒绝；核心3模块LLM。无最终answer_review（无supported claim），最终QA真实1次诊断5项全部keep。真实QA调用不等于正文或历史finding语义正确。"
+          ]
+        }
+      ]
+    },
+    "contract": {
+      "source_audit": "data/artifacts/task-projection-2026-10-24/current-content-audit-contract.json",
+      "overall": {
+        "deliverable": false,
+        "verdict": "fail",
+        "strict_question_verdict_counts": {
+          "partial": 3,
+          "fail": 3,
+          "pass": 2
+        },
+        "strict_pass_count": 2,
+        "strict_reviewed_denominator": 8,
+        "strict_final_denominator": 8,
+        "safe_refusal_count": 2,
+        "safe_refusal_pass_count": 2,
+        "visible_unique_formal_claim_count": 6,
+        "visible_occurrences": 6,
+        "visible_full_selected_quote_support": 6,
+        "visible_single_predicate": 4,
+        "persisted_claim_count": 11,
+        "audit_supported_claim_count": 6,
+        "audit_supported_hidden_claim_count": 0,
+        "selected_span_binding_count": 11,
+        "selected_operation_binding_count": 0,
+        "native_llm_spans": 53,
+        "calls": 50,
+        "provider_tokens_known": 151305,
+        "unknown_usage_transport_spans": 0,
+        "finish_reasons_transported": {
+          "stop": 50
+        },
+        "zero_transport_admission_rejected_spans": 3,
+        "admission_rejection_reasons": {
+          "run_llm_budget_reserved_for_delivery": 3
+        },
+        "qa_severity_counts": {
+          "blocker": 12,
+          "warn": 17
+        },
+        "actual_final_qa_dispositions": {
+          "keep": 20
+        },
+        "answer_review_model_calls": 3,
+        "final_reconciliation_model_calls": 4,
+        "qa_model_reviewed_findings": 11,
+        "qa_findings_outside_bounded_context": 9,
+        "all_reviewed_code_hashes_identical": true,
+        "production_code_sha256": [
+          "be6fd402587aba659a45050ca70badc23efd9688de59a945860fb78dcfe1b5bb"
+        ],
+        "all_source_hashes_preserved": true,
+        "strict_pass_by_product": {
+          "Trello": 0,
+          "Cloudflare": 1,
+          "Bitwarden": 1,
+          "1Password": 0
+        },
+        "module_execution_status_counts": {
+          "llm": 12
+        },
+        "core_module_fallback_used_count": 0,
+        "task_state_counts": {
+          "partial": 2,
+          "supported": 4,
+          "deferred": 5,
+          "rejected": 3,
+          "server_clarification": 1,
+          "insufficient_evidence": 1
+        },
+        "task_projection_replay_count": 4,
+        "task_projection_replay_all_valid": true,
+        "task_repair_attempted_count": 6,
+        "limitations": [
+          "原8题已曝光、非盲评；一次同组回放不能外推一般准确率或因果改进。",
+          "封存2026-10-21官方页面，非新抓取/完整Graph/发布/生产稠密RAG验收。",
+          "本审核无模型/网络/训练调用、未读env、未修改业务或原输出。",
+          "来源身份合法、task decision重放有效、真实QA调用和7346passed1skipped工程结果不能替代正文验收。",
+          "whole-question状态与可见局部内容分别核对；没有用隐藏支持补正文，也不因状态unverified抹掉已实际发表且有证的完整场景回答。"
+        ]
+      },
+      "products": [
+        {
+          "product": "Trello",
+          "run_id": "run-0b3a0f8f57aa43948b0439b5e7a1cc60",
+          "input_mode": "captured_page_replay",
+          "capture_date": "2026-10-21",
+          "fresh_web_capture": false,
+          "e2e": false,
+          "reference_snapshot_gold_loaded": false,
+          "production_code_sha256": "be6fd402587aba659a45050ca70badc23efd9688de59a945860fb78dcfe1b5bb",
+          "production_code_changed_during_run": false,
+          "deliverable": false,
+          "questions": [
+            {
+              "original_question": "Trello-1",
+              "verdict": "partial",
+              "branches": [
+                {
+                  "branch": "A投票否定及启用条件",
+                  "verdict": "answered_in_observation",
+                  "claim_ids": [
+                    "claim-359a651267cbd4313407"
+                  ]
+                },
+                {
+                  "branch": "B投票允许及启用条件",
+                  "verdict": "answered_in_observation",
+                  "claim_ids": [
+                    "claim-bc8725448d877d4a3865",
+                    "claim-44baa109b647e8dfcbc7"
+                  ]
+                },
+                {
+                  "branch": "下载A卡片附件",
+                  "verdict": "answered_in_observation",
+                  "claim_ids": [
+                    "claim-af9dfc1e570f3629376a"
+                  ]
+                },
+                {
+                  "branch": "导出A",
+                  "verdict": "missing",
+                  "claim_ids": [],
+                  "reason": "有证单谓词稿被误拒后未发表"
+                },
+                {
+                  "branch": "允许投票不推出每卡强制义务",
+                  "verdict": "answered_in_observation",
+                  "claim_ids": [
+                    "claim-44baa109b647e8dfcbc7"
+                  ]
+                }
+              ],
+              "note": "A否定、B许可、下载与义务模态在正文可见；导出缺失，仍partial。",
+              "original_input_id": "claim-semantics-candidate-20261020-trello-001",
+              "original_question_text": "假设 Trello Workspace 已订阅 Premium，小林已分别被设为看板 A 和 B 的 Observer；A 未启用卡片投票，B 已启用且允许该 Observer 投票。仅依据所给官方页面，逐项判断：小林能在 A、B 投票吗？他能下载 A 的卡片附件并导出 A 吗？B 允许投票，是否意味着他必须给每张卡片投票？请将可以执行的操作、启用条件与是否存在强制义务分别说明。"
+            },
+            {
+              "original_question": "Trello-2",
+              "verdict": "fail",
+              "branches": [
+                {
+                  "branch": "Workspace不能统一设Observer",
+                  "verdict": "missing",
+                  "claim_ids": []
+                },
+                {
+                  "branch": "A改权不自动决定B具体权限",
+                  "verdict": "missing",
+                  "claim_ids": []
+                },
+                {
+                  "branch": "谁可把A现有成员设Observer",
+                  "verdict": "missing",
+                  "claim_ids": []
+                },
+                {
+                  "branch": "仅凭Observer标签不能确定免费/计费",
+                  "verdict": "missing",
+                  "claim_ids": []
+                }
+              ],
+              "note": "第二题无任何正式主张或场景判断；被拒Workspace/角色复合稿不可补正文。",
+              "original_input_id": "claim-semantics-candidate-20261020-trello-002",
+              "original_question_text": "假设某 Trello Workspace 已订阅 Premium，管理员把看板 A 上现有协作者小周的权限改成了 Observer。同一 Workspace 另有看板 B，但题设没有说明小周是否加入 B、在 B 上的权限，或他属于 Workspace 成员还是哪一种 guest。仅依据所给页面，逐项回答：能否在 Workspace 层级把他统一设置成 Observer，A 上这次改权是否自动决定他在 B 的权限；谁有权把 A 的现有成员改为 Observer；只凭 A 上的 Observer 标签，能否确定他一定免费或一定计费？不要推定题设未说明的成员资格。"
+            }
+          ],
+          "task_state_counts": {
+            "partial": 1,
+            "supported": 3,
+            "deferred": 5,
+            "rejected": 1
+          },
+          "qa_severity_counts": {
+            "blocker": 5,
+            "warn": 5
+          },
+          "actual_final_qa_dispositions": {
+            "keep": 8
+          },
+          "answer_review_model_calls": 1,
+          "final_reconciliation_model_calls": 1,
+          "qa_model_reviewed_findings": 1,
+          "qa_findings_outside_bounded_context": 7,
+          "native_llm_spans": 17,
+          "calls": 14,
+          "provider_tokens_known": 45711,
+          "unknown_usage_transport_spans": 0,
+          "finish_reasons_transported": {
+            "stop": 14
+          },
+          "immutable_source_files_preserved": true,
+          "trace_matches_run": true,
+          "source_bindings_identity_valid": true,
+          "summary_usage_matches_actual": true,
+          "task_repair_attempted_count": 2,
+          "diagnosis": [
+            "正文4条可见：一般启用投票规则、下载A、B许可不蕴含义务、A不能投票。B许可本轮明确提及B且Observer具备许可，可记该分支answered_in_observation；原题1仍因导出A缺失而partial，不把一般规则自动补导出。",
+            "原题2正文全未答：Workspace复合稿仅选管理员改权句，追加类型/层级等未选事实被拒。角色原句虽有支持，但未拆出局部保留；B权限、角色、计费尾任务仍延期。该题由first partial变fail，不能因越span主张不再可见而宣称整体改进。",
+            "导出稿本身完整所选支持且单谓词，但review错误要求来源证明题设Premium与小林A Observer而拒绝，正文漏答。这是明确语义误拒，不是网页缺导出规则。",
+            "ledger supported3、partial1、deferred5、rejected1。正常生成3任务与最多3审核组没有解决尾部预算；span-47/48/49均0transport保护拒绝，含4尾task和Workspace修复延期，rule_vote部分支持保留。已用40281，input12615/9612/10773+output1600+protected30000+headroom3200均超过80000。",
+            "完整decision链3条（下载、B模态、A投票）身份重放有效；最终answer_review1次但所有整问行仍unverified。最终QA真实1次只诊断1 finding，另7项完整finding超有界上下文未送模型而keep；实际8keep，不能说8项都真实重审。"
+          ]
+        },
+        {
+          "product": "Cloudflare",
+          "run_id": "run-5eecf1d616d44f5f93bc90b1548774a9",
+          "input_mode": "captured_page_replay",
+          "capture_date": "2026-10-21",
+          "fresh_web_capture": false,
+          "e2e": false,
+          "reference_snapshot_gold_loaded": false,
+          "production_code_sha256": "be6fd402587aba659a45050ca70badc23efd9688de59a945860fb78dcfe1b5bb",
+          "production_code_changed_during_run": false,
+          "deliverable": false,
+          "questions": [
+            {
+              "original_question": "Cloudflare-1",
+              "verdict": "fail",
+              "branches": [
+                {
+                  "branch": "Cache Domain Purge特定域权限规则",
+                  "verdict": "missing"
+                },
+                {
+                  "branch": "角色只能被赋予其给定域范围",
+                  "verdict": "missing"
+                },
+                {
+                  "branch": "example.com角色不能据此清除other.example",
+                  "verdict": "missing"
+                }
+              ],
+              "note": "权限题未发表相关规则或场景结论；正文CPU计价与权限题无关，不能补此题。",
+              "original_input_id": "agent-readiness-holdout-v1-007",
+              "original_question_text": "同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？"
+            },
+            {
+              "original_question": "Cloudflare-2",
+              "verdict": "pass",
+              "safe_refusal": {
+                "strict_pass_credit": false,
+                "pass": true
+              },
+              "branches": [
+                {
+                  "branch": "不能仅据15M请求报准确完整美元账单",
+                  "verdict": "safe_refusal_pass"
+                },
+                {
+                  "branch": "CPU为独立用量计费，须CPU输入",
+                  "verdict": "answered_in_observation",
+                  "claim_ids": [
+                    "claim-493056bebaa57f34120f"
+                  ]
+                }
+              ],
+              "note": "CPU收费规则在正式bullet可见，配合不编造完整账单及CPU用量澄清，符合旧rubric；safe refusal独立不增加strict。",
+              "original_input_id": "agent-readiness-holdout-v1-008",
+              "original_question_text": "我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？"
+            }
+          ],
+          "task_state_counts": {
+            "rejected": 1,
+            "partial": 1
+          },
+          "qa_severity_counts": {
+            "blocker": 2,
+            "warn": 3
+          },
+          "actual_final_qa_dispositions": {
+            "keep": 2
+          },
+          "answer_review_model_calls": 1,
+          "final_reconciliation_model_calls": 1,
+          "qa_model_reviewed_findings": 2,
+          "qa_findings_outside_bounded_context": 0,
+          "native_llm_spans": 13,
+          "calls": 13,
+          "provider_tokens_known": 41008,
+          "unknown_usage_transport_spans": 0,
+          "finish_reasons_transported": {
+            "stop": 13
+          },
+          "immutable_source_files_preserved": true,
+          "trace_matches_run": true,
+          "source_bindings_identity_valid": true,
+          "summary_usage_matches_actual": true,
+          "task_repair_attempted_count": 2,
+          "diagnosis": [
+            "初次purge含额外动作触operation_binding_required；修复选中仅Cache Domain Purge行，却又声称角色只能在给定scope内分配，该独立规则未选；整体被拒。正文无权限题主张，原题1fail。",
+            "初次CPU复合fact source支持但task_fulfilled=false，partial保留。修复CPU稿与旧稿等义，review整体unsupported、checks supported且reason末尾说supported，持久unreviewed；失败修复未删除原CPU主张，计费前提仍实际可见。",
+            "CPU计量/收费/调用限制全部有所选行明文，但不是单谓词；Workers Paid沿题设限定，不由未选父段新增资格。配合服务器不编完整账单及CPU输入澄清，按旧rubric账单题pass。服务器答复无产品事实，不替代正式CPU bullet。",
+            "13native全部transport，无预算拒绝；answer_review1、finalQA1。最终QA模型诊断2项、实际2keep；仍把正确拒总额视作历史金额问题未解，不能以QA keep自动重判人工strict。"
+          ]
+        },
+        {
+          "product": "Bitwarden",
+          "run_id": "run-3fad4e1b8f6443babc6947eb14aa530e",
+          "input_mode": "captured_page_replay",
+          "capture_date": "2026-10-21",
+          "fresh_web_capture": false,
+          "e2e": false,
+          "reference_snapshot_gold_loaded": false,
+          "production_code_sha256": "be6fd402587aba659a45050ca70badc23efd9688de59a945860fb78dcfe1b5bb",
+          "production_code_changed_during_run": false,
+          "deliverable": false,
+          "questions": [
+            {
+              "original_question": "Bitwarden-1",
+              "verdict": "partial",
+              "branches": [
+                {
+                  "branch": "Free组织两位用户及最多2collections规则",
+                  "verdict": "answered_in_observation",
+                  "claim_ids": [
+                    "claim-1559e8be2fb94ef08d69"
+                  ]
+                },
+                {
+                  "branch": "3人3collections整体请求是否满足的场景结论",
+                  "verdict": "missing"
+                }
+              ],
+              "note": "只发表一般容量规则，明确3人3collections不能满足结论仅在未发表初稿/decision/reason中，不能补正文。",
+              "original_input_id": "agent-readiness-holdout-v1-001",
+              "original_question_text": "我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？"
+            },
+            {
+              "original_question": "Bitwarden-2",
+              "verdict": "pass",
+              "branches": [
+                {
+                  "branch": "澄清移除成员还是永久删除账户/数据",
+                  "verdict": "answered_by_clarification"
+                },
+                {
+                  "branch": "澄清个人数据还是组织数据",
+                  "verdict": "answered_by_clarification"
+                }
+              ],
+              "note": "沿用旧rubric：操作及数据归属含糊时，两项精确必要澄清为正确处置；没有捏造密码保留/删除结论。",
+              "original_input_id": "agent-readiness-holdout-v1-002",
+              "original_question_text": "我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？"
+            }
+          ],
+          "task_state_counts": {
+            "supported": 1,
+            "server_clarification": 1
+          },
+          "qa_severity_counts": {
+            "blocker": 2,
+            "warn": 5
+          },
+          "actual_final_qa_dispositions": {
+            "keep": 5
+          },
+          "answer_review_model_calls": 1,
+          "final_reconciliation_model_calls": 1,
+          "qa_model_reviewed_findings": 3,
+          "qa_findings_outside_bounded_context": 2,
+          "native_llm_spans": 12,
+          "calls": 12,
+          "provider_tokens_known": 33423,
+          "unknown_usage_transport_spans": 0,
+          "finish_reasons_transported": {
+            "stop": 12
+          },
+          "immutable_source_files_preserved": true,
+          "trace_matches_run": true,
+          "source_bindings_identity_valid": true,
+          "summary_usage_matches_actual": true,
+          "task_repair_attempted_count": 1,
+          "diagnosis": [
+            "初稿其实写了明确3人3collections无法满足，但绑定claim_candidate_invalid，未成为可发表claim。修复只保留“两人共享、核心功能、最多2collections”的一般复合fact；task decision却task_fulfilled=true/no/upper_bound，决策链身份有效而语义任务并未完整发表。",
+            "最终answer_review提出no与upper_bound，但subquestion仅匹配部分原问，被answer_subquestion_partition_incomplete拒回unverified。正文没有明确场景否定，不能从隐藏reason/decision或读者计算补正文；容量题按旧“有规则但具体请求判断缺失”定partial，较first pass回退。",
+            "离职actual_action/data_ownership两项必要澄清仍pass；一般容量fact完整选中支持但包含三独立谓词未原子化。新增中文容量守卫与工程7346项不证明该题整条交付已修好。",
+            "12native全部transport，answer_review1、finalQA1。QA模型诊断3项，另2完整finding超界未送而keep；实际5keep。比较矩阵和coverage阻断仍在，不能把来源规则/decision支持当完整报告通过。"
+          ]
+        },
+        {
+          "product": "1Password",
+          "run_id": "run-e574621bd75e4dc4b2d079b07569ed23",
+          "input_mode": "captured_page_replay",
+          "capture_date": "2026-10-21",
+          "fresh_web_capture": false,
+          "e2e": false,
+          "reference_snapshot_gold_loaded": false,
+          "production_code_sha256": "be6fd402587aba659a45050ca70badc23efd9688de59a945860fb78dcfe1b5bb",
+          "production_code_changed_during_run": false,
+          "deliverable": false,
+          "questions": [
+            {
+              "original_question": "1Password-1",
+              "verdict": "fail",
+              "branches": [
+                {
+                  "branch": "访客不能同时加入2共享vault",
+                  "verdict": "missing"
+                },
+                {
+                  "branch": "访客没有自己的Private vault",
+                  "verdict": "missing"
+                }
+              ],
+              "note": "初稿复合错选被拒；修复binding invalid未进入第二次审核。正文未答，不能用隐藏稿补两个否定。",
+              "original_input_id": "agent-readiness-holdout-v1-003",
+              "original_question_text": "在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？"
+            },
+            {
+              "original_question": "1Password-2",
+              "verdict": "partial",
+              "safe_refusal": {
+                "strict_pass_credit": false,
+                "pass": true
+              },
+              "branches": [
+                {
+                  "branch": "不编造精确RMB含税总价",
+                  "verdict": "safe_refusal_pass"
+                },
+                {
+                  "branch": "公开报价性质有官方证据",
+                  "verdict": "missing"
+                },
+                {
+                  "branch": "有证官方销售/报价下一步",
+                  "verdict": "missing"
+                }
+              ],
+              "note": "只有Families guests active source；请求的一年/人民币/含税为输入复述，通用补资料提示不是官方销售渠道。",
+              "original_input_id": "agent-readiness-holdout-v1-004",
+              "original_question_text": "我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。"
+            }
+          ],
+          "task_state_counts": {
+            "rejected": 1,
+            "insufficient_evidence": 1
+          },
+          "qa_severity_counts": {
+            "blocker": 3,
+            "warn": 4
+          },
+          "actual_final_qa_dispositions": {
+            "keep": 5
+          },
+          "answer_review_model_calls": 0,
+          "final_reconciliation_model_calls": 1,
+          "qa_model_reviewed_findings": 5,
+          "qa_findings_outside_bounded_context": 0,
+          "native_llm_spans": 11,
+          "calls": 11,
+          "provider_tokens_known": 31163,
+          "unknown_usage_transport_spans": 0,
+          "finish_reasons_transported": {
+            "stop": 11
+          },
+          "immutable_source_files_preserved": true,
+          "trace_matches_run": true,
+          "source_bindings_identity_valid": true,
+          "summary_usage_matches_actual": true,
+          "task_repair_attempted_count": 1,
+          "diagnosis": [
+            "初稿只选single-vault/no-private句，附加invited-at-a-time和需升级等规则，复合且未选支持被拒；接受邀请/确认是题设，不应作为新增产品事实误拒。",
+            "修复虽把需升级改为可升级，仍合并邀请/换库等多个谓词且support_refs s1/s3绑定触claim_candidate_invalid，未进入第二次task review。两个原请求的已证部分均未拆出发表，guest题fail。",
+            "报价只有guests资料；安全拒价成立，公开报价性质和有证销售下一步均缺，partial。11native全部transport，无预算拒绝；无answer_review，finalQA真实1次诊断5项并5keep。"
+          ]
+        }
+      ]
+    }
+  },
+  "this_phase_combined": {
+    "actual_model_calls": 100,
+    "native_spans": 106,
+    "known_provider_tokens": 304236,
+    "unknown_usage_transports": 0,
+    "finish_reasons": {
+      "stop": 100
+    },
+    "zero_transport_budget_rejections": 6,
+    "final_qa_actual_model_calls": 8,
+    "actual_invoice_known": false
+  },
+  "remaining_gaps": [
+    "Reviewed task conclusions are not yet compiled into canonical final question answers; supported rule text can appear without the scenario conclusion.",
+    "Trello export and the second original question remain unanswered; protected budget still defers five tasks.",
+    "Cloudflare domain permission answer remains unpublished after invalid operation selection.",
+    "Bitwarden final capacity response omits the explicit negative scenario answer.",
+    "1Password guest constraints remain combined with unsupported extra predicates; frozen quote evidence is insufficient.",
+    "Local repair may receive generic rejection rather than concrete independent failed checks.",
+    "Final QA calls occurred but only 11 of 20 historical findings reached the model in the final round; all 20 remain keep.",
+    "Some visible supported claims remain compound; valid provenance replay does not prove semantic entailment."
+  ],
+  "next_priorities": [
+    "Structured reviewed task decision to final answer contract with full request context, prerequisites, conclusions and exact citations.",
+    "Forward concrete failed checks and reasons to one scoped repair of the affected task.",
+    "Share full question context across QA finding groups and allocate budget from complete actual payloads.",
+    "Validate on new unexposed samples before any default rollout or training."
+  ]
+}

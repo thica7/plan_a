@@ -929,6 +929,12 @@ class DimensionWriterMixin:
                             if t['question_id'] == q['question_id'] and t['state'] == 'supported'
                             and t.get('claim_id') in {c.id for c in supported}],
                     } for q in pending]
+                    review_payload['reviewed_task_decisions'] = [{
+                        'task_id': t['task_id'], 'question_id': t['question_id'],
+                        'question_quote': t['question_quote'], 'focus': t['focus'],
+                        **t['decision'],
+                    } for t in compact['question_task_ledger'] if t['state'] == 'supported'
+                        and 'decision' in t and t.get('claim_id') in {c.id for c in supported}]
                 # Preserve the original proposed reason for the independent audit;
                 # only server-generated provenance is saved after that audit.
                 try:
@@ -1554,7 +1560,8 @@ class DimensionWriterMixin:
                     'status': 'insufficient_evidence', 'winner': None,
                     'gaps': [*assessment.gaps, '缺少可发表的已审核产品观察。' if detail.output_language.startswith('zh') else
                              'Published audited product observations are missing.']})
-        report = render_dimension_report(detail, audits, snapshot=snapshot, comparison_assessments=assessments)
+        report = render_dimension_report(detail, audits, snapshot=snapshot,
+            comparison_assessments=assessments, task_projection_detail=live.detail)
         opportunities = [] if partial_report_mode(detail, snapshot) else self._backfill_product_opportunities_section(detail)
         if opportunities:
             heading = f"## {report_label(detail.output_language, 'confidence_notes')}"
@@ -1663,7 +1670,8 @@ def render_common_capabilities(detail, audits, *, snapshot=None):
     return [*lines, '', *render_operation_comparison(detail, audits, snapshot=snapshot)]
 
 
-def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessments=None):
+def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessments=None,
+                            task_projection_detail=None):
     from packages.agents.writer.answer_presentation import (
         audit_heading, observation_claims, question_coverage_lines,
     )
@@ -1732,7 +1740,7 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
                            if zh else "These are captured page prices only. Unverified billing interval, market, tax and seat conditions preclude total-cost comparisons."), ""])
         for audit in dimension_audits:
             lines.extend([audit_heading(audit, detail.output_language), ""])
-            supported = observation_claims(detail, audit)
+            supported = observation_claims(task_projection_detail or detail, audit)
             printed = set()
             for item in supported:
                 identity = (plain(item.claim.text), tuple(item.claim.source_ids))

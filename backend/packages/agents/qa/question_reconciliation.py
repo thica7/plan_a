@@ -35,7 +35,9 @@ SYSTEM = (
     "quote or necessary clarification with explicit missing inputs, no invented product premise "
     "and no unresolved delivery omission. Preserve the limitation; it is not a wrong final claim. "
     "Otherwise return keep. Echo each issue_id, question_id, support_digest and every answer "
-    'claim_id exactly. Return JSON {"version":1,"basis_hash":"echo","reviews":[{"issue_id":'
+    "claim_id exactly. A diagnostic_only finding is an audit of the visible partial report, "
+    "not permission to clear a blocker: always keep it, identify omissions and invalid premises. "
+    'Return JSON {"version":1,"basis_hash":"echo","reviews":[{"issue_id":'
     '"id","question_id":"id","support_digest":"echo","disposition":"superseded|'
     'current_limitation|keep","claim_ids":["id"],"finding_fully_addressed":true,'
     '"remaining_gaps":[],"reason":"specific evidence and final answer reasoning"}]}. '
@@ -241,6 +243,30 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
                 support_digest=candidate["support_digest"],
             )
             candidates.append(candidate)
+    if service._task_delivery_segments(record):
+        # A failed/incomplete report still needs a real final audit. Such an
+        # audit has no authority to remove integrity or unmapped findings.
+        from packages.agents.writer.answer_presentation import observation_claims
+
+        eligible_ids = {c['issue_id'] for c in candidates}
+        for issue in historical[:MAX_FINDINGS]:
+            if issue.id in eligible_ids:
+                continue
+            qid = _question_id(issue, questions)
+            question, audit = questions[qid] if qid else ({"question": "Unmapped finding"}, None)
+            rows = [a for a in audit.answer_coverage if a.question_id == qid] if audit else []
+            answer = rows[0].model_dump(mode="json") if len(rows) == 1 else dict(
+                question_id=qid or "unmapped", status="unverified", claim_ids=[],
+                conclusion="unknown", answer="")
+            ids = set(answer['claim_ids'])
+            claims = [a.claim for a in audit.claims if a.status == 'supported'
+                      and (a.claim.id in ids or a in observation_claims(detail, audit))] if audit else []
+            candidate = dict(issue_id=issue.id, finding=issue.problem,
+                             question_id=qid or "unmapped", question=question['question'],
+                             answer=answer, claims=[c.model_dump(mode='json') for c in claims],
+                             diagnostic_only=True)
+            candidate['support_digest'] = service._evidence_artifact_hash(candidate)
+            candidates.append(candidate)
     review_limit = TASK_REVIEW_BYTES if service._task_delivery_segments(record) else MAX_REVIEW_BYTES
     if review_limit == TASK_REVIEW_BYTES:
         # Pack whole findings, never shorten a claim or source prerequisite.
@@ -255,6 +281,7 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
         candidates = selected
     payload = dict(version=1, basis_hash=basis_hash, findings=candidates)
     model_review = None
+    model_execution = "not_requested"
     if candidates and len(candidates) <= MAX_FINDINGS:
         # A prior complete or failed attempt is replayed on the identical basis;
         # unavailable reviews are never retried by another final QA pass.
@@ -269,6 +296,7 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
             None,
         )
         try:
+            model_execution = "unavailable"
             if cached:
                 model_review = _review_response(
                     json.loads(cached.full_output)["model_review"], basis_hash
@@ -297,6 +325,7 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
                 )
                 service._validate_evidence_use(record, use)
                 model_review = _review_response(response, basis_hash)
+            model_execution = "completed" if model_review else "unavailable"
         except EvidenceUseRejectedError:
             raise
         except Exception:
@@ -315,6 +344,10 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
         if set(row.issue_id for row in model_review.reviews) <= by_id.keys():
             for review in model_review.reviews:
                 candidate = by_id[review.issue_id]
+                if candidate.get('diagnostic_only'):
+                    decisions[review.issue_id].update(
+                        reason=review.reason, diagnostic_review=review.model_dump(mode='json'))
+                    continue
                 answer = candidate["answer"]
                 expected_ids = answer["claim_ids"]
                 if (
@@ -345,6 +378,7 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
         basis_hash=basis_hash,
         reviews=list(decisions.values()),
         model_review=model_review.model_dump(mode="json") if model_review else None,
+        model_execution=model_execution,
     )
     service._trace_local_tool(
         record,

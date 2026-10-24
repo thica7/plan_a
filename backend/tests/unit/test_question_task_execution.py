@@ -229,6 +229,38 @@ def test_task_bill_window_reserves_the_cpu_row_from_full_question_scope():
     assert all(len(row["source_span_candidates"]) <= 2 for row in rows)
 
 
+def test_task_batch_keeps_its_whole_original_question_but_omits_unrelated_questions():
+    from types import SimpleNamespace
+
+    from test_literal_non_operation import fact
+
+    from packages.agents.writer.task_execution import task_context
+
+    original = fact(quote="Members can export boards after signing in.")
+    questions = [
+        dict(question_id="active", question="假设已经登录账号，成员可以导出看板吗？"),
+        dict(question_id="other", question="另一个产品的完整账单是多少？"),
+    ]
+    task = dict(
+        task_id="t", question_id="active", question_quote="可以导出看板吗？", focus="export"
+    )
+    view = SimpleNamespace(facts=[original], competitor=original.competitor, dimension="feature")
+    service = SimpleNamespace(_question_packet_prompt=lambda *args: [dict(questions=questions)])
+    packed = task_context(
+        service,
+        None,
+        dict(segment_competitor=view.competitor, dimension="feature"),
+        view,
+        {original.id},
+        questions,
+        [],
+        [task],
+        SimpleNamespace(max_bytes=14000),
+    )
+    assert packed["questions"] == questions[:1]
+    assert packed["question_evidence_packets"][0]["questions"] == questions[:1]
+
+
 def test_each_resource_action_keeps_its_own_source_rule_identity():
     question = dict(question_id="q", question="能从看板 A、B 下载附件并导出看板吗？")
     tasks = protocol().parse_tasks(
@@ -256,7 +288,7 @@ def test_each_resource_action_keeps_its_own_source_rule_identity():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "failed_task", [False, "generation", "decision", "review", "duplicate_decision"]
+    "failed_task", [False, "generation", "decision", "review", "duplicate_decision", "incomplete"]
 )
 async def test_real_writer_uses_task_ids_then_one_independent_final_review(
     monkeypatch, failed_task
@@ -299,6 +331,15 @@ async def test_real_writer_uses_task_ids_then_one_independent_final_review(
             )
         if name == "dimension_task_generation":
             assert payload["questions"][0]["question"] == question
+            if payload.get("task_repair"):
+                return json.dumps(
+                    dict(
+                        results=[
+                            dict(task_id=t["task_id"], status="insufficient_evidence", atom=None)
+                            for t in payload["tasks"]
+                        ]
+                    )
+                )
             rows = payload["evidence_view"]["facts"]
             results = []
             for index, task in enumerate(payload["tasks"]):
@@ -329,6 +370,8 @@ async def test_real_writer_uses_task_ids_then_one_independent_final_review(
                 reviews[1] = {"claim_id": reviews[1]["claim_id"], "verdict": "invalid"}
             elif failed_task == "duplicate_decision":
                 decisions.append(dict(decisions[1], task_fulfilled="invalid"))
+            elif failed_task == "incomplete":
+                decisions[1]["task_fulfilled"] = False
             return json.dumps(dict(reviews=reviews, decisions=decisions))
         assert name == "dimension_answer_review"
         assert all("source_span_bindings" not in c for c in payload["claims"])
@@ -340,19 +383,27 @@ async def test_real_writer_uses_task_ids_then_one_independent_final_review(
     monkeypatch.setattr(service, "_trace_llm_text", model)
     await service._real_writer_step(record)
     audit = detail.report_dimension_audits[0]
-    assert sum(a.status == "supported" for a in audit.claims) == (1 if failed_task else 2), [
-        s.full_output for s in detail.trace_spans if s.name == "question_task_delivery"
-    ]
+    assert sum(a.status == "supported" for a in audit.claims) == (
+        1 if failed_task and failed_task != "incomplete" else 2
+    ), [s.full_output for s in detail.trace_spans if s.name == "question_task_delivery"]
     assert calls == [
         "dimension_task_plan",
         "dimension_task_generation",
         "dimension_task_review",
+        *(["dimension_task_generation"] if failed_task else []),
         "dimension_answer_review",
     ]
     assert audit.answer_coverage[0].status == "unverified"
     receipt = next(s for s in detail.trace_spans if s.name == "question_task_delivery")
     tasks = json.loads(receipt.full_output)["tasks"]
-    assert [t["state"] for t in tasks] == ["supported", "rejected" if failed_task else "supported"]
+    assert [t["state"] for t in tasks] == [
+        "supported",
+        "partial"
+        if failed_task == "incomplete"
+        else "insufficient_evidence"
+        if failed_task
+        else "supported",
+    ]
     assert all(t["task_id"].startswith("task-") for t in tasks)
 
 

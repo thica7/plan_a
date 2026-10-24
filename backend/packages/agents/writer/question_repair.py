@@ -320,8 +320,10 @@ def question_repair_context(view, allowed, questions, targets, audited, *, max_b
     return pack()
 
 
-def repair_review_batches(claims, view, questions, *, max_bytes, plans=()):
-    """At most two batches, two atoms and ten explicit checks per batch."""
+def repair_review_batches(claims, view, questions, *, max_bytes, plans=(), max_batches=2):
+    """Two repair groups, or three normal task groups; checks stay complete."""
+    if type(max_batches) is not int or max_batches not in (2, 3):
+        raise ValueError('review batch capacity must be two or three')
     from packages.agents.writer.dimension_writer import compact_prompt_json, review_payload
     from packages.research.evidence.report_claims import (
         required_claim_checks,
@@ -349,7 +351,7 @@ def repair_review_batches(claims, view, questions, *, max_bytes, plans=()):
         if batch and not fits([*batch, claim]):
             batches.append(batch)
             batch = []
-        if len(batches) >= 2 or not fits([claim]):
+        if len(batches) >= max_batches or not fits([claim]):
             omitted = True
         else:
             batch.append(claim)
