@@ -137,3 +137,28 @@ def support_ref_catalog(payload, source_facts, sent_fact_ids):
 def dispatched_span_candidates(payload, source_facts, sent_fact_ids):
     """The actual sent whitelist uses the same checks as short alias expansion."""
     return _catalogs(payload, source_facts, sent_fact_ids)[1]
+
+
+def dispatched_support_choices(payload, source_facts, sent_fact_ids):
+    """Readable, complete choices from the same verified transport catalog."""
+    from packages.research.evidence.operations import operation_binding, operation_observations
+
+    catalog, spans = _catalogs(payload, source_facts, sent_fact_ids)
+    if not catalog:
+        return {}
+    operations = {
+        (fact.id, item["observation_id"]): item
+        for fact in source_facts if fact.id in sent_fact_ids
+        for item in (operation_binding(op) for op in operation_observations(fact))
+    }
+    result = {}
+    for ref, binding in catalog.items():
+        if "observation_id" in binding:
+            result[ref] = dict(
+                support_ref=ref, binding_kind="operation",
+                operation_binding=operations[(binding["fact_ids"][0], binding["observation_id"])],
+            )
+        else:
+            span = spans[binding["source_span_ids"][0]]
+            result[ref] = dict(support_ref=ref, binding_kind="span", quote=span["quote"])
+    return result

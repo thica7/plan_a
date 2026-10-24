@@ -2,7 +2,9 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-当前验证见[原子任务覆盖、引用边界与独立最终QA复验](optimization/2026-10-24-atomic-independent-qa.md)（2026-10-24）：后端 **7424通过／1跳过**，新增55项。服务端有限请求补全、越引用守卫及独立逐题QA进入实验入口；实际provider重试、超时、未送与合法返回分开记账。两轮四家106实际调用／已知326148 token，另1次usage未知。最终原八题严格 **3/8**，可见主张完整支持6/6、单谓词4/6；四家均调用QA，31项中17项合法、12项未送、2项返回失效，**报告仍未达标，默认关闭**。两轮各12个分析／比较／反思模块均实际LLM执行无回退，不代表写作与整题交付完成；未验新抓取、全Graph、发布或生产语义RAG，未训练。[结构化结果](optimization/2026-10-24-atomic-independent-qa-results.json)。
+当前验证见[已采证据选用、原子写作与剩余QA调度复验](optimization/2026-10-24-selected-support-writing.md)（2026-10-24）：后端 **7469通过／1跳过**，新增45项。逐任务ref选证、限定支持写作与完整派送验证进入实验入口；最终QA严格整题ID回显，局部支持另列，并有界推进剩余窗口。四家真实回放 **62调用／187976 token**，另3次零transport预算拒绝；QA29项中28项合法，1项完整上下文超窗未送，未出现失效返回。**原八题仍3/8，报告未达标，默认关闭**；可见主张完整支持8/8、单谓词3/8。1Password访客恢复、BW容量遗漏，复合写作和Trello预算仍待修。12个分析／比较／反思模块均实际LLM执行无回退，不代表整题或完整Agent系统已合格；未验新抓取、全Graph、发布或生产语义RAG，未训练。[结构化结果](optimization/2026-10-24-selected-support-writing-results.json)。
+
+上一轮验证见[原子任务覆盖、引用边界与独立最终QA复验](optimization/2026-10-24-atomic-independent-qa.md)（2026-10-24）：后端 **7424通过／1跳过**，新增55项。服务端有限请求补全、越引用守卫及独立逐题QA进入实验入口；实际provider重试、超时、未送与合法返回分开记账。两轮四家106实际调用／已知326148 token，另1次usage未知。最终原八题严格 **3/8**，可见主张完整支持6/6、单谓词4/6；四家均调用QA，31项中17项合法、12项未送、2项返回失效，**报告仍未达标，默认关闭**。两轮各12个分析／比较／反思模块均实际LLM执行无回退，不代表写作与整题交付完成；未验新抓取、全Graph、发布或生产语义RAG，未训练。[结构化结果](optimization/2026-10-24-atomic-independent-qa-results.json)。
 
 上一轮验证见[任务答案交付、共同状态与预算复验](optimization/2026-10-24-task-answer-contract.md)（2026-10-24）：最终后端 **7369通过／1跳过**，新增23项。局部任务答案、服务端原问分段、具体失败反馈和同题共享QA进入真实入口；共同状态只是诊断，不授予完成。两轮四家102次真实调用／已知302260 token，另3次usage未知。最终原八题严格 **3/8，报告未达标**；最终QA6次、只有三家调用，含一次超时且有未送项，1Password Reflector回退后没有最终模型重核。不能宣称全部Agent或最后QA完整通过。实验继续默认关闭；未验自动发现、多产品同矩阵、全Graph、发布或生产语义RAG，未训练。[结构化结果](optimization/2026-10-24-task-answer-contract-results.json)。
 
@@ -150,6 +152,8 @@ Analyst、Comparator、Reflector、Writer 现共用 [`question_packets.py`](../b
 
 各批只携带任务所属的完整原问及对应逐题资料，不带其他原问的重复包；从当前准入视图交错优先安排任务的完整原文，再按真实字节窗填充；不切断角色、套餐、访问范围、AND／OR或例外。原子只能引用该批实际发送的规范目录，服务端恢复完整绑定。主张审核和 task→predicate 完成度分别核对，所选合法 ID 不代表整句成立。`question_task_delivery` 保存每次实际 transport span、请求 hash、任务与 fact IDs；QA 逐次校验规范原文、支持和完整原题，再合并真实送达事实。任务状态和本地选择标记不能替代派送证明。
 
+新增 [`task_support_selection.py`](../backend/packages/agents/writer/task_support_selection.py)：每次任务生成前先进行一次有界、仅返回引用的选证，操作／谁可操作须选择对应 o-reference，其余规则使用完整 s-reference；最多一个操作或必要例外对的两个片段。选证不是事实证明，非法、遗漏或无完整支持的任务明确延期／缺证，不给默认引用。生成只能使用该任务所选的完整支持，引用集合必须一致，之后仍经过原绑定、主张守卫和独立审核。选证与生成都核对真实 agent、scope、完整 system／user、返回内容和 transport；生成回执不符时整批延期，不解析为合格主张。可读操作身份从已验证目录对应的规范事实恢复，未验证操作行不能覆盖。选证输入与结果单列保存在任务收据，额外调用受原全局预算约束。
+
 最终原题答复只消费已支持主张，执行一次独立 `dimension_answer_review`，继续 v3 完整子问与引用合同；紧凑模型载荷去掉重复 hash／坐标，保留完整选中原文和操作条件，完整身份仍保存服务端。没有完成此审核不能自动标记已回答。`answer:<scope>` 与 `final_qa:run` 单独预留额度，完成／复用后释放，checkpoint 恢复不压缩已持久化的最终预留；不提高原24调用、80000 token、1600写作输出或14KB实际JSON上限。`WRITER_TASK_EXECUTION_ENABLED=0` 回滚以下旧逐题生成／修复路径；非功能、无题及操作定向重做也沿原入口。
 
 新增 [`task_projection.py`](../backend/packages/agents/writer/task_projection.py)：任务审核保存有限完成度、`conclusion/relation`，最终模型接收明确任务决策。只有当前运行／快照／消费、稳定任务身份、完整主张摘要及实际独立审核 span、输入 SHA、assignment 和原始审核结果全部一致的局部推断，才可在整题未核实时进入正文；不自动升级整题状态。Writer 隔离草稿通过独立 live 凭据参数重放新消费，不把本地自洽 task 状态当成证明；QA 使用同一展示函数。
@@ -158,7 +162,7 @@ Analyst、Comparator、Reflector、Writer 现共用 [`question_packets.py`](../b
 
 来源支持而任务不完整时保留 claim、记为 partial；最多一轮、两个 rejected／partial 任务修复，沿原 ID、规范来源及独立审核，失败不删除已有支持。`task_repair` 诊断不进入证据。默认旧修复打包器仍最多两组；普通三项任务生成必要时最多三组审核，每组原有上限不变。
 
-这些是执行合同，尚非语义效果保证：当前发表已支持 claim 文本，没有把完整 task decision 编译成最终答案，最终模型仍重新判断整题关系／分区；部分支持不能自动填补未发表的场景结论。上一轮任务投影复验发生3次最终回答审核、4次最终QA模型重核，但仅11/20项finding送达，9项未送。当前实验最终QA每批最多6000 bytes、最多两批，完整条件不截断，仍可能存在未送项。Trello的任务延期未因三项生成批次根治，最新实际结果以页首交付记录为准。
+这些是执行合同，尚非语义效果保证：当前发表已支持 claim 文本，没有把完整 task decision 编译成最终答案，最终模型仍重新判断整题关系／分区；部分支持不能自动填补未发表的场景结论。上一轮任务投影复验发生3次最终回答审核、4次最终QA模型重核，但仅11/20项finding送达，9项未送。当前实验最终QA每批最多6000 bytes、每次最多六批，完整条件不截断，仍可能存在未送项。Trello的任务延期未因三项生成批次根治，最新实际结果以页首交付记录为准。
 
 新增 [`question_repair.py`](../backend/packages/agents/writer/question_repair.py) 的逐子问定向修复入口：失败诊断用于检索排序，不能成为事实。事实装窗时先预留合法完整引用，缺失谓词在裁窗前参与排序；修复上下文将失败原问、失败检查、已通过主张和完整资料放在同一个实际压缩窗口内装入，不再分开预估后回填；长审核评语留在原审计中，只带有界诊断，不增14KB上限。一次最多4个新原子、2批独立主张审核、2次受影响答案复核，总额外调用最多5次；Writer输出仍1600。坏响应/传输失败不盲重试，原支持和成功答案保持。审核主张与原文回写目标使用字面字符串，模型不能回传 `text_ref` 对象代替严格字符串审核。明确的多对象请求逐项校验，未知自然语言仍需语义审核。
 
@@ -210,13 +214,15 @@ v3 逐条隔离支持审核：仅选定 operation quote／source span 及完整�
 
 实验任务入口使用 [`independent_question_review.py`](../backend/packages/agents/qa/independent_question_review.py)，从当前 report audit 的真实原题建立独立检查，优先于历史 Reflector finding；反思无 finding 或回退不会因此跳过最终逐题审核。模型核对实际可见正文和所选支持，资格不足只能诊断，不能解除阻断。完全缺少 audit 时依赖现有报告缺失阻断，零候选收据为 `not_requested`，不声称模型已审。
 
-每次最多两批，每批最多10项与6000 UTF-8 bytes；完整题目上下文装不下则整项保留未送，不裁前提。合法返回同行缓存；失败、超时与未送项可在后续审核调用中按剩余预算续审，不是无界或后台自动重试。每项最多两次实际请求，provider 内置重试及备用 provider 共用本次剩余额度；`max_request_attempts` 经实际调用预算约束，不修改共享 settings，默认 None 保留其他入口的旧行为。现有 `final_qa:run` 预留及全局24调用／80000 token继续生效。
+实验模式 `independent_questions_v2` 每次最多六批，每批最多10项与6000 UTF-8 bytes；完整题目上下文装不下则整项保留未送，不裁前提。未送项优先于已付费失败项，同类先审原题，再审历史问题。合法同行缓存；失败、超时与未送项可在后续审核调用中按剩余预算续审，不是无界或后台自动重试。每项最多两次实际请求，provider 内置重试及备用 provider 共用本次剩余额度；`max_request_attempts` 经实际调用预算约束，不修改共享 settings，默认 None 保留其他入口的旧行为。
+
+`expected_claim_ids` 显式给出整题 answer 的回显身份，`task_support_claim_ids` 另列同题局部支持；审核返回仍须严格等于整题 IDs，包括空列表，不能用局部任务 ID 替代或把局部支持升级为整题完成。新运行最终QA预留覆盖完整 system＋6000B user＋256余量＋1600输出（当前11000）；最终回答12000、全局24调用／80000 token不变。调用预留按真实问题数有界安排且不超全局；旧明确持久化预留保持。可继续派送的待审项保留阶段，新 basis 只重开阶段、不清零旧用量，完成或已无可继续项时释放。
 
 `planned_issue_ids`、`sent_issue_ids`、`valid_review_issue_ids`、`unsent_issue_ids` 与 `model_unreviewed_issue_ids` 分开；`completed` 要求已有候选全部返回合法审核，不表示报告已通过。历史 `timeout_issue_ids` 与仍未完成的 `unresolved_timeout_issue_ids` 分开：真实 adapter 的 `llm_timeout_attempts` 不被后续错误或成功覆盖。无 usage 按完整输入字节上界加输出预留保守记账；缓存不伪造新 transport，checkpoint恢复保留已扣账。异常链只保留新建脱敏 cause 和超时类型，不能借诊断回显凭证。
 
 新增 [`question_reconciliation.py`](../backend/packages/agents/qa/question_reconciliation.py)：在最终 QA 对可明确映射的历史 Reflector 问题复核当前正文和精确支持，最多一次1600输出调用、14KB输入；保留原反思，记录 `keep/superseded/current_limitation` 和快照/Writer/支持摘要收据。真实证据错误存在时保守保留旧问题；来源、矩阵、混合缺口或无法映射的问题不凭回答状态消除。预算/模型失败保留问题，不能将复核入口已接线当作旧问题已解决。
 
-实验逐题路径另将无解除资格的问题作为 `diagnostic_only` 送最终QA，包括有证据阻断或混有可解除候选的情况；模型意见不能消除原阻断。每题只带该题最终答案的主张，以及经完整任务凭据重放的同题支持；不把其他题的全部可见观察重复塞入窗口。同题 finding 可共享完整上下文，每批6000 bytes、最多两批；没有送到模型、没有返回合法审核或失败的项保持keep，分别记录。返回其他批次的 finding ID 会使当前批响应失效，正常批仍保留；相同依据的收据可复用，缓存不计新 transport。
+实验逐题路径另将无解除资格的问题作为 `diagnostic_only` 送最终QA，包括有证据阻断或混有可解除候选的情况；模型意见不能消除原阻断。每题只带该题最终答案的主张，以及经完整任务凭据重放的同题支持；不把其他题的全部可见观察重复塞入窗口。同题 finding 可共享完整上下文，每批6000 bytes、每次最多六批；没有送到模型、没有返回合法审核或失败的项保持keep，分别记录。返回其他批次的 finding ID 会使当前批响应失效，正常批仍保留；相同依据的收据可复用，缓存不计新 transport。
 
 共同诊断函数 [`question_state.py`](../backend/packages/research/question_state.py) 将“原文未送达”“证据待核实”“已提供来源上下文”“已审核局部答案”和“整题状态”分开记录，进入 Reflector、Writer 与 QA。来源可用不代表结论成立，局部答案也不代表整题完成。当前仅统一状态表示与交付依据，真实语义判断仍有不一致，未宣称全部修复。
 

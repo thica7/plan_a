@@ -207,7 +207,8 @@ def final_review_batches(candidates, basis_hash, *, max_bytes, max_batches):
         for row in rows:
             context = {k: v for k, v in row.items() if k in {
                 'question_id', 'question', 'answer', 'claims', 'task_answers', 'delivery_state',
-                'visible_answer', 'publication_matches', 'support_verified'}}
+                'visible_answer', 'publication_matches', 'support_verified',
+                'task_support_claim_ids'}}
             cid = hashlib.sha256(canonical_json(context).encode()).hexdigest()[:20]
             contexts[cid] = context
             findings.append({**{k: v for k, v in row.items() if k not in context},

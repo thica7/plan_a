@@ -32,7 +32,11 @@ PLAN_SYSTEM = (
 )
 
 GENERATE_SYSTEM = (
-    "Answer only the supplied task_ids using the actual support catalog. One independent predicate "
+    "Answer only the supplied task_ids using EACH task's task_support_selections. "
+    "Write from only that task's complete selected supports and use exactly its support_refs. "
+    "The canonical evidence_view and question_evidence_packets are restrictive replay context; "
+    "unselected parent or sibling text cannot add an explanation, next step or predicate. "
+    "Selection itself does not prove support. One independent predicate "
     "per task, one atom maximum; preserve the entire role, plan, actor, object, prerequisites, "
     "AND/OR alternatives and exceptions. Never append background or a sibling predicate. "
     "Each original question is request context, not evidence. "
@@ -305,7 +309,15 @@ async def execute_question_tasks(
         parse_json,
     )
     from packages.agents.writer.question_repair import REPAIR_REVIEW_SYSTEM, repair_review_batches
-    from packages.agents.writer.readable_support import dispatched_span_candidates
+    from packages.agents.writer.readable_support import (
+        dispatched_span_candidates,
+        dispatched_support_choices,
+    )
+    from packages.agents.writer.task_support_selection import (
+        SELECT_SYSTEM,
+        parse_support_selections,
+        selected_generation_context,
+    )
     from packages.i18n.language import language_instruction
     from packages.research.evidence.report_claims import audit_report_claims, claim_rule_reasons
     from packages.research.question_delivery import _expand_text_refs
@@ -328,6 +340,7 @@ async def execute_question_tasks(
         tasks = fallback_tasks(questions, scope)
         planning = "bounded_request_fallback"
     claims, reviews, sizes, dispatches, sent_ids = [], [], [], [], set()
+    support_selections = []
     upstream = service._dimension_upstream_context(record, view)
     dependencies = service._validate_dimension_upstream(record, dict(selected, **upstream))
     from packages.agents.writer.request_clarification import server_clarification_answer
@@ -366,19 +379,73 @@ async def execute_question_tasks(
         dispatched = _expand_text_refs(parse_json(prompt))
         sent = {row["id"] for row in dispatched["evidence_view"]["facts"]}
         catalog = _support_ref_catalog(dispatched, view.facts, sent)
-        if len(prompt.encode()) > min(14000, use.max_bytes) or not catalog:
+        if len(("\nJSON:\n" + prompt).encode()) > min(14000, use.max_bytes) or not catalog:
             for task in batch:
                 task.update(state="insufficient_evidence", reason="task_evidence_unavailable")
             continue
+        choices = dispatched_support_choices(dispatched, view.facts, sent)
+        selection_start = len(service._evidence_live_record(record).detail.trace_spans)
+        response, gaps = await service._dimension_call_with_gaps(
+            record, gaps, agent="writer", subagent=scope,
+            name="dimension_task_support_selection", system=SELECT_SYSTEM,
+            user="\nJSON:\n" + prompt, max_output_tokens=600, max_request_attempts=1,
+        )
+        service._validate_evidence_use(record, use)
+        service._validate_dimension_upstream(record, dict(selected, **upstream))
+        sizes.append(len(prompt.encode()))
+        selection_spans = [
+            span
+            for span in service._evidence_live_record(record).detail.trace_spans[selection_start:]
+            if span.name == "dimension_task_support_selection" and span.kind == "llm"
+            and span.agent == "writer" and span.subagent == scope and span.status == "ok"
+            and type(span.metadata.get("llm_transport_attempts")) is int
+            and span.metadata["llm_transport_attempts"] > 0
+            and span.full_input == SELECT_SYSTEM + "\n\n\nJSON:\n" + prompt
+            and isinstance(response, str) and span.full_output == response
+        ]
+        verified = len(selection_spans) == 1
+        try:
+            if not verified:
+                raise ValueError("task support selection transport unavailable")
+            selections, selection_failures = parse_support_selections(response, batch, choices)
+        except (ValueError, TypeError, AttributeError):
+            selections = {task["task_id"]: dict(state="deferred",
+                reason="task_support_selection_unavailable") for task in batch}
+            selection_failures = ["task_support_selection_unavailable"]
+        support_selections.append(dict(
+            attempt=attempt, task_ids=[task["task_id"] for task in batch], fact_ids=sorted(sent),
+            transport_verified=verified, results=selections, failures=selection_failures,
+            **(dict(span_id=selection_spans[0].id,
+                full_input_sha256=hashlib.sha256(selection_spans[0].full_input.encode()).hexdigest(),
+                full_output_sha256=hashlib.sha256(selection_spans[0].full_output.encode()).hexdigest())
+                if verified else {}),
+        ))
+        for task in batch:
+            selection = selections[task["task_id"]]
+            if selection["state"] != "selected":
+                task.update(selection)
+        batch = [task for task in batch if selections[task["task_id"]]["state"] == "selected"]
+        if not batch:
+            continue
+        payload = selected_generation_context(dispatched, selections, choices)
+        prompt = compact_prompt_json(payload)
+        if len(("\nJSON:\n" + prompt).encode()) > min(14000, use.max_bytes):
+            for task in batch:
+                task.update(
+                    state="deferred", reason="task_selected_support_context_budget_exceeded"
+                )
+            continue
         start = len(service._evidence_live_record(record).detail.trace_spans)
+        generation_system = GENERATE_SYSTEM + language_instruction(record.detail.output_language)
+        generation_user = "\nJSON:\n" + prompt
         response, gaps = await service._dimension_call_with_gaps(
             record,
             gaps,
             agent="writer",
             subagent=scope,
             name="dimension_task_generation",
-            system=GENERATE_SYSTEM + language_instruction(record.detail.output_language),
-            user="\nJSON:\n" + prompt,
+            system=generation_system,
+            user=generation_user,
         )
         service._validate_evidence_use(record, use)
         service._validate_dimension_upstream(record, dict(selected, **upstream))
@@ -387,22 +454,30 @@ async def execute_question_tasks(
             s
             for s in service._evidence_live_record(record).detail.trace_spans[start:]
             if s.name == "dimension_task_generation"
-            and s.kind == "llm"
-            and s.status == "ok"
-            and s.metadata.get("llm_transport_attempts", 0) > 0
         ]
-        if len(spans) == 1:
-            span = spans[0]
-            sent_ids.update(sent)
-            dispatches.append(
-                dict(
-                    span_id=span.id,
-                    full_input_sha256=hashlib.sha256(span.full_input.encode()).hexdigest(),
-                    task_ids=[t["task_id"] for t in batch],
-                    fact_ids=sorted(sent),
-                    attempt=attempt,
-                )
+        if not (
+            len(spans) == 1
+            and spans[0].kind == "llm" and spans[0].status == "ok"
+            and spans[0].agent == "writer" and spans[0].subagent == scope
+            and type(spans[0].metadata.get("llm_transport_attempts")) is int
+            and spans[0].metadata["llm_transport_attempts"] > 0
+            and spans[0].full_input == generation_system + "\n\n" + generation_user
+            and isinstance(response, str) and spans[0].full_output == response
+        ):
+            for task in batch:
+                task.update(state="deferred", reason="task_generation_transport_unverified")
+            continue
+        span = spans[0]
+        sent_ids.update(sent)
+        dispatches.append(
+            dict(
+                span_id=span.id,
+                full_input_sha256=hashlib.sha256(span.full_input.encode()).hexdigest(),
+                task_ids=[t["task_id"] for t in batch],
+                fact_ids=sorted(sent),
+                attempt=attempt,
             )
+        )
         try:
             results = parse_results(response, batch)
         except (ValueError, TypeError, AttributeError):
@@ -422,12 +497,16 @@ async def execute_question_tasks(
             if task["state"] != "generated":
                 continue
             try:
+                chosen = selections[task["task_id"]]["support_refs"]
+                if (len(result["atom"]["support_refs"]) != len(chosen)
+                        or set(result["atom"]["support_refs"]) != set(chosen)):
+                    raise ValueError("task_selected_support_mismatch")
                 task_reasons = task_atom_reasons(
                     task, result["atom"]["text"], kind=result["atom"]["kind"]
                 )
                 if task_reasons:
                     raise ValueError(",".join(task_reasons))
-                draft = _expand_support_atom(result["atom"], catalog)
+                draft = _expand_support_atom(result["atom"], {ref: catalog[ref] for ref in chosen})
                 parsed, failures = parse_claim_drafts(
                     encoded(dict(claims=[draft])),
                     candidates,
@@ -637,6 +716,7 @@ async def execute_question_tasks(
         planning=planning,
         tasks=tasks,
         dispatches=dispatches,
+        support_selections=support_selections,
     )
     service._trace_local_tool(
         record,

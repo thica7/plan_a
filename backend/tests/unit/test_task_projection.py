@@ -267,6 +267,10 @@ async def test_real_writer_draft_projects_reviewed_task_before_whole_question_re
                     for part in parts
                 ]
             )
+        elif name == "dimension_task_support_selection":
+            ref = payload["evidence_view"]["facts"][0]["source_span_candidates"][0]["support_ref"]
+            result = dict(selections=[dict(task_id=t["task_id"], status="selected",
+                binding_kind="span", support_refs=[ref]) for t in payload["tasks"]])
         elif name == "dimension_task_generation":
             row = payload["evidence_view"]["facts"][0]
             result = dict(
@@ -310,7 +314,7 @@ async def test_real_writer_draft_projects_reviewed_task_before_whole_question_re
             name=name,
             status="ok",
             started=time.perf_counter(),
-            input_text=kwargs["system"] + kwargs["user"],
+            input_text=kwargs["system"] + "\n\n" + kwargs["user"],
             output_text=response,
             metadata={"llm_transport_attempts": 1},
         )

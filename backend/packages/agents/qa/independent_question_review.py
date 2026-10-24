@@ -30,6 +30,8 @@ from packages.schema.decision_brief import safe_decision_brief_text
 from packages.schema.models import QCIssue, RedoScope
 
 MAX_ATTEMPTS_PER_FINDING = 2
+MAX_REVIEW_BATCHES = 6
+PROTOCOL = "independent_questions_v2"
 INDEPENDENT_SYSTEM = SYSTEM + (
     " Independently audit every independent_question_check against EVERY request in its complete "
     "original question, whether or not a historical objection exists. The visible_answer is the "
@@ -39,7 +41,15 @@ INDEPENDENT_SYSTEM = SYSTEM + (
     "answered; "
     "otherwise use keep and enumerate remaining_gaps. Diagnostic checks can never approve a "
     "question or clear a historical issue. Historical findings require their original full "
-    "objection to be resolved as well. Echo only IDs belonging to this batch."
+    "objection to be resolved as well. Echo only IDs belonging to this batch. "
+    "For each finding, copy expected_claim_ids EXACTLY into claim_ids, including an empty []. "
+    "These are the whole answer's echo identities, not a selection task. "
+    "task_support_claim_ids identify visible local support to inspect; never substitute them "
+    "for expected_claim_ids or promote their local conclusions to a complete answer."
+)
+MAX_REVIEW_OUTPUT_TOKENS = 1600
+FINAL_QA_REQUEST_RESERVE = (
+    len(INDEPENDENT_SYSTEM.encode()) + TASK_REVIEW_BYTES + 256 + MAX_REVIEW_OUTPUT_TOKENS + 2
 )
 
 
@@ -104,6 +114,7 @@ def _question_context(service, record, snapshot, question, audit, *, verified):
             {k: v for k, v in row.items() if k not in {"claim", "question", "question_id"}}
             for row in tasks
         ],
+        task_support_claim_ids=sorted({row["claim_id"] for row in tasks}),
         publication_matches=matches,
         support_verified=bool(verified and support is not None),
     )
@@ -158,7 +169,7 @@ def _cache(detail, basis_hash, candidates):
         return {}, {}, set(), set(), []
     try:
         receipt = json.loads(cached.full_output)
-        if receipt.get("mode") != "independent_questions_v1":
+        if receipt.get("mode") != PROTOCOL:
             return {}, {}, set(), set(), []
         attempts = {
             key: max(0, int(value))
@@ -213,7 +224,7 @@ def _question_issue(candidate, review, basis_hash, pending_reason):
 
 
 async def review_current_questions(service, record, issues, *, evidence_issues):
-    """Two complete batches per pass; a finding cannot start after two attempts."""
+    """Advance bounded complete windows; paid retries follow unseen findings."""
     detail = record.detail
     snapshot = service._final_qa_snapshot(record)
     dependency_hash = _basis(service, record, snapshot)
@@ -267,11 +278,10 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
             )
         )
     for candidate in candidates:
+        candidate["expected_claim_ids"] = list(candidate["answer"]["claim_ids"])
         candidate["support_digest"] = service._evidence_artifact_hash(candidate)
     basis_hash = service._evidence_artifact_hash(
-        dict(
-            dependencies=dependency_hash, protocol="independent_questions_v1", candidates=candidates
-        )
+        dict(dependencies=dependency_hash, protocol=PROTOCOL, candidates=candidates)
     )
     by_id = {row["issue_id"]: row for row in candidates}
     reviews, attempts, sent, timeouts, batch_receipts = _cache(detail, basis_hash, by_id)
@@ -281,9 +291,19 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
         if row["issue_id"] not in reviews
         and attempts.get(row["issue_id"], 0) < MAX_ATTEMPTS_PER_FINDING
     ]
-    batches, omitted = final_review_batches(
-        pending, basis_hash, max_bytes=TASK_REVIEW_BYTES, max_batches=2
+    pending.sort(
+        key=lambda row: (
+            attempts.get(row["issue_id"], 0) > 0,
+            not row.get("independent_question_check", False),
+        )
     )
+    batches, omitted = final_review_batches(
+        pending, basis_hash, max_bytes=TASK_REVIEW_BYTES, max_batches=MAX_REVIEW_BATCHES
+    )
+    if batches:
+        budget = service._run_llm_budget(record)
+        budget.delivery_finished.discard("final_qa:run")
+        service._checkpoint_llm_budget(record, budget)
     cancellation = None
     for batch in batches:
         ids = {row["issue_id"] for row in batch["findings"]}
@@ -310,7 +330,7 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
                 name="final_question_reconciliation",
                 system=INDEPENDENT_SYSTEM,
                 user=user,
-                max_output_tokens=1600,
+                max_output_tokens=MAX_REVIEW_OUTPUT_TOKENS,
                 max_request_attempts=min(
                     MAX_ATTEMPTS_PER_FINDING - attempts.get(key, 0) for key in ids
                 ),
@@ -404,7 +424,7 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
             reason = (
                 "Complete question context exceeded the bounded final QA byte limit."
                 if single_omitted
-                else "Complete question context is pending beyond the two-batch review window."
+                else "Complete question context is pending beyond the bounded review window."
             )
         elif attempts.get(key, 0) >= MAX_ATTEMPTS_PER_FINDING:
             reason = "Final QA attempt limit reached; review remains incomplete."
@@ -424,6 +444,14 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
         if candidate and _affirmative(review, candidate):
             decisions[issue.id] = review
     question_candidates = [row for row in candidates if row.get("independent_question_check")]
+    resumable = [
+        key
+        for key in unresolved
+        if attempts.get(key, 0) < MAX_ATTEMPTS_PER_FINDING
+        and not final_review_batches(
+            [by_id[key]], basis_hash, max_bytes=TASK_REVIEW_BYTES, max_batches=1
+        )[1]
+    ]
     passed = {
         row["issue_id"]
         for row in question_candidates
@@ -431,7 +459,7 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
     }
     receipt = dict(
         version=1,
-        mode="independent_questions_v1",
+        mode=PROTOCOL,
         basis_hash=basis_hash,
         snapshot_id=snapshot.id,
         snapshot_hash=snapshot.content_hash,
@@ -463,6 +491,8 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
         if sent
         else "not_requested",
         planned_batches=len(batches),
+        review_batch_limit=MAX_REVIEW_BATCHES,
+        resumable_issue_ids=resumable,
         planned_issue_ids=planned,
         sent_issue_ids=[key for key in planned if key in sent],
         valid_review_issue_ids=[key for key in planned if key in valid],
@@ -543,7 +573,8 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
                 unreviewed_reasons.get(candidate["issue_id"], "最终逐题审核尚未取得合法完整返回。"),
             )
         )
-    service._finish_delivery_phase(record, "final_qa", None)
+    if not resumable:
+        service._finish_delivery_phase(record, "final_qa", None)
     if cancellation:
         raise cancellation
     return result

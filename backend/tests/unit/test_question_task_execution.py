@@ -293,6 +293,7 @@ def test_each_resource_action_keeps_its_own_source_rule_identity():
 async def test_real_writer_uses_task_ids_then_one_independent_final_review(
     monkeypatch, failed_task
 ):
+    import time
     from datetime import UTC, datetime
 
     from claim_review_fixture import expand_prompt_payload, supported_review
@@ -329,6 +330,10 @@ async def test_real_writer_uses_task_ids_then_one_independent_final_review(
                     ]
                 )
             )
+        if name == "dimension_task_support_selection":
+            ref = payload["evidence_view"]["facts"][0]["source_span_candidates"][0]["support_ref"]
+            return json.dumps(dict(selections=[dict(task_id=t["task_id"], status="selected",
+                binding_kind="span", support_refs=[ref]) for t in payload["tasks"]]))
         if name == "dimension_task_generation":
             assert payload["questions"][0]["question"] == question
             if payload.get("task_repair"):
@@ -380,7 +385,15 @@ async def test_real_writer_uses_task_ids_then_one_independent_final_review(
         # an automatically answered original question.
         return None
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    async def traced_model(record, **kwargs):
+        response = await model(record, **kwargs)
+        service._append_trace_span(service._evidence_live_record(record), kind="llm",
+            agent=kwargs["agent"], subagent=kwargs["subagent"], name=kwargs["name"], status="ok",
+            started=time.perf_counter(), input_text=kwargs["system"] + "\n\n" + kwargs["user"],
+            output_text=response or "", metadata={"llm_transport_attempts": 1})
+        return response
+
+    monkeypatch.setattr(service, "_trace_llm_text", traced_model)
     await service._real_writer_step(record)
     audit = detail.report_dimension_audits[0]
     assert sum(a.status == "supported" for a in audit.claims) == (
@@ -388,9 +401,10 @@ async def test_real_writer_uses_task_ids_then_one_independent_final_review(
     ), [s.full_output for s in detail.trace_spans if s.name == "question_task_delivery"]
     assert calls == [
         "dimension_task_plan",
+        "dimension_task_support_selection",
         "dimension_task_generation",
         "dimension_task_review",
-        *(["dimension_task_generation"] if failed_task else []),
+        *(["dimension_task_support_selection", "dimension_task_generation"] if failed_task else []),
         "dimension_answer_review",
     ]
     assert audit.answer_coverage[0].status == "unverified"

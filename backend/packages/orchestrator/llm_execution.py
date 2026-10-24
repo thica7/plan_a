@@ -111,6 +111,15 @@ class LLMExecutionMixin:
             adding_phases = any(phase not in budget.delivery_reserves for phase in phases)
             persisted_phases = {phase for phase in phases
                                 if task_segments and f'delivery_limit:{phase}' in checkpoint}
+            final_review_calls = 1
+            if task_segments:
+                from packages.research.question_scope import research_questions
+                # Protect question checks plus one historical window. Extra
+                # dispatches still use only the unchanged global allowance.
+                final_review_calls = min(6, 1 + sum(
+                    len(research_questions(record.detail, scope.rsplit('/', 1)[0], 'feature'))
+                    for scope in task_segments
+                ))
             for phase in phases:
                 agent = phase.split(':', 1)[0]
                 count = 1 if agent in {'comparator', 'reflector'} or (agent == 'writer' and not dimension_mode) else max(1, len(segments))
@@ -119,8 +128,15 @@ class LLMExecutionMixin:
                     desired = min(TASK_ANSWER_RESERVE, int(budget.max_tokens * .15)) if budget.max_tokens else TASK_ANSWER_RESERVE
                     desired //= len(task_segments)
                 elif agent == 'final_qa':
-                    # 6KB complete-finding window + system/framing + 1600 output.
-                    desired = min(10000, int(budget.max_tokens * .125)) if budget.max_tokens else 10000
+                    from packages.agents.qa.independent_question_review import (
+                        FINAL_QA_REQUEST_RESERVE,
+                    )
+
+                    # Protect the real complete system/user/output envelope.
+                    desired = (
+                        min(FINAL_QA_REQUEST_RESERVE, int(budget.max_tokens * .15))
+                        if budget.max_tokens else FINAL_QA_REQUEST_RESERVE
+                    )
                 else:
                     desired = min(32000, int(budget.max_tokens * fractions[agent] / count)) if budget.max_tokens else 32000
                 if phase in budget.delivery_reserves:
@@ -133,12 +149,26 @@ class LLMExecutionMixin:
                 # A legacy checkpoint cannot gain the task profile's new
                 # call floors; explicitly persisted floors survive rollback.
                 default_calls = budget.delivery_calls[phase] if task_segments and restoring and checkpoint else 1
+                if agent == 'final_qa' and not (task_segments and restoring and checkpoint):
+                    default_calls = final_review_calls
                 budget.delivery_call_reserves[phase] = int(checkpoint.get(
                     f'delivery_call_limit:{phase}', default_calls))
                 if checkpoint.get(f'delivery_finished:{phase}'):
                     budget.delivery_finished.add(phase)
             for phase in budget.delivery_reserves.keys() - set(phases):
                 budget.finish_delivery(phase)
+            if task_segments and adding_phases and 'final_qa:run' not in persisted_phases:
+                phase = 'final_qa:run'
+                other_calls = sum(
+                    max(0, amount - budget.delivery_calls.get(key, 0))
+                    for key, amount in budget.delivery_call_reserves.items()
+                    if key != phase and key not in budget.delivery_finished
+                )
+                available_calls = max(0, budget.max_calls - budget.calls - other_calls)
+                budget.delivery_call_reserves[phase] = min(
+                    budget.delivery_call_reserves[phase],
+                    budget.delivery_calls.get(phase, 0) + available_calls,
+                )
             # Legacy checkpoints did not preserve phase allowances. Recovery
             # must protect only what is still available, not recreate a full
             # allowance on top of charges that already consumed it.

@@ -7,6 +7,7 @@ import httpx
 import pytest
 from test_execution_limits import _service
 
+from packages.agents.qa.independent_question_review import FINAL_QA_REQUEST_RESERVE
 from packages.config import Settings, get_settings
 from packages.llm.errors import LLMExecutionLimitError
 from packages.llm.execution_budget import LLMCallExecution, RunLLMBudget
@@ -36,11 +37,13 @@ async def test_late_task_can_run_while_bounded_answer_and_final_qa_remain_protec
     for phase in list(budget.delivery_reserves):
         if phase.startswith(("collector:", "analyst:", "comparator:", "reflector:")):
             budget.finish_delivery(phase)
-    budget.tokens_used = 45000
+    budget.tokens_used = (
+        80000 - 11000 - 1600 - budget.protected_tokens("writer:Example Suite/feature")
+    )
     call = LLMCallExecution(budget, False, phase="writer:Example Suite/feature",
                            input_tokens=11000, max_output_tokens=1600)
     call.reserve()
-    assert budget.protected_tokens(call.phase) >= 22000
+    assert budget.protected_tokens(call.phase) == 12000 + FINAL_QA_REQUEST_RESERVE
     assert budget.tokens_used + budget.tokens_reserved + budget.protected_tokens(call.phase) <= 80000
 
 
@@ -66,9 +69,9 @@ async def test_task_profile_keeps_separate_final_answer_and_run_review_floors():
     service, record = await task_service()
     budget = service._run_llm_budget(record)
     assert budget.delivery_reserves.get("answer:Example Suite/feature", 0) == 12000
-    assert budget.delivery_reserves.get("final_qa:run", 0) == 10000
+    assert budget.delivery_reserves.get("final_qa:run", 0) == FINAL_QA_REQUEST_RESERVE
     assert budget.delivery_call_reserves["answer:Example Suite/feature"] == 1
-    assert budget.delivery_call_reserves["final_qa:run"] == 1
+    assert budget.delivery_call_reserves["final_qa:run"] == 2
     assert sum(budget.delivery_reserves.values()) + budget.stage_headroom < 80000
     assert budget.max_calls == 24 and budget.max_tokens == 80000
 
@@ -81,7 +84,7 @@ async def test_task_generation_and_review_share_headroom_but_keep_call_floors():
         assert budget.delivery_reserves[phase] == 0
         assert budget.delivery_call_reserves[phase] == 1
     assert budget.delivery_reserves["answer:Example Suite/feature"] == 12000
-    assert budget.delivery_reserves["final_qa:run"] == 10000
+    assert budget.delivery_reserves["final_qa:run"] == FINAL_QA_REQUEST_RESERVE
 
 
 @pytest.mark.asyncio
@@ -117,7 +120,7 @@ async def test_collector_real_request_envelopes_enter_without_spending_final_flo
     assert len(requests) == 2
     assert budget.tokens_used == 31301 and budget.tokens_reserved == 0
     assert budget.delivery_reserves["answer:Example Suite/feature"] == 12000
-    assert budget.delivery_reserves["final_qa:run"] == 10000
+    assert budget.delivery_reserves["final_qa:run"] == FINAL_QA_REQUEST_RESERVE
 
 
 @pytest.mark.asyncio
@@ -152,9 +155,9 @@ async def test_reflector_twenty_k_envelope_enters_after_twenty_five_k_charged():
     assert len(requests) == 1
     assert record.detail.trace_spans[-1].metadata["llm_reserved_input_tokens"] == 19447
     assert budget.tokens_used == 46047 and budget.tokens_reserved == 0
-    assert budget.protected_tokens("reflector:run") == 22000
+    assert budget.protected_tokens("reflector:run") == 12000 + FINAL_QA_REQUEST_RESERVE
     assert budget.delivery_reserves["answer:Example Suite/feature"] == 12000
-    assert budget.delivery_reserves["final_qa:run"] == 10000
+    assert budget.delivery_reserves["final_qa:run"] == FINAL_QA_REQUEST_RESERVE
 
 
 @pytest.mark.asyncio
@@ -168,7 +171,8 @@ async def test_real_admission_blocks_task_spending_and_admits_complete_final_pay
             budget.finish_delivery(phase)
     # An anonymous task replay consumes all nonfinal token headroom.
     prior = LLMCallExecution(
-        budget, False, input_tokens=58000, phase="writer:Example Suite/feature"
+        budget, False, input_tokens=80000 - 12000 - FINAL_QA_REQUEST_RESERVE,
+        phase="writer:Example Suite/feature"
     )
     prior.reserve()
     prior.settle()
@@ -375,7 +379,8 @@ async def test_pending_unknown_task_charge_cannot_consume_final_floors():
         if not phase.startswith(("answer:", "final_qa:")):
             budget.finish_delivery(phase)
     first = LLMCallExecution(
-        budget, False, input_tokens=58000, phase="writer:Example Suite/feature"
+        budget, False, input_tokens=80000 - 12000 - FINAL_QA_REQUEST_RESERVE,
+        phase="writer:Example Suite/feature"
     )
     first.reserve()
     blocked = LLMCallExecution(budget, False, input_tokens=1, phase="writer:Example Suite/feature")
@@ -385,8 +390,10 @@ async def test_pending_unknown_task_charge_cannot_consume_final_floors():
     first.settle()
     with pytest.raises(LLMExecutionLimitError, match="reserved_for_delivery"):
         await waiting
-    assert budget.tokens_used == 58000 and budget.calls == 1
-    assert budget.protected_tokens("writer:Example Suite/feature") == 22000
+    assert budget.tokens_used == 80000 - 12000 - FINAL_QA_REQUEST_RESERVE and budget.calls == 1
+    assert (
+        budget.protected_tokens("writer:Example Suite/feature") == 12000 + FINAL_QA_REQUEST_RESERVE
+    )
 
 
 @pytest.mark.asyncio
@@ -449,7 +456,10 @@ async def test_new_scope_can_only_reserve_capacity_after_persisted_final_floors(
     for phase in list(budget.delivery_reserves):
         if not phase.startswith(("answer:", "final_qa:")):
             budget.finish_delivery(phase)
-    task = LLMCallExecution(budget, False, phase="writer:Example Suite/feature", input_tokens=50000)
+    prior_tokens = 80000 - 20000 - FINAL_QA_REQUEST_RESERVE
+    task = LLMCallExecution(
+        budget, False, phase="writer:Example Suite/feature", input_tokens=prior_tokens
+    )
     task.checkpoint = lambda: service._checkpoint_llm_budget(record, budget)
     task.reserve()
     task.settle()
@@ -458,11 +468,11 @@ async def test_new_scope_can_only_reserve_capacity_after_persisted_final_floors(
         record.llm_budget = None
     expanded = service._run_llm_budget(record)
     assert expanded.delivery_reserves["answer:Example Suite/feature"] == 20000
-    assert expanded.delivery_reserves["final_qa:run"] == 10000
+    assert expanded.delivery_reserves["final_qa:run"] == FINAL_QA_REQUEST_RESERVE
     remaining = sum(
         max(0, amount - expanded.delivery_charged.get(phase, 0))
         for phase, amount in expanded.delivery_reserves.items()
         if phase not in expanded.delivery_finished
     )
-    assert remaining == 30000
-    assert expanded.tokens_used == 50000 and expanded.max_tokens == 80000
+    assert remaining == 20000 + FINAL_QA_REQUEST_RESERVE
+    assert expanded.tokens_used == prior_tokens and expanded.max_tokens == 80000

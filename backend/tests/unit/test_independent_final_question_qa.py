@@ -329,10 +329,10 @@ async def test_all_current_questions_keep_fixed_plan_and_resume_unsent_window(mo
     first = await reconcile_question_findings(service, record, [], evidence_issues=[])
     output = receipt(detail)
     assert len(output["planned_issue_ids"]) == 3
-    assert len(output["valid_review_issue_ids"]) == 2
-    assert len(output["unsent_issue_ids"]) == 1
+    assert len(output["valid_review_issue_ids"]) == 3
+    assert len(output["unsent_issue_ids"]) == 0
     assert len(first) == 3  # The edited, unreplayed report remains diagnostic only.
-    assert output["model_execution"] == "partial"
+    assert output["model_execution"] == "completed"
     assert len(await reconcile_question_findings(service, record, [], evidence_issues=[])) == 3
     assert len(calls) == 3
     assert receipt(detail)["model_execution"] == "completed"
@@ -534,6 +534,10 @@ async def test_real_adapter_retains_any_timeout_across_later_failure_or_success(
             budget.finish_delivery(phase)
     if outcome == "budget_rejected":
         budget.calls = 23
+        # All but one of the protected final-QA calls already happened.
+        budget.delivery_calls["final_qa:run"] = (
+            budget.delivery_call_reserves["final_qa:run"] - 1
+        )
     monkeypatch.setattr(
         service, "_trace_llm_text", LLMExecutionMixin._trace_llm_text.__get__(service)
     )
