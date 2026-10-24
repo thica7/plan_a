@@ -270,6 +270,7 @@ class LLMExecutionMixin:
         is_repair: bool = False,
         timeout_seconds: float | None = None,
         max_output_tokens: int | None = None,
+        max_request_attempts: int | None = None,
     ) -> str:
         return await self._trace_budgeted_llm(
             record,
@@ -283,6 +284,7 @@ class LLMExecutionMixin:
             is_repair=is_repair,
             timeout_seconds=timeout_seconds,
             max_output_tokens=max_output_tokens,
+            max_request_attempts=max_request_attempts,
         )
 
     async def _trace_budgeted_llm(
@@ -299,6 +301,7 @@ class LLMExecutionMixin:
         is_repair,
         timeout_seconds,
         max_output_tokens=None,
+        max_request_attempts=None,
     ):
         record = self._evidence_live_record(record)
         started = time.perf_counter()
@@ -316,6 +319,7 @@ class LLMExecutionMixin:
             # framing/schema instructions reserve additional room.
             input_tokens=len(input_text.encode("utf-8")) + 256,
             max_output_tokens=min(self._settings.llm_max_output_tokens or 4096, max_output_tokens) if max_output_tokens else self._settings.llm_max_output_tokens or 4096,
+            max_attempts=max_request_attempts,
         )
         execution.checkpoint = lambda: self._checkpoint_llm_budget(record, execution.budget)
         queue_wait_ms = 0
@@ -379,6 +383,8 @@ class LLMExecutionMixin:
             if isinstance(exc, LLMExecutionLimitError):
                 extra["degradation_reason"] = str(exc)
             elif isinstance(exc, TimeoutError):
+                if execution.transport_attempts > execution.timeout_attempts:
+                    execution.timeout_attempts += 1
                 extra["degradation_reason"] = "llm_timeout"
                 extra["timeout_seconds"] = timeout_seconds
             raise

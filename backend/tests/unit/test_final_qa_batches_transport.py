@@ -14,7 +14,7 @@ from packages.orchestrator.llm_execution import LLMExecutionMixin
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("second_batch", ["valid", "foreign", "unavailable"])
-async def test_two_batches_use_real_admission_and_cache_without_new_transport(
+async def test_two_batches_use_real_admission_and_bounded_partial_cache_resume(
     monkeypatch, second_batch
 ):
     detail, service, record = await scope_case(monkeypatch)
@@ -53,6 +53,8 @@ async def test_two_batches_use_real_admission_and_cache_without_new_transport(
     ]
     requests = []
     first_response = None
+    question_id = detail.report_dimension_audits[0].answer_coverage[0].question_id
+    independent_id = f"final-question-{question_id}"
 
     async def post(url, payload, headers):
         nonlocal first_response
@@ -60,7 +62,8 @@ async def test_two_batches_use_real_admission_and_cache_without_new_transport(
         batch = json.loads(user.split("\nJSON:\n", 1)[1])
         requests.append(batch)
         assert len(user.encode()) <= 6000
-        assert [row["issue_id"] for row in batch["findings"]] == [f"issue-{len(requests) - 1}"]
+        assert [row["issue_id"] for row in batch["findings"]] == (
+            [independent_id, "issue-0"] if len(requests) == 1 else ["issue-1"])
         response = reviewed(batch)
         if len(requests) == 1:
             first_response = response
@@ -100,15 +103,25 @@ async def test_two_batches_use_real_admission_and_cache_without_new_transport(
     assert receipt["planned_batches"] == 2
     assert receipt["unsent_issue_ids"] == []
     assert [row["issue_id"] for row in receipt["model_review"]["reviews"]] == (
-        ["issue-0", "issue-1"] if second_batch == "valid" else ["issue-0"]
+        [independent_id, "issue-0", "issue-1"]
+        if second_batch == "valid" else [independent_id, "issue-0"]
     )
+    assert receipt['model_execution'] == ('completed' if second_batch == 'valid' else 'partial')
 
     cached_result = await reconcile_question_findings(service, record, issues, evidence_issues=[])
     assert [issue.id for issue in cached_result] == expected_kept
-    assert len(requests) == 2
+    expected_calls = 2 if second_batch == 'valid' else 3
+    assert len(requests) == expected_calls
     assert (
         len([span for span in detail.trace_spans if span.name == "final_question_reconciliation"])
-        == 2
+        == expected_calls
     )
-    assert budget.calls == 2 and budget.tokens_used == conservative_charge
+    spans = [span for span in detail.trace_spans if span.name == 'final_question_reconciliation']
+    conservative_charge = sum(
+        len(span.full_input.encode()) + 256 + span.metadata['llm_max_output_tokens']
+        for span in spans)
+    assert budget.calls == expected_calls and budget.tokens_used == conservative_charge
     assert budget.tokens_reserved == 0
+    final_result = await reconcile_question_findings(service, record, issues, evidence_issues=[])
+    assert final_result == cached_result
+    assert len(requests) == expected_calls  # No third paid attempt for an unsuccessful finding.

@@ -1,0 +1,717 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-24",
+  "baseline_commit": "91609530cfba90c06dc7f4f50b246277ec4d7957",
+  "deliverable": false,
+  "writer_task_execution_enabled_by_default": false,
+  "training_performed": false,
+  "scope": {
+    "products": [
+      "Trello",
+      "Cloudflare",
+      "Bitwarden",
+      "1Password"
+    ],
+    "original_question_denominator": 8,
+    "internal_question_count": 10,
+    "captured_page_date": "2026-10-21",
+    "configured_model_alias": "deepseek-flash",
+    "fresh_web_capture": false,
+    "e2e": false,
+    "full_graph": false,
+    "production_semantic_rag_acceptance": false,
+    "new_blind_holdout": false,
+    "gold_loaded_into_runtime": false,
+    "semantic_review": "independent agent; fixed previously reviewed boundaries, not a new human approval"
+  },
+  "tests": {
+    "passed": 7424,
+    "skipped": 1,
+    "warnings": 212,
+    "seconds": 220.94,
+    "new_vs_baseline": 55,
+    "log": "data/artifacts/atomic-independent-qa-2026-10-24/backend-final.log"
+  },
+  "rounds": {
+    "first": {
+      "calls": 51,
+      "known_provider_tokens": 159014,
+      "unknown_usage_transports": 1,
+      "qa_calls": 7,
+      "qa_counts": {
+        "planned_issue_ids": 30,
+        "sent_issue_ids": 20,
+        "valid_review_issue_ids": 12,
+        "unsent_issue_ids": 10,
+        "model_unreviewed_issue_ids": 18,
+        "timeout_issue_ids": 4,
+        "unresolved_timeout_issue_ids": 4
+      },
+      "qa_independent_counts": {
+        "planned_issue_ids": 10,
+        "sent_issue_ids": 9,
+        "valid_review_issue_ids": 4
+      },
+      "production_code_sha256": [
+        "5f6dd9d31a19cb4d6fae73ce96d642f422fb3cdd660aa2df785152f5bfe5308d"
+      ],
+      "semantic_overall": {
+        "deliverable": false,
+        "verdict": "fail",
+        "strict_question_verdict_counts": {
+          "partial": 4,
+          "fail": 2,
+          "pass": 2
+        },
+        "strict_pass_count": 2,
+        "strict_reviewed_denominator": 8,
+        "strict_final_denominator": 8,
+        "safe_refusal_count": 2,
+        "safe_refusal_pass_count": 2,
+        "visible_unique_formal_claim_count": 6,
+        "visible_occurrences": 12,
+        "visible_full_selected_quote_support": 4,
+        "visible_single_predicate": 3,
+        "persisted_claim_count": 12,
+        "audit_supported_claim_count": 6,
+        "audit_supported_hidden_claim_count": 0,
+        "selected_span_binding_count": 9,
+        "selected_operation_binding_count": 3,
+        "native_llm_spans": 53,
+        "calls": 51,
+        "provider_tokens_known": 159014,
+        "unknown_usage_transport_spans": 1,
+        "finish_reasons_transported": {
+          "stop": 50,
+          "unknown": 1
+        },
+        "zero_transport_admission_rejected_spans": 2,
+        "admission_rejection_reasons": {
+          "run_llm_budget_reserved_for_delivery": 2
+        },
+        "qa_severity_counts": {
+          "blocker": 20,
+          "warn": 18
+        },
+        "actual_final_qa_dispositions": {
+          "keep": 20
+        },
+        "answer_review_model_calls": 1,
+        "final_reconciliation_model_calls": 7,
+        "qa_model_reviewed_findings": 12,
+        "qa_findings_outside_bounded_context": 4,
+        "all_reviewed_code_hashes_identical": true,
+        "production_code_sha256": [
+          "5f6dd9d31a19cb4d6fae73ce96d642f422fb3cdd660aa2df785152f5bfe5308d"
+        ],
+        "all_source_hashes_preserved": true,
+        "strict_pass_by_product": {
+          "Trello": 0,
+          "Cloudflare": 0,
+          "Bitwarden": 2,
+          "1Password": 0
+        },
+        "module_execution_status_counts": {
+          "llm": 12
+        },
+        "core_module_fallback_used_count": 0,
+        "task_state_counts": {
+          "deferred": 3,
+          "insufficient_evidence": 3,
+          "supported": 6,
+          "rejected": 4,
+          "server_clarification": 1
+        },
+        "task_projection_replay_count": 6,
+        "task_projection_replay_all_valid": true,
+        "task_repair_attempted_count": 6,
+        "limitations": [
+          "原8题已曝光、非盲评；一次同组回放不能外推一般准确率或因果改进。",
+          "封存2026-10-21官方页面，非新抓取/完整Graph/发布/生产稠密RAG验收。",
+          "本审核无模型/网络/训练调用、未读env、未修改业务或原输出。",
+          "来源身份合法、task decision重放有效、真实QA调用和工程测试记录不能替代正文验收。",
+          "whole-question状态与可见局部内容分别核对；没有用隐藏支持补正文，也不因状态unverified抹掉已实际发表且有证的完整场景回答。"
+        ],
+        "visible_task_conclusion_count": 6,
+        "qa_planned_batches": 7,
+        "qa_planned_issue_count": 30,
+        "qa_sent_issue_count": 20,
+        "qa_raw_returned_review_count": 16,
+        "qa_valid_review_count": 12,
+        "qa_invalid_returned_review_count": 4,
+        "qa_timeout_issue_count": 4,
+        "qa_unsent_issue_count": 10,
+        "qa_model_unreviewed_count": 18,
+        "qa_successful_transport_batches": 6,
+        "qa_failed_transport_batches": 1,
+        "qa_independent_question_candidates": 10,
+        "qa_independent_question_sent": 9,
+        "qa_independent_question_valid": 4,
+        "qa_independent_question_unsent": 1,
+        "qa_independent_question_timeout": 2,
+        "budget_tokens_charged": 168942,
+        "unknown_usage_estimated_budget_tokens": 9928,
+        "visible_task_focus_conclusions_source_supported": 6,
+        "visible_task_conclusions_whole_explanation_full_support": 4,
+        "visible_task_fragments_covered_by_cited_claim": 5,
+        "visible_task_fragments_single_predicate": 5,
+        "qa_products_with_real_model_call": 4,
+        "qa_batch_semantic_status_counts": {
+          "partial": 4,
+          "timeout": 1,
+          "valid": 2
+        },
+        "qa_pending_beyond_batch_window": 6
+      },
+      "products": {
+        "trello": {
+          "calls": 15,
+          "known_provider_tokens": 50642,
+          "unknown_usage_transports": 0,
+          "qa_calls": 2,
+          "qa_span_statuses": {
+            "ok": 2
+          },
+          "qa_model_execution": "partial",
+          "qa_counts": {
+            "planned_issue_ids": 11,
+            "sent_issue_ids": 3,
+            "valid_review_issue_ids": 1,
+            "unsent_issue_ids": 8,
+            "model_unreviewed_issue_ids": 10,
+            "timeout_issue_ids": 0,
+            "unresolved_timeout_issue_ids": 0
+          },
+          "qa_independent_counts": {
+            "planned_issue_ids": 4,
+            "sent_issue_ids": 3,
+            "valid_review_issue_ids": 1
+          },
+          "qa_severities": {
+            "blocker": 8,
+            "warn": 5
+          },
+          "task_states": {
+            "deferred": 3,
+            "insufficient_evidence": 1,
+            "supported": 5,
+            "rejected": 1
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "production_code_sha256": "5f6dd9d31a19cb4d6fae73ce96d642f422fb3cdd660aa2df785152f5bfe5308d",
+          "production_code_changed_during_run": false,
+          "replay_network_guard_blocks": 0,
+          "reference_snapshot_gold_loaded": false
+        },
+        "cloudflare": {
+          "calls": 12,
+          "known_provider_tokens": 37409,
+          "unknown_usage_transports": 1,
+          "qa_calls": 1,
+          "qa_span_statuses": {
+            "error": 1
+          },
+          "qa_model_execution": "unavailable",
+          "qa_counts": {
+            "planned_issue_ids": 4,
+            "sent_issue_ids": 4,
+            "valid_review_issue_ids": 0,
+            "unsent_issue_ids": 0,
+            "model_unreviewed_issue_ids": 4,
+            "timeout_issue_ids": 4,
+            "unresolved_timeout_issue_ids": 4
+          },
+          "qa_independent_counts": {
+            "planned_issue_ids": 2,
+            "sent_issue_ids": 2,
+            "valid_review_issue_ids": 0
+          },
+          "qa_severities": {
+            "blocker": 3,
+            "warn": 3
+          },
+          "task_states": {
+            "rejected": 1,
+            "insufficient_evidence": 1
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "production_code_sha256": "5f6dd9d31a19cb4d6fae73ce96d642f422fb3cdd660aa2df785152f5bfe5308d",
+          "production_code_changed_during_run": false,
+          "replay_network_guard_blocks": 0,
+          "reference_snapshot_gold_loaded": false
+        },
+        "bitwarden": {
+          "calls": 12,
+          "known_provider_tokens": 34870,
+          "unknown_usage_transports": 0,
+          "qa_calls": 2,
+          "qa_span_statuses": {
+            "ok": 2
+          },
+          "qa_model_execution": "partial",
+          "qa_counts": {
+            "planned_issue_ids": 8,
+            "sent_issue_ids": 6,
+            "valid_review_issue_ids": 4,
+            "unsent_issue_ids": 2,
+            "model_unreviewed_issue_ids": 4,
+            "timeout_issue_ids": 0,
+            "unresolved_timeout_issue_ids": 0
+          },
+          "qa_independent_counts": {
+            "planned_issue_ids": 2,
+            "sent_issue_ids": 2,
+            "valid_review_issue_ids": 1
+          },
+          "qa_severities": {
+            "blocker": 4,
+            "warn": 6
+          },
+          "task_states": {
+            "supported": 1,
+            "server_clarification": 1
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "production_code_sha256": "5f6dd9d31a19cb4d6fae73ce96d642f422fb3cdd660aa2df785152f5bfe5308d",
+          "production_code_changed_during_run": false,
+          "replay_network_guard_blocks": 0,
+          "reference_snapshot_gold_loaded": false
+        },
+        "1password": {
+          "calls": 12,
+          "known_provider_tokens": 36093,
+          "unknown_usage_transports": 0,
+          "qa_calls": 2,
+          "qa_span_statuses": {
+            "ok": 2
+          },
+          "qa_model_execution": "completed",
+          "qa_counts": {
+            "planned_issue_ids": 7,
+            "sent_issue_ids": 7,
+            "valid_review_issue_ids": 7,
+            "unsent_issue_ids": 0,
+            "model_unreviewed_issue_ids": 0,
+            "timeout_issue_ids": 0,
+            "unresolved_timeout_issue_ids": 0
+          },
+          "qa_independent_counts": {
+            "planned_issue_ids": 2,
+            "sent_issue_ids": 2,
+            "valid_review_issue_ids": 2
+          },
+          "qa_severities": {
+            "blocker": 5,
+            "warn": 4
+          },
+          "task_states": {
+            "rejected": 2,
+            "insufficient_evidence": 1
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "production_code_sha256": "5f6dd9d31a19cb4d6fae73ce96d642f422fb3cdd660aa2df785152f5bfe5308d",
+          "production_code_changed_during_run": false,
+          "replay_network_guard_blocks": 0,
+          "reference_snapshot_gold_loaded": false
+        }
+      },
+      "audit_sha256": "7708a7b28dab49aad1d0d7b19e74f8a8bf23fdf59480272a78304be9a9f0eb7d"
+    },
+    "final": {
+      "calls": 55,
+      "known_provider_tokens": 167134,
+      "unknown_usage_transports": 0,
+      "qa_calls": 8,
+      "qa_counts": {
+        "planned_issue_ids": 31,
+        "sent_issue_ids": 19,
+        "valid_review_issue_ids": 17,
+        "unsent_issue_ids": 12,
+        "model_unreviewed_issue_ids": 14,
+        "timeout_issue_ids": 0,
+        "unresolved_timeout_issue_ids": 0
+      },
+      "qa_independent_counts": {
+        "planned_issue_ids": 10,
+        "sent_issue_ids": 9,
+        "valid_review_issue_ids": 7
+      },
+      "production_code_sha256": [
+        "b9290a8a7f72bef9a87276dd4007663690f7ab04d0c9dc928226733e8c910fb9"
+      ],
+      "semantic_overall": {
+        "deliverable": false,
+        "verdict": "fail",
+        "strict_question_verdict_counts": {
+          "partial": 2,
+          "fail": 3,
+          "pass": 3
+        },
+        "strict_pass_count": 3,
+        "strict_reviewed_denominator": 8,
+        "strict_final_denominator": 8,
+        "safe_refusal_count": 2,
+        "safe_refusal_pass_count": 2,
+        "visible_unique_formal_claim_count": 6,
+        "visible_occurrences": 12,
+        "visible_full_selected_quote_support": 6,
+        "visible_single_predicate": 4,
+        "persisted_claim_count": 12,
+        "audit_supported_claim_count": 6,
+        "audit_supported_hidden_claim_count": 0,
+        "selected_span_binding_count": 11,
+        "selected_operation_binding_count": 1,
+        "native_llm_spans": 56,
+        "calls": 55,
+        "provider_tokens_known": 167134,
+        "unknown_usage_transport_spans": 0,
+        "finish_reasons_transported": {
+          "stop": 55
+        },
+        "zero_transport_admission_rejected_spans": 1,
+        "admission_rejection_reasons": {
+          "run_llm_budget_reserved_for_delivery": 1
+        },
+        "qa_severity_counts": {
+          "blocker": 18,
+          "warn": 19
+        },
+        "actual_final_qa_dispositions": {
+          "keep": 21
+        },
+        "answer_review_model_calls": 2,
+        "final_reconciliation_model_calls": 8,
+        "qa_model_reviewed_findings": 17,
+        "qa_findings_outside_bounded_context": 0,
+        "all_reviewed_code_hashes_identical": true,
+        "production_code_sha256": [
+          "b9290a8a7f72bef9a87276dd4007663690f7ab04d0c9dc928226733e8c910fb9"
+        ],
+        "all_source_hashes_preserved": true,
+        "strict_pass_by_product": {
+          "Trello": 0,
+          "Cloudflare": 1,
+          "Bitwarden": 2,
+          "1Password": 0
+        },
+        "module_execution_status_counts": {
+          "llm": 12
+        },
+        "core_module_fallback_used_count": 0,
+        "task_state_counts": {
+          "deferred": 2,
+          "supported": 5,
+          "insufficient_evidence": 2,
+          "rejected": 7,
+          "partial": 1,
+          "server_clarification": 1
+        },
+        "task_projection_replay_count": 5,
+        "task_projection_replay_all_valid": true,
+        "task_repair_attempted_count": 6,
+        "limitations": [
+          "原8题已曝光、非盲评；一次同组回放不能外推一般准确率或因果改进。",
+          "封存2026-10-21官方页面，非新抓取/完整Graph/发布/生产稠密RAG验收。",
+          "本审核无模型/网络/训练调用、未读env、未修改业务或原输出。",
+          "来源身份合法、task decision重放有效、真实QA调用和工程测试记录不能替代正文验收。",
+          "whole-question状态与可见局部内容分别核对；没有用隐藏支持补正文，也不因状态unverified抹掉已实际发表且有证的完整场景回答。"
+        ],
+        "visible_task_conclusion_count": 5,
+        "qa_planned_batches": 8,
+        "qa_planned_issue_count": 31,
+        "qa_sent_issue_count": 19,
+        "qa_raw_returned_review_count": 19,
+        "qa_valid_review_count": 17,
+        "qa_invalid_returned_review_count": 2,
+        "qa_timeout_issue_count": 0,
+        "qa_unsent_issue_count": 12,
+        "qa_model_unreviewed_count": 14,
+        "qa_successful_transport_batches": 8,
+        "qa_failed_transport_batches": 0,
+        "qa_independent_question_candidates": 10,
+        "qa_independent_question_sent": 9,
+        "qa_independent_question_valid": 7,
+        "qa_independent_question_unsent": 1,
+        "qa_independent_question_timeout": 0,
+        "budget_tokens_charged": 167134,
+        "unknown_usage_estimated_budget_tokens": 0,
+        "visible_task_focus_conclusions_source_supported": 5,
+        "visible_task_conclusions_whole_explanation_full_support": 5,
+        "visible_task_fragments_covered_by_cited_claim": 5,
+        "visible_task_fragments_single_predicate": 5,
+        "qa_products_with_real_model_call": 4,
+        "qa_batch_semantic_status_counts": {
+          "partial": 2,
+          "valid": 6
+        },
+        "qa_pending_beyond_batch_window": 12
+      },
+      "products": {
+        "trello": {
+          "calls": 16,
+          "known_provider_tokens": 52434,
+          "unknown_usage_transports": 0,
+          "qa_calls": 2,
+          "qa_span_statuses": {
+            "ok": 2
+          },
+          "qa_model_execution": "partial",
+          "qa_counts": {
+            "planned_issue_ids": 10,
+            "sent_issue_ids": 3,
+            "valid_review_issue_ids": 1,
+            "unsent_issue_ids": 7,
+            "model_unreviewed_issue_ids": 9,
+            "timeout_issue_ids": 0,
+            "unresolved_timeout_issue_ids": 0
+          },
+          "qa_independent_counts": {
+            "planned_issue_ids": 4,
+            "sent_issue_ids": 3,
+            "valid_review_issue_ids": 1
+          },
+          "qa_severities": {
+            "blocker": 8,
+            "warn": 4
+          },
+          "task_states": {
+            "deferred": 2,
+            "supported": 4,
+            "insufficient_evidence": 1,
+            "rejected": 4
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "production_code_sha256": "b9290a8a7f72bef9a87276dd4007663690f7ab04d0c9dc928226733e8c910fb9",
+          "production_code_changed_during_run": false,
+          "replay_network_guard_blocks": 0,
+          "reference_snapshot_gold_loaded": false
+        },
+        "cloudflare": {
+          "calls": 14,
+          "known_provider_tokens": 41631,
+          "unknown_usage_transports": 0,
+          "qa_calls": 2,
+          "qa_span_statuses": {
+            "ok": 2
+          },
+          "qa_model_execution": "completed",
+          "qa_counts": {
+            "planned_issue_ids": 6,
+            "sent_issue_ids": 6,
+            "valid_review_issue_ids": 6,
+            "unsent_issue_ids": 0,
+            "model_unreviewed_issue_ids": 0,
+            "timeout_issue_ids": 0,
+            "unresolved_timeout_issue_ids": 0
+          },
+          "qa_independent_counts": {
+            "planned_issue_ids": 2,
+            "sent_issue_ids": 2,
+            "valid_review_issue_ids": 2
+          },
+          "qa_severities": {
+            "blocker": 3,
+            "warn": 5
+          },
+          "task_states": {
+            "rejected": 1,
+            "partial": 1
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "production_code_sha256": "b9290a8a7f72bef9a87276dd4007663690f7ab04d0c9dc928226733e8c910fb9",
+          "production_code_changed_during_run": false,
+          "replay_network_guard_blocks": 0,
+          "reference_snapshot_gold_loaded": false
+        },
+        "bitwarden": {
+          "calls": 12,
+          "known_provider_tokens": 33303,
+          "unknown_usage_transports": 0,
+          "qa_calls": 2,
+          "qa_span_statuses": {
+            "ok": 2
+          },
+          "qa_model_execution": "partial",
+          "qa_counts": {
+            "planned_issue_ids": 8,
+            "sent_issue_ids": 3,
+            "valid_review_issue_ids": 3,
+            "unsent_issue_ids": 5,
+            "model_unreviewed_issue_ids": 5,
+            "timeout_issue_ids": 0,
+            "unresolved_timeout_issue_ids": 0
+          },
+          "qa_independent_counts": {
+            "planned_issue_ids": 2,
+            "sent_issue_ids": 2,
+            "valid_review_issue_ids": 2
+          },
+          "qa_severities": {
+            "warn": 6,
+            "blocker": 2
+          },
+          "task_states": {
+            "supported": 1,
+            "server_clarification": 1
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "production_code_sha256": "b9290a8a7f72bef9a87276dd4007663690f7ab04d0c9dc928226733e8c910fb9",
+          "production_code_changed_during_run": false,
+          "replay_network_guard_blocks": 0,
+          "reference_snapshot_gold_loaded": false
+        },
+        "1password": {
+          "calls": 13,
+          "known_provider_tokens": 39766,
+          "unknown_usage_transports": 0,
+          "qa_calls": 2,
+          "qa_span_statuses": {
+            "ok": 2
+          },
+          "qa_model_execution": "completed",
+          "qa_counts": {
+            "planned_issue_ids": 7,
+            "sent_issue_ids": 7,
+            "valid_review_issue_ids": 7,
+            "unsent_issue_ids": 0,
+            "model_unreviewed_issue_ids": 0,
+            "timeout_issue_ids": 0,
+            "unresolved_timeout_issue_ids": 0
+          },
+          "qa_independent_counts": {
+            "planned_issue_ids": 2,
+            "sent_issue_ids": 2,
+            "valid_review_issue_ids": 2
+          },
+          "qa_severities": {
+            "blocker": 5,
+            "warn": 4
+          },
+          "task_states": {
+            "rejected": 2,
+            "insufficient_evidence": 1
+          },
+          "module_status_counts": {
+            "llm": 3
+          },
+          "production_code_sha256": "b9290a8a7f72bef9a87276dd4007663690f7ab04d0c9dc928226733e8c910fb9",
+          "production_code_changed_during_run": false,
+          "replay_network_guard_blocks": 0,
+          "reference_snapshot_gold_loaded": false
+        }
+      },
+      "audit_sha256": "7e521e0a29c758a95d561e504c67557754de6db32e23aa073e8496e4dea2ab94"
+    }
+  },
+  "combined": {
+    "actual_transport_calls": 106,
+    "known_provider_tokens": 326148,
+    "unknown_usage_transports": 1,
+    "final_qa_calls": 15,
+    "zero_transport_admission_rejected_spans": 3,
+    "tokens_are_known_subtotal_not_full_bill": true
+  },
+  "integrity": {
+    "current_frozen_code_match": true,
+    "production_code_sha256": "b9290a8a7f72bef9a87276dd4007663690f7ab04d0c9dc928226733e8c910fb9",
+    "runs": [
+      {
+        "directory": "live-1password",
+        "same_during_run": true,
+        "code_sha": "5f6dd9d31a19cb4d6fae73ce96d642f422fb3cdd660aa2df785152f5bfe5308d"
+      },
+      {
+        "directory": "live-1password-final",
+        "same_during_run": true,
+        "code_sha": "b9290a8a7f72bef9a87276dd4007663690f7ab04d0c9dc928226733e8c910fb9"
+      },
+      {
+        "directory": "live-bitwarden",
+        "same_during_run": true,
+        "code_sha": "5f6dd9d31a19cb4d6fae73ce96d642f422fb3cdd660aa2df785152f5bfe5308d"
+      },
+      {
+        "directory": "live-bitwarden-final",
+        "same_during_run": true,
+        "code_sha": "b9290a8a7f72bef9a87276dd4007663690f7ab04d0c9dc928226733e8c910fb9"
+      },
+      {
+        "directory": "live-cloudflare",
+        "same_during_run": true,
+        "code_sha": "5f6dd9d31a19cb4d6fae73ce96d642f422fb3cdd660aa2df785152f5bfe5308d"
+      },
+      {
+        "directory": "live-cloudflare-final",
+        "same_during_run": true,
+        "code_sha": "b9290a8a7f72bef9a87276dd4007663690f7ab04d0c9dc928226733e8c910fb9"
+      },
+      {
+        "directory": "live-trello",
+        "same_during_run": true,
+        "code_sha": "5f6dd9d31a19cb4d6fae73ce96d642f422fb3cdd660aa2df785152f5bfe5308d"
+      },
+      {
+        "directory": "live-trello-final",
+        "same_during_run": true,
+        "code_sha": "b9290a8a7f72bef9a87276dd4007663690f7ab04d0c9dc928226733e8c910fb9"
+      }
+    ],
+    "previous_48_unchanged": true,
+    "first_24_unchanged": true
+  },
+  "lint": {
+    "full_new_and_owned_files": "passed",
+    "changed_existing_python_files": 10,
+    "new_ruff_diagnostics": 0,
+    "critical_ruff": "passed",
+    "diff_check": "passed"
+  },
+  "next_steps": [
+    {
+      "priority": 1,
+      "action": "统一最终QA候选显式需要回显的claim IDs与当前可见任务支持，同时保留整题资格分离与严格ID/digest守卫。",
+      "evidence": "T两独立项真实返回准确digest但task claim IDs与candidate.answer.claim_ids=[]冲突，2项正常stop后失效；不能放宽guard接收任意ID。",
+      "acceptance": "实际发送明确expected IDs，模型仅回显本批准入ID，错误/foreign/重复ID继续拒绝；原题每分支诊断不靠answered标签判定。"
+    },
+    {
+      "priority": 2,
+      "action": "按每个独立请求生成最小原子并精确选择支持；先修已进窗口却未产生合格task的1P访客与T第二题。",
+      "evidence": "1P四稿始终附未选邀请/升级动作；T角色原句已进span45/47却operation_binding_required，Workspace只选逐板句又附类型否定，billing只选例子又附查页。",
+      "acceptance": "访客两个限制各有原子；Workspace/跨板/改权角色/计费有限判断各有完整选中支持与真实review决策。不新增无关操作，也不用父段补选中。"
+    },
+    {
+      "priority": 3,
+      "action": "给全部独立原题检查安排可完成的有界审核，再安排历史finding；按完整请求及真实未送集合规划两批窗口。",
+      "evidence": "10内部独立检查9送7合法，T第二原题在窗口外；另11历史未送，最终12未送全为两批窗口限制，无单题byte超界。",
+      "acceptance": "固定8原题全部必要检查有actual sent及valid结果；超时、无响应、身份失效、未送继续pending并保留可追溯原因。不得将正常stop当合法完成。"
+    },
+    {
+      "priority": 4,
+      "action": "消除有证复合主张和已有局部正确内容与whole-question/QA判断的不一致，并处理剩余尾部预算。",
+      "evidence": "CF收费与调用限制、BW人数与collections仍复合；T义务缺、answer_review未送、1repair0transport；QA仍把必要澄清当未答。",
+      "acceptance": "单谓词逐条核、完整原题按全部分支，安全拒价/必要澄清遵守同rubric；预算按完整载荷实际准入验证，重试保留未知用量估计与实际usage分离。"
+    },
+    {
+      "priority": 5,
+      "action": "保持默认关闭，完成上述真实失败链后再讨论扩大验收；对报价题单独处理合格公开来源的准入与销售下一步。",
+      "evidence": "严格3/8仍低旧4/8，1P报价只有guest支持；本轮0超时不证明重试/超时问题已被真实覆盖。",
+      "acceptance": "不以7424测试、transport数、完整引用率提升替代原8题内容交付；不把有证guest失败写成需补新来源。"
+    }
+  ],
+  "artifact_directory": "data/artifacts/atomic-independent-qa-2026-10-24/",
+  "artifact_policy": "Raw outputs, credentials and local audit fixtures are not committed; this file is a redacted summary."
+}

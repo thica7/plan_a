@@ -69,13 +69,16 @@ def test_explicit_question_id_cannot_conflict_with_issue_product_scope():
     assert _question_id(issue, questions) is None
 
 
-async def scope_case(monkeypatch):
+async def scope_case(monkeypatch, *, reflections=True):
     detail, _ = research_case([QUOTE], question=QUESTION)
     detail.created_at = detail.updated_at = datetime.now(UTC)
     detail.plan.competitors = ["Example Product"]
     detail.plan.dimensions = ["feature"]
     detail.plan.decision_brief = DecisionBrief(decision_question=QUESTION)
-    detail.reflections = [ReflectionRecord(iteration=1, gate_status="block", blocking_gaps=[OLD])]
+    detail.reflections = (
+        [ReflectionRecord(iteration=1, gate_status="block", blocking_gaps=[OLD])]
+        if reflections else []
+    )
     for source in detail.raw_sources:
         source.url = TypeAdapter(HttpUrl).validate_python(source.url)
     seal_snapshot(detail, phase="analysis", canonical_documents={})
@@ -158,7 +161,10 @@ async def test_experimental_final_qa_diagnoses_integrity_gaps_without_clearing_t
     monkeypatch.setattr(service, '_trace_llm_text', model)
     result = await api()(service, record, issues, evidence_issues=issues)
     assert len(calls) == 1
-    assert result == issues
+    assert result[:len(issues)] == issues
+    assert len(result) == len(issues) + 1
+    assert result[-1].metadata['issue_kind'] == 'independent_final_question'
+    assert result[-1].severity == 'blocker'
     assert json.loads(detail.trace_spans[-1].full_output)['model_review'] is not None
 
 
@@ -179,8 +185,10 @@ async def test_experimental_final_qa_includes_gaps_beside_eligible_findings(monk
     monkeypatch.setattr(service, '_trace_llm_text', model)
     result = await api()(service, record, issues, evidence_issues=[])
     assert len(calls) == 1
-    assert len(calls[0]['findings']) == 2
-    assert calls[0]['findings'][1]['diagnostic_only'] is True
+    assert len(calls[0]['findings']) == 3
+    assert calls[0]['findings'][0]['independent_question_check'] is True
+    assert next(row for row in calls[0]['findings']
+                if row['issue_id'] == issues[1].id)['diagnostic_only'] is True
     assert len(result) == 1 and result[0].id == issues[1].id
 
 
@@ -426,14 +434,19 @@ async def test_task_final_qa_packs_whole_findings_and_keeps_unsent_ones(monkeypa
     detail, service, record = await scope_case(monkeypatch)
     service._settings = replace(service._settings, writer_task_execution_enabled=True)
     original = service._build_reflector_qa_issues(detail)[0]
-    large = original.model_copy(update={'id': 'oversized-finding', 'problem': 'Q1: ' + 'diagnostic ' * 1000})
+    large = original.model_copy(update={
+        'id': 'oversized-finding', 'problem': 'Q1: ' + 'diagnostic ' * 1000})
     calls = []
 
     async def model(record, **kwargs):
         assert len(kwargs['user'].encode()) <= 6000
         payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
-        assert [row['issue_id'] for row in payload['findings']] == [original.id]
-        assert payload['findings'][0]['claims'][0]['source_span_bindings']
+        qid = detail.report_dimension_audits[0].answer_coverage[0].question_id
+        assert [row['issue_id'] for row in payload['findings']] == [
+            f"final-question-{qid}", original.id]
+        first = payload['findings'][0]
+        context = payload.get('question_contexts', {}).get(first.get('context_id'), first)
+        assert context['claims'][0]['source_span_bindings']
         calls.append(payload)
         return reviewed(payload)
 

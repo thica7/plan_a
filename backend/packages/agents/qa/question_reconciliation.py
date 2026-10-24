@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
-import hashlib
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -130,7 +130,8 @@ def _structural_or_mixed(issue):
 
 def _answer_support(detail, snapshot, audit, answer, question):
     if answer.question != question["question"] or not question_coverage_matches(
-        detail.report_md, audit, detail.output_language, audits=detail.report_dimension_audits, detail=detail
+        detail.report_md, audit, detail.output_language,
+        audits=detail.report_dimension_audits, detail=detail
     ):
         return None
     published = [item.claim for item in audit.claims if item.status == "supported"]
@@ -205,7 +206,8 @@ def final_review_batches(candidates, basis_hash, *, max_bytes, max_batches):
         contexts, findings = {}, []
         for row in rows:
             context = {k: v for k, v in row.items() if k in {
-                'question_id', 'question', 'answer', 'claims', 'task_answers', 'delivery_state'}}
+                'question_id', 'question', 'answer', 'claims', 'task_answers', 'delivery_state',
+                'visible_answer', 'publication_matches', 'support_verified'}}
             cid = hashlib.sha256(canonical_json(context).encode()).hexdigest()[:20]
             contexts[cid] = context
             findings.append({**{k: v for k, v in row.items() if k not in context},
@@ -214,7 +216,8 @@ def final_review_batches(candidates, basis_hash, *, max_bytes, max_batches):
         return dict(version=1, basis_hash=basis_hash, question_contexts=contexts, findings=findings)
 
     def fits(row):
-        return len(('\nJSON:\n' + canonical_json(row)).encode()) <= max_bytes
+        return (len(row['findings']) <= MAX_FINDINGS
+                and len(('\nJSON:\n' + canonical_json(row)).encode()) <= max_bytes)
 
     batches, current, omitted = [], [], []
     for row in candidates:
@@ -236,6 +239,12 @@ def final_review_batches(candidates, basis_hash, *, max_bytes, max_batches):
 
 async def reconcile_question_findings(service, record, issues, *, evidence_issues):
     """At most one bounded review; failures keep every original finding intact."""
+    if service._task_delivery_segments(record):
+        from packages.agents.qa.independent_question_review import review_current_questions
+
+        return await review_current_questions(
+            service, record, issues, evidence_issues=evidence_issues
+        )
     historical = [issue for issue in issues if issue.detected_by == "reflector"]
     if not historical:
         service._finish_delivery_phase(record, 'final_qa', None)
@@ -310,8 +319,8 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
                              question_id=qid or "unmapped", question=question['question'],
                              answer=answer, claims=[c.model_dump(mode='json') for c in claims],
                              diagnostic_only=True)
-            from packages.agents.writer.task_answers import reviewed_task_answer_rows
             from packages.agents.writer.answer_presentation import question_coverage_matches
+            from packages.agents.writer.task_answers import reviewed_task_answer_rows
             if audit and question_coverage_matches(detail.report_md, audit, detail.output_language,
                     audits=detail.report_dimension_audits, detail=detail):
                 candidate['task_answers'] = [{k: v for k, v in t.items()
@@ -319,11 +328,14 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
                     for t in reviewed_task_answer_rows(detail, audit) if t['question_id'] == qid]
             from packages.research.question_state import question_state
             candidate['delivery_state'] = question_state(
-                dict(question_id=qid or 'unmapped'), reviewed_tasks=candidate.get('task_answers', ()),
+                dict(question_id=qid or 'unmapped'),
+                reviewed_tasks=candidate.get('task_answers', ()),
                 answer_status=answer['status'])
             candidate['support_digest'] = service._evidence_artifact_hash(candidate)
             candidates.append(candidate)
-    review_limit = TASK_REVIEW_BYTES if service._task_delivery_segments(record) else MAX_REVIEW_BYTES
+    review_limit = (
+        TASK_REVIEW_BYTES if service._task_delivery_segments(record) else MAX_REVIEW_BYTES
+    )
     batches, omitted = final_review_batches(candidates, basis_hash, max_bytes=review_limit,
         max_batches=2 if review_limit == TASK_REVIEW_BYTES else 1)
     for issue_id in omitted:
@@ -358,7 +370,9 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
                     rows = [r for r in candidates if r['issue_id'] in ids]
                     claim_rows = [claim for row in rows for claim in row["claims"]]
                     fact_ids = sorted({fid for claim in claim_rows for fid in claim["fact_ids"]})
-                    source_ids = sorted({sid for claim in claim_rows for sid in claim["source_ids"]})
+                    source_ids = sorted(
+                        {sid for claim in claim_rows for sid in claim["source_ids"]}
+                    )
                     view, use = service._begin_evidence_use(
                         record, agent="qa", fact_ids=fact_ids, source_ids=source_ids
                     )
@@ -383,7 +397,9 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
                         raise
                     except Exception:
                         for issue_id in ids:
-                            decisions[issue_id]['reason'] = 'Final QA batch unavailable; finding retained.'
+                            decisions[issue_id]['reason'] = (
+                                'Final QA batch unavailable; finding retained.'
+                            )
                 if collected:
                     model_review = _Review(version=1, basis_hash=basis_hash, reviews=collected)
             model_execution = "completed" if model_review else "unavailable"
@@ -443,7 +459,8 @@ async def reconcile_question_findings(service, record, issues, *, evidence_issue
         planned_batches=len(batches), unsent_issue_ids=omitted,
         model_reviewed_issue_ids=[r.issue_id for r in model_review.reviews] if model_review else [],
         model_unreviewed_issue_ids=[i.id for i in historical if i.id not in {
-            r.issue_id for r in model_review.reviews}] if model_review else [i.id for i in historical],
+            r.issue_id for r in model_review.reviews}]
+            if model_review else [i.id for i in historical],
     )
     service._trace_local_tool(
         record,

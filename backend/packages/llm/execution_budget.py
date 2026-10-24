@@ -107,8 +107,12 @@ class LLMCallExecution:
     cost_charged_usd: float = 0.0
     provider_accounted: bool = False
     checkpoint: Callable[[], None] | None = None
+    max_attempts: int | None = None
+    timeout_attempts: int = 0
 
     def reserve(self) -> None:
+        if self.max_attempts is not None and self.attempts >= self.max_attempts:
+            raise LLMExecutionLimitError("llm_call_attempt_budget_exhausted")
         self.budget.reserve(is_repair=self.is_repair, input_tokens=self.input_tokens,
                             max_output_tokens=self.max_output_tokens, phase=self.phase)
         self.attempts += 1
@@ -160,7 +164,10 @@ class LLMCallExecution:
             "delivery_tokens_protected": self.budget.protected_tokens(self.phase),
             "delivery_calls_protected": self.budget.protected_calls(self.phase),
             "llm_request_attempts": self.attempts,
+            **({"llm_request_attempt_limit": self.max_attempts}
+               if self.max_attempts is not None else {}),
             "llm_transport_attempts": self.transport_attempts,
+            "llm_timeout_attempts": self.timeout_attempts,
             "llm_admission_status": "admitted" if self.attempts else "rejected",
             "llm_phase": self.phase or "unallocated",
             "stage_headroom_tokens": self.budget.stage_headroom,

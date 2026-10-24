@@ -59,7 +59,13 @@ def test_permission_context_survives_question_unit_split():
             )
         ]
     )
-    assert tasks == [dict(question_id="q", focus="permission_not_obligation")]
+    assert tasks == [
+        dict(
+            question_id="q",
+            focus="permission_not_obligation",
+            request="是否意味着他必须给每张卡片投票？",
+        )
+    ]
 
 
 def test_complete_scope_original_precedes_repeated_role_background():

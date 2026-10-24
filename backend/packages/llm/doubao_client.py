@@ -23,6 +23,19 @@ class _RetryableLLMError(LLMError):
 _RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
 
 
+def _sanitized_provider_cause(exc: Exception, safe_error: str) -> LLMError:
+    """Retain timeout type without carrying raw provider messages or traceback."""
+    safe_cause = LLMError(safe_error)
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
+            safe_cause.__cause__ = type(exc)("Provider request timed out.")
+            break
+        seen.add(id(exc))
+        exc = exc.__cause__ or exc.__context__
+    return safe_cause
+
+
 @dataclass(frozen=True)
 class LLMUsage:
     prompt_tokens: int | None = None
@@ -93,6 +106,7 @@ class DoubaoClient:
             raise LLMError(self._route_error_message())
 
         errors: list[str] = []
+        last_error: LLMError | None = None
         for provider in providers:
             try:
                 return await self._complete_text_with_provider(
@@ -104,9 +118,16 @@ class DoubaoClient:
                 raise
             except LLMError as exc:
                 safe_error = str(exc).replace(provider.api_key, "[REDACTED]")
+                last_error = _sanitized_provider_cause(exc, safe_error)
                 errors.append(f"{provider.name}: {safe_error}")
                 self._usage_context.set(None)
-        raise LLMError("LLM request failed for all providers: " + " | ".join(errors))
+                execution = current_llm_execution.get()
+                if (execution is not None and execution.max_attempts is not None
+                        and execution.transport_attempts >= execution.max_attempts):
+                    break
+        raise LLMError(
+            "LLM request failed for all providers: " + " | ".join(errors)
+        ) from last_error
 
     async def _complete_text_with_provider(
         self,
@@ -143,6 +164,8 @@ class DoubaoClient:
         url = f"{provider.base_url}/chat/completions"
 
         attempts = max(1, self._settings.llm_max_retries + 1)
+        if execution is not None and execution.max_attempts is not None:
+            attempts = min(attempts, max(0, execution.max_attempts - execution.transport_attempts))
         for attempt in range(attempts):
             try:
                 self._response_context.set((provider.name, provider.model, None))
@@ -177,6 +200,9 @@ class DoubaoClient:
             async with httpx.AsyncClient(timeout=self._settings.llm_timeout_seconds) as client:
                 return await client.post(url, json=payload, headers=headers)
         except httpx.TimeoutException as exc:
+            execution = current_llm_execution.get()
+            if execution is not None:
+                execution.timeout_attempts += 1
             raise _RetryableLLMError(
                 f"LLM request timed out after {self._settings.llm_timeout_seconds} seconds."
             ) from exc

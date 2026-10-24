@@ -21,6 +21,40 @@ FOCUSES = {
 MAX_TASKS = 12
 
 
+def _covered_request_rows(rows, questions):
+    """Supplement finite request omissions; source-only unknowns remain semantic."""
+    from packages.agents.writer.question_allocation import _request_units, question_atom_tasks
+
+    result = []
+    units = {q["question_id"]: _request_units(q["question"]) for q in questions}
+    for row in rows:
+        contained = [u for u in units[row["question_id"]] if u in row["question_quote"]]
+        shared = [u for u in units[row["question_id"]] if row["question_quote"] in u]
+        expanded = contained if row["focus"] == "source_rule" else []
+        expanded = shared if len(shared) > 1 else expanded
+        if len(expanded) > 1:
+            result.extend(dict(row, question_quote=u) for u in expanded)
+        else:
+            result.append(row)
+    for minimum in question_atom_tasks(questions, max_atoms=None):
+        qid, request, focus = minimum["question_id"], minimum["request"], minimum["focus"]
+        if focus == "source_rule" and len(units[qid]) == 1:
+            continue
+        if not any(
+            row["question_id"] == qid
+            and (
+                row["focus"] == focus or focus == "source_rule"
+                or row["focus"] == "permission_not_obligation" and re.search(
+                    r"必须|义务|强制|\b(?:must|obligation|obliged|mandatory)\b", request, re.I
+                )
+            )
+            and (row["question_quote"] in request or request in row["question_quote"])
+            for row in result
+        ):
+            result.append(dict(question_id=qid, question_quote=request, focus=focus))
+    return result
+
+
 def _json(text):
     from packages.agents.writer.dimension_writer import parse_json
 
@@ -55,6 +89,7 @@ def parse_tasks(text, questions, scope):
             re.I,
         ):
             raise ValueError("obligation task requires an explicit obligation request")
+    for row in _covered_request_rows(payload["tasks"], questions):
         resources = named_resource_items(row["question_quote"]) if row["focus"] in _ACTIONS else ()
         if row["focus"] in _ACTIONS and not resources:
             # Exact request excerpts may omit their question mark or noun.
@@ -181,12 +216,11 @@ def task_atom_reasons(task, text, *, kind=None):
         and kind != "inference"
     ):
         return ("task_assertion_kind_mismatch",)
-    if focus not in _ACTIONS:
-        return ()
-    if not re.search(_ACTIONS[focus], text, re.I):
+    if focus in _ACTIONS and not re.search(_ACTIONS[focus], text, re.I):
         return ("task_predicate_not_addressed",)
     from packages.agents.writer.answer_action_scope import _LEADING_CONTEXT, _TRAILING_CONTEXT
 
+    assertions = []
     for part in re.split(r"[。；;.!?]", text):
         assertion = _LEADING_CONTEXT.sub("", part).strip()
         assertion = re.sub(r"^在[^，,。；]{1,100}(?:后|前)[，,]\s*", "", assertion)
@@ -204,16 +238,18 @@ def task_atom_reasons(task, text, *, kind=None):
             re.I,
         ):
             continue
-        sibling = any(
-            re.search(
-                r"(?:并(?:且)?(?:可以|能够|不能|无法|可|能)?|还可|还能|"
-                r"\band\s+(?:can|cannot|may|must|could))\s*(?:" + pattern + ")",
-                assertion,
-                re.I,
-            )
-            for key, pattern in _ACTIONS.items()
-            if key != focus
+        assertions.append(assertion)
+    assertion = "; ".join(assertions)
+    actions = {key for key, pattern in _ACTIONS.items() if re.search(pattern, assertion, re.I)}
+    sibling = len(actions) > 1 and any(
+        re.search(
+            r"(?:并(?:且)?(?:可以|能够|不能|无法|可|能)?|还可|还能|"
+            r"\band\s+(?:can|cannot|may|must|could))\s*(?:" + pattern + ")",
+            assertion,
+            re.I,
         )
-        if sibling:
-            return ("task_contains_sibling_predicate",)
+        for pattern in _ACTIONS.values()
+    )
+    if sibling:
+        return ("task_contains_sibling_predicate",)
     return ()

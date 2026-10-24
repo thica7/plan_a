@@ -90,12 +90,39 @@ def document_absence_claim(text):
 def _request_units(question):
     tail = re.split(r"(?:逐项|分别)(?:回答|判断|说明)[：:]", question)[-1]
     units = re.split(r"[；;]|(?<=[?？])|[，,](?=[^，,]{0,35}(?:是否|能否))", tail)
+    expanded = []
+    coordinated_requests = set()
+    for unit in units:
+        # Only explicit coordinated requests, never an alternative prerequisite.
+        start = 0
+        for match in re.finditer(
+            r"[，,]\s*(?:或者|或是|以及)(?=(?:拥有|能否|可否|是否))"
+            r"|,\s*(?:or|and)\s+(?=(?:own|have|can|could|may)\b)",
+            unit, re.I,
+        ):
+            preceding = re.split(r"[。.!?！？]", unit[start:match.start()])[-1]
+            if re.match(
+                r"\s*(?:(?:他|她|它|用户|成员|访客)?(?:能否|是否|可否|可以|能)"
+                r"|(?:或者|或是|以及)(?:拥有|能否|可否|是否)"
+                r"|(?:can|could|may)\b)", preceding, re.I
+            ) and not re.search(
+                r"[，,]|只要|只有|仅当|如果|若|前提|才能"
+                r"|\b(?:if|after|before|when|unless|provided)\b",
+                preceding, re.I,
+            ):
+                fragment = unit[start:match.start()].strip()
+                expanded.append(fragment)
+                coordinated_requests.add(fragment)
+                start = match.start() + 1
+        expanded.append(unit[start:].strip())
     requested = [
         unit.strip()
-        for unit in units
-        if re.search(
-            r"[?？]|吗|是否|能否|谁有权|\b(?:can|could|must|may|how|what|who)\b", unit, re.I
-        )
+        for unit in expanded
+        if not re.match(r"^请将[^?？]*分别说明[。.!]?$", unit.strip())
+        and (unit in coordinated_requests or re.search(
+            r"[?？]|吗|是否|能否|谁有权|\b(?:can|could|must|may|how|what|who)\b",
+            unit, re.I,
+        ))
     ]
     return requested or [question]
 
@@ -114,7 +141,9 @@ def question_atom_tasks(questions, *, max_atoms=8):
             elif re.search(r"账单|总价|报价|\b(?:bill|invoice|exact price)\b", unit, re.I):
                 focuses = ["billing_inputs"]
             else:
-                focuses = sorted(requested_answer_actions(unit)) or ["source_rule"]
+                # Split clauses inherit the original question's interrogation;
+                # only routing gets punctuation, never the exact request quote.
+                focuses = sorted(requested_answer_actions(unit + "？")) or ["source_rule"]
             for focus in focuses:
                 resources = named_resource_items(unit) if focus in _ACTIONS else ()
                 if focus in _ACTIONS and not resources:
@@ -128,15 +157,14 @@ def question_atom_tasks(questions, *, max_atoms=8):
                     task = dict(question_id=question["question_id"], focus=focus)
                     if resource:
                         task["resource"] = resource
-                    if focus == "source_rule":
-                        task["request"] = unit
+                    task["request"] = unit
                     if task not in tasks:
                         tasks.append(task)
         groups.append(tasks)
     result = []
     for index in range(max((len(group) for group in groups), default=0)):
         for group in groups:
-            if index < len(group) and len(result) < max_atoms:
+            if index < len(group) and (max_atoms is None or len(result) < max_atoms):
                 result.append(group[index])
     return result
 

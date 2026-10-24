@@ -2,7 +2,9 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-当前验证见[任务答案交付、共同状态与预算复验](optimization/2026-10-24-task-answer-contract.md)（2026-10-24）：最终后端 **7369通过／1跳过**，新增23项。局部任务答案、服务端原问分段、具体失败反馈和同题共享QA进入真实入口；共同状态只是诊断，不授予完成。两轮四家102次真实调用／已知302260 token，另3次usage未知。最终原八题严格 **3/8，报告未达标**；最终QA6次、只有三家调用，含一次超时且有未送项，1Password Reflector回退后没有最终模型重核。不能宣称全部Agent或最后QA完整通过。实验继续默认关闭；未验自动发现、多产品同矩阵、全Graph、发布或生产语义RAG，未训练。[结构化结果](optimization/2026-10-24-task-answer-contract-results.json)。
+当前验证见[原子任务覆盖、引用边界与独立最终QA复验](optimization/2026-10-24-atomic-independent-qa.md)（2026-10-24）：后端 **7424通过／1跳过**，新增55项。服务端有限请求补全、越引用守卫及独立逐题QA进入实验入口；实际provider重试、超时、未送与合法返回分开记账。两轮四家106实际调用／已知326148 token，另1次usage未知。最终原八题严格 **3/8**，可见主张完整支持6/6、单谓词4/6；四家均调用QA，31项中17项合法、12项未送、2项返回失效，**报告仍未达标，默认关闭**。两轮各12个分析／比较／反思模块均实际LLM执行无回退，不代表写作与整题交付完成；未验新抓取、全Graph、发布或生产语义RAG，未训练。[结构化结果](optimization/2026-10-24-atomic-independent-qa-results.json)。
+
+上一轮验证见[任务答案交付、共同状态与预算复验](optimization/2026-10-24-task-answer-contract.md)（2026-10-24）：最终后端 **7369通过／1跳过**，新增23项。局部任务答案、服务端原问分段、具体失败反馈和同题共享QA进入真实入口；共同状态只是诊断，不授予完成。两轮四家102次真实调用／已知302260 token，另3次usage未知。最终原八题严格 **3/8，报告未达标**；最终QA6次、只有三家调用，含一次超时且有未送项，1Password Reflector回退后没有最终模型重核。不能宣称全部Agent或最后QA完整通过。实验继续默认关闭；未验自动发现、多产品同矩阵、全Graph、发布或生产语义RAG，未训练。[结构化结果](optimization/2026-10-24-task-answer-contract-results.json)。
 
 上一轮验证见[已审核任务投影、局部修复与最终 QA 复验](optimization/2026-10-24-task-projection.md)（2026-10-24）：后端 **7346通过／1跳过**，新增40项；局部主张投影凭据、任务失败修复及最终QA诊断进入实际入口。两轮四家封存页面真实回放共100次实际调用／304236已知token，最终QA共8次；最终轮原八题严格 **2/8**，低于历史旧流程4/8。最终轮12个分析／比较／反思模块均真实调用且无回退，但最终QA只送达11/20项，另9项保留待审。**报告仍未达标，实验保持默认关闭**；任务决策尚未编译为完整最终答案，Trello／Cloudflare／Bitwarden／1Password仍有遗漏或不完整。未验新抓取、全Graph、发布或生产稠密RAG，未训练。[结构化结果](optimization/2026-10-24-task-projection-results.json)。
 
@@ -142,6 +144,8 @@ Analyst、Comparator、Reflector、Writer 现共用 [`question_packets.py`](../b
 
 ### Writer：把有效分析写入报告
 
+本轮 [`task_protocol.py`](../backend/packages/agents/writer/task_protocol.py) 将有限规则识别的请求与模型计划合并：明确的协调主问逐项保留，宽泛 source_rule 和多子问共享短片段不能吞掉已识别请求；原片段仍是原问精确子串，动作路由继承原问的疑问性质。条件和格式要求不生成独立任务，未知自然语言仍交语义审核。服务端补项不受模型48行解析上限静默截断；超过12个活动任务的请求有稳定ID与延期原因。明确并列动作的前后顺序、跨句形式共用原子守卫；条件内的动作词和动作对象不据此判复合。新增 [`classification_denials.py`](../backend/packages/research/evidence/classification_denials.py) 拒绝所选 span／operation quote 没有的有限分类否定，父文档不能补支持，实时与最终重放同用。
+
 默认关闭的实验逐题入口（`WRITER_TASK_EXECUTION_ENABLED=1` 显式测试）使用 [`task_protocol.py`](../backend/packages/agents/writer/task_protocol.py) 和 [`task_execution.py`](../backend/packages/agents/writer/task_execution.py)。小型规划只接收原问，输出必须是原文片段与有限 focus，不能产生来源事实；服务端派生绑定产品、维度、原题、片段、动作和对象的稳定任务 ID。规划无效时记录有限规则回退。普通生成每批最多3项、每项最多1条原子、最多12个活动任务；独立审核每组最多2条原子、10项检查，三任务必要时最多3组；超额、无响应或无审核额度显式延期，一个无效项不会删除其它项。命名对象分别推理，另有按动作区分的 `rule_ACTION` 规则任务。请求场景仅供条件推断，不能变成产品事实。
 
 各批只携带任务所属的完整原问及对应逐题资料，不带其他原问的重复包；从当前准入视图交错优先安排任务的完整原文，再按真实字节窗填充；不切断角色、套餐、访问范围、AND／OR或例外。原子只能引用该批实际发送的规范目录，服务端恢复完整绑定。主张审核和 task→predicate 完成度分别核对，所选合法 ID 不代表整句成立。`question_task_delivery` 保存每次实际 transport span、请求 hash、任务与 fact IDs；QA 逐次校验规范原文、支持和完整原题，再合并真实送达事实。任务状态和本地选择标记不能替代派送证明。
@@ -203,6 +207,12 @@ v3 逐条隔离支持审核：仅选定 operation quote／source span 及完整�
 完整中文“只有……才能访问……”可作为闭合问句的必要条件断言；新增识别路径对完整主张块检查引号、示例、建议及未完成句，不从审核理由补答案。主体、对象、套餐、完整主张和 v2 引用重放仍须分别通过。
 
 ### QA：审核与重做决策
+
+实验任务入口使用 [`independent_question_review.py`](../backend/packages/agents/qa/independent_question_review.py)，从当前 report audit 的真实原题建立独立检查，优先于历史 Reflector finding；反思无 finding 或回退不会因此跳过最终逐题审核。模型核对实际可见正文和所选支持，资格不足只能诊断，不能解除阻断。完全缺少 audit 时依赖现有报告缺失阻断，零候选收据为 `not_requested`，不声称模型已审。
+
+每次最多两批，每批最多10项与6000 UTF-8 bytes；完整题目上下文装不下则整项保留未送，不裁前提。合法返回同行缓存；失败、超时与未送项可在后续审核调用中按剩余预算续审，不是无界或后台自动重试。每项最多两次实际请求，provider 内置重试及备用 provider 共用本次剩余额度；`max_request_attempts` 经实际调用预算约束，不修改共享 settings，默认 None 保留其他入口的旧行为。现有 `final_qa:run` 预留及全局24调用／80000 token继续生效。
+
+`planned_issue_ids`、`sent_issue_ids`、`valid_review_issue_ids`、`unsent_issue_ids` 与 `model_unreviewed_issue_ids` 分开；`completed` 要求已有候选全部返回合法审核，不表示报告已通过。历史 `timeout_issue_ids` 与仍未完成的 `unresolved_timeout_issue_ids` 分开：真实 adapter 的 `llm_timeout_attempts` 不被后续错误或成功覆盖。无 usage 按完整输入字节上界加输出预留保守记账；缓存不伪造新 transport，checkpoint恢复保留已扣账。异常链只保留新建脱敏 cause 和超时类型，不能借诊断回显凭证。
 
 新增 [`question_reconciliation.py`](../backend/packages/agents/qa/question_reconciliation.py)：在最终 QA 对可明确映射的历史 Reflector 问题复核当前正文和精确支持，最多一次1600输出调用、14KB输入；保留原反思，记录 `keep/superseded/current_limitation` 和快照/Writer/支持摘要收据。真实证据错误存在时保守保留旧问题；来源、矩阵、混合缺口或无法映射的问题不凭回答状态消除。预算/模型失败保留问题，不能将复核入口已接线当作旧问题已解决。
 

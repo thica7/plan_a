@@ -15,6 +15,7 @@ from packages.research.evidence.operation_claim_checks import (
     independent_operation_reasons, operation_condition_reasons, operation_review_reasons,
 )
 from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
+from packages.research.evidence.classification_denials import classification_denial_reasons
 from packages.research.evidence.source_spans import ReportSourceSpanBinding
 from packages.research.evidence.snapshot_models import EvidenceArtifactDependency
 
@@ -309,6 +310,7 @@ def claim_rule_reasons(claim, view, boundaries, *, available_facts=None):
         if bound is None:
             reasons.append('operation_binding_mismatch')
         else:
+            reasons.extend(classification_denial_reasons(claim.text, [bound['operation_quote']]))
             effects = _claim_operation_effects(claim.text, bound)
             # Unresolved or mixed-actor polarity still goes through the normal
             # semantic review; a single explicit contrary assertion is blocked.
@@ -338,6 +340,7 @@ def claim_rule_reasons(claim, view, boundaries, *, available_facts=None):
         discovery = view.facts if available_facts is None else available_facts
         reasons.extend(claim_source_exception_reasons(claim, content, available_facts=discovery))
         if not span_reasons and claim.source_span_bindings:
+            reasons.extend(classification_denial_reasons(claim.text, [f.quote for f in projected]))
             reasons.extend(claim_temporal_condition_reasons(claim, projected))
             reasons.extend(claim_source_condition_reasons(claim, projected))
             reasons.extend(claim_source_exception_reasons(claim, projected, available_facts=discovery,
