@@ -218,11 +218,16 @@ def _admission_rejection_reasons(
                 return reasons
             replay_brief = replay_brief.model_copy(update={
                 'metadata': {**brief.metadata, 'active_question_ids': active}})
-        verified = semantic_extraction(
-            replay_brief,
-            page, {"facts": [{"quote": item.text} for item in extraction.quotes]},
-            extractor_name=extraction.extractor_name,
-        )
+        try:
+            verified = semantic_extraction(
+                replay_brief,
+                page, {"facts": [{"quote": item.text} for item in extraction.quotes]},
+                extractor_name=extraction.extractor_name,
+                extractor_version=extraction.extractor_version,
+            )
+        except ValueError:
+            reasons.append('semantic_extractor_version_unsupported')
+            return reasons
         if (value != verified.fields.get(field) or quote != _quote_by_field(verified.quotes).get(field)
                 or extraction.extractor_version != verified.extractor_version):
             reasons.append("semantic_evidence_not_bound_to_body")

@@ -960,7 +960,7 @@ class DimensionWriterMixin:
             task_workflow = 'question_task_ledger' in compact
             payload = compact_prompt_json(answer_review_payload(pending, supported, view,
                 include_originals=False, compact_semantics=task_workflow))
-            if len(payload.encode()) <= use.max_bytes:
+            if task_workflow or len(payload.encode()) <= use.max_bytes:
                 response = None
                 if not task_workflow:
                     sizes.append(len(payload.encode()))
@@ -1015,43 +1015,92 @@ class DimensionWriterMixin:
                     pass
                 # Rejected draft atoms cannot become answer premises via the plan.
                 review_payload['answer_review_contract'] = 'subquestion-premises-v1'
-                review_prompt = compact_prompt_json(review_payload)
                 review_system = SUBQUESTION_REVIEW_SYSTEM
-                review_limit = use.max_bytes
                 if task_workflow:
                     from packages.agents.writer.task_execution import TASK_ANSWER_SYSTEM
-                    from packages.agents.writer.task_answers import TASK_ANSWER_REQUEST_BYTES
                     review_system = TASK_ANSWER_SYSTEM
-                    review_limit = min(use.max_bytes, TASK_ANSWER_REQUEST_BYTES
-                        - len((review_system + language_instruction(record.detail.output_language)).encode())
-                        - len('\n\n\nJSON:\n'.encode()))
-                # A proposal never survives an unavailable or invalid semantic review.
-                coverage = unverified_coverage(pending, 'Answer semantic review was not completed.')
-                if len(review_prompt.encode()) <= review_limit:
-                    sizes.append(len(review_prompt.encode()))
-                    reviewed, gaps = await self._dimension_call_with_gaps(
-                        record, gaps, agent='qa', subagent=f'{view.competitor}/{view.dimension}',
-                        name='dimension_answer_review',
-                        system=review_system + language_instruction(record.detail.output_language),
-                        user='\nJSON:\n' + review_prompt,
+                review_system += language_instruction(record.detail.output_language)
+                if task_workflow:
+                    from packages.agents.writer.task_answers import task_answer_review_windows
+                    from packages.research.evidence.source_exceptions import (
+                        question_exception_fact_ids,
                     )
+
+                    windows, omitted = task_answer_review_windows(
+                        review_payload, compact['question_task_ledger'], system=review_system,
+                        max_user_bytes=use.max_bytes,
+                        question_fact_ids={q['question_id']: question_exception_fact_ids(
+                            q['question'], view.facts) for q in pending})
+                    if windows:
+                        budget = self._run_llm_budget(record)
+                        budget.delivery_finished.discard(f'answer:{view.competitor}/{view.dimension}')
+                        self._checkpoint_llm_budget(record, budget)
+                else:
+                    windows = ([review_payload] if len(compact_prompt_json(review_payload).encode())
+                               <= use.max_bytes else [])
+                    omitted = [] if windows else [q['question_id'] for q in pending]
+                # Unsent or invalid peers remain unverified; each window can use
+                # only the complete claims admitted for its own questions.
+                answers = {row.question_id: row for row in unverified_coverage(
+                    pending, 'Answer semantic review was not completed.')}
+                if omitted:
+                    gaps = tuple(sorted(set(gaps) | {'answer_review_context_budget_exceeded'}))
+                for window in windows:
+                    review_prompt = compact_prompt_json(window)
+                    window_questions = window['questions']
+                    allowed_ids = {row['id'] for row in window['claims']}
+                    window_claims = [c.model_dump(mode='json') for c in supported
+                                     if c.id in allowed_ids]
+                    user = '\nJSON:\n' + review_prompt
+
+                    def parse_review(value, window=window, window_questions=window_questions,
+                                     allowed_ids=allowed_ids, window_claims=window_claims):
+                        if task_workflow:
+                            from packages.agents.writer.task_answers import restore_task_segments
+                            value = restore_task_segments(value, window['server_partition'])
+                        parsed = parse_answer_coverage(
+                            value, window_questions, allowed_ids, claims=window_claims,
+                            required_binding_version=3, facts=view.facts, require_subquestions=True)
+                        if task_workflow:
+                            local_ids = {q['question_id']: {t['claim_id']
+                                for t in compact['question_task_ledger']
+                                if t['question_id'] == q['question_id'] and t.get('claim_id')}
+                                for q in window_questions}
+                            parsed = tuple(row if set(row.claim_ids) <= local_ids[row.question_id]
+                                else unverified_coverage(
+                                    [q], "Answer borrowed another question's claims.")[0]
+                                for q, row in zip(window_questions, parsed, strict=True))
+                        return value, parsed
+
+                    reviewed, cached = None, False
+                    if task_workflow:
+                        for span in reversed(live.detail.trace_spans):
+                            if ((span.kind, span.agent, span.subagent, span.name, span.status)
+                                    == ('llm', 'qa', f'{view.competitor}/{view.dimension}',
+                                        'dimension_answer_review', 'ok')
+                                    and span.metadata.get('llm_transport_attempts', 0) > 0
+                                    and span.full_input == review_system + '\n\n' + user):
+                                restored, parsed = parse_review(span.full_output)
+                                if all(row.binding_version == 3 for row in parsed):
+                                    reviewed, cached = restored, True
+                                    break
+                    if not cached:
+                        sizes.append(len(review_prompt.encode()))
+                        reviewed, gaps = await self._dimension_call_with_gaps(
+                            record, gaps, agent='qa',
+                            subagent=f'{view.competitor}/{view.dimension}',
+                            name='dimension_answer_review', system=review_system, user=user)
+                        reviewed, parsed = parse_review(reviewed)
                     self._validate_evidence_use(record, use)
                     self._validate_dimension_upstream(record, compact)
-                    if task_workflow:
-                        from packages.agents.writer.task_answers import restore_task_segments
-                        reviewed = restore_task_segments(reviewed, server_partition)
-                    coverage = parse_answer_coverage(
-                        reviewed, pending, {claim.id for claim in supported},
-                        claims=[claim.model_dump(mode='json') for claim in supported],
-                        required_binding_version=3, facts=view.facts, require_subquestions=True,
-                    )
-                    # Preserve a valid review's concrete omission for one local
-                    # repair target. It is never copied into answer prose.
+                    answers.update({row.question_id: row for row in parsed})
+                    # Preserve a valid review's concrete omission for local repair.
+                    # It is never copied into answer prose.
                     try:
                         if not isinstance(reviewed, str):
                             raise ValueError('review unavailable')
                         rows = parse_json(reviewed)['answers']
-                        incomplete = {item.question_id for item in coverage
+                        incomplete = {item.question_id for item in parsed
                             if item.binding_version == 3 and item.status != 'answered'}
                         for row in rows:
                             if row['question_id'] in incomplete and isinstance(row.get('reason'), str):
@@ -1061,8 +1110,7 @@ class DimensionWriterMixin:
                         pass
                     if reviewed is None:
                         gaps = tuple(sorted(set(gaps) | {'answer_semantic_review_unavailable'}))
-                else:
-                    gaps = tuple(sorted(set(gaps) | {'answer_review_context_budget_exceeded'}))
+                coverage = tuple(answers[q['question_id']] for q in pending)
                 if task_workflow:
                     self._finish_delivery_phase(record, 'answer', f'{view.competitor}/{view.dimension}')
             else:

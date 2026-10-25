@@ -29,6 +29,8 @@ def _review_matches(detail, audit, task, claim, *, handoff_version=None, dispatc
     payload = _expand_text_refs(parse_json(span.full_input.split("\nJSON:\n", 1)[1]))
     from packages.agents.writer.task_execution import (
         has_task_handoff_system,
+        task_instruction,
+        task_instruction_version,
         task_request_context_version,
     )
     if (has_task_handoff_system(span.full_input) or handoff_version is not None
@@ -52,7 +54,7 @@ def _review_matches(detail, audit, task, claim, *, handoff_version=None, dispatc
     )
     advisory_review = span.full_input.startswith(
         HANDOFF_SYSTEM_IDENTITY + ADVISORY_REVIEW_SYSTEM_IDENTITY)
-    generations, two_phase, parent_v2 = [], False, False
+    generations, two_phase, parent_v2, instruction_v2 = [], False, False, False
     for dispatch in dispatches:
         if task['task_id'] not in dispatch['task_ids']:
             continue
@@ -68,11 +70,29 @@ def _review_matches(detail, audit, task, claim, *, handoff_version=None, dispatc
                     == dispatch['full_input_sha256']):
                 two_phase |= has_two_phase_generation_system(generation.full_input)
                 parent_v2 |= task_request_context_version(generation.full_input) == 2
-                generations.append(_expand_text_refs(parse_json(
-                    generation.full_input.split('\nJSON:\n', 1)[1])))
+                generation_payload = _expand_text_refs(parse_json(
+                    generation.full_input.split('\nJSON:\n', 1)[1]))
+                expected_generation_task = {key: task[key] for key in (
+                    "task_id", "question_id", "question_quote", "focus")}
+                if task.get("resource") is not None:
+                    expected_generation_task["resource"] = task["resource"]
+                generation_tasks = [row for row in generation_payload["tasks"]
+                                    if isinstance(row, dict)
+                                    and row.get("task_id") == task["task_id"]]
+                if generation_tasks != [expected_generation_task]:
+                    return False
+                generation_instruction_v2 = task_instruction_version(generation.full_input) == 2
+                if generation_instruction_v2 and generation_payload.get("task_predicates") != [
+                        dict(task_id=row["task_id"], instruction=task_instruction(row))
+                        for row in generation_payload["tasks"]]:
+                    return False
+                instruction_v2 |= generation_instruction_v2
+                generations.append(generation_payload)
     if two_phase and not advisory_review:
         return False
     if parent_v2 and task_request_context_version(span.full_input) != 2:
+        return False
+    if instruction_v2 and task_instruction_version(span.full_input) != 2:
         return False
     if advisory_review:
         # Final QA separately rebuilds both inputs against current producers.
@@ -87,6 +107,8 @@ def _review_matches(detail, audit, task, claim, *, handoff_version=None, dispatc
         for k in ("task_id", "question_id", "question_quote", "focus", "claim_id", "claim_digest")
     }
     expected["consumption_id"] = audit.consumption_id
+    if task_instruction_version(span.full_input) == 2:
+        expected["instruction"] = task_instruction(task)
     if task.get("resource") is not None:
         expected["resource"] = task["resource"]
     if assignments != [expected]:

@@ -193,7 +193,10 @@ def _replay_question_delivery(detail, capsule, documents, *, authorized_brief=No
                 if recipe['extractor_name'] not in SEMANTIC_EXTRACTOR_NAMES:
                     raise ValueError('extractor_unverified')
                 facts = [{'quote': row.get('original_quote', row['quote_anchor']['quote'])} for row in recipe['proposals']]
-                extraction = semantic_extraction(brief, page, {'facts': facts}, extractor_name=recipe['extractor_name'])
+                extraction = semantic_extraction(
+                    brief, page, {'facts': facts}, extractor_name=recipe['extractor_name'],
+                    extractor_version=recipe['extractor_version'],
+                )
                 if extraction.id != recipe['id']:
                     raise ValueError('recipe_identity_mismatch')
                 if (extraction.extractor_version != recipe['extractor_version']

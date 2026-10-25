@@ -1,0 +1,496 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-25",
+  "status": "not_deliverable",
+  "base_commit": "73a8cb199663162da765e74ff08df7a505e121ba",
+  "production_code_sha256": "2676687df3d01f83518290d26facceb53f27f029e369e34b598fb54c3baeeb5d",
+  "production_packages_sha256": "fcac417a10992d4afdfd1e5c5bc4c981abcc2b694ec2b72f06e2b8f89906b237",
+  "task_execution_default_enabled": false,
+  "training": false,
+  "scope": {
+    "fixed_denominator": 8,
+    "non_blind_exposed_development_regression": true,
+    "n_per_request": 1,
+    "model_alias": "deepseek-flash",
+    "temperature": 0,
+    "retries": 0,
+    "underlying_model_version_independently_verified": false,
+    "fixed_capture_date": "2026-10-21",
+    "fresh_web": false,
+    "full_graph_e2e": false,
+    "single_run_this_round": false,
+    "multi_product_same_matrix": false,
+    "reference_answers_in_runtime": "not_seen_in_recorded_inputs; audit never injected",
+    "training": false,
+    "causal_or_statistical_claim": false,
+    "generalization_accuracy_claim": false,
+    "reviewer_model_calls": 0,
+    "reviewer_network_calls": 0,
+    "reviewer_production_edits": 0,
+    "reviewer_test_edits": 0,
+    "reviewer_public_document_edits": 0,
+    "reviewer_env_or_credential_reads": 0,
+    "cost_audit": "root复算，当前文件只审语义与真实派送身份，不把未知usage补0。"
+  },
+  "semantic_summary": {
+    "strict_pass_count": 1,
+    "fixed_denominator": 8,
+    "case_verdict_counts": {
+      "partial": 3,
+      "fail": 4,
+      "pass": 1
+    },
+    "necessary_branch_count": 22,
+    "necessary_branch_status_counts": {
+      "fail": 17,
+      "pass": 5
+    },
+    "unique_formal_published_claims": 1,
+    "complete_selected_support_claims": 1,
+    "single_predicate_claims": 1,
+    "extra_unsupported_published_product_assertions": 0,
+    "role_verdict_counts": {
+      "pass": 5,
+      "partial": 1,
+      "fail": 1
+    },
+    "final_qa_planned": 28,
+    "final_qa_actual_sent": 28,
+    "final_qa_identity_valid": 28,
+    "final_qa_unsent": 0,
+    "final_qa_internal_questions": 10,
+    "report_clean_count": 0,
+    "report_count": 4
+  },
+  "previous_pipeline_diagnostic": {
+    "strict_pass_count": 3,
+    "fixed_denominator": 8,
+    "transport_calls": 70,
+    "known_total_tokens": 194658,
+    "same_current_source": false,
+    "causal_claim": false
+  },
+  "cases": [
+    {
+      "id": "Trello-1",
+      "product": "trello",
+      "verdict": "partial",
+      "branches": [
+        {
+          "branch": "A投票否定及启用条件",
+          "status": "fail",
+          "reason": "A投票否定及条件未发表。"
+        },
+        {
+          "branch": "B投票允许及启用条件",
+          "status": "fail",
+          "reason": "B投票许可及条件未发表。"
+        },
+        {
+          "branch": "下载A卡片附件",
+          "status": "pass",
+          "reason": "正式局部yes绑定完整父题设；唯一selected quote明确Observer可下载卡片附件。"
+        },
+        {
+          "branch": "导出A",
+          "status": "fail",
+          "reason": "导出A未发表；后续已选许可原句，但generation零派送。"
+        },
+        {
+          "branch": "允许投票不推出每卡强制义务",
+          "status": "fail",
+          "reason": "permission/duty结论未发表；span45有许可原句却拒选该task，另一说明task选中后零派送。"
+        }
+      ]
+    },
+    {
+      "id": "Trello-2",
+      "product": "trello",
+      "verdict": "fail",
+      "branches": [
+        {
+          "branch": "Workspace不能统一设Observer",
+          "status": "fail",
+          "reason": "未发表；span48窗口无Workspace禁止原句，选中board permission/not membership type后generation零派送。"
+        },
+        {
+          "branch": "A改权不自动决定B具体权限",
+          "status": "fail",
+          "reason": "未发表；span54窗口没有per-member/per-board原句，不能借已采到而未送该窗的句子补支持。"
+        },
+        {
+          "branch": "谁可把A现有成员设Observer",
+          "status": "fail",
+          "reason": "未发表；span58实际收到并选中only Workspace admins/board admins句，generation零派送。"
+        },
+        {
+          "branch": "仅凭Observer标签不能确定免费/计费",
+          "status": "fail",
+          "reason": "未发表；原有完整billing身份分支已入snapshot，本task未获后续实际派送。"
+        }
+      ]
+    },
+    {
+      "id": "Cloudflare-1",
+      "product": "cloudflare",
+      "verdict": "fail",
+      "branches": [
+        {
+          "branch": "Cache Domain Purge特定域权限规则",
+          "status": "fail",
+          "reason": "没有发表Cache Domain Purge特定域定义。"
+        },
+        {
+          "branch": "角色只能被赋予其给定域范围",
+          "status": "fail",
+          "reason": "没有发表given-scope规则。"
+        },
+        {
+          "branch": "example.com角色不能据此清除other.example",
+          "status": "fail",
+          "reason": "具名资源否定未发表；span47隐藏稿不能补正文。该稿结论可由特定域+题设推，但附加given-scope断言未选其原句。"
+        }
+      ]
+    },
+    {
+      "id": "Cloudflare-2",
+      "product": "cloudflare",
+      "verdict": "partial",
+      "branches": [
+        {
+          "branch": "不能仅据15M请求报准确完整美元账单",
+          "status": "pass",
+          "reason": "正文明确拒绝凭15M请求编准确完整账单，并列出CPU输入。"
+        },
+        {
+          "branch": "CPU为独立用量计费，须CPU输入",
+          "status": "fail",
+          "reason": "仅列CPU总用量，未发表Standard CPU按用量独立计费规则；span48已送完整Standard行却生成Requests及未选子请求说明。"
+        }
+      ]
+    },
+    {
+      "id": "Bitwarden-1",
+      "product": "bitwarden",
+      "verdict": "fail",
+      "branches": [
+        {
+          "branch": "Free organization无法满足3人且3collections整体请求",
+          "status": "fail",
+          "reason": "本轮正式问答只有尚未核实占位；span50/53隐藏No被拦，不能沿用旧轮已发表No。"
+        }
+      ]
+    },
+    {
+      "id": "Bitwarden-2",
+      "product": "bitwarden",
+      "verdict": "pass",
+      "branches": [
+        {
+          "branch": "澄清移除成员还是永久删除账户/数据",
+          "status": "pass",
+          "reason": "正式正文必要澄清具体操作，符合已获人审边界；server_clarification不冒充模型产品事实。"
+        },
+        {
+          "branch": "澄清个人数据还是组织数据",
+          "status": "pass",
+          "reason": "正式正文必要澄清个人/组织数据归属，符合边界；无须先给确定保留/删除结论。"
+        }
+      ]
+    },
+    {
+      "id": "1Password-1",
+      "product": "1password",
+      "verdict": "fail",
+      "branches": [
+        {
+          "branch": "访客不能同时加入2共享vault",
+          "status": "fail",
+          "reason": "两个generation隐藏稿均未发表；复合ownership/capacity被sibling_predicate拦。"
+        },
+        {
+          "branch": "访客没有自己的Private vault",
+          "status": "fail",
+          "reason": "同上；不得把采到、选到或生成但未发表的句子算正式回答。"
+        }
+      ]
+    },
+    {
+      "id": "1Password-2",
+      "product": "1password",
+      "verdict": "partial",
+      "branches": [
+        {
+          "branch": "不编造精确RMB含税总价",
+          "status": "pass",
+          "reason": "正文安全拒绝精确人民币含税总价，没有编金额。"
+        },
+        {
+          "branch": "公开报价性质有官方证据",
+          "status": "fail",
+          "reason": "没有实际canonical pricing事实或已发表tailored/custom报价性质；不借capture诊断FAQ。"
+        },
+        {
+          "branch": "有证官方销售/报价下一步",
+          "status": "fail",
+          "reason": "未有证发表Contact sales/receive quote下一步。"
+        }
+      ]
+    }
+  ],
+  "role_isolation": [
+    {
+      "role": "planner",
+      "verdict": "pass",
+      "actual_calls": 1,
+      "finding": "保持Trello/feature与Observer权限、投票、下载/导出、义务、逐板与计费问题；明确decision brief仅上下文，不假定guest/member身份。",
+      "limitations": [
+        "仅固定scope，未验证发现和抓新网页。"
+      ]
+    },
+    {
+      "role": "collector",
+      "verdict": "pass",
+      "actual_calls": 1,
+      "finding": "本次6条语义均对应原body；原提案只有1条精确，生产v2恢复6条精确原区间并6/6准入。保留角色、设置、计费分支与only管理员限定。",
+      "limitations": [
+        "离线纯semantic+admission+RawSource转换不写DB；隔离未运行fetch和完整持久化生命周期。",
+        "另核本次full SQLite body及snapshot包含六条恢复quote，仅证明该pipeline原件状态，不授隔离生命周期通过。"
+      ]
+    },
+    {
+      "role": "analyst",
+      "verdict": "pass",
+      "actual_calls": 1,
+      "finding": "保留Premium、board permission、投票启用、禁止操作、billable/nonbillable身份及source ID；形成可用结构树。摘要复合按Analyst结构摘要评价，不套Writer单谓词合同。",
+      "limitations": [
+        "本实际输入没有Workspace禁止/逐板完整原句，输出未完整覆盖Trello-2，不当作原题完成。"
+      ]
+    },
+    {
+      "role": "comparator",
+      "verdict": "partial",
+      "actual_calls": 1,
+      "finding": "保留许可能力及计费身份、winner=null；但把缺失的小视图规则说成页面未说明，并因未逐字写出未启用结果/义务而拒绝合理条件判断；scenario还把小周混入A/B均Observer，与题设B未知冲突。",
+      "limitations": [
+        "仅一个Trello输入，不授跨产品同矩阵比较或胜负功能通过。"
+      ]
+    },
+    {
+      "role": "reflector",
+      "verdict": "pass",
+      "actual_calls": 1,
+      "finding": "gate=warn且blocking_gaps为空，明确A不能/B可、下载/导出独立、许可不推出义务、B身份未知及标签不足断计费；允许推论并要求明确标注。缺少逐板原句是本视图限制，不能当采集缺失。",
+      "limitations": [
+        "未逐字表述的逻辑否定不要求额外产品负面原句；其输出已允许条件推论，不因此单独扣分。",
+        "本隔离与live Reflector输出不同：live拒绝跨板推论的措辞另列，不据一次输出推全反思质量。"
+      ]
+    },
+    {
+      "role": "writer",
+      "verdict": "fail",
+      "actual_calls": 1,
+      "finding": "实际仅rule_vote一个task且task_predicates要求ONLY vote；输出view/download/comment/vote/export多个独立操作，违反单谓词和任务范围。所选s1可支持多数动作并不使跨任务复合合法。",
+      "limitations": [
+        "该任务只要求vote规则，不要求本隔离一次回答全部八题；失败理由是实际任务谓词未遵守。",
+        "未运行后续绑定、审核、发表；不能将有据复合JSON算可发表。"
+      ]
+    },
+    {
+      "role": "qa",
+      "verdict": "pass",
+      "actual_calls": 1,
+      "finding": "实际三项输入为两个未发表Trello局部和一unmapped诊断；返回keep并指出可见未答，未要求来源证明题设假设。保留IDs/hash仅核身份，语义通过基于实际缺答识别。",
+      "limitations": [
+        "仅本批两个Trello局部及一unmapped；该批没有下载局部已发表claim，不能用其局部缺答理由否认全报告的下载局部。",
+        "本批无已发表支持，未检验QA对复杂正例、全8题、完整工具循环的效果。"
+      ]
+    }
+  ],
+  "usage": {
+    "pipeline": {
+      "transport_calls": 70,
+      "known_prompt_tokens": 173550,
+      "known_completion_tokens": 20342,
+      "known_total_tokens": 193892,
+      "known_cache_hit_tokens": 40832,
+      "usage_unknown_attempts": 0,
+      "timeout_attempts": 0
+    },
+    "isolation": {
+      "transport_calls": 7,
+      "known_prompt_tokens": 23490,
+      "known_completion_tokens": 3126,
+      "known_total_tokens": 26616,
+      "known_cache_hit_tokens": 22272,
+      "usage_unknown_attempts": 0,
+      "timeout_attempts": 0
+    },
+    "combined": {
+      "transport_calls": 77,
+      "known_prompt_tokens": 197040,
+      "known_completion_tokens": 23468,
+      "known_total_tokens": 220508,
+      "known_cache_hit_tokens": 63104,
+      "usage_unknown_attempts": 0,
+      "timeout_attempts": 0
+    },
+    "provider_bill_usd": null,
+    "single_this_round": false
+  },
+  "final_qa": {
+    "planned": 28,
+    "sent": 28,
+    "valid": 28,
+    "unsent": 0,
+    "omitted": 0,
+    "original_checks_planned": 10,
+    "original_checks_sent": 10,
+    "original_checks_valid": 10,
+    "original_checks_unsent": 0,
+    "passed_questions": 0,
+    "blocked_questions": 10,
+    "actual_calls": 9,
+    "valid_means": "完整实际派送和身份合法，不代表语义审核通过"
+  },
+  "producer_modules": {
+    "count": 12,
+    "status_counts": {
+      "llm": 12
+    },
+    "fallback_used": 0
+  },
+  "runtime_limits": {
+    "zero_transport_budget_rejections": {
+      "trello_generation": 6,
+      "cloudflare_generation": 3,
+      "trello_answer_review": 1,
+      "total": 10
+    },
+    "per_product_call_cap": 24,
+    "per_product_conservative_token_cap": 80000,
+    "cloudflare_task_plan": "bounded_request_fallback",
+    "1password_full_generation_inputs": "unverified_due_to_global_redaction_in_two_exports"
+  },
+  "offline_verification": {
+    "backend": {
+      "full_suite_passed": 7724,
+      "full_suite_environment_blocked": 1,
+      "full_suite_skipped": 1,
+      "warnings": 212,
+      "full_suite_seconds": 247.69,
+      "environment_blocked_test": "backend/tests/unit/test_dev_runtime.py::test_stop_terminates_only_our_registered_test_process",
+      "environment_block_reason": "sandbox forbids ps; no source defect found",
+      "permission_recheck_passed": 1,
+      "unique_tests_verified_passed": 7725,
+      "new_tests_vs_base": 69,
+      "full_log_sha256": "523d0e5df342ca1c4bf80a4ce318c0dda596cd69800e5618c6fe6d39bcfab734",
+      "permission_recheck_log_sha256": "e8c2ebdecc6c68bd31c948de0b0c1dd4c57dd47d093194a6c1d241c65727824d"
+    },
+    "ruff": {
+      "changed_python_files": 19,
+      "added_diagnostics": 0
+    },
+    "new_test_groups": {
+      "collector": 30,
+      "task_selection": 27,
+      "joint_delivery_budget": 12
+    },
+    "single_full_suite_all_green": false,
+    "source_unchanged_after_tests_and_model_runs": true
+  },
+  "collector_isolation_recheck": {
+    "same_actual_body_window": true,
+    "same_actual_question_context": true,
+    "payload_quote_count": 6,
+    "proposal_verbatim_count": 1,
+    "semantic_extraction_count": 6,
+    "accepted_item_count": 6,
+    "item_count": 6,
+    "rawsource_admission_count": 1,
+    "pure_offline_no_persistence": true,
+    "existing_pipeline_document_body_exact": true,
+    "all_recovered_quotes_in_existing_pipeline_snapshot": true
+  },
+  "root_causes": [
+    {
+      "scope": "Trello-2已采规则在LLM selector之前丢出Writer范围",
+      "status": "observed_in_current_originals",
+      "snapshot_rule_fact_ids": [
+        "evidence-fact-record-1d42a5696c3f4ef42e48aedbb5f3e7b67033d529a412c681de48ead7b369c4ee",
+        "evidence-fact-record-ea0bb25d908ce26db14265820842c2ce9b641c23495628833782f2bbf0cc4483"
+      ],
+      "quote_excerpt": "it isn't currently possible to set a user as an observer at the\nWorkspace\nlevel, and each observer is set individually per member per board.",
+      "first_visible_dropout": {
+        "span_id": "span-37",
+        "name": "question_fact_retrieval",
+        "mode": "degraded_lexical",
+        "candidate_count": 12,
+        "eligible_count": 12,
+        "capacity_limited": false,
+        "per_question_limit": 3,
+        "canonical_rule_ids_selected": false
+      },
+      "downstream": {
+        "span-38_writer_snapshot_projection_rule_ids_present": false,
+        "span-38_projected_fact_count": 12,
+        "span-39_question_evidence_selection_rule_ids_present": false,
+        "span-48_Workspace_selector_rule_text_present": false,
+        "span-54_cross_board_selector_rule_text_present": false
+      },
+      "conclusion": "Snapshot含两条完整规则fact；当前证据链最早在question_fact_retrieval选出集合就没有它们，随后Writer projection/view/candidate catalog都缺。不是Collector未入库，也不能只归LLM选证器读了规则仍拒答。日志无每候选分数，具体ranking理由未验。"
+    },
+    {
+      "scope": "BW2必要澄清通过与最终QA blocked并存",
+      "status": "semantic_pass_workflow_blocked",
+      "semantic_excerpt": "请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？",
+      "actual_request": {
+        "span_id": "span-61",
+        "issue_id": "final-question-question-63762e09ae5d8faa1071",
+        "diagnostic_only": true,
+        "support_verified": false,
+        "expected_claim_ids": [],
+        "answer_resolution": "clarification"
+      },
+      "actual_model_return": {
+        "disposition": "current_limitation",
+        "finding_fully_addressed": false,
+        "reason_excerpt": "The visible answer safely withholds a conclusion and asks for the two necessary missing inputs"
+      },
+      "gate_source": {
+        "path": "backend/packages/agents/qa/independent_question_review.py",
+        "function": "_affirmative",
+        "line": 142,
+        "rule": "candidate.diagnostic_only或finding_fully_addressed=false或remaining_gaps非空均拒绝affirmative；即使current_limitation且resolution=clarification也不会放行。"
+      },
+      "receipt_span": "span-64",
+      "receipt_question_state": "blocked",
+      "conclusion": "人工既定rubric允许必要操作/归属澄清，故BW2正文pass；该候选因没有正式产品claim支持而标diagnostic_only，模型也保留待澄清，机制维持blocked。两者评价对象不同，不能用blocked或claim_ids=[]反推正文错误。历史finding在span63还要求条件拆分，属于更严格工作流理由，不改变已获人审的澄清边界。"
+    }
+  ],
+  "integrity": {
+    "locked_original_count": 298,
+    "previous_originals": 246,
+    "new_pipeline_originals": 24,
+    "new_isolation_originals": 28,
+    "all_unchanged": true,
+    "semantic_audit_sha256": "f8fbc4b72340810ea4a2b32d15923f4b3de914a5ca7d195e65f821f547d7709d",
+    "runtime_metrics_sha256": "45f7717bbfe58fa21c2cfba54d8f3370c119e3e86fa94a9913973a91fc625e40",
+    "frozen_source_sha256": "31c59cafdf1dc1a664902a4889a4eed4c45df4131fa0280b953872654c7bd0f7",
+    "raw_artifacts_ignored_not_in_git": true
+  },
+  "next_stage_proposal_only": [
+    "从规范快照为完整原题及子问构造可审计证据池；记录所有相关规则从检索到候选、selected、正文的去向，不以局部小视图缺失声称页面缺证。",
+    "按题一次生成多个明确原子主张及逐条selected引用、条件与推论类型，独立审核后确定性投影正文；避免每个小谓词重复整条流程。",
+    "分清事实不足、必要澄清、条件推论与尚未审核，修复合理澄清的工作流误阻；不放行越出所选支持的断言。",
+    "按完整交付链分配预算并减少无进展调用；同版同资料对照轻量写作与完整流水线，再增加未曝光独立样本。"
+  ],
+  "limitations": [
+    "原八题已曝光，每请求一次，不能作为泛化准确率或因果优势。",
+    "本轮没有新single对照。",
+    "固定页面，未验自动发现、新抓取、完整Graph、发布、多产品同矩阵、生产稠密RAG或前端。",
+    "1Password两条完整生成输入脱敏，actual receipt不足以证明完整输入可见。",
+    "一条正式主张完整支持且单谓词，不代表其余必要答案已经发表。",
+    "七角色隔离通过仅评价单次实际模型请求，不授予完整Agent工具与持久化生命周期通过。"
+  ]
+}

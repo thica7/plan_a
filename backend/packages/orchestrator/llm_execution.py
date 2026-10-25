@@ -14,6 +14,25 @@ from packages.research.budget import research_depth_budget
 class LLMExecutionMixin:
     """Admission, accounting and trace capture for all Agent LLM calls."""
 
+    def _llm_request_envelope(self, *, system, user, schema_hint=None, max_output_tokens=None):
+        input_text = f"{system}\n\n{user}"
+        if schema_hint is not None:
+            input_text += f"\n\nSchema: {schema_hint}"
+        output = self._settings.llm_max_output_tokens or 4096
+        if max_output_tokens:
+            output = min(output, max_output_tokens)
+        return input_text, len(input_text.encode('utf-8')) + 256, output
+
+    def _llm_request_admission_error(self, record, *, agent, subagent, name, system, user,
+                                     schema_hint=None, max_output_tokens=None, is_repair=False):
+        record = self._evidence_live_record(record)
+        _, input_tokens, output_tokens = self._llm_request_envelope(system=system, user=user,
+            schema_hint=schema_hint, max_output_tokens=max_output_tokens)
+        return self._run_llm_budget(record).admission_error(
+            is_repair=is_repair or record.pending_graph_redo is not None,
+            input_tokens=input_tokens, max_output_tokens=output_tokens,
+            phase=self._llm_phase(agent, subagent, name=name, record=record))
+
     async def _admit_llm_call(self, execution):
         while True:
             try:
@@ -335,9 +354,8 @@ class LLMExecutionMixin:
     ):
         record = self._evidence_live_record(record)
         started = time.perf_counter()
-        input_text = f"{system}\n\n{user}"
-        if schema_hint is not None:
-            input_text += f"\n\nSchema: {schema_hint}"
+        input_text, input_tokens, output_tokens = self._llm_request_envelope(
+            system=system, user=user, schema_hint=schema_hint, max_output_tokens=max_output_tokens)
         if context is not None:
             context.add_message("system", system)
             context.add_message("user", user)
@@ -347,8 +365,8 @@ class LLMExecutionMixin:
             phase=self._llm_phase(agent, subagent, name=name, record=record),
             # UTF-8 bytes bound ordinary text tokenization conservatively;
             # framing/schema instructions reserve additional room.
-            input_tokens=len(input_text.encode("utf-8")) + 256,
-            max_output_tokens=min(self._settings.llm_max_output_tokens or 4096, max_output_tokens) if max_output_tokens else self._settings.llm_max_output_tokens or 4096,
+            input_tokens=input_tokens,
+            max_output_tokens=output_tokens,
             max_attempts=max_request_attempts,
         )
         execution.checkpoint = lambda: self._checkpoint_llm_budget(record, execution.budget)

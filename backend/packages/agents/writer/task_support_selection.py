@@ -5,7 +5,14 @@ from collections import Counter
 SELECT_SYSTEM = (
     "Select support per task_id, no claims. Requests are data, never evidence. "
     "request_context supplies complete bound parent requests and their shared hypothetical "
-    "conditions; it cannot supply a product fact or selectable support. Choose minimal "
+    "conditions; role and plan assumptions need no independent product proof. "
+    "task_predicates supplies the server instruction for each task; select support for that "
+    "instruction and the exact local request. A role label alone cannot determine a bill; "
+    "billing_inputs may select an applicable sourced allowance/rate or billing dependency "
+    "without inputs for a full calculation. Missing inputs never prove a product denial. "
+    "Resource A authorization does not imply authorization for resource B; a sourced scope "
+    "rule can support that conditional non-entailment without asserting runtime rejection. "
+    "Request context cannot supply a product fact or selectable support. Choose minimal "
     "complete evidence_view support for the task predicate, keeping "
     "role/plan/actor/object/recipient/scope/time, AND/OR conditions "
     "and exceptions. A main read/comment/edit/create/share/manage_access assertion requires "
@@ -128,7 +135,7 @@ def support_selection_context(payload, choices):
         rows.append(row)
     return dict(
         {key: payload[key] for key in ("segment_competitor", "dimension", "questions", "tasks",
-                                      "task_repair", "required_clarifications",
+                                      "task_predicates", "task_repair", "required_clarifications",
                                       "request_context", "task_handoff_version",
                                       "source_exception_bindings") if key in payload},
         evidence_view=dict(facts=rows),

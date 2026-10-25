@@ -39,7 +39,10 @@ def add_capacity_pressure(record, *, terms=70):
 
 
 def restore_historical_parent_context(detail, receipt):
-    from packages.agents.writer.task_execution import REQUEST_CONTEXT_SYSTEM_IDENTITY
+    from packages.agents.writer.task_execution import (
+        REQUEST_CONTEXT_SYSTEM_IDENTITY,
+        TASK_INSTRUCTION_SYSTEM_IDENTITY,
+    )
     from packages.research.question_scope import question_request_context
 
     for span in detail.trace_spans:
@@ -49,6 +52,9 @@ def restore_historical_parent_context(detail, receipt):
         payload = expand_prompt_payload(json.loads(raw))
         payload['request_context'] = question_request_context(
             detail, detail.plan.competitors[0], 'feature', payload['questions'], version=1)
+        for assignment in payload.get('task_assignments', ()):
+            assignment.pop('instruction', None)
+        system = system.replace(TASK_INSTRUCTION_SYSTEM_IDENTITY, '')
         span.full_input = (system.replace(REQUEST_CONTEXT_SYSTEM_IDENTITY, '')
                            + '\nJSON:\n' + json.dumps(payload, ensure_ascii=False))
         digest = hashlib.sha256(span.full_input.encode()).hexdigest()
@@ -883,7 +889,7 @@ async def test_candidate_budget_is_distinct_from_missing_or_unusable_originals(m
     if case == 'outer_limit':
         add_capacity_pressure(record)
     elif case in {'omitted_originals', 'no_legal_support'}:
-        add_capacity_pressure(record, terms=220)
+        add_capacity_pressure(record, terms=240)
     if case == 'no_legal_support':
         monkeypatch.setattr('packages.research.evidence.source_spans.source_span_candidates',
                             lambda fact: ())

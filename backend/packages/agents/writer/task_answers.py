@@ -10,6 +10,61 @@ TASK_ANSWER_REQUEST_BYTES = 10000
 TASK_ANSWER_RESERVE = 12000
 
 
+def task_answer_review_windows(payload, tasks, *, system, max_bytes=TASK_ANSWER_REQUEST_BYTES,
+                               max_user_bytes=14000, question_fact_ids=None):
+    """Pack whole questions with only their own complete reviewed task premises."""
+    from packages.agents.writer.dimension_writer import compact_prompt_json
+    from packages.research.question_scope import narrow_request_context
+
+    def window(questions):
+        qids = {q['question_id'] for q in questions}
+        # payload.claims already passed source review. A local task can remain
+        # partial while its complete, narrower fact is still a valid premise.
+        # Task fulfillment is checked independently by the unchanged partition.
+        claim_ids = ({t['claim_id'] for t in tasks
+                      if t['question_id'] in qids and t.get('claim_id')}
+                     & {claim['id'] for claim in payload['claims']})
+        result = dict(payload, questions=questions,
+            claims=[c for c in payload['claims'] if c['id'] in claim_ids])
+        for key in ('proposed_answers', 'reviewed_task_decisions', 'server_partition',
+                    'required_clarifications'):
+            if key in payload:
+                result[key] = [row for row in payload[key] if row['question_id'] in qids]
+        if 'request_context' in payload:
+            result['request_context'] = narrow_request_context(payload['request_context'], qids)
+        if 'published_supports' in payload:
+            result['published_supports'] = [row for row in payload['published_supports']
+                                            if row['claim_id'] in claim_ids]
+        fact_ids = {row['fact_id'] for row in result.get('published_supports', ())}
+        fact_ids.update(fid for qid in qids for fid in (question_fact_ids or {}).get(qid, ()))
+        if 'restrictive_source_context' in payload:
+            result['restrictive_source_context'] = [
+                row for row in payload['restrictive_source_context'] if row['fact_id'] in fact_ids]
+        return result
+
+    def fits(candidate):
+        user = '\nJSON:\n' + compact_prompt_json(candidate)
+        return (len(user.encode()) <= max_user_bytes
+                and len((system + '\n\n' + user).encode()) <= max_bytes)
+
+    windows, current, omitted = [], [], []
+    for question in payload['questions']:
+        trial = window([*current, question])
+        if fits(trial):
+            current.append(question)
+            continue
+        if current:
+            windows.append(window(current))
+            current = []
+        if fits(window([question])):
+            current = [question]
+        else:
+            omitted.append(question['question_id'])
+    if current:
+        windows.append(window(current))
+    return windows, omitted
+
+
 def task_answer_plan(questions, tasks, supported_ids):
     """Propose a lossless request partition; this is not coverage approval."""
     plans = []

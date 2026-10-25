@@ -147,7 +147,7 @@ def test_selection_uses_verified_complete_choices_without_canonical_metadata_dup
     assert compact["questions"] == payload["questions"]
     assert compact["tasks"] == payload["tasks"]
     assert "question_evidence_packets" not in compact
-    assert "task_predicates" not in compact
+    assert compact["task_predicates"] == payload["task_predicates"]
     assert all(
         "value" not in row and "qualifiers" not in row for row in compact["evidence_view"]["facts"]
     )

@@ -31,11 +31,18 @@ from packages.schema.models import QCIssue, RedoScope
 
 MAX_ATTEMPTS_PER_FINDING = 2
 MAX_REVIEW_BATCHES = 6
-PROTOCOL = "independent_questions_v2"
+PROTOCOL = "independent_questions_v3"
 INDEPENDENT_SYSTEM = SYSTEM + (
     " Audit EVERY independent_question_check against every request and shared premise in the "
     "complete original question and bound request_context, even without a historical objection. "
-    "Request premises are hypothetical inputs, never product evidence. "
+    "Roles, plans, settings and other scenario conditions explicitly GIVEN in the request or "
+    "its bound parent are hypothetical inputs: do NOT demand source evidence proving those "
+    "assumptions. Every product rule used in the answer still needs complete selected source "
+    "support, preserving its conditions and exceptions. A supported rule plus those given "
+    "assumptions may establish a bounded logical inference. Permission does not imply an "
+    "obligation; authorization for one resource does not imply authorization for another. "
+    "These logical non-entailments need no separate explicit negative product quote, but "
+    "do not invent runtime rejection, enforcement or broader product behavior. "
     "visible_answer is the actual "
     "local publication; answer metadata proves no publication. Check omitted branches, unsupported "
     "premises and exact selected sources. Only a fully answered independent check may set "
@@ -296,8 +303,8 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
     ]
     pending.sort(
         key=lambda row: (
-            attempts.get(row["issue_id"], 0) > 0,
             not row.get("independent_question_check", False),
+            attempts.get(row["issue_id"], 0) > 0,
         )
     )
     batches, omitted = final_review_batches(

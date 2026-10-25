@@ -111,6 +111,7 @@ def _dispatched_originals(detail, snapshot, use, view, packets, dispatch, name, 
         from packages.agents.writer.task_execution import (
             ADVISORY_PROJECTION_SYSTEM_IDENTITY,
             HANDOFF_VERSION,
+            task_instruction_version,
             task_request_context_version,
             validate_task_handoff,
         )
@@ -121,7 +122,8 @@ def _dispatched_originals(detail, snapshot, use, view, packets, dispatch, name, 
         validate_task_handoff(service, SimpleNamespace(detail=detail, evidence_origin=None),
                               payload, view, projection_version=(
                                   2 if ADVISORY_PROJECTION_SYSTEM_IDENTITY in system else 1),
-                              request_context_version=task_request_context_version(span.full_input))
+                              request_context_version=task_request_context_version(span.full_input),
+                              instruction_version=task_instruction_version(span.full_input))
     facts = payload["evidence_view"]["facts"]
     expected_questions = packet["questions"]
     if name == "dimension_task_generation":
@@ -160,6 +162,7 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt, *, s
     from packages.agents.writer.task_execution import (
         HANDOFF_VERSION,
         has_two_phase_generation_system,
+        task_instruction_version,
         task_request_context_version,
     )
     from packages.agents.writer.task_protocol import CONTRACT, parse_tasks
@@ -225,6 +228,8 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt, *, s
     sent, seen_spans, seen_tasks, repaired = {}, set(), set(), False
     two_phase_tasks = set()
     parent_v2_tasks = set()
+    instruction_v2_tasks, repair_tasks = set(), set()
+    repair_version = None
     for dispatch in dispatches:
         ids = dispatch["task_ids"]
         attempt = dispatch.get("attempt", 0)
@@ -237,7 +242,7 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt, *, s
             or type(attempt) is not int
             or attempt not in (0, 1)
             or (attempt == 0 and bool(seen_tasks.intersection(ids)))
-            or (attempt == 1 and (repaired or len(ids) > 2 or not set(ids) <= seen_tasks))
+            or (attempt == 1 and (len(ids) > 2 or not set(ids) <= seen_tasks))
             or dispatch["span_id"] in seen_spans
         ):
             raise ValueError("question task dispatch identity ambiguous")
@@ -246,6 +251,14 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt, *, s
             service=service, handoff_version=receipt.get('task_handoff_version'),
         )
         span = next(span for span in detail.trace_spans if span.id == dispatch["span_id"])
+        instruction_version = task_instruction_version(span.full_input)
+        if instruction_version == 2:
+            instruction_v2_tasks.update(ids)
+        if (attempt == 0 and repair_version == 2 or attempt == 1 and (
+                repaired and (instruction_version != 2 or repair_version != 2)
+                or instruction_version == 2 and (
+                    repair_tasks.intersection(ids) or len(repair_tasks | set(ids)) > 2))):
+            raise ValueError("question task dispatch identity ambiguous")
         if has_two_phase_generation_system(span.full_input):
             two_phase_tasks.update(ids)
         if task_request_context_version(span.full_input) == 2:
@@ -256,6 +269,8 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt, *, s
             if len(repairs) != len(ids) or {r["task_id"] for r in repairs} != set(ids):
                 raise ValueError("question repair does not bind the original tasks")
             repaired = True
+            repair_version = instruction_version
+            repair_tasks.update(ids)
         if payload["tasks"] != [known[tid] for tid in ids] or dispatch["fact_ids"] != sorted(
             fact["id"] for fact in facts
         ):
@@ -276,7 +291,9 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt, *, s
         if len(matches) != 1 or not matches[0].full_input.startswith(
                 HANDOFF_SYSTEM_IDENTITY + ADVISORY_REVIEW_SYSTEM_IDENTITY) or (
                 task['task_id'] in parent_v2_tasks
-                and task_request_context_version(matches[0].full_input) != 2):
+                and task_request_context_version(matches[0].full_input) != 2) or (
+                task['task_id'] in instruction_v2_tasks
+                and task_instruction_version(matches[0].full_input) != 2):
             raise ValueError('question task advisory review phase changed')
     for span in detail.trace_spans:
         if span.id not in review_ids or not span.full_input.startswith(
@@ -288,7 +305,8 @@ def _task_delivery_originals(detail, snapshot, use, view, packets, receipt, *, s
         payload = _expand_text_refs(json.loads(span.full_input.split('\nJSON:\n', 1)[1]))
         validate_task_handoff(service, SimpleNamespace(detail=detail, evidence_origin=None),
                               payload, view,
-                              request_context_version=task_request_context_version(span.full_input))
+                              request_context_version=task_request_context_version(span.full_input),
+                              instruction_version=task_instruction_version(span.full_input))
     return list(sent.values())
 
 

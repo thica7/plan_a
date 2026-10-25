@@ -206,7 +206,8 @@ def final_review_batches(candidates, basis_hash, *, max_bytes, max_batches):
         contexts, findings = {}, []
         for row in rows:
             context = {k: v for k, v in row.items() if k in {
-                'question_id', 'question', 'answer', 'claims', 'task_answers', 'delivery_state',
+                'question_id', 'question', 'request_context', 'answer', 'claims', 'task_answers',
+                'delivery_state',
                 'visible_answer', 'publication_matches', 'support_verified',
                 'task_support_claim_ids'}}
             cid = hashlib.sha256(canonical_json(context).encode()).hexdigest()[:20]
@@ -220,22 +221,21 @@ def final_review_batches(candidates, basis_hash, *, max_bytes, max_batches):
         return (len(row['findings']) <= MAX_FINDINGS
                 and len(('\nJSON:\n' + canonical_json(row)).encode()) <= max_bytes)
 
-    batches, current, omitted = [], [], []
+    # Candidates arrive with unseen independent questions first. Keep that
+    # admission order, then fill an existing complete window when it fits;
+    # historical findings cannot occupy a slot needed by an earlier question.
+    groups, omitted = [], []
     for row in candidates:
-        trial = payload([*current, row])
-        if len(batches) < max_batches and fits(trial):
-            current.append(row)
-            continue
-        if current:
-            batches.append(payload(current))
-            current = []
-        if len(batches) < max_batches and fits(payload([row])):
-            current = [row]
+        for group in groups:
+            if fits(payload([*group, row])):
+                group.append(row)
+                break
         else:
-            omitted.append(row['issue_id'])
-    if current:
-        batches.append(payload(current))
-    return batches, omitted
+            if len(groups) < max_batches and fits(payload([row])):
+                groups.append([row])
+            else:
+                omitted.append(row['issue_id'])
+    return [payload(group) for group in groups], omitted
 
 
 async def reconcile_question_findings(service, record, issues, *, evidence_issues):

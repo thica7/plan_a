@@ -58,24 +58,25 @@ class RunLLMBudget:
                 + cached * self.cache_usd_per_million
                 + output * self.output_usd_per_million) / 1_000_000
 
-    def reserve(
+    def admission_error(
         self, *, is_repair: bool, input_tokens: int = 0, max_output_tokens: int = 0, phase: str | None = None,
-    ) -> None:
+    ) -> str | None:
+        """Read the same admission gates as reserve without changing any account."""
         if self.calls >= self.max_calls:
-            raise LLMExecutionLimitError("run_llm_call_budget_exhausted")
+            return "run_llm_call_budget_exhausted"
         required_calls = self.calls + self.protected_calls(None)
         if required_calls > self.max_calls:
-            raise LLMExecutionLimitError(
-                f'run_llm_scope_budget_insufficient:required_calls={required_calls},limit={self.max_calls}')
+            return ('run_llm_scope_budget_insufficient:'
+                    f'required_calls={required_calls},limit={self.max_calls}')
         if is_repair and self.repairs >= self.max_repairs:
-            raise LLMExecutionLimitError("run_llm_repair_budget_exhausted")
+            return "run_llm_repair_budget_exhausted"
         tokens = input_tokens + max_output_tokens
         cost = self.cost(input_tokens, max_output_tokens)
         if self.max_tokens and self.tokens_used + self.tokens_reserved + tokens > self.max_tokens:
-            raise LLMExecutionLimitError("run_llm_token_budget_exhausted")
+            return "run_llm_token_budget_exhausted"
         total_cost = self.cost_used_usd + self.cost_reserved_usd + cost
         if self.max_cost_usd and total_cost > self.max_cost_usd:
-            raise LLMExecutionLimitError("run_llm_cost_budget_exhausted")
+            return "run_llm_cost_budget_exhausted"
         # Other unfinished segments keep their allowance. The current segment
         # can use its own allowance plus unprotected headroom, never another's.
         protected = self.protected_tokens(phase)
@@ -83,7 +84,19 @@ class RunLLMBudget:
                 or self.calls + 1 + self.protected_calls(phase) > self.max_calls
                 or (self.max_cost_usd and total_cost + protected * max(
                     self.input_usd_per_million, self.output_usd_per_million) / 1_000_000 > self.max_cost_usd)):
-            raise LLMExecutionLimitError("run_llm_budget_reserved_for_delivery")
+            return "run_llm_budget_reserved_for_delivery"
+        return None
+
+    def reserve(
+        self, *, is_repair: bool, input_tokens: int = 0, max_output_tokens: int = 0,
+        phase: str | None = None,
+    ) -> None:
+        error = self.admission_error(is_repair=is_repair, input_tokens=input_tokens,
+                                     max_output_tokens=max_output_tokens, phase=phase)
+        if error:
+            raise LLMExecutionLimitError(error)
+        tokens = input_tokens + max_output_tokens
+        cost = self.cost(input_tokens, max_output_tokens)
         if phase in self.delivery_reserves:
             self.delivery_charged[phase] = self.delivery_charged.get(phase, 0) + tokens
             self.delivery_calls[phase] = self.delivery_calls.get(phase, 0) + 1

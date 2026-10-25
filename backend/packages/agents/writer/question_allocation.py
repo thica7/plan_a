@@ -173,10 +173,10 @@ def task_support_score(task, quote, question, product):
     """Finite routing hints only; a match never proves a predicate or condition."""
     from packages.agents.writer.answer_coverage import question_terms
 
-    request = task.get("request", question)
+    request = task.get("request", task.get("question_quote", question))
     action = _ACTIONS.get(task['focus'].removeprefix('rule_'))
     if task["focus"] == "permission_not_obligation":
-        action = _ACTIONS.get(next(iter(sorted(requested_answer_actions(question))), ""))
+        action = _ACTIONS.get(next(iter(sorted(requested_answer_actions(request))), ""))
     score = 20 * bool(action and re.search(action, quote, re.I))
     from packages.agents.writer.task_predicates import explicit_scope_assignment
 

@@ -19,6 +19,8 @@ from packages.research.evidence.source_exceptions import complete_rule_blocks
 from packages.research.models import CapturedPage, EvidenceQuote, ExtractionResult, ResearchBrief
 
 SEMANTIC_EXTRACTOR_NAMES = frozenset({"bounded_semantic_capabilities", "source_operation_rules", "source_structured_rules"})
+SEMANTIC_MAPPING_VERSION = 'question-focus-v2'
+LEGACY_SEMANTIC_MAPPING_VERSION = 'question-focus-v1'
 
 MAX_INPUT_CHARS = 12000
 MAX_FACTS = 6
@@ -868,6 +870,52 @@ def _restore_markdown_quote(body, window, quote, page):
     return original
 
 
+def _display_quote_layout(text):
+    """Keep word boundaries; recover only inline line breaks before prose , or ."""
+    # A line break introduced around an inline link may precede its comma or
+    # sentence stop. Never join digits, identifiers, or arbitrary punctuation.
+    text = re.sub(r'(?<=[^\W\d_])[ \t\xa0]*(?:\r?\n[ \t\xa0]*)+'
+                  r'(?=[,.](?:[ \t\xa0]|$))', '', text)
+    return re.sub(r'[ \t\r\n\xa0]+', ' ', text).strip()
+
+
+def _restore_display_quote(body, window, quote, page):
+    """Map one complete plain display sentence group to its unchanged source."""
+    if 'document_structure_format' in page.metadata or not window:
+        return quote
+    resolution = _heading_resolution(body, page)
+    if not resolution['valid']:
+        return quote
+    lines = body.splitlines(keepends=True)
+    prose_lines = _markdown_prose_lines(body, lines)
+    headings = {position for position, _, _ in resolution['headings']}
+    target = _display_quote_layout(quote)
+    matches, group = [], []
+    offset = 0
+    for index, line in enumerate(lines):
+        if index not in prose_lines or offset in headings or not line.strip():
+            group = []
+        else:
+            group.append(line)
+            # Completed sentences on different captured lines are distinct
+            # blocks. A recovery cannot concatenate them or omit their prefix.
+            if re.search(r'[.!?。！？]\s*$', line):
+                original = ''.join(group).strip()
+                if (len(original) <= MAX_CONTEXT_CHARS
+                        and _display_quote_layout(original) == target):
+                    matches.append(original)
+                group = []
+        offset += len(line)
+    if len(matches) != 1:
+        return quote
+    original = matches[0]
+    # Search the whole body for ambiguity, then require the entire raw span in
+    # the selected window. Metadata cannot certify or enlarge either boundary.
+    if body.count(original) != 1 or window.count(original) != 1:
+        return quote
+    return original
+
+
 def _table_context(body, start, end):
     """Bind only a contiguous original table header and its adjacent footnotes."""
     from packages.research.evidence.operations import _ROLE
@@ -910,6 +958,7 @@ def _document_rule_blocks(body, page, start=0, end=None):
 def semantic_extraction(
     brief: ResearchBrief, page: CapturedPage, payload: object, *,
     extractor_name: str = "bounded_semantic_capabilities",
+    extractor_version: str | None = None,
 ) -> ExtractionResult:
     body = page.text or page.markdown or page.snippet
     facts = payload.get("facts", []) if isinstance(payload, dict) else []
@@ -930,6 +979,11 @@ def semantic_extraction(
     seen = set()
     diagnostics = []
     focus = semantic_focus_signature(brief, page)
+    version = (extractor_version if extractor_version is not None
+               else SEMANTIC_MAPPING_VERSION + ':' + focus)
+    if version not in {SEMANTIC_MAPPING_VERSION + ':' + focus,
+                       LEGACY_SEMANTIC_MAPPING_VERSION + ':' + focus}:
+        raise ValueError('semantic_extractor_version_unsupported')
     allowed = semantic_page_allowed(brief, page)
     for index, fact in enumerate(facts if isinstance(facts, list) else []):
         original = fact.get("quote") if isinstance(fact, dict) else None
@@ -959,6 +1013,8 @@ def semantic_extraction(
         quote = _restore_bullet(body, window, quote)
         if quote not in window:
             quote = _restore_markdown_quote(body, window, quote, page)
+        if quote not in window and version == SEMANTIC_MAPPING_VERSION + ':' + focus:
+            quote = _restore_display_quote(body, window, quote, page)
         if quote in seen or (len(quote) > MAX_QUOTE_CHARS and quote not in rule_blocks):
             diagnostic['reason'] = 'duplicate' if quote in seen else 'quote_capacity'
             continue
@@ -1073,7 +1129,7 @@ def semantic_extraction(
     result = ExtractionResult(
         competitor=brief.competitor, dimension=brief.dimension, source_candidate_id=page.candidate_id,
         captured_page_id=page.id, fields=fields, quotes=quotes, confidence=min(.8, page.quality_score),
-        extractor_version='question-focus-v1:' + semantic_focus_signature(brief, page),
+        extractor_version=version,
         extractor_name=extractor_name, status="extracted" if fields else "partial",
         missing_fields=[] if fields else ["product_capabilities"],
         metadata={"product_name": brief.product_name, "category": brief.product_category,

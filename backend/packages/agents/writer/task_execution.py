@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections import Counter
+from collections import Counter, deque
 
 from packages.agents.writer.task_protocol import (
     CONTRACT,
@@ -21,6 +21,7 @@ ADVISORY_PROJECTION_SYSTEM_IDENTITY = 'Advisory projection v2. '
 ADVISORY_REVIEW_SYSTEM_IDENTITY = 'Server advisory review v1. '
 TASK_PHASE_SYSTEM_IDENTITY = 'Two phase task handoff v1. '
 REQUEST_CONTEXT_SYSTEM_IDENTITY = 'Parent request context v2. '
+TASK_INSTRUCTION_SYSTEM_IDENTITY = 'Server task instruction v2. '
 
 
 def has_task_handoff_system(full_input):
@@ -45,6 +46,17 @@ def task_request_context_version(full_input):
                                   for prefix in prefixes) else 1
 
 
+def task_instruction_version(full_input):
+    system, separator, _ = full_input.partition('\nJSON:\n')
+    prefixes = (
+        HANDOFF_SYSTEM_IDENTITY + ADVISORY_PROJECTION_SYSTEM_IDENTITY + TASK_PHASE_SYSTEM_IDENTITY,
+        HANDOFF_SYSTEM_IDENTITY + ADVISORY_REVIEW_SYSTEM_IDENTITY,
+    )
+    return 2 if separator and any(system.startswith(
+        prefix + REQUEST_CONTEXT_SYSTEM_IDENTITY + TASK_INSTRUCTION_SYSTEM_IDENTITY)
+        for prefix in prefixes) else 1
+
+
 PLAN_SYSTEM = (
     "Split only the original research requests into independent answer tasks. Never answer them. "
     "One predicate per task; keep inseparable prerequisite lists together. Include every requested "
@@ -64,7 +76,7 @@ PLAN_SYSTEM = (
 
 GENERATE_SYSTEM = (
     HANDOFF_SYSTEM_IDENTITY + ADVISORY_PROJECTION_SYSTEM_IDENTITY + TASK_PHASE_SYSTEM_IDENTITY
-    + REQUEST_CONTEXT_SYSTEM_IDENTITY
+    + REQUEST_CONTEXT_SYSTEM_IDENTITY + TASK_INSTRUCTION_SYSTEM_IDENTITY
 ) + (
     "Answer only the supplied task_ids using EACH task's task_support_selections. "
     "Write from only that task's complete selected supports and use exactly its support_refs. "
@@ -73,6 +85,12 @@ GENERATE_SYSTEM = (
     "Selection itself does not prove support. One independent predicate "
     "per task, one atom maximum; preserve the entire role, plan, actor, object, prerequisites, "
     "AND/OR alternatives and exceptions. Never append background or a sibling predicate. "
+    "Use each task_predicates server instruction to define its requested answer. "
+    "A given role or plan is a hypothetical premise requiring no separate product proof. "
+    "Resource A authorization does not imply resource B authorization; a sourced scope rule "
+    "can support this conditional non-entailment without claiming runtime rejection. "
+    "A role label alone cannot determine billing; applicable sourced billing rules or billing "
+    "dependencies may answer billing_inputs even when a full calculation lacks inputs. "
     "Each original question is request context, not evidence. "
     "request_context binds each question to its complete original parent request; preserve its "
     "shared scenario conditions as hypothetical inputs only. upstream_analysis, "
@@ -171,7 +189,7 @@ def task_instruction(task):
         )
     if focus == "billing_inputs":
         return (
-            "Publish only the applicable CPU-time allowance/rate and complete conditions "
+            "Publish only the applicable billing allowance/rate and complete conditions "
             "if supplied; otherwise only the relevant sourced billing dependency. "
             "Do not calculate the full bill."
         )
@@ -263,11 +281,21 @@ ADVISORY_KEYS = ('upstream_analysis', 'comparison_assessment', 'reflection_const
 
 
 def validate_task_handoff(service, record, payload, view, *, projection_version=2,
-                          request_context_version=2):
+                          request_context_version=2, instruction_version=1):
     """Rebuild request and advisory identity from server state, never a receipt hash."""
     from packages.orchestrator.evidence_context import EvidenceUseRejectedError
     from packages.research.question_scope import question_request_context, questions_match_scope
 
+    if instruction_version == 2:
+        if "tasks" in payload and payload.get("task_predicates") != [
+                dict(task_id=task["task_id"], instruction=task_instruction(task))
+                for task in payload["tasks"]]:
+            raise EvidenceUseRejectedError('Task server instruction changed')
+        if any(assignment.get("instruction") != task_instruction(assignment)
+               for assignment in payload.get("task_assignments", ())):
+            raise EvidenceUseRejectedError('Task review instruction changed')
+    elif instruction_version != 1:
+        raise EvidenceUseRejectedError('Task instruction version changed')
     detail = service._evidence_live_record(record).detail
     if not questions_match_scope(detail, view.competitor, view.dimension, payload.get('questions')):
         raise EvidenceUseRejectedError('Task canonical questions changed')
@@ -291,8 +319,8 @@ def validate_task_handoff(service, record, payload, view, *, projection_version=
     return service._validate_dimension_upstream(record, payload)
 
 
-def task_context(service, record, selected, view, allowed, questions, packets, tasks, use,
-                 *, upstream_context=None):
+def _task_context(service, record, selected, view, allowed, questions, packets, tasks, use,
+                  *, upstream_context=None):
     from packages.agents.writer.dimension_writer import (
         compact_dimension_context,
         compact_prompt_json,
@@ -353,33 +381,40 @@ def task_context(service, record, selected, view, allowed, questions, packets, t
     selected_ids = {fact.id for ranking in rankings for fact in ranking[:2]}
     from packages.research.evidence.source_exceptions import source_exception_bindings
 
-    for pair in source_exception_bindings(facts):
-        if selected_ids.intersection(pair["fact_ids"]):
-            selected_ids.update(pair["fact_ids"])
+    pairs = source_exception_bindings(facts)
+    while True:
+        closure = selected_ids | {fid for pair in pairs
+                                  if selected_ids.intersection(pair["fact_ids"])
+                                  for fid in pair["fact_ids"]}
+        if closure == selected_ids:
+            break
+        selected_ids = closure
     narrow = [dict(question_id=t["question_id"], question=t["question_quote"]) for t in tasks]
     # Bound complete originals, never slice a prerequisite or source quote to fit.
-    reserve = len(compact_prompt_json(dict(questions=questions, tasks=tasks)).encode()) + 700
-    context, omitted = compact_dimension_context(
+    context, _ = compact_dimension_context(
         selected,
         view,
         selected_ids,
         questions=narrow,
-        max_bytes=max(0, min(10000, use.max_bytes) - reserve),
+        max_bytes=10**9,
         atom_limit=2,
         fact_order=ranked_ids,
         span_limit=2,
         repair_metadata=metadata,
     )
-    if omitted and not context['evidence_view']['facts']:
-        from packages.research.evidence.operations import operation_observations
-        from packages.research.evidence.source_spans import source_span_candidates
-        # No operation filter is applied here. A selected, legal original that
-        # was omitted from an empty result could not fit with complete context.
-        if any(fact.id in selected_ids and fact.status == 'supported'
-               and (fact.competitor, fact.dimension) == (view.competitor, view.dimension)
-               and (source_span_candidates(fact) or operation_observations(fact))
-               for fact in facts):
-            context['candidate_context_budget_exceeded'] = True
+    from packages.research.evidence.operations import operation_observations
+    from packages.research.evidence.source_spans import source_span_candidates
+
+    required_ids = {fact.id for fact in facts if fact.id in selected_ids
+                    and (source_span_candidates(fact) or operation_observations(fact))}
+    sent_ids = {row["id"] for row in context["evidence_view"]["facts"]}
+    reserve = len(compact_prompt_json(dict(questions=questions, tasks=tasks)).encode()) + 700
+    if (required_ids - sent_ids or len(compact_prompt_json(context).encode())
+            > max(0, min(10000, use.max_bytes) - reserve)):
+        from packages.agents.writer.readable_support import support_ref_catalog
+        if support_ref_catalog(context, view.facts,
+                               {row["id"] for row in context["evidence_view"]["facts"]}):
+            context["candidate_context_budget_exceeded"] = True
     context.pop("atom_tasks", None)
     billing_ids = {
         fid
@@ -413,6 +448,83 @@ def task_context(service, record, selected, view, allowed, questions, packets, t
         dict(p, questions=[q for q in p["questions"] if q["question_id"] in active_ids])
         for p in context["question_evidence_packets"]
     ]
+    return context
+
+
+def task_context(service, record, selected, view, allowed, questions, packets, tasks, use,
+                 *, upstream_context=None):
+    """Union complete task-local packages before testing the shared dispatch window."""
+    from copy import deepcopy
+
+    from packages.agents.writer.dimension_writer import compact_prompt_json
+    from packages.research.question_delivery import _expand_text_refs
+
+    # Local ranking determines each task's complete candidates. A shared ranking
+    # must never replace those candidates with a sibling's preferred spans.
+    contexts = [_expand_text_refs(_task_context(
+        service, record, selected, view, allowed, questions, packets, [task], use,
+        upstream_context=upstream_context)) for task in tasks]
+    context = _expand_text_refs(_task_context(
+        service, record, selected, view, allowed, questions, packets, tasks, use,
+        upstream_context=upstream_context)) if len(tasks) > 1 else contexts[0]
+    local_overflow = any(local.get("candidate_context_budget_exceeded") for local in contexts)
+    context.pop("candidate_context_budget_exceeded", None)
+    rows, pairs = {}, {}
+    for local in contexts:
+        for original in local["evidence_view"]["facts"]:
+            if original["id"] not in rows:
+                rows[original["id"]] = deepcopy(original)
+                continue
+            row = rows[original["id"]]
+            for key in ("source_span_candidates", "non_operation_originals"):
+                for item in original.get(key, ()):
+                    # Aliases are local to the old catalog; identity is the
+                    # complete canonical quote, or the non-operation original.
+                    if key == "source_span_candidates":
+                        present = any(current["quote"] == item["quote"]
+                                      for current in row.get(key, ()))
+                    else:
+                        present = item in row.get(key, ())
+                    if not present:
+                        row.setdefault(key, []).append(deepcopy(item))
+        for pair in local.get("source_exception_bindings", ()):
+            pairs[pair["id"]] = pair
+    # Preserve the existing round-robin priority across task predicates.
+    ordered = [rows.pop(row["id"]) for row in context["evidence_view"]["facts"]
+               if row["id"] in rows]
+    ordered.extend(rows.values())
+    span_index, operation_index = 0, 0
+    for row in ordered:
+        for span in row.get("source_span_candidates", ()):
+            span_index += 1
+            span["support_ref"] = f"s{span_index}"
+        if row.get("operation_observations"):
+            row["operation_support_refs"] = [f"o{index}" for index in range(
+                operation_index + 1, operation_index + len(row["operation_observations"]) + 1)]
+            operation_index += len(row["operation_observations"])
+    context["evidence_view"]["facts"] = ordered
+    if pairs:
+        context["source_exception_bindings"] = list(pairs.values())
+    context["question_evidence_packets"] = service._question_packet_prompt(
+        record, packets, context["evidence_view"]["facts"])
+    active = {task["question_id"] for task in tasks}
+    context["question_evidence_packets"] = [dict(
+        packet, questions=[q for q in packet["questions"] if q["question_id"] in active])
+        for packet in context["question_evidence_packets"]]
+    from packages.agents.writer.readable_support import support_ref_catalog
+    catalog = support_ref_catalog(context, view.facts, {row["id"] for row in ordered})
+    actual = {compact_prompt_json(binding) for binding in catalog.values()}
+    required = {task["task_id"]: {compact_prompt_json(binding) for binding in
+                support_ref_catalog(local, view.facts,
+                    {row["id"] for row in local["evidence_view"]["facts"]}).values()}
+                for task, local in zip(tasks, contexts, strict=True)}
+    if (any(not bindings <= actual for bindings in required.values())
+            or local_overflow
+            or len(("\nJSON:\n" + compact_prompt_json(context)).encode())
+            > min(10000, use.max_bytes)):
+        if catalog or any(required.values()):
+            context["candidate_context_budget_exceeded"] = True
+        context["evidence_view"]["facts"] = []
     return context
 
 
@@ -474,15 +586,14 @@ async def execute_question_tasks(
         if task["question_id"] in server_ids:
             task.update(state="server_clarification", reason="request_only_clarification")
     pending = [t for t in tasks if t["state"] == "planned"]
-    for offset in range(0, len(pending) + 3, 3):
-        attempt = int(offset >= len(pending))
-        batch = (
-            [t for t in pending if t["state"] in {"rejected", "partial"}][:2]
-            if attempt
-            else pending[offset : offset + 3]
-        )
+    task_batches = deque((pending[offset:offset + 3], 0) for offset in range(0, len(pending), 3))
+    task_batches.append((None, 1))
+    while task_batches:
+        batch, attempt = task_batches.popleft()
+        if batch is None:
+            batch = [t for t in pending if t["state"] in {"rejected", "partial"}][:2]
         if not batch:
-            break
+            continue
         payload = task_context(
             service, record, selected, view, allowed, questions, packets, batch, use,
             upstream_context=upstream,
@@ -505,7 +616,12 @@ async def execute_question_tasks(
         sent = {row["id"] for row in dispatched["evidence_view"]["facts"]}
         catalog = _support_ref_catalog(dispatched, view.facts, sent)
         if (len(("\nJSON:\n" + prompt).encode()) > min(14000, use.max_bytes)
-                or not catalog and candidate_budget_exceeded):
+                or candidate_budget_exceeded):
+            if len(batch) > 1:
+                middle = len(batch) // 2
+                task_batches.appendleft((batch[middle:], attempt))
+                task_batches.appendleft((batch[:middle], attempt))
+                continue
             for task in batch:
                 task.update(state='deferred', reason='candidate_context_budget_exceeded')
             continue
@@ -515,6 +631,21 @@ async def execute_question_tasks(
             continue
         choices = dispatched_support_choices(dispatched, view.facts, sent)
         selection_prompt = compact_prompt_json(support_selection_context(dispatched, choices))
+        # Selection may choose any single cheap task/support. Only the empty
+        # generation envelope is a proven lower bound across every such choice.
+        # Do not pay for selection/repair when even that cannot be admitted.
+        # Outstanding reservations may settle lower, so leave those to the
+        # normal admission wait instead of declaring a permanent deferral.
+        budget = service._run_llm_budget(record)
+        if not budget.tokens_reserved and service._llm_request_admission_error(
+            record, agent='writer', subagent=scope, name='dimension_task_generation',
+            system=GENERATE_SYSTEM + language_instruction(record.detail.output_language),
+            user='\nJSON:\n{}', max_output_tokens=1600,
+        ):
+            for task in batch:
+                task.update(state='deferred', reason='task_delivery_budget_unavailable')
+            gaps = tuple(sorted(set(gaps) | {'claim_execution_budget_exceeded'}))
+            continue
         selection_start = len(service._evidence_live_record(record).detail.trace_spans)
         response, gaps = await service._dimension_call_with_gaps(
             record, gaps, agent="writer", subagent=scope,
@@ -562,7 +693,7 @@ async def execute_question_tasks(
             dict(dispatched, **upstream), selections, choices,
             packet_builder=lambda rows: service._question_packet_prompt(record, packets, rows),
         )
-        validate_task_handoff(service, record, payload, view)
+        validate_task_handoff(service, record, payload, view, instruction_version=2)
         prompt = compact_prompt_json(payload)
         if len(("\nJSON:\n" + prompt).encode()) > min(14000, use.max_bytes):
             for task in batch:
@@ -607,7 +738,8 @@ async def execute_question_tasks(
             continue
         span = spans[0]
         actual_payload = _expand_text_refs(parse_json(span.full_input.split('\nJSON:\n', 1)[1]))
-        actual_dependencies = validate_task_handoff(service, record, actual_payload, view)
+        actual_dependencies = validate_task_handoff(
+            service, record, actual_payload, view, instruction_version=2)
         dependencies = tuple(dict.fromkeys((*dependencies, *actual_dependencies)))
         sent_upstream.update({key: actual_payload[key] for key in ADVISORY_KEYS
                               if key in actual_payload})
@@ -678,6 +810,7 @@ async def execute_question_tasks(
                         question_id=task["question_id"],
                         question_quote=task["question_quote"],
                         focus=task["focus"],
+                        instruction=task_instruction(task),
                         claim_digest=hashlib.sha256(claim.model_dump_json().encode()).hexdigest(),
                         consumption_id=use.id,
                         **({"resource": task["resource"]} if "resource" in task else {}),
@@ -732,7 +865,7 @@ async def execute_question_tasks(
             group_assignments = [a for a in assignments if a["claim_id"] in {c.id for c in current}]
             review.update(review_metadata)
             review["task_assignments"] = group_assignments
-            validate_task_handoff(service, record, review, view)
+            validate_task_handoff(service, record, review, view, instruction_version=2)
             review_prompt = compact_prompt_json(review)
             if len(review_prompt.encode()) > min(14000, use.max_bytes):
                 for task in batch:
@@ -747,10 +880,17 @@ async def execute_question_tasks(
                 subagent=scope,
                 name="dimension_task_review",
                 system=HANDOFF_SYSTEM_IDENTITY + ADVISORY_REVIEW_SYSTEM_IDENTITY
-                + REQUEST_CONTEXT_SYSTEM_IDENTITY
+                + REQUEST_CONTEXT_SYSTEM_IDENTITY + TASK_INSTRUCTION_SYSTEM_IDENTITY
                 + REPAIR_REVIEW_SYSTEM
                 + " Also independently check each task_assignment "
-                "is fully answered by that exact claim. "
+                "is fully answered by that exact claim using its server instruction. "
+                "Given role and plan assumptions need no independent product proof. "
+                "Permission does not entail obligation. Resource A authorization does not "
+                "entail resource B authorization; a sourced scope rule can support this "
+                "conditional non-entailment without proving runtime rejection. "
+                "Role labels alone cannot determine a bill. Applicable sourced billing rules "
+                "or a billing dependency can answer billing_inputs without calculating a "
+                "full bill; missing inputs never justify an automatic product denial. "
                 "request_context contains complete bound parent requests; use their shared "
                 "premises only as hypothetical scenario inputs, never product facts. "
                 "The three upstream role outputs are fallible advisory diagnostics; verify "
@@ -787,13 +927,15 @@ async def execute_question_tasks(
                 and span.metadata['llm_transport_attempts'] > 0
                 and span.full_input.startswith(
                     HANDOFF_SYSTEM_IDENTITY + ADVISORY_REVIEW_SYSTEM_IDENTITY)
+                and task_instruction_version(span.full_input) == 2
                 and span.full_input.partition('\nJSON:\n')[2] == review_prompt
                 and isinstance(response, str) and span.full_output == response
             ]
             if len(review_spans) == 1:
                 actual_review = _expand_text_refs(parse_json(
                     review_spans[0].full_input.split('\nJSON:\n', 1)[1]))
-                validate_task_handoff(service, record, actual_review, view)
+                validate_task_handoff(
+                    service, record, actual_review, view, instruction_version=2)
             else:
                 response = None
             try:
