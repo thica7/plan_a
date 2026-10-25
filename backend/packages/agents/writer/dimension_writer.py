@@ -956,7 +956,12 @@ class DimensionWriterMixin:
                    and q['question_id'] not in clarification_answers]
         coverage = unverified_coverage(pending, 'No supported answer claims are available.')
         sizes = []
-        if pending and supported:
+        if (pending and supported
+                and compact.get('question_atomic_contract') == 'question-atomic-delivery-v1'):
+            from packages.agents.writer.question_atomic_delivery import atomic_answer_coverage
+            coverage, gaps, sizes = await atomic_answer_coverage(
+                self, record, pending, compact, supported, view, use, gaps)
+        elif pending and supported:
             task_workflow = 'question_task_ledger' in compact
             payload = compact_prompt_json(answer_review_payload(pending, supported, view,
                 include_originals=False, compact_semantics=task_workflow))
@@ -1269,6 +1274,12 @@ class DimensionWriterMixin:
                 upstream_hash = self._analysis_artifacts_hash(live.detail)
                 view, use, question_packets = await self._begin_question_evidence_use(
                     record, agent='writer', competitor=product, dimension=dimension)
+                atomic_enabled = (self._settings.writer_task_execution_enabled
+                    and self._settings.writer_question_atomic_enabled and dimension == 'feature'
+                    and bool(question_packets) and not operation_targets)
+                if atomic_enabled:
+                    view, use, question_packets = await self._begin_question_pool_evidence_use(
+                        record, packet=question_packets[0])
                 retrieval = question_packets[0]['retrieval'] if question_packets else {'mode': 'no_questions', 'questions': []}
                 if self._analysis_artifacts_hash(self._evidence_live_record(record).detail) != upstream_hash:
                     raise EvidenceUseRejectedError('Question retrieval upstream artifacts changed')
@@ -1305,9 +1316,18 @@ class DimensionWriterMixin:
                 task_result = None
                 if (self._settings.writer_task_execution_enabled and compact_supports and allowed
                         and len(questions) <= 8 and not operation_targets):
-                    from packages.agents.writer.task_execution import execute_question_tasks
-                    task_result = await execute_question_tasks(self, record, selected, view, use,
-                        questions, question_packets, allowed, boundaries, gaps)
+                    if atomic_enabled:
+                        from packages.agents.writer.question_atomic_delivery import (
+                            execute_question_atomic_delivery,
+                        )
+                        task_result = await execute_question_atomic_delivery(
+                            self, record, selected, view, use, questions,
+                            question_packets, allowed, boundaries, gaps)
+                    else:
+                        from packages.agents.writer.task_execution import execute_question_tasks
+                        task_result = await execute_question_tasks(
+                            self, record, selected, view, use, questions,
+                            question_packets, allowed, boundaries, gaps)
                     claims, reviews = task_result['claims'], task_result['reviews']
                     sizes, compact, gaps = task_result['sizes'], task_result['compact'], task_result['gaps']
                     sent_fact_ids = task_result['sent_fact_ids']
@@ -1652,7 +1672,9 @@ class DimensionWriterMixin:
                     claims=tuple(audited), gaps=gaps, review_context_bytes=tuple(sizes), answer_coverage=coverage,
                     answer_binding_version=3 if questions else 2, claim_review_version=3 if questions else None,
                     answer_review_contract="subquestion-premises-v1" if questions else None,
-                    upstream_dependencies=upstream_dependencies)
+                    upstream_dependencies=upstream_dependencies,
+                    question_atomic_contract=compact.get('question_atomic_contract'),
+                    question_atomic_receipt_digest=compact.get('question_atomic_receipt_digest'))
                 audits.append(audit)
                 self._validate_evidence_use(record, use)
                 self._trace_local_tool(record, agent="writer", subagent=f"{product}/{dimension}",

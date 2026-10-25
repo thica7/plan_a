@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -383,7 +383,10 @@ class EvidenceContextMixin:
     @staticmethod
     def _validate_question_selection_receipt(detail, snapshot, use):
         """Replay persisted selection identity without consuming the credential."""
-        from packages.orchestrator.question_packets import validate_selection_receipt
+        from packages.orchestrator.question_packets import (
+            validate_pool_trace_packets,
+            validate_selection_receipt,
+        )
 
         selections = []
         for span in detail.trace_spans:
@@ -395,6 +398,8 @@ class EvidenceContextMixin:
             if selection.get('consumption_id') == use.id:
                 selections.append(selection)
                 validate_selection_receipt(detail, snapshot, selection['receipt'], use)
+                if selection['receipt'].get('version') == 2:
+                    validate_pool_trace_packets(selection.get('packets', ()), selection['receipt'])
         if use.id.startswith('question-evidence-use-') and len(selections) != 1:
             raise EvidenceUseRejectedError('question packet selection missing or ambiguous')
 
@@ -839,9 +844,7 @@ class EvidenceContextMixin:
         return snapshot
 
     async def _begin_question_evidence_use(self, record, *, agent, competitor=None, dimension=None):
-        from packages.orchestrator.question_packets import (
-            prepare_packets, prompt_packets, receipt_hash, selected_packet_ids, selection_receipt,
-        )
+        from packages.orchestrator.question_packets import prepare_packets
         record = self._evidence_live_record(record)
         snapshot = self._current_evidence_snapshot(record)
         try:
@@ -851,13 +854,46 @@ class EvidenceContextMixin:
         if not packets:
             view, use = self._begin_evidence_use(record, agent=agent, competitor=competitor, dimension=dimension)
             return view, use, []
+        return self._begin_prepared_question_evidence_use(record, snapshot, packets,
+            agent=agent, competitor=competitor, dimension=dimension)
+
+    async def _begin_question_pool_evidence_use(self, record, *, packet, question_id=None,
+                                                fact_ids=None, agent='writer'):
+        """Apply one whole-question or scope pool selection to an ordinary use.
+
+        A scope selection shares one credential across all of its question
+        generations. Omitted whole originals stay in the pool for a later use;
+        their IDs are never added to this view's citable set.
+        """
+        from packages.orchestrator.question_packets import select_question_pool_packet
+        record = self._evidence_live_record(record)
+        snapshot = self._current_evidence_snapshot(record)
+        try:
+            selected = select_question_pool_packet(
+                record.detail, snapshot, packet, question_id, fact_ids)
+        except ValueError as error:
+            raise EvidenceUseRejectedError(str(error)) from error
+        return self._begin_prepared_question_evidence_use(record, snapshot, [selected],
+            agent=agent, competitor=packet['competitor'], dimension=packet['dimension'])
+
+    def _begin_prepared_question_evidence_use(self, record, snapshot, packets, *, agent,
+                                             competitor=None, dimension=None):
+        from packages.orchestrator.question_packets import (
+            prompt_packets,
+            receipt_hash,
+            selected_packet_ids,
+            selection_receipt,
+        )
         if self._current_evidence_snapshot(record).id != snapshot.id:
             raise EvidenceUseRejectedError('Question retrieval snapshot changed')
-        # Reserve metadata inside the existing stage budget, including omission IDs.
-        reserve = max(len(canonical_json(prompt_packets(packets, snapshot, facts)).encode())
-                      for facts in (snapshot.facts, ())) + 256
+        # Reserve only metadata for the actual view, including omission IDs.
+        # The complete pool is local trace state and never a prompt catalog.
+        def reserve(facts):
+            return len(canonical_json(prompt_packets(packets, snapshot, facts)).encode()) + 256
         view, use = self._begin_evidence_use(record, agent=agent, competitor=competitor,
             dimension=dimension, fact_ids=selected_packet_ids(packets), context_reserve_bytes=reserve,
+            question_pool_selection=any(packet.get('version') == 2 and packet.get('pool_selection')
+                                        for packet in packets),
             question_scopes={(packet['competitor'], packet['dimension']) for packet in packets})
         previous_id = use.id
         receipt = selection_receipt(record.detail, packets, use.requested_fact_ids)
@@ -972,8 +1008,9 @@ class EvidenceContextMixin:
         dimension: str | None = None,
         source_ids: Iterable[str] | None = None,
         fact_ids: Iterable[str] | None = None,
-        context_reserve_bytes: int = 0,
+        context_reserve_bytes: int | Callable[[tuple], int] = 0,
         question_scopes=None,
+        question_pool_selection=False,
     ) -> tuple[StageEvidenceView, EvidenceConsumption]:
         record = self._evidence_live_record(record)
         if record.detail.evidence_inputs_dirty:
@@ -991,11 +1028,14 @@ class EvidenceContextMixin:
             from packages.agents.writer.answer_coverage import question_fact_ids
             requested_fact_ids = question_fact_ids(record.detail, snapshot, competitor, dimension)
         if (agent == 'writer' and competitor and dimension == 'feature'
-                and requested_fact_ids and len(requested_fact_ids) <= 8):
+                and requested_fact_ids
+                and (len(requested_fact_ids) <= 8 or question_pool_selection)):
             from packages.research.question_scope import research_questions
             if research_questions(record.detail, competitor, dimension):
                 # This local view retains complete question observations before
                 # the Writer independently compacts its model input to 14 KiB.
+                # A validated pool selection must retain this existing allowance
+                # when its available original count exceeds the legacy top eight.
                 budget = min(32768, budget * 2)
         analysis_allowance = budget if agent in {'comparator', 'reflector'} else 0
         if agent in {"comparator", "reflector"}:
@@ -1057,7 +1097,9 @@ class EvidenceContextMixin:
         # Oversized question metadata cannot consume the structural view itself.
         # The dispatch guard records the unsent originals rather than raising
         # a serialization error or increasing this stage's original allowance.
-        view_budget = budget - context_reserve_bytes
+        reserve_callback = context_reserve_bytes if callable(context_reserve_bytes) else None
+        reserved = reserve_callback(()) if reserve_callback else context_reserve_bytes
+        view_budget = budget - reserved
         if view_budget < min(1024, budget):
             view_budget = budget
         view = select_evidence_view(
@@ -1069,6 +1111,20 @@ class EvidenceContextMixin:
             fact_ids=requested_fact_ids,
             max_bytes=view_budget,
         )
+        if reserve_callback:
+            # Monotone reservation converges without serializing all N pool IDs
+            # as a hypothetical sent catalog. Whole originals are never trimmed.
+            while (needed := reserve_callback(view.facts)) > reserved:
+                reserved = needed
+                next_budget = budget - reserved
+                if next_budget < min(1024, budget):
+                    next_budget = budget
+                if next_budget == view_budget:
+                    break
+                view_budget = next_budget
+                view = select_evidence_view(snapshot, agent=agent, competitor=competitor,
+                    dimension=dimension, source_ids=requested_ids, fact_ids=requested_fact_ids,
+                    max_bytes=view_budget)
         use = EvidenceConsumption(
             id=f"evidence-use-{uuid4().hex}",
             run_id=record.detail.id,

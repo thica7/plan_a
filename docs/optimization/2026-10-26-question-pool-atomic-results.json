@@ -1,0 +1,973 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-26",
+  "status": "experimental_implementation_verified_report_acceptance_failed",
+  "branch": "codex/pastoral-desktop",
+  "base_commit": "8774bf000d21321b0f5526b0d6243ea76d3904d1",
+  "experimental_defaults": {
+    "WRITER_TASK_EXECUTION_ENABLED": false,
+    "WRITER_QUESTION_ATOMIC_ENABLED": false
+  },
+  "implementation": {
+    "question_pool": "Complete eligible scoped candidates retained independently of default top3/top8 selection; pool is not sending or citation authorization.",
+    "writer": "At most 8 admitted independent atoms per question; bounded claim batches; actual-use receipt and deterministic publication.",
+    "clarification": "Strict canonical request-only clarification plus actual independent v4 QA; remains partial, not a product fact.",
+    "budget": "Actual current request admission with unchanged caps; future chain worst case diagnostic only. No new local rewrite loop.",
+    "legacy_replay_preserved": true
+  },
+  "protocols": {
+    "delivery": "question-atomic-delivery-v1",
+    "independent_qa": "independent_questions_v4",
+    "budget_diagnostic_version": 2
+  },
+  "limits": {
+    "calls": 24,
+    "tokens": 80000,
+    "cost_usd": 0.25,
+    "atomic_output_tokens": 1600,
+    "user_bytes": 14000,
+    "answer_plus_final_qa_protected_tokens": 23995,
+    "final_qa_protected_tokens": 11995
+  },
+  "conditions": {
+    "captured_pages_date": "2026-10-21",
+    "model_alias": "deepseek-flash",
+    "temperature": 0,
+    "provider_retries": 0,
+    "n_per_request": 1,
+    "fixed_original_questions": 8,
+    "fixed_required_branches": 22,
+    "already_exposed": true,
+    "current_single_agent_control": null,
+    "stage_replay_not_full_graph": true,
+    "fresh_fetch_tested": false,
+    "publication_tested": false,
+    "production_dense_rag_tested": false,
+    "training_performed": false
+  },
+  "content_acceptance": {
+    "strict_pass": 3,
+    "denominator": 8,
+    "pass_rate": 0.375,
+    "questions": {
+      "fail": 1,
+      "partial": 4,
+      "pass": 3
+    },
+    "branches": {
+      "fail": 12,
+      "partial": 1,
+      "pass": 9
+    },
+    "branch_denominator": 22,
+    "visible_unique_claims": 18,
+    "complete_selected_support": 17,
+    "single_predicate": 10,
+    "both": 9,
+    "delivery_ready_reports": 0,
+    "report_denominator": 4
+  },
+  "question_results": [
+    {
+      "id": "Trello-1",
+      "verdict": "fail",
+      "branches": [
+        {
+          "id": "Trello-1.1",
+          "original_question_id": "Trello-1",
+          "requirement": "A投票否定及启用条件",
+          "verdict": "fail",
+          "reason": "A投票否定及条件未发表，s9选错片段被拒。"
+        },
+        {
+          "id": "Trello-1.2",
+          "original_question_id": "Trello-1",
+          "requirement": "B投票允许及启用条件",
+          "verdict": "fail",
+          "reason": "B投票允许及条件未发表，同样s9错引。"
+        },
+        {
+          "id": "Trello-1.3",
+          "original_question_id": "Trello-1",
+          "requirement": "下载A卡片附件",
+          "verdict": "fail",
+          "reason": "下载观察已发表却绑定禁止编辑/上传句，不能补成A的有证结论。"
+        },
+        {
+          "id": "Trello-1.4",
+          "original_question_id": "Trello-1",
+          "requirement": "导出A",
+          "verdict": "fail",
+          "reason": "导出候选被拒，正式正文无导出A。"
+        },
+        {
+          "id": "Trello-1.5",
+          "original_question_id": "Trello-1",
+          "requirement": "允许投票不推出每卡强制义务",
+          "verdict": "fail",
+          "reason": "许可不推出逐卡义务未发表；原始生成末尾该推断超过八条准入上限。"
+        }
+      ]
+    },
+    {
+      "id": "Trello-2",
+      "verdict": "partial",
+      "branches": [
+        {
+          "id": "Trello-2.1",
+          "original_question_id": "Trello-2",
+          "requirement": "Workspace不能统一设Observer",
+          "verdict": "fail",
+          "reason": "封存原句和证据池有Workspace层级不可设Observer，第二原题未生成且未发表。"
+        },
+        {
+          "id": "Trello-2.2",
+          "original_question_id": "Trello-2",
+          "requirement": "A改权不自动决定B具体权限",
+          "verdict": "fail",
+          "reason": "A改权不决定B具体权限未发表。"
+        },
+        {
+          "id": "Trello-2.3",
+          "original_question_id": "Trello-2",
+          "requirement": "谁可把A现有成员设Observer",
+          "verdict": "partial",
+          "reason": "正式观察有board admin可赋Observer，所选支持完整；未明确现有成员改权的完整主体，漏Workspace admins。"
+        },
+        {
+          "id": "Trello-2.4",
+          "original_question_id": "Trello-2",
+          "requirement": "仅凭Observer标签不能确定免费/计费",
+          "verdict": "fail",
+          "reason": "原页有billable/non-billable类型，正文无标签不能确定计费的回答。"
+        }
+      ]
+    },
+    {
+      "id": "Cloudflare-1",
+      "verdict": "partial",
+      "branches": [
+        {
+          "id": "Cloudflare-1.1",
+          "original_question_id": "Cloudflare-1",
+          "requirement": "Cache Domain Purge特定域权限规则",
+          "verdict": "pass",
+          "reason": "正文选完整Cache Domain Purge表行，明确特定域清边缘缓存。"
+        },
+        {
+          "id": "Cloudflare-1.2",
+          "original_question_id": "Cloudflare-1",
+          "requirement": "角色只能被赋予其给定域范围",
+          "verdict": "fail",
+          "reason": "given-scope赋权规则未发表；对应候选错选添加成员/policies介绍句被拒。已发表domain-scoped适用特定域是有效局部规则，未补此独立赋权分支。"
+        },
+        {
+          "id": "Cloudflare-1.3",
+          "original_question_id": "Cloudflare-1",
+          "requirement": "example.com角色不能据此清除other.example",
+          "verdict": "pass",
+          "reason": "完整原题后明确否；特定域角色和域作用域规则支撑本题有限非扩展推断。"
+        }
+      ]
+    },
+    {
+      "id": "Cloudflare-2",
+      "verdict": "partial",
+      "branches": [
+        {
+          "id": "Cloudflare-2.1",
+          "original_question_id": "Cloudflare-2",
+          "requirement": "不能仅据15M请求报准确完整美元账单",
+          "verdict": "pass",
+          "reason": "正文明确不足以核实完整准确账单，未编CPU输入或套示例总价。"
+        },
+        {
+          "id": "Cloudflare-2.2",
+          "original_question_id": "Cloudflare-2",
+          "requirement": "CPU为独立用量计费，须CPU输入",
+          "verdict": "fail",
+          "reason": "只询问CPU总用量，没有发表CPU独立收费前提；封存表及未审核CPU候选不能补正文。"
+        }
+      ]
+    },
+    {
+      "id": "Bitwarden-1",
+      "verdict": "pass",
+      "branches": [
+        {
+          "id": "Bitwarden-1.1",
+          "original_question_id": "Bitwarden-1",
+          "requirement": "Free organization无法满足3人且3collections整体请求",
+          "verdict": "pass",
+          "reason": "完整3人/3collections原题后明确否，并发表另一用户及最多两collections上限；未审核两条场景推断不计分。"
+        }
+      ]
+    },
+    {
+      "id": "Bitwarden-2",
+      "verdict": "pass",
+      "branches": [
+        {
+          "id": "Bitwarden-2.1",
+          "original_question_id": "Bitwarden-2",
+          "requirement": "澄清移除成员还是永久删除账户/数据",
+          "verdict": "pass",
+          "reason": "正文明确询问移除成员还是永久删除账户/数据。"
+        },
+        {
+          "id": "Bitwarden-2.2",
+          "original_question_id": "Bitwarden-2",
+          "requirement": "澄清个人数据还是组织数据",
+          "verdict": "pass",
+          "reason": "正文明确询问个人数据还是组织数据；没有捏造保留/删除规则。"
+        }
+      ]
+    },
+    {
+      "id": "1Password-1",
+      "verdict": "pass",
+      "branches": [
+        {
+          "id": "1Password-1.1",
+          "original_question_id": "1Password-1",
+          "requirement": "访客不能同时加入2共享vault",
+          "verdict": "pass",
+          "reason": "正式问答明确确认后的Families访客仍不能同时加入两共享vault，完整single-vault-at-a-time和remove-then-add选证支持。"
+        },
+        {
+          "id": "1Password-1.2",
+          "original_question_id": "1Password-1",
+          "requirement": "访客没有自己的Private vault",
+          "verdict": "pass",
+          "reason": "正式问答明确访客无Private vault，选中原句完整支持。"
+        }
+      ]
+    },
+    {
+      "id": "1Password-2",
+      "verdict": "partial",
+      "branches": [
+        {
+          "id": "1Password-2.1",
+          "original_question_id": "1Password-2",
+          "requirement": "不编造精确RMB含税总价",
+          "verdict": "pass",
+          "reason": "正文安全拒绝精确人民币含税年总价。"
+        },
+        {
+          "id": "1Password-2.2",
+          "original_question_id": "1Password-2",
+          "requirement": "公开报价性质有官方证据",
+          "verdict": "fail",
+          "reason": "没有有证公开报价性质；封存pricing正文主要是平台/产品介绍，Collector对该页facts=[]，当前raw_sources只有访客页。"
+        },
+        {
+          "id": "1Password-2.3",
+          "original_question_id": "1Password-2",
+          "requirement": "有证官方销售/报价下一步",
+          "verdict": "fail",
+          "reason": "没有有证官方销售/询价下一步；要求用户补参数不是官方报价渠道。"
+        }
+      ]
+    }
+  ],
+  "published_claim_checks": [
+    {
+      "product": "trello",
+      "id": "claim-2e9583e8471ee72736a1",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "atomicity_reason": "同一操作/限制及其完整条件；看板及其卡片按同一read操作。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "trello",
+      "id": "claim-206291e2a61f9f0372f2",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": false,
+      "atomicity_reason": "定义与管理员赋权是两个事实。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "trello",
+      "id": "claim-d37f617527f464c7f54b",
+      "kind": "fact",
+      "binding_kind": "operation",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "atomicity_reason": "同一操作/限制及其完整条件；看板及其卡片按同一read操作。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "trello",
+      "id": "claim-74cb4fb292640e0e7d60",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": false,
+      "single_predicate": true,
+      "atomicity_reason": "同一操作/限制及其完整条件；看板及其卡片按同一read操作。",
+      "support_reason": "选中的是禁止编辑/上传等的句子，不含下载；审核理由错称原句明确允许下载，父段不能补证。"
+    },
+    {
+      "product": "cloudflare",
+      "id": "claim-ce78fa4137681c476e68",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "atomicity_reason": "同一操作/限制及其完整条件；看板及其卡片按同一read操作。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "cloudflare",
+      "id": "claim-8d21868c88775f28c085",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": false,
+      "atomicity_reason": "清缓存与读区域设置是两个操作。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "cloudflare",
+      "id": "claim-5f18c2108fbb195dd4b3",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": false,
+      "atomicity_reason": "产品用量包含清单与最低月费是两个谓词。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "cloudflare",
+      "id": "claim-0258007d0f819253dc68",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": false,
+      "atomicity_reason": "超量收费与无额外传输/带宽费是独立计费规则。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "bitwarden",
+      "id": "claim-8d4dff6067ae0cadffe2",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": false,
+      "atomicity_reason": "存储与共享是可独立判断的两个操作。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "bitwarden",
+      "id": "claim-e265a59112b9140a893f",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": false,
+      "atomicity_reason": "两用户核心功能与最多两collections共享是独立能力/上限。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "bitwarden",
+      "id": "claim-e62dd98319aa1d37a5b6",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "atomicity_reason": "同一操作/限制及其完整条件；看板及其卡片按同一read操作。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "bitwarden",
+      "id": "claim-4f654f37166d72c8e039",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "atomicity_reason": "同一操作/限制及其完整条件；看板及其卡片按同一read操作。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "bitwarden",
+      "id": "claim-0e4310bc6dc673cd0903",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "atomicity_reason": "同一操作/限制及其完整条件；看板及其卡片按同一read操作。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "1password",
+      "id": "claim-e7cddc27a0b5523ef93f",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "atomicity_reason": "同一操作/限制及其完整条件；看板及其卡片按同一read操作。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "1password",
+      "id": "claim-998f083b0a9aeb0a1c2c",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": false,
+      "atomicity_reason": "无Private vault与仅一个共享vault是两个限制。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "1password",
+      "id": "claim-dcce98be698cd841849c",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": false,
+      "atomicity_reason": "单vault邀请限制与移除后加入其他vault是独立规则/动作。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "1password",
+      "id": "claim-5e3743d6f2208e659192",
+      "kind": "inference",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "atomicity_reason": "同一操作/限制及其完整条件；看板及其卡片按同一read操作。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    },
+    {
+      "product": "1password",
+      "id": "claim-6ff454a48844fec1d490",
+      "kind": "inference",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "atomicity_reason": "同一操作/限制及其完整条件；看板及其卡片按同一read操作。",
+      "support_reason": "完整选中原句/操作支持全文；题设仅作有限场景输入。"
+    }
+  ],
+  "agent_request_isolations": {
+    "planner": {
+      "verdict": "pass",
+      "reason": "保持Trello/feature固定范围，未把题设当产品事实；发现/主页抓取未测。",
+      "actual_requests": 1,
+      "full_lifecycle_accepted": false
+    },
+    "collector": {
+      "verdict": "pass",
+      "reason": "六项生产parser/admission完整准入，保留投票启用、角色/成员、计费类型、Workspace范围及两类管理员。",
+      "actual_requests": 1,
+      "full_lifecycle_accepted": false
+    },
+    "analyst": {
+      "verdict": "partial",
+      "reason": "操作树有源身份和条件；但summary混多个动作和跨板/计费推断，未完整交付Workspace否定及现有成员改权两类管理员。",
+      "actual_requests": 1,
+      "full_lifecycle_accepted": false
+    },
+    "comparator": {
+      "verdict": "partial",
+      "reason": "单产品无winner且A/B条件判断有用；把许可非义务及计费标签不唯一误当需额外负面原句，scenario还把小周扩大为A/B Observer。",
+      "actual_requests": 1,
+      "full_lifecycle_accepted": false
+    },
+    "reflector": {
+      "verdict": "fail",
+      "reason": "要求许可不推出义务必须有显式负面原句，且把投票启用条件牵连附件/导出；对计费标签不唯一作错误缺证判断。comment原文条件歧义不另扣。",
+      "actual_requests": 1,
+      "full_lifecycle_accepted": false
+    },
+    "writer": {
+      "verdict": "fail",
+      "reason": "八atom仅六条生产parse；四条错选s9，题设标fact，B投票/义务复合。",
+      "actual_requests": 1,
+      "full_lifecycle_accepted": false
+    },
+    "qa": {
+      "verdict": "pass",
+      "reason": "本请求三项针对真实未核实正文保持阻断并正确回传空IDs，完整parent可见；没有实际产品claim入此隔离窗口，完整claim语义审查未测。",
+      "actual_requests": 1,
+      "full_lifecycle_accepted": false
+    }
+  },
+  "collector_offline_admission": {
+    "proposals": 6,
+    "raw_literal_in_supplied_body": 1,
+    "restored_quotes_exact_body_offsets": 6,
+    "extracted_fields": 6,
+    "admitted": 6,
+    "accepted": 6,
+    "restoration": "Production parser restores display whitespace/newlines to the exact captured source. 1/6 raw proposals are byte-literal; all 6 restored quotes have exact body offsets.",
+    "context": "Original research_focus plus production target_product name=Trello/category=产品. An initial empty-name exploratory brief was page_not_allowed and is not the acceptance context.",
+    "fetch_tested": false,
+    "persistence_tested": false
+  },
+  "final_qa": {
+    "totals": {
+      "planned": 28,
+      "sent": 23,
+      "raw_returned": 23,
+      "identity_valid": 23,
+      "invalid": 0,
+      "unsent": 5,
+      "actual_batches": 9,
+      "internal_questions_planned": 10,
+      "internal_questions_sent": 8,
+      "digest_valid": 23,
+      "question_states": {
+        "blocked": 7,
+        "current_limitation": 1,
+        "pending": 2
+      },
+      "product_fact_passed": 0,
+      "current_limitation": 1,
+      "unsent_reason": "All five unsent issues exceed complete final-QA byte window; not timeouts or exhausted transport budget.",
+      "unsent_original_questions": [
+        "Bitwarden-1",
+        "1Password-1"
+      ],
+      "note": "Internal 10 questions retain the fixed original denominator 8. Bitwarden-2 remains runtime partial/current_limitation and proves no product retention fact or report pass. receipt blocked_question_ids may include pending; do not sum as disjoint states."
+    },
+    "by_product": {
+      "trello": {
+        "planned": 7,
+        "sent": 7,
+        "identity_valid": 7,
+        "unsent": 0,
+        "actual_batches": 4,
+        "internal_questions_planned": 4,
+        "internal_questions_sent": 4,
+        "question_review_states": {
+          "question-00e2382d7575b5384c9a": "blocked",
+          "question-1305198ad16f108bf375": "blocked",
+          "question-659854eaa5bf118b8901": "blocked",
+          "question-a5be8c7a210d770f2ea7": "blocked"
+        },
+        "unreviewed_reasons": {}
+      },
+      "cloudflare": {
+        "planned": 5,
+        "sent": 5,
+        "identity_valid": 5,
+        "unsent": 0,
+        "actual_batches": 3,
+        "internal_questions_planned": 2,
+        "internal_questions_sent": 2,
+        "question_review_states": {
+          "question-1b7471af0d3dcf4af91c": "blocked",
+          "question-dd9aeefb8be2a32bc5bf": "blocked"
+        },
+        "unreviewed_reasons": {}
+      },
+      "bitwarden": {
+        "planned": 7,
+        "sent": 5,
+        "identity_valid": 5,
+        "unsent": 2,
+        "actual_batches": 1,
+        "internal_questions_planned": 2,
+        "internal_questions_sent": 1,
+        "question_review_states": {
+          "question-63762e09ae5d8faa1071": "current_limitation",
+          "question-cb40c90e4d944bf23275": "pending"
+        },
+        "unreviewed_reasons": {
+          "final-question-question-cb40c90e4d944bf23275": "Complete question context exceeded the bounded final QA byte limit.",
+          "qc-issue-8d81eab92c992496": "Complete question context exceeded the bounded final QA byte limit."
+        }
+      },
+      "1password": {
+        "planned": 9,
+        "sent": 6,
+        "identity_valid": 6,
+        "unsent": 3,
+        "actual_batches": 1,
+        "internal_questions_planned": 2,
+        "internal_questions_sent": 1,
+        "question_review_states": {
+          "question-26d795d67d79bd12e05d": "blocked",
+          "question-60a7010e0c7ca2ae7058": "pending"
+        },
+        "unreviewed_reasons": {
+          "final-question-question-60a7010e0c7ca2ae7058": "Complete question context exceeded the bounded final QA byte limit.",
+          "qc-issue-661d9b38fecab3f5": "Complete question context exceeded the bounded final QA byte limit.",
+          "qc-issue-c103ba3cc9eefbd1": "Complete question context exceeded the bounded final QA byte limit."
+        }
+      }
+    }
+  },
+  "report_acceptance": {
+    "trello": {
+      "delivery_standard_met": false,
+      "fixed_original_scores": {
+        "Trello-1": "fail",
+        "Trello-2": "partial"
+      },
+      "run_status": "queued",
+      "publication_status": "not_attempted",
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "reason": "Necessary branches missing/unsupported and final QA blocked/pending."
+    },
+    "cloudflare": {
+      "delivery_standard_met": false,
+      "fixed_original_scores": {
+        "Cloudflare-1": "partial",
+        "Cloudflare-2": "partial"
+      },
+      "run_status": "queued",
+      "publication_status": "not_attempted",
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "reason": "Necessary branches missing/unsupported and final QA blocked/pending."
+    },
+    "bitwarden": {
+      "delivery_standard_met": false,
+      "fixed_original_scores": {
+        "Bitwarden-1": "pass",
+        "Bitwarden-2": "pass"
+      },
+      "run_status": "queued",
+      "publication_status": "not_attempted",
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "reason": "Two original rubric questions qualify, but compound claims persist and capacity question finalQA was unsent."
+    },
+    "1password": {
+      "delivery_standard_met": false,
+      "fixed_original_scores": {
+        "1Password-1": "pass",
+        "1Password-2": "partial"
+      },
+      "run_status": "queued",
+      "publication_status": "not_attempted",
+      "pipeline_terminal": false,
+      "mechanical_pass": false,
+      "reason": "Necessary branches missing/unsupported and final QA blocked/pending."
+    }
+  },
+  "runtime_cost": {
+    "first_round": {
+      "pipeline": {
+        "transport_calls": 36,
+        "known_prompt_tokens": 102053,
+        "known_completion_tokens": 17057,
+        "known_total_tokens": 119110,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 119110,
+        "timeout_count": 0,
+        "length_count": 0
+      },
+      "isolations": {
+        "transport_calls": 6,
+        "known_prompt_tokens": 18579,
+        "known_completion_tokens": 3775,
+        "known_total_tokens": 22354,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 22354,
+        "timeout_count": 0,
+        "length_count": 0
+      },
+      "total": {
+        "transport_calls": 42,
+        "known_prompt_tokens": 120632,
+        "known_completion_tokens": 20832,
+        "known_total_tokens": 141464,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 141464,
+        "timeout_count": 0,
+        "length_count": 0
+      },
+      "writer_generation_requests": 0,
+      "strict_pass": 1,
+      "report_deliverable_count": 0
+    },
+    "corrected_round": {
+      "pipeline": {
+        "transport_calls": 59,
+        "known_prompt_tokens": 192168,
+        "known_completion_tokens": 24231,
+        "known_total_tokens": 216399,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 216399,
+        "timeout_count": 0,
+        "length_count": 0
+      },
+      "isolations": {
+        "transport_calls": 7,
+        "known_prompt_tokens": 22851,
+        "known_completion_tokens": 3803,
+        "known_total_tokens": 26654,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 26654,
+        "timeout_count": 0,
+        "length_count": 0
+      },
+      "total": {
+        "transport_calls": 66,
+        "known_prompt_tokens": 215019,
+        "known_completion_tokens": 28034,
+        "known_total_tokens": 243053,
+        "usage_unknown_count": 0,
+        "conservative_charged_tokens": 243053,
+        "timeout_count": 0,
+        "length_count": 0
+      },
+      "by_product": {
+        "trello": {
+          "transport_calls": 16,
+          "known_prompt_tokens": 51859,
+          "known_completion_tokens": 7818,
+          "known_total_tokens": 59677,
+          "usage_unknown_count": 0,
+          "conservative_charged_tokens": 59677,
+          "timeout_count": 0,
+          "length_count": 0,
+          "provider_bill_usd": null
+        },
+        "cloudflare": {
+          "transport_calls": 16,
+          "known_prompt_tokens": 51067,
+          "known_completion_tokens": 5673,
+          "known_total_tokens": 56740,
+          "usage_unknown_count": 0,
+          "conservative_charged_tokens": 56740,
+          "timeout_count": 0,
+          "length_count": 0,
+          "provider_bill_usd": null
+        },
+        "bitwarden": {
+          "transport_calls": 13,
+          "known_prompt_tokens": 43288,
+          "known_completion_tokens": 5686,
+          "known_total_tokens": 48974,
+          "usage_unknown_count": 0,
+          "conservative_charged_tokens": 48974,
+          "timeout_count": 0,
+          "length_count": 0,
+          "provider_bill_usd": null
+        },
+        "1password": {
+          "transport_calls": 14,
+          "known_prompt_tokens": 45954,
+          "known_completion_tokens": 5054,
+          "known_total_tokens": 51008,
+          "usage_unknown_count": 0,
+          "conservative_charged_tokens": 51008,
+          "timeout_count": 0,
+          "length_count": 0,
+          "provider_bill_usd": null
+        }
+      },
+      "writer_generation_requests": 6,
+      "atomic_review_requests": 13,
+      "question_answer_review_requests": 4,
+      "final_qa_requests": 9
+    },
+    "two_rounds_total": {
+      "transport_calls": 108,
+      "known_prompt_tokens": 335651,
+      "known_completion_tokens": 48866,
+      "known_total_tokens": 384517,
+      "usage_unknown_count": 0,
+      "conservative_charged_tokens": 384517,
+      "timeout_count": 0,
+      "length_count": 0
+    },
+    "previous_delivery_pipeline": {
+      "calls": 70,
+      "known_total_tokens": 193892,
+      "strict_pass": 1,
+      "report_deliverable_count": 0
+    },
+    "same_quality_cost_reduction_claim": false,
+    "provider_invoice_usd": null
+  },
+  "budget_refusals": {
+    "corrected_current_zero_transport_count": 9,
+    "trello": {
+      "raw_atoms": 11,
+      "admitted_candidates": 8,
+      "review_batches": 4,
+      "internal_supported": 4,
+      "full_selected_support": 3,
+      "later_generation_refusals": 3,
+      "used_tokens": 44120,
+      "request_input_tokens": [
+        16015,
+        16107,
+        16130
+      ],
+      "output_reserve": 1600,
+      "other_delivery_protection": 23995,
+      "estimated_totals": [
+        85730,
+        85822,
+        85845
+      ],
+      "token_cap": 80000,
+      "note": "Comment lacks required operation binding; last download+export and permission-not-duty atoms exceed eight admitted slots. Later generation refusals are real cumulative current-budget gates."
+    },
+    "other_products": "CF three review batches leave six claims including CPU unreviewed; BW one review batch leaves two scenario atoms unreviewed; 1P two quote-question review batches leave three claims unreviewed. No budget cap was raised.",
+    "first_round_diagnosis": "Whole future chain prediction blocked 9 questions. Reconstructed 6; exact live state for 3 remains unexplained. Sequential settlement does not remove equal worst-case reservations."
+  },
+  "engineering_verification": {
+    "final_backend": {
+      "status": "passed",
+      "passed": 7852,
+      "failed": 0,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 263.17,
+      "sandbox_process_permission": "whole suite ran with required ps permission",
+      "log_sha256": "aa26d4d839c3bd7c2785aaf13c78c556ceefb7578dc4b80fa625cf78c4d7fda7",
+      "frozen_source_sha256": "14d170757846b439bef6a12ee0b79c8d76cf14b80348d589c71b99d8d365565e",
+      "source_before_after_equal": true
+    },
+    "added_test_cases": 127,
+    "new_module_counts": {
+      "question_evidence_pool": 15,
+      "question_atomic_delivery": 58,
+      "clarification_qa_alignment": 43
+    },
+    "isolation_cli_added": 10,
+    "natural_stress_case_added": 1,
+    "root_specialist_recheck": {
+      "passed": 116,
+      "failed": 0,
+      "seconds": 12.03
+    },
+    "first_full_suite": {
+      "passed": 7833,
+      "failed": 8,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 266.05
+    },
+    "fixture_adjusted_full_suite": {
+      "passed": 7841,
+      "failed": 0,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 265.16
+    },
+    "fixture_adjustment_explanation": "Six legacy QA mocks/protocol expectations, one incomplete semantic pool mock, one synthetic 10000-byte stress boundary; original failures retained. No new content quality credit.",
+    "ruff": {
+      "changed_python_files": 25,
+      "baseline_diagnostics": 593,
+      "current_diagnostics": 591,
+      "new_diagnostics": 0,
+      "full_repository_lint_clean_claim": false
+    },
+    "diff_check": "passed"
+  },
+  "frozen_source": {
+    "base_commit": "8774bf000d21321b0f5526b0d6243ea76d3904d1",
+    "production_code_sha256": "7f45e99c722f1dc28e8f1d41ce05dbb2fdbaddb3946deb58a8bd46a130663dce",
+    "production_packages_sha256": "e969190d05ca0cf983ea33ce755cc90cc48c572b08e2577c1ad9efe9f692a49c",
+    "frozen_source_sha256": "14d170757846b439bef6a12ee0b79c8d76cf14b80348d589c71b99d8d365565e",
+    "snapshot_start_matches": true,
+    "snapshot_end_matches": true
+  },
+  "evidence_integrity": {
+    "previous_locked_files": 418,
+    "corrected_pipeline_originals": 68,
+    "corrected_isolation_originals": 28,
+    "unique_originals": 514,
+    "rubric_files": 3,
+    "rubrics_already_in_previous_lock": true,
+    "originals_unchanged": true,
+    "round_one_source_archive_files": 796,
+    "round_one_source_archive_sha256": "9d950dd3d4d723cb2ecf73b490cd736a0ae6d7e2141a5ad8a912b524304e2091",
+    "round_one_audit_sha256": "f265f37ecea2455b44f78dc1d3e1d3ec156fef321b3d9c89b4460ef17009f495",
+    "corrected_audit_sha256": "30f5cbe09879c8c64e9391d4ae5487adddaf41ab23872be7ddb4d4f28658c2ed",
+    "round_one_metrics_sha256": "9e90d5b4ae52405303da19d753b05a12eea98e672e460014dae029ff101b6383",
+    "corrected_metrics_sha256": "97fe99457fa208126b4d8ee8f018ee771a43a5217b3e35d16e4c74dbe0835356",
+    "artifact_roots": [
+      "data/artifacts/question-pool-atomic-2026-10-25",
+      "data/artifacts/question-pool-atomic-2026-10-26"
+    ],
+    "raw_artifacts_git_ignored": true
+  },
+  "observability_limits": {
+    "one_password_atomic_requests_with_redacted_input": 6,
+    "breakdown": {
+      "generation": 2,
+      "claim_review": 3,
+      "answer_review": 1
+    },
+    "full_input_content_delivery_verified": false,
+    "metrics_postprocessing": {
+      "original_helper_sha256": "a38f0cb28e4b76d5271f316a85e6849d18e03bd510fb3357183a637cc9b6475e",
+      "failure": "IndexError when an exported generation input has no JSON delimiter",
+      "change": "Read-only v2 catches IndexError as unverified actual input; no model request, source change, or raw artifact modification",
+      "v2_sha256": "b7890297b896a25d66e438a554f2fec299fb4b66b57e287e47c04e09dd1582f0"
+    }
+  },
+  "known_failures": [
+    "Trello wrong selected span was mostly blocked, but download review hallucinated selected support and passed it.",
+    "Broad/repeated atoms consume eight admitted slots before needed scenario branches.",
+    "Real cumulative current-request estimates plus protected delivery budget stop later generation/reviews.",
+    "Eight of eighteen published atoms remain compound despite identity-valid reviews.",
+    "Missing publication and collection/view gaps differ: Trello/CF needed original rules exist; 1P pricing extraction returned facts=[].",
+    "FinalQA complete-context byte limit leaves BW capacity and 1P guest original-question checks unsent."
+  ],
+  "next_priorities": [
+    "Reject selected-support semantic mismatches; independent hard negatives for wrong-span same-page assertions.",
+    "Select and schedule against each required subquestion before general background; control per-question review spending and duplicate context.",
+    "Preserve complete conditions while fitting final QA and align bounded inference, visible answer and actual QA state; fill generic billing and official-quote evidence gaps."
+  ],
+  "scope_limits": [
+    "Production stage replay on sealed 2026-10-21 pages; run status queued/publication not_attempted. Not full Graph lifecycle, deployed E2E, live fetch, discovery, current-web freshness or training.",
+    "Exposed fixed 8 originals, n=1; no causal or statistical generalization.",
+    "Request isolation is not full-agent tool/admission/persistence acceptance. Collector additionally passed offline parser/admission only; Writer only offline production parse/support.",
+    "Bitwarden-2 satisfies the frozen ambiguity rubric via necessary operation/ownership clarification while remaining partial/current_limitation, without retention product facts.",
+    "1Password actual atomic input contents are redacted and remain unverified; hashes do not replace them.",
+    "All provider usage known, but invoice absent; old single-agent results are not same-version controls.",
+    "No model/network call, source/test/docs/raw edit or SQL connection by this auditor. Only this independent-content-audit.json is newly written. Any future SQL must use mode=ro&immutable=1.",
+    "Skills applied: subagent-driven-development final independent read-only acceptance; verification-before-completion."
+  ]
+}

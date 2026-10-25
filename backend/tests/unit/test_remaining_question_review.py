@@ -6,7 +6,12 @@ from dataclasses import replace
 import httpx
 import pytest
 from test_final_question_reconciliation import QUESTION, reviewed
-from test_independent_final_question_qa import independent_case, payload_from, receipt
+from test_independent_final_question_qa import (
+    independent_case,
+    payload_from,
+    receipt,
+    traced_model_double,
+)
 
 from packages.agents.qa import independent_question_review as independent
 from packages.agents.qa.question_reconciliation import reconcile_question_findings
@@ -51,7 +56,7 @@ async def test_explicit_answer_echo_ids_do_not_borrow_visible_local_task_ids(mon
         )
         return json.dumps(result)
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     issues = await reconcile_question_findings(service, record, [], evidence_issues=[])
     assert len(calls) == 1
     output = receipt(record.detail)
@@ -73,7 +78,7 @@ async def test_current_pass_advances_beyond_two_complete_windows(monkeypatch):
         calls.append(payload)
         return reviewed(payload)
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     issues = await reconcile_question_findings(service, record, [], evidence_issues=[])
     output = receipt(detail)
     assert len(calls) == 4
@@ -100,7 +105,7 @@ async def test_resume_prioritizes_unseen_windows_before_failed_paid_attempts(mon
             result["reviews"][0]["support_digest"] = "0" * 64
         return json.dumps(result)
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     await reconcile_question_findings(service, record, [], evidence_issues=[])
     first = receipt(detail)
     assert len(calls) == 1 and len(first["unsent_issue_ids"]) == 2
@@ -122,7 +127,7 @@ async def test_pending_complete_window_keeps_qa_reservation_until_resumed(monkey
     async def model(record, **kwargs):
         return reviewed(payload_from(kwargs))
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     await reconcile_question_findings(service, record, [], evidence_issues=[])
     assert "final_qa:run" not in service._run_llm_budget(record).delivery_finished
     await reconcile_question_findings(service, record, [], evidence_issues=[])
@@ -264,7 +269,7 @@ async def test_new_basis_reopens_pending_review_without_resetting_charges(monkey
             raise TimeoutError("controlled new-basis timeout")
         return reviewed(calls[-1], "keep")
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     await reconcile_question_findings(service, record, [], evidence_issues=[])
     budget = service._run_llm_budget(record)
     assert "final_qa:run" in budget.delivery_finished

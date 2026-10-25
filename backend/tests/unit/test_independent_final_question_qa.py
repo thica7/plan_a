@@ -11,6 +11,7 @@ from test_final_question_reconciliation import QUESTION, reviewed, scope_case
 from packages.agents.qa.question_reconciliation import reconcile_question_findings
 from packages.llm.errors import LLMError, LLMExecutionLimitError
 from packages.orchestrator.llm_execution import LLMExecutionMixin
+from packages.schema.models import TraceSpan
 
 
 def payload_from(kwargs):
@@ -37,6 +38,28 @@ async def independent_case(monkeypatch):
     return detail, service, record
 
 
+def traced_model_double(monkeypatch, service, model):
+    """An offline QA double supplies the actual adapter's trace envelope too."""
+    async def traced(record, **kwargs):
+        status, response, transports = 'error', '', 1
+        try:
+            response = await model(record, **kwargs)
+            status = 'ok'
+            return response
+        except LLMExecutionLimitError:
+            transports = 0
+            raise
+        finally:
+            record.detail.trace_spans.append(TraceSpan(
+                id=f'qa-double-{len(record.detail.trace_spans)}', kind='llm', agent='qa',
+                name=kwargs['name'], status=status, duration_ms=0,
+                full_input=kwargs['system'] + '\n\n' + kwargs['user'], full_output=response,
+                metadata={'llm_transport_attempts': transports,
+                          'llm_request_attempts': transports},
+            ))
+    monkeypatch.setattr(service, '_trace_llm_text', traced)
+
+
 @pytest.mark.asyncio
 async def test_no_reflector_still_checks_complete_current_question_and_visible_answer(monkeypatch):
     detail, service, record = await independent_case(monkeypatch)
@@ -54,7 +77,7 @@ async def test_no_reflector_still_checks_complete_current_question_and_visible_a
         assert len(kwargs["user"].encode()) <= 6000
         return reviewed(payload)
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     assert await reconcile_question_findings(service, record, [], evidence_issues=[]) == []
     assert len(calls) == 1
     output = receipt(detail)
@@ -81,7 +104,7 @@ async def test_independent_qa_detects_omitted_branch_through_real_qa_entry(monke
         )
         return json.dumps(result)
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     await service._real_qa_step(record)
     assert len(calls) == 1
     independent = [
@@ -104,7 +127,7 @@ async def test_timeout_is_receipted_and_can_resume_once_without_permanent_failed
             raise TimeoutError("controlled final QA timeout")
         return reviewed(payload_from(kwargs))
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     first = await reconcile_question_findings(service, record, [], evidence_issues=[])
     assert len(first) == 1 and first[0].severity == "blocker"
     output = receipt(detail)
@@ -129,7 +152,7 @@ async def test_admission_rejection_remains_unsent_and_does_not_consume_review_at
             raise LLMExecutionLimitError("run_llm_call_budget_exhausted")
         return reviewed(payload_from(kwargs))
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     assert len(await reconcile_question_findings(service, record, [], evidence_issues=[])) == 1
     output = receipt(detail)
     assert output["sent_issue_ids"] == []
@@ -151,7 +174,7 @@ async def test_invalid_or_missing_returns_never_become_valid_and_retries_are_bou
         result["reviews"][0]["support_digest"] = "0" * 64
         return json.dumps(result)
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     for _ in range(4):
         assert len(await reconcile_question_findings(service, record, [], evidence_issues=[])) == 1
     assert len(calls) == 2
@@ -177,7 +200,7 @@ async def test_diagnostic_review_cannot_approve_nonvisible_or_unverified_answer(
         assert "VISIBLE TAMPERED ANSWER" in context["visible_answer"]
         return reviewed(payload)
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     result = await reconcile_question_findings(service, record, [], evidence_issues=[])
     assert len(calls) == 1
     assert len(result) == 1 and result[0].severity == "blocker"
@@ -202,7 +225,7 @@ async def test_independent_review_cannot_relabel_a_direct_answer_as_a_safe_limit
     async def model(record, **kwargs):
         return reviewed(payload_from(kwargs), "current_limitation")
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     result = await reconcile_question_findings(service, record, [], evidence_issues=[])
     assert len(result) == 1 and result[0].severity == "blocker"
     assert receipt(detail)["passed_question_ids"] == []
@@ -218,7 +241,7 @@ async def test_provider_wrapped_timeout_is_receipted_as_timeout(monkeypatch):
         except httpx.TimeoutException as exc:
             raise LLMError("LLM request timed out") from exc
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     assert len(await reconcile_question_findings(service, record, [], evidence_issues=[])) == 1
     output = receipt(detail)
     assert output["timeout_issue_ids"] == output["sent_issue_ids"] == output["planned_issue_ids"]
@@ -246,7 +269,7 @@ async def test_current_questions_are_scheduled_before_historical_findings(monkey
             assert payload["findings"][0]["independent_question_check"] is True
         return reviewed(payload)
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     await reconcile_question_findings(service, record, issues, evidence_issues=[])
     output = receipt(detail)
     assert output["planned_issue_ids"][0].startswith("final-question-")
@@ -274,7 +297,7 @@ async def test_partial_legal_response_caches_valid_rows_and_only_resumes_missing
             assert completed_id not in {row["issue_id"] for row in payload["findings"]}
         return json.dumps(response)
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     await reconcile_question_findings(service, record, issues, evidence_issues=[])
     output = receipt(detail)
     assert output["model_execution"] == "partial"
@@ -325,7 +348,7 @@ async def test_all_current_questions_keep_fixed_plan_and_resume_unsent_window(mo
         calls.append(payload)
         return reviewed(payload)
 
-    monkeypatch.setattr(service, "_trace_llm_text", model)
+    traced_model_double(monkeypatch, service, model)
     first = await reconcile_question_findings(service, record, [], evidence_issues=[])
     output = receipt(detail)
     assert len(output["planned_issue_ids"]) == 3

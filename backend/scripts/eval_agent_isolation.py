@@ -551,7 +551,13 @@ def preflight(source_run: Path, *, mode: str, role: str | None = None) -> dict:
                 and (
                     bool(re.fullmatch(r"feature_.+_analyst", s.get("name", "")))
                     if selected_role == "analyst"
-                    else s.get("name") == NAMES[selected_role]
+                    else (
+                        s.get("name") == NAMES[selected_role]
+                        or (
+                            selected_role == "writer"
+                            and s.get("name") == "dimension_question_atomic_generation"
+                        )
+                    )
                 )
                 and s.get("kind") == "llm"
                 and s.get("status") == "ok"

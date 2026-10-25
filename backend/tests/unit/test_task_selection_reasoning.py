@@ -294,16 +294,20 @@ async def test_candidate_collision_dispatches_fitting_single_package_without_rej
 
     from packages.agents.writer import task_execution
     from packages.agents.writer.dimension_writer import compact_prompt_json
+    from packages.research.evidence.source_spans import source_span_candidates
 
     service, record, parts, texts = handoff_case()
-    add_capacity_pressure(record, terms=220)
+    # Pool metadata puts the old 220-term synthetic load over even the cheaper
+    # single-task window. This nearby load still requires a split with one fit.
+    pressure_terms = 218
+    add_capacity_pressure(record, terms=pressure_terms)
     record_large_upstream(service, record)
     original = task_execution.task_context
     built = []
 
     def capture(*args, **kwargs):
         payload = original(*args, **kwargs)
-        built.append(payload)
+        built.append(dict(payload))
         return payload
 
     seen = {}
@@ -320,17 +324,30 @@ async def test_candidate_collision_dispatches_fitting_single_package_without_rej
 
     monkeypatch.setattr(service, "_trace_llm_text", model)
     await service._real_writer_step(record)
+    assert len(built[0]["tasks"]) == 2
+    assert built[0]["candidate_context_budget_exceeded"] is True
+    assert not built[0]["evidence_view"]["facts"]
     single = [p for p in built if len(p["tasks"]) == 1 and p["evidence_view"]["facts"]]
     assert len(single) == 1
-    assert len(compact_prompt_json(single[0]).encode()) <= 10000
+    assert len(("\nJSON:\n" + compact_prompt_json(single[0])).encode()) <= 10000
     assert single[0]["tasks"][0]["question_quote"] == "他能同时加入两个容器吗？"
     assert len(seen["dimension_task_support_selection"]) == 1
     assert seen["dimension_task_support_selection"][0]["tasks"] == single[0]["tasks"]
     assert any(
-        "Canonical retained background. " * 220 in value
+        "Canonical retained background. " * pressure_terms in value
         for row in single[0]["evidence_view"]["facts"]
         for value in row["value"]
     )
+    originals = {fact.id: fact for fact in service._current_evidence_snapshot(record).facts}
+    for row in single[0]["evidence_view"]["facts"]:
+        fact = originals[row["id"]]
+        assert row["quote"] == fact.quote and row["value"] == fact.value
+        assert row["qualifiers"] == {
+            key: value for key, value in fact.qualifiers.items() if key != "operations"
+        }
+        assert {span["quote"] for span in row["source_span_candidates"]} <= {
+            span["quote"] for span in source_span_candidates(fact)
+        }
     expected_quotes = {
         span["quote"]
         for row in single[0]["evidence_view"]["facts"]

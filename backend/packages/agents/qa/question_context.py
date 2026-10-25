@@ -367,7 +367,15 @@ def _question_replays(service, detail, snapshot, use, view):
         optional=True,
         scope=f"{use.competitor}/{use.dimension}",
     )
-    if receipt is not None:
+    atomic_receipt = _observations(detail, "question_atomic_delivery", use.id,
+        optional=True, scope=f"{use.competitor}/{use.dimension}")
+    atomic_audit = next((a for a in detail.report_dimension_audits
+        if a.consumption_id == use.id and a.question_atomic_contract is not None), None)
+    if atomic_receipt is not None or atomic_audit is not None:
+        from packages.agents.writer.question_atomic_delivery import replay_atomic_delivery
+        facts = replay_atomic_delivery(
+            service, detail, snapshot, use, view, audit=atomic_audit)["facts"]
+    elif receipt is not None:
         facts = _task_delivery_originals(
             detail, snapshot, use, view, packets, receipt, service=service)
     else:

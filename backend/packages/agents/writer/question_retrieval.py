@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import math
 import re
 from datetime import UTC, datetime
@@ -28,6 +29,52 @@ TOTAL_FACT_LIMIT = 8
 EXCEPTION_CLOSURE_MAX_BYTES = 14000
 RERANK_CANDIDATE_LIMIT = 12
 _RRF_K = 60
+
+
+def _pool_original_identity(fact):
+    return {
+        "fact_id": fact.id,
+        "source_id": fact.source_id,
+        "original_sha256": hashlib.sha256(
+            canonical_json(fact.model_dump(mode="json")).encode("utf-8")
+        ).hexdigest(),
+    }
+
+
+def _question_evidence_pool(facts, questions, queries, ranked_rows, lexical_rows,
+                            priority_rows, core_rows, exception_rows, selected, ranking_window):
+    """Keep accepted originals available independently of a bounded default view.
+
+    Model windows and lexical overlap are ranking signals, never admission
+    decisions. Originals remain immutable in the identified snapshot.
+    """
+    by_id = {fact.id: fact for fact in facts}
+    identities = {key: _pool_original_identity(fact) for key, fact in by_id.items()}
+    original_keys = {key: (f.quote, f.value_json, f.qualifiers_json) for key, f in by_id.items()}
+    sent = {original_keys[key] for key in selected}
+    rows = []
+    for question, query, ranked, lexical, priority, core, exceptions in zip(
+        questions, queries, ranked_rows, lexical_rows,
+        priority_rows, core_rows, exception_rows, strict=True
+    ):
+        ordered = list(dict.fromkeys([*ranked, *lexical, *by_id]))
+        lexical_ranks = {key: index for index, key in enumerate(lexical, 1)}
+        candidates = []
+        for rank, key in enumerate(ordered, 1):
+            reason = (None if key in selected
+                      else 'equivalent_original' if original_keys[key] in sent
+                      else 'context_budget_exceeded' if key in priority
+                      else 'priority_cutoff')
+            candidates.append(dict(identities[key], rank=rank, lexical_rank=lexical_ranks.get(key),
+                in_ranking_window=key in ranking_window,
+                ranking_basis=('ranked' if key in ranked else 'lexical_tail' if key in lexical
+                               else 'unranked_eligible'),
+                default_view_omission_reason=reason))
+        rows.append(dict(question_id=question['question_id'], question=query['question'],
+            candidates=candidates, core_fact_ids=list(core),
+            required_exception_fact_ids=list(exceptions)))
+    return dict(version=1, fact_ids=list(by_id), questions=rows,
+                availability='accepted_snapshot_originals', ranking_only=True)
 
 
 def _round_robin(rows, limit):
@@ -381,6 +428,10 @@ async def retrieve_question_facts(
     diagnostic["eligible_count"] = len(facts)
     if not facts:
         diagnostic["mode"] = "no_candidates"
+        empty_rows = [[] for _ in questions]
+        diagnostic['evidence_pool'] = _question_evidence_pool(
+            (), questions, queries, empty_rows, empty_rows, empty_rows,
+            empty_rows, empty_rows, (), set())
         return (), diagnostic
 
     texts = {fact.id: _rank_text(fact) for fact in facts}
@@ -412,6 +463,7 @@ async def retrieve_question_facts(
                                  -len(terms & quote_hints[key]), key)
             )
         )
+    full_lexical_rows = [list(row) for row in lexical_rows]
     billing_rows = [_billing_core(question['question'], facts, product) for question in questions]
     scope_rows = [_scope_core(question['question'], facts) for question in questions]
     pool_ids = _round_robin(
@@ -630,4 +682,7 @@ async def retrieve_question_facts(
         )
     ]
     diagnostic["selected_fact_ids"] = list(selected)
+    diagnostic['evidence_pool'] = _question_evidence_pool(
+        facts, questions, queries, ranked_rows, full_lexical_rows, question_rows,
+        core_rows, exception_rows, selected, pool)
     return selected, diagnostic

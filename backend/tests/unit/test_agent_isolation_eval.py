@@ -488,6 +488,86 @@ def test_missing_actual_role_is_not_exercised(source, tmp_path):
     assert result["llm_transport_attempts"] == 0
 
 
+@pytest.mark.parametrize(
+    "name", ["dimension_task_generation", "dimension_question_atomic_generation"]
+)
+def test_writer_generation_recovers_exact_actual_request(source, name):
+    module = runner()
+    system = "Writer rules\n\nretain every condition"
+    user = "完整问题\n\nSchema: user data\n\n原始证据"
+    schema = '{"answers": []}'
+    value = span(name=name, agent="writer", system=system, user=user, schema=schema)
+    write(source / "trace.json", [value])
+
+    plan = module.preflight(source, mode="isolate", role="writer")
+
+    assert module.NAMES["writer"] == "dimension_task_generation"
+    assert plan["roles"] == {"writer": "ready"}
+    assert len(plan["requests"]) == 1
+    request = plan["requests"][0]
+    assert request["system"] == system
+    assert request["user"] == user
+    assert request["schema"] == schema
+    assert request["messages"] == [
+        {"role": "system", "content": system + module.JSON_INSTRUCTION + schema},
+        {"role": "user", "content": user},
+    ]
+    assert request["source_span_id"] == value["id"]
+    assert request["max_output_tokens"] == 700
+
+
+@pytest.mark.parametrize(
+    "name,attempts,kind,status",
+    [
+        ("dimension_question_atomic_generation", 0, "llm", "ok"),
+        ("dimension_task_generation", 0, "llm", "ok"),
+        ("dimension_question_atomic_generation", 1, "agent", "ok"),
+        ("dimension_question_atomic_generation", 1, "llm", "error"),
+        ("dimension_question_atomic_review", 1, "llm", "ok"),
+        ("dimension_question_atomic_answer_review", 1, "llm", "ok"),
+    ],
+)
+def test_writer_without_actual_successful_generation_is_not_exercised(
+    source, name, attempts, kind, status
+):
+    value = span(name=name, agent="writer")
+    value["metadata"]["llm_transport_attempts"] = attempts
+    value.update(kind=kind, status=status)
+    write(source / "trace.json", [value])
+
+    plan = runner().preflight(source, mode="isolate", role="writer")
+
+    assert plan["roles"] == {"writer": "not_exercised"}
+    assert plan["requests"] == []
+
+
+@pytest.mark.parametrize(
+    "first_name,second_name",
+    [
+        ("dimension_question_atomic_generation", "dimension_task_generation"),
+        ("dimension_task_generation", "dimension_question_atomic_generation"),
+    ],
+)
+def test_writer_selects_first_actual_generation_without_judging_output(
+    source, first_name, second_name
+):
+    skipped = span(name=first_name, agent="writer", user="no actual request")
+    skipped["metadata"]["llm_transport_attempts"] = 0
+    review = span(name="dimension_question_atomic_review", agent="writer", user="review")
+    first = span(name=first_name, agent="writer", user="first actual request")
+    first.update(id="first", full_output="broken {")
+    second = span(name=second_name, agent="writer", user="second actual request")
+    second.update(id="second", full_output='{"answers": []}')
+    write(source / "trace.json", [skipped, review, first, second])
+
+    plan = runner().preflight(source, mode="isolate", role="writer")
+
+    assert plan["roles"] == {"writer": "ready"}
+    assert len(plan["requests"]) == 1
+    assert plan["requests"][0]["source_span_id"] == "first"
+    assert plan["requests"][0]["user"] == "first actual request"
+
+
 def test_output_cannot_overwrite_source_or_history(source, tmp_path):
     old = tmp_path / "old"
     old.mkdir()

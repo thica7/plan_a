@@ -311,7 +311,7 @@ async def test_same_complete_parent_reaches_selection_generation_task_review_ans
     audit = record.detail.report_dimension_audits[0]
     for question in original:
         final = _question_context(service, record, current_snapshot(record.detail), question,
-                                  audit, verified=False)
+                                  audit, verified=False, producer_verified=False)
         assert final['request_context']['parents'][0]['text'] == parent
         assert final['request_context']['bindings'][0]['question_id'] == question['question_id']
     assert research_questions(record.detail, "Example Product", "feature") == original
@@ -857,8 +857,20 @@ async def test_offline_actual_adapter_transport_keeps_advisories_inside_original
 
 
 @pytest.mark.asyncio
-async def test_selected_complete_context_over_budget_defers_without_generation_or_consumption(
+async def test_synthesized_oversize_selected_payload_defers_without_generation_or_consumption(
     monkeypatch):
+    from packages.agents.writer import task_support_selection
+    from packages.agents.writer.dimension_writer import compact_prompt_json
+    original_context = task_support_selection.selected_generation_context
+    selected_bytes = []
+    def measured_context(*args, **kwargs):
+        payload = original_context(*args, **kwargs)
+        # Synthetic final-envelope boundary; the original terms=150 input is
+        # separately retained below as a naturally admitted positive case.
+        payload['selected_context_diagnostic'] = 'Complete selected phase metadata. ' * 100
+        selected_bytes.append(len(('\nJSON:\n' + compact_prompt_json(payload)).encode()))
+        return payload
+    monkeypatch.setattr(task_support_selection, 'selected_generation_context', measured_context)
     service, record, parts, texts = handoff_case()
     add_capacity_pressure(record, terms=150)
     record_large_upstream(service, record)
@@ -867,6 +879,7 @@ async def test_selected_complete_context_over_budget_defers_without_generation_o
         service, record, parts, texts, seen))
     await service._real_writer_step(record)
     assert seen.get('dimension_task_support_selection')
+    assert selected_bytes and all(size > 14000 for size in selected_bytes)
     assert not seen.get('dimension_task_generation')
     assert record.detail.report_dimension_audits[0].upstream_dependencies == ()
     receipt = json.loads(next(s.full_output for s in record.detail.trace_spans
@@ -1027,3 +1040,18 @@ async def test_long_complete_parent_is_bounded_without_slicing_conditions_or_cla
     receipt = json.loads(next(s.full_output for s in record.detail.trace_spans
                              if s.name == 'question_task_delivery'))
     assert not any(row['sent'] for row in receipt['advisory_delivery'].values())
+
+
+@pytest.mark.asyncio
+async def test_original_selected_context_pressure_is_admitted_when_actual_user_fits(monkeypatch):
+    service, record, parts, texts = handoff_case()
+    add_capacity_pressure(record, terms=150)
+    record_large_upstream(service, record)
+    seen = {}
+    monkeypatch.setattr(service, '_trace_llm_text', offline_model(
+        service, record, parts, texts, seen))
+    await service._real_writer_step(record)
+    spans = [s for s in record.detail.trace_spans if s.name == 'dimension_task_generation']
+    assert spans
+    assert all(len(('\nJSON:\n' + s.full_input.split('\nJSON:\n', 1)[1]).encode()) <= 14000
+        for s in spans)

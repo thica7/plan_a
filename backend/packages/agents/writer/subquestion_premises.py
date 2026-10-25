@@ -221,10 +221,21 @@ def _destruction_denies_retention(question, texts):
     return False
 
 
+def _explicit_negative_text(text):
+    if _NEGATIVE.search(text):
+        return True
+    # Only the plain present-tense possession form with a simple noun subject
+    # gains this shortcut. Modal, probabilistic or outer-negated wording needs
+    # independent support; it cannot establish an unconditional product denial.
+    return bool(re.match(r"^\s*(?:(?:a|an|the|all)\s+)?[a-z][a-z'-]*\s+(?:have|has)\s+no\b",
+                         text, re.I)) and not re.search(
+        r"\b(?:may|might|could|would|can|if|unless|when|sometimes|possibly)\b", text, re.I)
+
+
 def _negative_supported(binding, selected):
     texts = [claim["text"] for claim in selected]
     if binding.relation == "explicit_negative":
-        negatives = [text for text in texts if _NEGATIVE.search(text)]
+        negatives = [text for text in texts if _explicit_negative_text(text)]
         # A positive sibling cannot supply the object of a different negative
         # atom. Claim atomicity and unrecognized predicates remain model checks.
         objects = set().union(*(_scope_objects(text) for text in negatives)) if negatives else set()

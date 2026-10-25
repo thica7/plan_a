@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 
 import httpx
@@ -14,24 +15,24 @@ from packages.agents.qa.question_reconciliation import (
     TASK_REVIEW_BYTES,
     _answer_support,
     _basis,
-    _Decision,
     _question_id,
+    _request_only_clarification,
     _review_response,
     _structural_or_mixed,
+    _visible_question_block,
     final_review_batches,
 )
-from packages.agents.writer.answer_presentation import audit_heading, question_coverage_matches
+from packages.agents.writer.answer_presentation import question_coverage_matches
 from packages.agents.writer.task_answers import reviewed_task_answer_rows
 from packages.llm.errors import LLMExecutionLimitError
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.research.evidence.snapshot_models import canonical_json
 from packages.research.question_scope import question_request_context, research_questions
-from packages.schema.decision_brief import safe_decision_brief_text
 from packages.schema.models import QCIssue, RedoScope
 
 MAX_ATTEMPTS_PER_FINDING = 2
 MAX_REVIEW_BATCHES = 6
-PROTOCOL = "independent_questions_v3"
+PROTOCOL = "independent_questions_v4"
 INDEPENDENT_SYSTEM = SYSTEM + (
     " Audit EVERY independent_question_check against every request and shared premise in the "
     "complete original question and bound request_context, even without a historical objection. "
@@ -45,8 +46,14 @@ INDEPENDENT_SYSTEM = SYSTEM + (
     "do not invent runtime rejection, enforcement or broader product behavior. "
     "visible_answer is the actual "
     "local publication; answer metadata proves no publication. Check omitted branches, unsupported "
-    "premises and exact selected sources. Only a fully answered independent check may set "
-    "finding_fully_addressed=true and superseded; otherwise use keep and enumerate remaining_gaps. "
+    "premises and exact selected sources. A fully answered direct/conditional check may set "
+    "finding_fully_addressed=true and superseded. A necessary canonical request-only clarification "
+    "whose bound parent truly lacks its input fields may set current_limitation, "
+    "finding_fully_addressed=true, remaining_gaps=[] and claim_ids=[] when its complete "
+    "clarification is visible with no other omission. Pending user inputs are not delivery "
+    "omissions. Keep partial/clarification; do not confirm product facts or approve the report. "
+    "Otherwise use keep "
+    "and enumerate remaining_gaps. "
     "Diagnostic checks cannot approve a question or clear historical issues. "
     "Resolve each historical objection in full. Echo only batch IDs. "
     "Copy expected_claim_ids EXACTLY to claim_ids, including "
@@ -63,27 +70,10 @@ FINAL_QA_REQUEST_RESERVE = (
 
 def _visible_answer(detail, audit, question):
     """Read the actual local publication, including a changed or absent answer."""
-    lines = detail.report_md.splitlines()
-    headings = [
-        i for i, line in enumerate(lines) if line == audit_heading(audit, detail.output_language)
-    ]
-    if len(headings) != 1:
-        return ""
-    start = headings[0] + 1
-    end = next(
-        (i for i in range(start, len(lines)) if lines[i].startswith(("# ", "## ", "### "))),
-        len(lines),
-    )
-    prefix = "- " + safe_decision_brief_text(question["question"]) + " — "
-    starts = [i for i in range(start, end) if lines[i].startswith(prefix)]
-    if len(starts) != 1:
-        return ""
-    start = starts[0]
-    end = next((i for i in range(start + 1, end) if lines[i].startswith(("- ", "#### "))), end)
-    return "\n".join(lines[start:end]).rstrip()
+    return _visible_question_block(detail, audit, question)
 
 
-def _question_context(service, record, snapshot, question, audit, *, verified):
+def _question_context(service, record, snapshot, question, audit, *, verified, producer_verified):
     detail = record.detail
     qid = question["question_id"]
     answers = [answer for answer in audit.answer_coverage if answer.question_id == qid]
@@ -126,7 +116,8 @@ def _question_context(service, record, snapshot, question, audit, *, verified):
         ],
         task_support_claim_ids=sorted({row["claim_id"] for row in tasks}),
         publication_matches=matches,
-        support_verified=bool(verified and support is not None),
+        support_verified=bool(support is not None and (verified or producer_verified
+            and _request_only_clarification(detail, audit, answer, question))),
     )
 
 
@@ -164,12 +155,51 @@ def _is_timeout(exc):
     return False
 
 
+def _bound_batch_reviews(detail, basis_hash, candidates, receipt):
+    """Replay the actual QA transport and its full current candidate payload."""
+    try:
+        spans = [span for span in detail.trace_spans if span.id == receipt['span_id']]
+        if len(spans) != 1:
+            return {}
+        span = spans[0]
+        attempts = span.metadata.get('llm_transport_attempts')
+        prefix = INDEPENDENT_SYSTEM + '\n\n'
+        if (span.kind != 'llm' or span.agent != 'qa' or span.subagent is not None
+                or span.name != 'final_question_reconciliation' or span.status != 'ok'
+                or type(attempts) is not int or attempts <= 0
+                or hashlib.sha256(span.full_input.encode()).hexdigest()
+                    != receipt['full_input_sha256']
+                or hashlib.sha256(span.full_output.encode()).hexdigest()
+                    != receipt['full_output_sha256']
+                or not span.full_input.startswith(prefix + '\nJSON:\n')):
+            return {}
+        user = span.full_input[len(prefix):]
+        payload = json.loads(user[len('\nJSON:\n'):])
+        ids = [row['issue_id'] for row in payload['findings']]
+        if (len(ids) != len(set(ids)) or set(ids) != set(receipt['issue_ids'])
+                or not set(ids) <= candidates.keys()):
+            return {}
+        batches, omitted = final_review_batches(
+            [candidates[key] for key in ids], basis_hash,
+            max_bytes=TASK_REVIEW_BYTES, max_batches=1)
+        if omitted or len(batches) != 1 or user != '\nJSON:\n' + canonical_json(batches[0]):
+            return {}
+        parsed = _review_response(span.full_output, basis_hash)
+        if not {row.issue_id for row in parsed.reviews} <= set(ids):
+            return {}
+        return {row.issue_id: row for row in parsed.reviews
+                if _valid_identity(row, candidates[row.issue_id])}
+    except (ValueError, TypeError, KeyError, IndexError):
+        return {}
+
+
 def _cache(detail, basis_hash, candidates):
     cached = next(
         (
             span
             for span in reversed(detail.trace_spans)
             if span.name == RECEIPT_NAME
+            and span.kind == 'tool' and span.agent == 'qa' and span.status == 'ok'
             and span.metadata.get("basis_hash") == basis_hash
             and span.full_output
         ),
@@ -187,12 +217,8 @@ def _cache(detail, basis_hash, candidates):
             if key in candidates
         }
         reviews = {}
-        for row in (receipt.get("model_review") or {}).get("reviews", []):
-            review = _Decision.model_validate(row)
-            if review.issue_id in candidates and _valid_identity(
-                review, candidates[review.issue_id]
-            ):
-                reviews[review.issue_id] = review
+        for batch in receipt.get('batch_receipts', []):
+            reviews.update(_bound_batch_reviews(detail, basis_hash, candidates, batch))
         return (
             reviews,
             attempts,
@@ -239,13 +265,15 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
     snapshot = service._final_qa_snapshot(record)
     dependency_hash = _basis(service, record, snapshot)
     writer_hash = service._evidence_artifact_hash(service._writer_evidence_artifact_payload(detail))
-    verified = not evidence_issues and service._final_qa_producer_verified(record, snapshot)
+    producer_verified = service._final_qa_producer_verified(record, snapshot)
+    verified = not evidence_issues and producer_verified
     questions = {}
     for audit in detail.report_dimension_audits:
         for question in research_questions(detail, audit.competitor, audit.dimension):
             questions.setdefault(question["question_id"], (question, audit))
     contexts = {
-        qid: _question_context(service, record, snapshot, question, audit, verified=verified)
+        qid: _question_context(service, record, snapshot, question, audit, verified=verified,
+                               producer_verified=producer_verified)
         for qid, (question, audit) in questions.items()
     }
     candidates = []
@@ -321,12 +349,13 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
         fact_ids = sorted({fid for claim in claims for fid in claim["fact_ids"]})
         source_ids = sorted({sid for claim in claims for sid in claim["source_ids"]})
         batch_status, was_sent, valid_ids, reason = "unsent", False, [], ""
+        response = None
+        user = "\nJSON:\n" + canonical_json(batch)
         before = len(detail.trace_spans)
         try:
             view, use = service._begin_evidence_use(
                 record, agent="qa", fact_ids=fact_ids, source_ids=source_ids
             )
-            user = "\nJSON:\n" + canonical_json(batch)
             if len(user.encode()) > min(TASK_REVIEW_BYTES, use.max_bytes) or not set(
                 fact_ids
             ) <= set(view.fact_ids):
@@ -378,8 +407,28 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
             for span in detail.trace_spans[before:]
             if span.name == "final_question_reconciliation" and span.kind == "llm"
         ]
-        if spans:
-            was_sent = any(span.metadata.get("llm_transport_attempts", 0) for span in spans)
+        was_sent = any(type(span.metadata.get('llm_transport_attempts')) is int
+                       and span.metadata['llm_transport_attempts'] > 0 for span in spans)
+        bound_receipt = dict(issue_ids=sorted(ids))
+        actual = [span for span in spans
+                  if span.full_input == INDEPENDENT_SYSTEM + '\n\n' + user
+                  and (span.status != 'ok' or span.full_output == response)]
+        if len(actual) == 1:
+            span = actual[0]
+            bound_receipt.update(
+                span_id=span.id,
+                full_input_sha256=hashlib.sha256(span.full_input.encode()).hexdigest(),
+                full_output_sha256=hashlib.sha256(span.full_output.encode()).hexdigest())
+        bound = _bound_batch_reviews(detail, basis_hash, by_id, bound_receipt)
+        for key in valid_ids:
+            if key not in bound:
+                reviews.pop(key, None)
+        valid_ids = [key for key in valid_ids if key in bound]
+        if batch_status in {'valid', 'partial'}:
+            batch_status = (
+                'valid' if set(valid_ids) == ids else 'partial' if valid_ids else 'invalid')
+            if not valid_ids:
+                reason = 'Final QA actual transport or response binding is unverified.'
         timeout_attempts = sum(int(span.metadata.get("llm_timeout_attempts", 0)) for span in spans)
         if was_sent:
             if batch_status == "unsent":
@@ -404,7 +453,7 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
             )
         batch_receipts.append(
             dict(
-                issue_ids=sorted(ids),
+                **bound_receipt,
                 status=batch_status,
                 sent=was_sent,
                 valid_review_issue_ids=sorted(valid_ids),
@@ -416,7 +465,7 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
             break
     if (
         dependency_hash != _basis(service, record, service._final_qa_snapshot(record))
-        or verified
+        or producer_verified
         and not service._final_qa_producer_verified(record, snapshot)
     ):
         raise EvidenceUseRejectedError(

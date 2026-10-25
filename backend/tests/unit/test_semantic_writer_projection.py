@@ -48,13 +48,31 @@ async def test_protected_writer_projects_new_semantic_source_and_replays_its_pro
         assert live_detail is detail and live_snapshot.id == snapshot.id
         assert (competitor, dimension) == (product, 'feature')
         retrieval_calls.append((live_snapshot.id, target.id))
-        from packages.research.question_scope import research_questions
-        return (target.id,), {'mode': 'hybrid', 'ranking_only': True, 'eligible_count': 3,
+        from packages.agents.writer.question_retrieval import (
+            _eligible_facts,
+            _question_evidence_pool,
+        )
+        from packages.research.question_scope import (
+            question_request_context,
+            request_context_questions,
+            research_questions,
+        )
+        questions = research_questions(live_detail, competitor, dimension)
+        queries = request_context_questions(question_request_context(
+            live_detail, competitor, dimension, questions), questions)
+        facts = _eligible_facts(live_snapshot, competitor, dimension)
+        ranked = [[target.id] for _ in questions]
+        empty = [[] for _ in questions]
+        pool = _question_evidence_pool(facts, questions, queries, ranked,
+            [list(old_ids) for _ in questions], ranked, ranked, empty,
+            (target.id,), {fact.id for fact in facts})
+        return (target.id,), {'mode': 'hybrid', 'ranking_only': True,
+            'eligible_count': len(facts), 'evidence_pool': pool,
             'selected_fact_ids': [target.id], 'snapshot_id': snapshot.id,
             'questions': [dict(question_id=q['question_id'], fact_ids=[target.id],
                 core_fact_ids=[target.id], required_exception_fact_ids=[],
                 missing_core_fact_ids=[], missing_exception_fact_ids=[], minimum_evidence_missing=False)
-                for q in research_questions(live_detail, competitor, dimension)]}
+                for q in questions]}
 
     monkeypatch.setattr('packages.agents.writer.question_retrieval.retrieve_question_facts', semantic_ids)
     service = RunService(SkillRegistry.from_default_path(), Settings(demo_mode=True, writer_task_execution_enabled=False),
@@ -93,6 +111,7 @@ async def test_protected_writer_projects_new_semantic_source_and_replays_its_pro
     await service._real_writer_step(record)
     assert projections and target.source_id in projections[0], (
         'The initial protected projection discarded the newly selected semantic source.')
+    assert projections[0].isdisjoint(old_source_ids)
     assert len(retrieval_calls) >= 2, 'Initial projection and inner Writer both need semantic selection.'
     assert target.id in writer_fact_ids and login in detail.report_md
     assert f'[source:{target.source_id}]' in detail.report_md

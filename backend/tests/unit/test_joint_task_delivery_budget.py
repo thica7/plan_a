@@ -589,7 +589,7 @@ async def test_real_independent_qa_sends_nine_lossless_findings_and_never_reuses
     span.full_output = json.dumps(old_receipt)
     await qa.review_current_questions(service, record, historical, evidence_issues=[])
     assert len(requests) == 8 and budget.calls == 8 and budget.tokens_used == 1200
-    assert receipt(detail)["mode"] == "independent_questions_v3"
+    assert receipt(detail)["mode"] == "independent_questions_v4"
     assert (budget.max_calls, budget.max_tokens) == (24, 80000)
 
 

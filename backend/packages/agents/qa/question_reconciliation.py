@@ -10,13 +10,18 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from packages.agents.writer.answer_coverage import coverage_resolution_reasons
-from packages.agents.writer.answer_presentation import question_coverage_matches
+from packages.agents.writer.answer_presentation import (
+    audit_heading,
+    question_coverage_lines,
+    question_coverage_matches,
+)
 from packages.agents.writer.price_answers import server_missing_price_answers
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
 from packages.research.evidence.snapshot_models import canonical_json
 from packages.research.evidence.source_spans import projected_source_facts
-from packages.research.question_scope import research_questions
+from packages.research.question_scope import question_request_context, research_questions
+from packages.schema.decision_brief import safe_decision_brief_text
 
 MAX_REVIEW_BYTES = 14000
 TASK_REVIEW_BYTES = 6000
@@ -128,7 +133,72 @@ def _structural_or_mixed(issue):
     )
 
 
+def _visible_question_block(detail, audit, question):
+    """Read one complete question block inside its unique published audit section."""
+    lines = detail.report_md.splitlines()
+    headings = [i for i, line in enumerate(lines)
+                if line == audit_heading(audit, detail.output_language)]
+    if len(headings) != 1:
+        return ""
+    start = headings[0] + 1
+    end = next((i for i in range(start, len(lines))
+                if lines[i].startswith(("# ", "## ", "### "))), len(lines))
+    coverage = question_coverage_lines(audit, detail.output_language)
+    blocks = [i for i in range(start, end) if coverage and lines[i] == coverage[0]]
+    if len(blocks) != 1:
+        return ""
+    start = blocks[0] + 1
+    end = next((i for i in range(start, end) if lines[i].startswith('#### ')), end)
+    prefix = "- " + safe_decision_brief_text(question["question"]) + " — "
+    starts = [i for i in range(start, end) if lines[i].startswith(prefix)]
+    if len(starts) != 1:
+        return ""
+    start = starts[0]
+    other_questions = tuple('- ' + safe_decision_brief_text(a.question) + ' — '
+                            for a in audit.answer_coverage
+                            if a.question_id != question['question_id'])
+    end = next((i for i in range(start + 1, end)
+                if lines[i].startswith((*other_questions, "#### "))), end)
+    return "\n".join(lines[start:end]).rstrip()
+
+
+def _request_only_clarification(detail, audit, answer, question):
+    """Only the unchanged, necessary server question can qualify without source claims."""
+    from packages.agents.writer.request_clarification import (
+        request_clarification_fields,
+        server_clarification_answer,
+    )
+    from packages.agents.writer.task_answers import reviewed_task_answer_rows
+
+    current = [q for q in research_questions(detail, audit.competitor, audit.dimension)
+               if q['question_id'] == question['question_id']]
+    rows = [a for a in audit.answer_coverage if a.question_id == question['question_id']]
+    if (current != [question] or rows != [answer]
+            or audit.claim_review_version != 3 or audit.answer_binding_version != 3
+            or answer != server_clarification_answer(question)
+            or answer.claim_ids or answer.evidence_spans or answer.subquestion_bindings
+            or answer.basis_snapshot_id is not None):
+        return False
+    context = question_request_context(detail, audit.competitor, audit.dimension, [question])
+    bindings, parents = context['bindings'], context['parents']
+    if (context['unbound_question_ids'] or len(bindings) != 1 or len(parents) != 1
+            or bindings[0] != dict(question_id=question['question_id'],
+                                   parent_id=parents[0]['parent_id'])
+            or request_clarification_fields(parents[0]['text']) != answer.missing_fields):
+        return False
+    if any(row['question_id'] == answer.question_id
+           for row in reviewed_task_answer_rows(detail, audit)):
+        return False
+    # Render just the canonical question; metadata or a matching substring cannot
+    # excuse additional local assertions or a changed publication.
+    expected = question_coverage_lines(
+        audit.model_copy(update={'answer_coverage': [answer]}), detail.output_language)
+    return _visible_question_block(detail, audit, question) == '\n'.join(expected[2:]).rstrip()
+
+
 def _answer_support(detail, snapshot, audit, answer, question):
+    if answer.resolution == 'clarification' and not answer.claim_ids:
+        return [] if _request_only_clarification(detail, audit, answer, question) else None
     if answer.question != question["question"] or not question_coverage_matches(
         detail.report_md, audit, detail.output_language,
         audits=detail.report_dimension_audits, detail=detail

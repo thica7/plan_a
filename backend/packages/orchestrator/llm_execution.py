@@ -240,11 +240,14 @@ class LLMExecutionMixin:
                 if agent == 'qa' and name == 'final_question_reconciliation' and subagent is None:
                     return 'final_qa:run'
                 if subagent in task_segments:
-                    if name in {'dimension_task_plan', 'dimension_task_generation'}:
+                    if name in {
+                            'dimension_task_plan', 'dimension_task_generation',
+                            'dimension_question_atomic_generation'}:
                         return f'writer:{subagent}'
-                    if name == 'dimension_task_review':
+                    if name in {'dimension_task_review', 'dimension_question_atomic_review'}:
                         return f'qa:{subagent}'
-                    if name == 'dimension_answer_review':
+                    if name in {
+                            'dimension_answer_review', 'dimension_question_atomic_answer_review'}:
                         return f'answer:{subagent}'
         if agent in {'comparator', 'reflector'} or (agent == 'writer' and not subagent):
             return f'{agent}:run'

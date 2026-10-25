@@ -131,6 +131,8 @@ class ReportDimensionAudit(BaseModel):
     answer_review_contract: Literal["subquestion-premises-v1"] | None = None
     claim_review_version: Literal[3] | None = None
     upstream_dependencies: tuple[EvidenceArtifactDependency, ...] | None = None
+    question_atomic_contract: Literal["question-atomic-delivery-v1"] | None = None
+    question_atomic_receipt_digest: str | None = None
 
     @field_validator('answer_binding_version', 'claim_review_version', mode='before')
     @classmethod
@@ -152,6 +154,10 @@ class ReportDimensionAudit(BaseModel):
             values.pop('claim_review_version', None)
         if self.upstream_dependencies is None:
             values.pop('upstream_dependencies', None)
+        if self.question_atomic_contract is None:
+            values.pop('question_atomic_contract', None)
+        if self.question_atomic_receipt_digest is None:
+            values.pop('question_atomic_receipt_digest', None)
         return values
 
 

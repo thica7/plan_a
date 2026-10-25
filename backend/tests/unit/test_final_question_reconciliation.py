@@ -164,7 +164,8 @@ async def test_experimental_final_qa_diagnoses_integrity_gaps_without_clearing_t
         assert context['request_context']['parents'][0]['text'] == QUESTION
         return reviewed(payload)
 
-    monkeypatch.setattr(service, '_trace_llm_text', model)
+    from test_independent_final_question_qa import traced_model_double
+    traced_model_double(monkeypatch, service, model)
     result = await api()(service, record, issues, evidence_issues=issues)
     assert len(calls) == 1
     assert result[:len(issues)] == issues
@@ -188,7 +189,8 @@ async def test_experimental_final_qa_includes_gaps_beside_eligible_findings(monk
         calls.append(payload)
         return reviewed(payload)
 
-    monkeypatch.setattr(service, '_trace_llm_text', model)
+    from test_independent_final_question_qa import traced_model_double
+    traced_model_double(monkeypatch, service, model)
     result = await api()(service, record, issues, evidence_issues=[])
     assert len(calls) == 1
     assert len(calls[0]['findings']) == 3
@@ -457,7 +459,8 @@ async def test_task_final_qa_packs_whole_findings_and_keeps_unsent_ones(monkeypa
         calls.append(payload)
         return reviewed(payload)
 
-    monkeypatch.setattr(service, '_trace_llm_text', model)
+    from test_independent_final_question_qa import traced_model_double
+    traced_model_double(monkeypatch, service, model)
     result = await api()(service, record, [original, large], evidence_issues=[])
     assert [row.id for row in result] == [large.id]
     assert len(calls) == 1

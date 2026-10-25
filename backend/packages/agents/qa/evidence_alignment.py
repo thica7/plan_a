@@ -37,6 +37,17 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
             boundaries = [b for b in record.detail.report_answer_boundaries
                           if b.requirement.competitor == audit.competitor and b.requirement.dimension == audit.dimension
                           and set(b.view_fact_ids) == set(use.fact_ids) and set(b.view_source_ids) == set(use.source_ids)]
+            atomic_trace = any((s.name == 'question_atomic_delivery'
+                and audit.consumption_id in s.full_output) or (
+                    s.name == 'dimension_question_atomic_generation'
+                and audit.consumption_id in s.full_input) for s in record.detail.trace_spans)
+            if (audit.question_atomic_contract is not None
+                    or audit.question_atomic_receipt_digest is not None or atomic_trace):
+                from packages.agents.writer.question_atomic_delivery import replay_atomic_delivery
+                try:
+                    replay_atomic_delivery(service, record.detail, snapshot, use, view, audit=audit)
+                except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
+                    reasons.add("question_atomic_replay_failed")
             published = [c for c in audit.claims if c.status == "supported"]
             from packages.agents.writer.question_retrieval import _eligible_facts
             discovery = _eligible_facts(snapshot, audit.competitor, audit.dimension) if audit.dimension == 'feature' else view.facts
