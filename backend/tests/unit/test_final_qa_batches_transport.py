@@ -88,15 +88,16 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
     expected_kept = [] if second_batch == "valid" else ["issue-1"]
     assert [issue.id for issue in result] == expected_kept
     # The readable named question context keeps all same-question findings whole.
-    assert len(requests) == 2
+    initial_calls = 3 if second_batch == "foreign" else 2
+    assert len(requests) == initial_calls
     assert [row["issue_id"] for batch in requests for row in batch["findings"]] == [
-        independent_id, "issue-0", "issue-1"]
+        independent_id, "issue-0", "issue-1"] + (["issue-1"] if second_batch == "foreign" else [])
     spans = [span for span in detail.trace_spans if span.name == "final_question_reconciliation"]
-    assert len(spans) == 2
+    assert len(spans) == initial_calls
     assert [span.status for span in spans] == [
         "ok",
         "error" if second_batch == "unavailable" else "ok",
-    ]
+    ] + (["ok"] if second_batch == "foreign" else [])
     complete = json.loads(detail.trace_spans[-1].full_input)['findings']
     expected = {row['issue_id']: row for row in complete}
     from packages.agents.qa.independent_question_review import INDEPENDENT_SYSTEM
@@ -119,11 +120,11 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
     assert sum(span.metadata["llm_tokens_charged"] for span in spans) == conservative_charge
     assert service._run_llm_budget(record) is budget
     assert budget.tokens_used == conservative_charge
-    assert budget.calls == 2 and budget.tokens_reserved == 0
+    assert budget.calls == initial_calls and budget.tokens_reserved == 0
     assert budget.max_calls == 24 and budget.max_tokens == 80000
     assert budget.tokens_used <= budget.max_tokens
     receipt = json.loads(detail.trace_spans[-1].full_output)
-    assert receipt["planned_batches"] == 2
+    assert receipt["planned_batches"] == initial_calls
     assert receipt["unsent_issue_ids"] == []
     assert [row["issue_id"] for row in receipt["model_review"]["reviews"]] == (
         [independent_id, "issue-0", "issue-1"]

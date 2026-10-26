@@ -1,0 +1,40 @@
+{
+  "source_span_id": "span-70",
+  "source_output_sha256": "be85ffe1a6fcbf696465de077dac93f39dfb302ede10e542c5ff924eb417edea",
+  "basis_hash": "697fbaebd6918f4a089079c3f4bba67478a7bf35855519d16da5b843c39eb90e",
+  "candidates": {
+    "final-question-question-63762e09ae5d8faa1071": {
+      "issue_id": "final-question-question-63762e09ae5d8faa1071",
+      "question_id": "question-63762e09ae5d8faa1071",
+      "support_digest": "356b87d0036dfd65fed6b9117fdce1eb9ccd1081726f025d9d7e1c19c511af49",
+      "answer": {
+        "claim_ids": []
+      }
+    },
+    "qc-issue-6633afe79b837c6e": {
+      "issue_id": "qc-issue-6633afe79b837c6e",
+      "question_id": "question-63762e09ae5d8faa1071",
+      "support_digest": "90ff8e1956f36849cbc84aea1afc2f5f82fa59519e2dd74bb2cc0de0a8a7d94a",
+      "answer": {
+        "claim_ids": []
+      }
+    },
+    "qc-issue-71e0d595e9007e04": {
+      "issue_id": "qc-issue-71e0d595e9007e04",
+      "question_id": "question-63762e09ae5d8faa1071",
+      "support_digest": "dd5977b66175f94706f15c20237bb0b69efe3c4fc5634df182e6f9e813d19ecb",
+      "answer": {
+        "claim_ids": []
+      }
+    },
+    "qc-issue-d5f48a4df9e2610f": {
+      "issue_id": "qc-issue-d5f48a4df9e2610f",
+      "question_id": "question-63762e09ae5d8faa1071",
+      "support_digest": "a5582d6c54032ee6e2bff84038aae537c2a9db1eed0790016e1ec9878f6d84c3",
+      "answer": {
+        "claim_ids": []
+      }
+    }
+  },
+  "response": "{\"version\":1,\"basis_hash\":\"697fbaebd6918f4a089079c3f4bba67478a7bf35855519d16da5b843c39eb90e\",\"reviews\":[{\"issue_id\":\"final-question-question-63762e09ae5d8faa1071\",\"question_id\":\"question-63762e09ae5d8faa1071\",\"support_digest\":\"356b87d0036dfd65fed6b9117fdce1eb9ccd1081726f025d9d7e1c19c511af49\",\"disposition\":\"current_limitation\",\"claim_ids\":[],\"finding_fully_addressed\":true,\"remaining_gaps\":[],\"reason\":\"The complete original question asks whether a departing colleague's saved passwords remain after being 'deleted' in Bitwarden. The visible answer is a canonical request-only clarification that asks the two necessary disambiguating inputs: the actual action (remove member vs. permanently delete account/data) and data ownership (personal vs. organization). These are genuine request-only ambiguities in the bound parent, not invented product premises. The clarification is fully visible and no product facts are asserted, so this is a permissible current_limitation.\"},{\"issue_id\":\"qc-issue-6633afe79b837c6e\",\"question_id\":\"question-63762e09ae5d8faa1071\",\"support_digest\":\"90ff8e1956f36849cbc84aea1afc2f5f82fa59519e2dd74bb2cc0de0a8a7d94c3\",\"disposition\":\"keep\",\"claim_ids\":[],\"finding_fully_addressed\":false,\"remaining_gaps\":[\"Core facts are context-omitted (context_budget_exceeded); the visible evidence cannot resolve whether items in the removed member's My vault persist, whether organization-owned collections persist, or the Centralize organization ownership policy behavior.\",\"A complete answer to the original question remains blocked by these omitted core facts.\"],\"reason\":\"This is a diagnostic_only finding, which must always keep. It identifies a real context omission (context_budget_exceeded) that blocks a complete answer; the visible clarification does not supply the omitted core facts, so the omission remains.\"},{\"issue_id\":\"qc-issue-71e0d595e9007e04\",\"question_id\":\"question-63762e09ae5d8faa1071\",\"support_digest\":\"dd5977b66175f94706f15c20237bb0b69efe3c4fc5634df182e6f9e813d19ecb\",\"disposition\":\"keep\",\"claim_ids\":[],\"finding_fully_addressed\":false,\"remaining_gaps\":[\"The specific effect on the removed colleague's saved passwords under default vs. Centralize ownership policy requires the omitted core facts before a definitive answer.\",\"The distinction between 'remove member' and 'delete account' is only posed as a clarification question; no product rule resolving it is visible.\"],\"reason\":\"The visible answer only asks the user to clarify the action and ownership; it does not resolve what happens to saved passwords under default vs. Centralize ownership policy. The needed core facts are omitted, so this finding is not fully addressed.\"},{\"issue_id\":\"qc-issue-d5f48a4df9e2610f\",\"question_id\":\"question-63762e09ae5d8faa1071\",\"support_digest\":\"a5582d6c54032ee6e2bff84038aae537c2a9db1eed0790016e1ec9878f6d84c3\",\"disposition\":\"keep\",\"claim_ids\":[],\"finding_fully_addressed\":false,\"remaining_gaps\":[\"Question core context budget exceeded; missing core fact IDs include evidence-fact-record-3ae1d860e33068e5f7dfae586ca06637ab6d93e6168ad1ced155372a1d79465d, evidence-fact-record-7db81fd038344d3d81c00f62a608dda6d911ace5bd7d457e65279841eaa69d68, evidence-fact-record-79caaa675b42c466f669d016d277a5389de25f9a4083ef30333f424f7d41d290, evidence-fact-record-d424653e094e6c7ab1468b7582da38d21b15160e6234f061c0fd2b611a2ba17c, evidence-fact-record-5bbdf913afa09857ab1c983713cf21af99ec743e0aac5f981e0355ac43383cf0, evidence-fact-record-80e257de4729cd4aa914dcf2d13b7e99cfc4abf67ea040611f20330e779730e5, evidence-fact-record-3a1bf2b6fc37bd8cad70ff54c313cf20a35056eb827bbb7fb7aefeac307b4abe.\",\"No exception facts are missing, but the omitted core facts block a complete product answer.\"],\"reason\":\"The question core context budget was exceeded and seven core fact records are missing. The visible request-only clarification cannot substitute for those omitted product facts, so the omission remains and the finding is kept.\"}]}"
+}

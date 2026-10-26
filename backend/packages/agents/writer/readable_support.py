@@ -45,6 +45,28 @@ def single_reference_tasks(payload):
     )
 
 
+def advisory_reference_tasks(payload):
+    """V4 names task ranks separately from the complete dispatched catalog."""
+    tasks = []
+    for task in payload["generation_tasks"]:
+        projected = {key: value for key, value in task.items()
+                     if key not in {"support_refs", "support_ref_options"}}
+        projected["advisory_support_refs"] = list(task["support_refs"])
+        tasks.append(projected)
+    refs = [ref for row in payload["evidence_view"]["facts"]
+            for ref in (*row.get("operation_support_refs", ()),
+                        *(span["support_ref"] for span in row.get("source_span_candidates", ())))]
+    return dict(
+        payload, generation_projection_version=4, generation_tasks=tasks,
+        support_catalog=dict(
+            support_refs=refs, task_hints_are_advisory=True,
+            scope="current_question_dispatched_complete_members_only",
+            bindings="evidence_view.facts.operation_support_refs/source_span_candidates",
+            selection="one_complete_reference_or_supplied_source_exception_bindings_pair",
+        ),
+    )
+
+
 def _resolve_span(item, spans):
     bare = {key: value for key, value in item.items() if key != "support_ref"}
     if set(bare) == {"quote"} and isinstance(bare["quote"], str):

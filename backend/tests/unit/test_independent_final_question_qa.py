@@ -42,7 +42,7 @@ async def independent_case(monkeypatch):
 def traced_model_double(monkeypatch, service, model):
     """An offline QA double supplies the actual adapter's trace envelope too."""
     async def traced(record, **kwargs):
-        status, response, transports = 'error', '', 1
+        status, response, transports, timeouts = 'error', '', 1, 0
         try:
             response = await model(record, **kwargs)
             status = 'ok'
@@ -50,13 +50,19 @@ def traced_model_double(monkeypatch, service, model):
         except LLMExecutionLimitError:
             transports = 0
             raise
+        except (TimeoutError, httpx.TimeoutException):
+            timeouts = 1
+            raise
+        except LLMError as exc:
+            timeouts = int(isinstance(exc.__cause__, (TimeoutError, httpx.TimeoutException)))
+            raise
         finally:
             record.detail.trace_spans.append(TraceSpan(
                 id=f'qa-double-{len(record.detail.trace_spans)}', kind='llm', agent='qa',
                 name=kwargs['name'], status=status, duration_ms=0,
                 full_input=kwargs['system'] + '\n\n' + kwargs['user'], full_output=response,
                 metadata={'llm_transport_attempts': transports,
-                          'llm_request_attempts': transports},
+                          'llm_request_attempts': transports, 'llm_timeout_attempts': timeouts},
             ))
     monkeypatch.setattr(service, '_trace_llm_text', traced)
 
@@ -278,7 +284,7 @@ async def test_current_questions_are_scheduled_before_historical_findings(monkey
 
 
 @pytest.mark.asyncio
-async def test_partial_legal_response_caches_valid_rows_and_only_resumes_missing_rows(monkeypatch):
+async def test_partial_legal_response_caches_valid_rows_and_retries_only_missing_rows(monkeypatch):
     detail, service, record = await scope_case(monkeypatch)
     service._settings = replace(service._settings, writer_task_execution_enabled=True)
     original = service._build_reflector_qa_issues(detail)[0]
@@ -301,9 +307,11 @@ async def test_partial_legal_response_caches_valid_rows_and_only_resumes_missing
     traced_model_double(monkeypatch, service, model)
     await reconcile_question_findings(service, record, issues, evidence_issues=[])
     output = receipt(detail)
-    assert output["model_execution"] == "partial"
-    assert output["valid_review_issue_ids"] == [completed_id]
-    assert len(output["model_unreviewed_issue_ids"]) == 2
+    assert output["model_execution"] == "completed"
+    assert output["valid_review_issue_ids"] == output["planned_issue_ids"]
+    assert output["model_unreviewed_issue_ids"] == []
+    assert output["batch_receipts"][0]["valid_review_issue_ids"] == [completed_id]
+    assert len(output["batch_receipts"][0]["missing_review_issue_ids"]) == 2
     assert await reconcile_question_findings(service, record, issues, evidence_issues=[]) == []
     assert len(calls) == 2
     assert receipt(detail)["model_execution"] == "completed"

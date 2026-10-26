@@ -48,6 +48,13 @@ def current_generation_projection(payload):
     return single_reference_tasks(dict(payload, generation_tasks=tasks))
 
 
+def advisory_generation_projection(payload):
+    """Keep v3 support and capacity checks while making v4 ranks advisory."""
+    from packages.agents.writer.readable_support import advisory_reference_tasks
+
+    return advisory_reference_tasks(current_generation_projection(payload))
+
+
 def checked_generation_projection_version(value):
     if type(value) is not int or value not in {1, 2}:
         raise ValueError("Atomic generation projection version changed")
@@ -73,7 +80,7 @@ def complete_support_text(text, fact):
         return bool(
             len(lines) >= 3
             and cells[0]
-            and all(len(row) == len(cells[0]) for row in cells)
+            and all(row is not None and len(row) == len(cells[0]) for row in cells)
             and all(re.fullmatch(r":?-{3,}:?", cell.strip()) for cell in cells[1])
         )
     if re.match(r"(?:Because|Since)\b|由于|因为", text, re.I):
@@ -472,7 +479,7 @@ def scoped_generation_response(response, payload, *, forecast=False):
                 and (
                     task["focus"] == "source_rule"
                     and not task.get("request_property")
-                    or payload.get("generation_projection_version") == 3
+                    or payload.get("generation_projection_version") in {3, 4}
                     and (task["focus"] == "billing_inputs" or task.get("request_property") in {
                         "people_limit", "container_limit"})
                     or counts[task["task_id"]] == 1

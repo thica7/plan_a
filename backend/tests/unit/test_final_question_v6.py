@@ -62,7 +62,7 @@ async def test_price_permission_and_unmapped_findings_never_share_actual_request
     monkeypatch.setattr(service._llm, "_post_chat_completion", post)
     await service._real_qa_step(record)
     output = receipt(detail)
-    assert output["mode"] == "independent_questions_v6"
+    assert output["mode"] == "independent_questions_v7"
     assert {r["question_id"] for b in calls for r in b["findings"]} == {
         *[q["question_id"] for q in questions],
         "unmapped",
@@ -122,7 +122,7 @@ async def test_canonical_clarification_real_qa_adapter_replays_partial_limitatio
     audit, question, answer = clarification(record)
     assert answer.status == "partial" and answer.resolution == "clarification"
     output = receipt(record.detail)
-    assert output["mode"] == "independent_questions_v6"
+    assert output["mode"] == "independent_questions_v7"
     assert output["passed_question_ids"] == [question["question_id"]]
     assert output["question_review_states"][question["question_id"]] == "current_limitation"
     assert not any(
@@ -194,8 +194,8 @@ async def test_actual_evidence_cap_keeps_complete_context_unsent_and_retryable(m
     assert await reconcile_question_findings(service, record, [], evidence_issues=[]) == []
 
 
-def test_v6_reserve_covers_actual_plain_cap_and_preserves_legacy_system():
-    assert independent.PROTOCOL == "independent_questions_v6"
+def test_current_reserve_covers_actual_plain_cap_and_preserves_legacy_system():
+    assert independent.PROTOCOL == "independent_questions_v7"
     assert independent.TASK_REVIEW_BYTES == 8192
     assert "Decode exact-content sharing first" in independent.INDEPENDENT_SYSTEM_V5
     assert "Decode exact-content sharing first" not in independent.INDEPENDENT_SYSTEM

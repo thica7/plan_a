@@ -405,7 +405,7 @@ def test_receipt_replay_retains_the_server_extraction_mapping_version(monkeypatc
     detail, brief, capsule, document = versioned_delivery_fixture(monkeypatch, legacy=legacy)
     recipe = capsule["recipes"][0]
     if not legacy:
-        assert recipe["extractor_version"].startswith("question-focus-v2:")
+        assert recipe["extractor_version"].startswith("question-focus-v3:")
     replay = _replay_question_delivery(
         detail, capsule, {document.id: document}, authorized_brief=brief
     )
@@ -418,7 +418,7 @@ def test_metadata_cannot_downgrade_mapping_or_grant_an_unknown_version():
     brief, candidate, page = trello_source()
     page.metadata["extractor_version"] = "question-focus-v1"
     extraction, items = admitted(brief, candidate, page, [QUOTES[0]])
-    assert extraction.extractor_version.startswith("question-focus-v2:")
+    assert extraction.extractor_version.startswith("question-focus-v3:")
     assert items and all(item.status == "accepted" for item in items)
     extraction.metadata["extractor_version"] = extraction.extractor_version
     extraction.extractor_version = "unsupported-mapping:" + semantic.semantic_focus_signature(

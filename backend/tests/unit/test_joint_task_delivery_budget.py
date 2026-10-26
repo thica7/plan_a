@@ -483,7 +483,8 @@ async def test_selector_is_unsent_when_even_empty_generation_envelope_cannot_adv
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("old_mode", ["independent_questions_v2", "independent_questions_v5"])
+@pytest.mark.parametrize("old_mode", ["independent_questions_v2", "independent_questions_v5",
+                                     "independent_questions_v6"])
 async def test_real_independent_qa_sends_nine_complete_findings_and_rejects_old_receipt(
     monkeypatch, old_mode,
 ):
@@ -591,7 +592,7 @@ async def test_real_independent_qa_sends_nine_complete_findings_and_rejects_old_
     span.full_output = json.dumps(old_receipt)
     await qa.review_current_questions(service, record, historical, evidence_issues=[])
     assert len(requests) == 8 and budget.calls == 8 and budget.tokens_used == 1200
-    assert receipt(detail)["mode"] == "independent_questions_v6"
+    assert receipt(detail)["mode"] == "independent_questions_v7"
     assert (budget.max_calls, budget.max_tokens) == (24, 80000)
 
 

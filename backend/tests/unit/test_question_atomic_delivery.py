@@ -1104,7 +1104,7 @@ async def test_live_checkpoint_current_requests_run_despite_nonbinding_future_fo
             for name in (atomic.GENERATION_NAME, atomic.REVIEW_NAME, atomic.ANSWER_NAME)
             if system == atomic.atomic_system(
                 name, record.detail.output_language,
-                review_projection_version=3, generation_projection_version=3,
+                review_projection_version=3, generation_projection_version=4,
             )
         )
         transported.append(name)
@@ -1288,7 +1288,8 @@ async def test_current_review_exhaustion_after_real_generation_leaves_claim_unpu
     async def post(url, payload, headers):
         system, user = [row["content"] for row in payload["messages"]]
         assert system == atomic.atomic_system(
-            atomic.GENERATION_NAME, record.detail.output_language, generation_projection_version=3
+            atomic.GENERATION_NAME, record.detail.output_language,
+            review_projection_version=3, generation_projection_version=4,
         )
         transported.append(atomic.GENERATION_NAME)
         body = expand_prompt_payload(json.loads(user.split("\nJSON:\n", 1)[1]))

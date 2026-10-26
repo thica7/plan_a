@@ -31,13 +31,14 @@ def clarification(record):
                                if a.question_id == question['question_id'])
 
 
-def append_mock_trace(record, kwargs, response, *, status='ok', transports=1):
+def append_mock_trace(record, kwargs, response, *, status='ok', transports=1, timeout_attempts=0):
     """Offline model double records the same envelope as the traced adapter."""
     record.detail.trace_spans.append(TraceSpan(
         id=f'qa-offline-{len(record.detail.trace_spans)}', kind='llm', agent='qa',
         name='final_question_reconciliation', status=status, duration_ms=0,
         full_input=kwargs['system'] + '\n\n' + kwargs['user'], full_output=response,
-        metadata={'llm_transport_attempts': transports, 'llm_request_attempts': transports},
+        metadata={'llm_transport_attempts': transports, 'llm_request_attempts': transports,
+                  'llm_timeout_attempts': timeout_attempts},
     ))
 
 
@@ -160,7 +161,7 @@ async def test_current_cache_needs_current_actual_qa_trace_and_hashes(monkeypatc
     calls = install_review(monkeypatch, service)
     assert await reconcile_question_findings(service, record, [], evidence_issues=[]) == []
     output = receipt(record.detail)
-    assert output['mode'] == 'independent_questions_v6'
+    assert output['mode'] == 'independent_questions_v7'
     batch = output['batch_receipts'][0]
     span = next(s for s in record.detail.trace_spans if s.id == batch['span_id'])
     assert batch['full_input_sha256'] == hashlib.sha256(span.full_input.encode()).hexdigest()
@@ -304,7 +305,8 @@ async def test_clarification_timeout_records_actual_span_and_resumes_once(monkey
     service, record, _ = qa_case()
 
     async def timeout(record, **kwargs):
-        append_mock_trace(record, kwargs, 'controlled offline timeout', status='error')
+        append_mock_trace(record, kwargs, 'controlled offline timeout', status='error',
+                          timeout_attempts=1)
         raise TimeoutError('controlled offline timeout')
 
     monkeypatch.setattr(service, '_trace_llm_text', timeout)
@@ -313,6 +315,7 @@ async def test_clarification_timeout_records_actual_span_and_resumes_once(monkey
     batch = output['batch_receipts'][0]
     assert batch['status'] == 'timeout'
     span = next(s for s in record.detail.trace_spans if s.id == batch['span_id'])
+    assert span.metadata['llm_timeout_attempts'] == 1
     assert batch['full_input_sha256'] == hashlib.sha256(span.full_input.encode()).hexdigest()
     assert batch['full_output_sha256'] == hashlib.sha256(span.full_output.encode()).hexdigest()
     assert output['valid_review_issue_ids'] == []
@@ -322,3 +325,4 @@ async def test_clarification_timeout_records_actual_span_and_resumes_once(monkey
     assert await reconcile_question_findings(service, record, [], evidence_issues=[]) == []
     assert len(calls) == 1
     assert set(receipt(record.detail)['attempts_by_issue_id'].values()) == {2}
+    assert receipt(record.detail)['timeout_issue_ids'] == output['planned_issue_ids']

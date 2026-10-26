@@ -1,0 +1,383 @@
+{
+  "date": "2026-10-27",
+  "baseline_commit": "d8c9bb63bd819b4180f49c4a37bbe7db2f3d07e8",
+  "user_objective_achieved": false,
+  "status": "checkpoint; direct final-answer delivery remains incomplete",
+  "implementation": [
+    "Collector question-focus-v3 original table context",
+    "Writer gen4/review3 advisory hints and complete dispatched catalog",
+    "QA7 isolated strict rows and transport-rebuilt bounded continuation"
+  ],
+  "content_summary": {
+    "original_questions": {
+      "denominator": 8,
+      "pass": 4,
+      "partial": 4,
+      "fail": 0
+    },
+    "necessary_branches": {
+      "denominator": 22,
+      "pass": 16,
+      "missing": 6
+    },
+    "visible_unique_product_claims": {
+      "denominator": 17,
+      "fully_supported": 16,
+      "partially_supported": 1,
+      "unsupported": 0,
+      "atomic": 11,
+      "compound": 6
+    },
+    "reports": {
+      "denominator": 4,
+      "text_deliverable": 1,
+      "text_and_evidence_deliverable": 1,
+      "all_claims_atomic_deliverable": 1,
+      "strict_system_qa_deliverable": 0
+    },
+    "direct_answer_delivery": {
+      "question_denominator": 8,
+      "questions_pass": 2,
+      "questions_partial": 3,
+      "questions_not_delivered": 3,
+      "branch_denominator": 22,
+      "branches_pass": 11,
+      "report_denominator": 4,
+      "reports_pass": 0
+    }
+  },
+  "questions": [
+    {
+      "original_question_id": "Trello-1",
+      "frozen_content_result": "partial",
+      "frozen_content_passed_branches": 4,
+      "branch_denominator": 5,
+      "direct_answer_delivery": "partial",
+      "direct_answer_passed_branches": 4
+    },
+    {
+      "original_question_id": "Trello-2",
+      "frozen_content_result": "partial",
+      "frozen_content_passed_branches": 2,
+      "branch_denominator": 4,
+      "direct_answer_delivery": "not_delivered",
+      "direct_answer_passed_branches": 0
+    },
+    {
+      "original_question_id": "Cloudflare-1",
+      "frozen_content_result": "pass",
+      "frozen_content_passed_branches": 3,
+      "branch_denominator": 3,
+      "direct_answer_delivery": "pass",
+      "direct_answer_passed_branches": 3
+    },
+    {
+      "original_question_id": "Cloudflare-2",
+      "frozen_content_result": "partial",
+      "frozen_content_passed_branches": 1,
+      "branch_denominator": 2,
+      "direct_answer_delivery": "partial",
+      "direct_answer_passed_branches": 1
+    },
+    {
+      "original_question_id": "Bitwarden-1",
+      "frozen_content_result": "pass",
+      "frozen_content_passed_branches": 1,
+      "branch_denominator": 1,
+      "direct_answer_delivery": "not_delivered",
+      "direct_answer_passed_branches": 0
+    },
+    {
+      "original_question_id": "Bitwarden-2",
+      "frozen_content_result": "pass",
+      "frozen_content_passed_branches": 2,
+      "branch_denominator": 2,
+      "direct_answer_delivery": "pass",
+      "direct_answer_passed_branches": 2
+    },
+    {
+      "original_question_id": "1Password-1",
+      "frozen_content_result": "pass",
+      "frozen_content_passed_branches": 2,
+      "branch_denominator": 2,
+      "direct_answer_delivery": "not_delivered",
+      "direct_answer_passed_branches": 0
+    },
+    {
+      "original_question_id": "1Password-2",
+      "frozen_content_result": "partial",
+      "frozen_content_passed_branches": 1,
+      "branch_denominator": 3,
+      "direct_answer_delivery": "partial",
+      "direct_answer_passed_branches": 1
+    }
+  ],
+  "engineering": {
+    "exit_code": 0,
+    "passed": 8204,
+    "skipped": 1,
+    "warnings": 212,
+    "seconds": 287.3,
+    "new_tests_since_baseline": 93,
+    "environment": "COMPETISCOPE_LOAD_ENV_FILES=0; necessary process-inspection permission",
+    "frozen_source_unchanged": true,
+    "log": "full-backend.log"
+  },
+  "ruff": {
+    "config": "automatic; no --config",
+    "version": "ruff 0.16.9",
+    "files": [
+      "backend/packages/agents/qa/independent_question_review.py",
+      "backend/packages/agents/qa/independent_review_response.py",
+      "backend/packages/agents/writer/atomic_question_projection.py",
+      "backend/packages/agents/writer/question_atomic_delivery.py",
+      "backend/packages/agents/writer/readable_support.py",
+      "backend/packages/research/extraction/semantic.py",
+      "backend/tests/unit/claim_review_fixture.py",
+      "backend/tests/unit/test_atomic_delivery_v4.py",
+      "backend/tests/unit/test_clarification_qa_alignment.py",
+      "backend/tests/unit/test_collector_quote_mapping.py",
+      "backend/tests/unit/test_final_qa_batches_transport.py",
+      "backend/tests/unit/test_final_question_v6.py",
+      "backend/tests/unit/test_final_question_v7.py",
+      "backend/tests/unit/test_independent_final_question_qa.py",
+      "backend/tests/unit/test_joint_task_delivery_budget.py",
+      "backend/tests/unit/test_question_atomic_delivery.py",
+      "backend/tests/unit/test_semantic_table_context.py"
+    ],
+    "current_diagnostics": 67,
+    "baseline_diagnostics": 68,
+    "new_diagnostics": [],
+    "exit_code": 1,
+    "root_v7_tests": "38 passed in 2.43s"
+  },
+  "runtime": {
+    "transports": 78,
+    "known_tokens": 253908,
+    "unknown_usage_spans": 0,
+    "provider_bill_usd": null,
+    "model_weight_revision": "not established; configured alias only"
+  },
+  "qa": {
+    "planned": 28,
+    "actual_sent_unique": 28,
+    "actual_sent_rows": 29,
+    "valid_unique": 28,
+    "full_server_rebuilt_rows": 29,
+    "invalid_rows": 1,
+    "negative_keep_unique": 22,
+    "actual_batches": 14
+  },
+  "per_product_runtime": [
+    {
+      "product": "trello",
+      "run_sha256": "dc74c6e9dc58bc7cca4bf5c1447f9c25923f7753d2aeff5a1fc30283f274e7aa",
+      "exact_witness": true,
+      "report_sha256": "3a1ee3594c6b54cfe89c51860dffa2cb29b06fc28e7848dcc4f8f4581353db2f",
+      "transport_attempts": 25,
+      "llm_spans": 25,
+      "by_agent": {
+        "planner": 1,
+        "collector": 2,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 4,
+        "qa": 15
+      },
+      "known_tokens": 88668,
+      "unknown_usage_spans": 0,
+      "timeout_attempts": 0,
+      "output_length_spans": 0,
+      "qa_protocol": "independent_questions_v7",
+      "qa_sent": 9,
+      "qa_valid": 9,
+      "qa_resumable": 0,
+      "qa_passed_question_ids": [
+        "question-00e2382d7575b5384c9a"
+      ],
+      "qa_blockers": 4,
+      "observed_answers": [
+        {
+          "question_id": "question-659854eaa5bf118b8901",
+          "status": "answered"
+        },
+        {
+          "question_id": "question-00e2382d7575b5384c9a",
+          "status": "answered"
+        },
+        {
+          "question_id": "question-1305198ad16f108bf375",
+          "status": "unverified"
+        },
+        {
+          "question_id": "question-a5be8c7a210d770f2ea7",
+          "status": "unverified"
+        }
+      ]
+    },
+    {
+      "product": "cloudflare",
+      "run_sha256": "15382862016f6dda2d21fa4e95b4cc2999374559258e7e43960ae54278a6f336",
+      "exact_witness": true,
+      "report_sha256": "bcc441f9b1864bfc17c170bbaffb9d6b1ae88e88c887e38de8b63136459fda58",
+      "transport_attempts": 19,
+      "llm_spans": 19,
+      "by_agent": {
+        "planner": 1,
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 2,
+        "qa": 10
+      },
+      "known_tokens": 60984,
+      "unknown_usage_spans": 0,
+      "timeout_attempts": 0,
+      "output_length_spans": 0,
+      "qa_protocol": "independent_questions_v7",
+      "qa_sent": 5,
+      "qa_valid": 5,
+      "qa_resumable": 0,
+      "qa_passed_question_ids": [
+        "question-1b7471af0d3dcf4af91c"
+      ],
+      "qa_blockers": 2,
+      "observed_answers": [
+        {
+          "question_id": "question-1b7471af0d3dcf4af91c",
+          "status": "answered"
+        },
+        {
+          "question_id": "question-dd9aeefb8be2a32bc5bf",
+          "status": "partial"
+        }
+      ]
+    },
+    {
+      "product": "bitwarden",
+      "run_sha256": "6d70b4a98b31aa9257ffb8245d5fc89363c6bc6843eebef53c028ffb1a49b87b",
+      "exact_witness": true,
+      "report_sha256": "27592a2bbb4e6ab4feeb5b5dd742ab00c0c8a3f1ae147edaab4d0f93e70c8dbe",
+      "transport_attempts": 16,
+      "llm_spans": 16,
+      "by_agent": {
+        "planner": 1,
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 1,
+        "qa": 8
+      },
+      "known_tokens": 49698,
+      "unknown_usage_spans": 0,
+      "timeout_attempts": 0,
+      "output_length_spans": 0,
+      "qa_protocol": "independent_questions_v7",
+      "qa_sent": 7,
+      "qa_valid": 7,
+      "qa_resumable": 0,
+      "qa_passed_question_ids": [],
+      "qa_blockers": 4,
+      "observed_answers": [
+        {
+          "question_id": "question-cb40c90e4d944bf23275",
+          "status": "unverified"
+        },
+        {
+          "question_id": "question-63762e09ae5d8faa1071",
+          "status": "partial"
+        }
+      ]
+    },
+    {
+      "product": "1password",
+      "run_sha256": "75a5d5d6c48930378b6e7ab9351de93fe6a3f57a405441258dfe1a1996d81c8a",
+      "exact_witness": true,
+      "report_sha256": "fa2b3b0444f4ee52e08450101d83763a81404b829fbab1e5c7bca69a0bd36487",
+      "transport_attempts": 18,
+      "llm_spans": 18,
+      "by_agent": {
+        "planner": 1,
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 2,
+        "qa": 9
+      },
+      "known_tokens": 54558,
+      "unknown_usage_spans": 0,
+      "timeout_attempts": 0,
+      "output_length_spans": 0,
+      "qa_protocol": "independent_questions_v7",
+      "qa_sent": 7,
+      "qa_valid": 7,
+      "qa_resumable": 0,
+      "qa_passed_question_ids": [],
+      "qa_blockers": 4,
+      "observed_answers": [
+        {
+          "question_id": "question-60a7010e0c7ca2ae7058",
+          "status": "unverified"
+        },
+        {
+          "question_id": "question-26d795d67d79bd12e05d",
+          "status": "partial"
+        }
+      ]
+    }
+  ],
+  "production_code_sha256": "f7e177e3304b1a2905f46a71913514c14829fa694de6e1f879fc03a4b0b8204b",
+  "production_packages_sha256": "a0f76e40b138075bdf385ac4f63cf1d913fc2c5c77945cb5c629f8ac82039659",
+  "source_archive": {
+    "archive_sha256": "f844b82c4da73fb1d5637f5c255017b8aa70147bc92aa2d7df4b88d9a8721113",
+    "manifest_sha256": "426aa637f392cad9e01615a1b09f12d9b0cf600957b534596956f2940a62a299",
+    "source_members": 817,
+    "total_members": 818,
+    "every_member_matches_manifest": true,
+    "actual_env_file_included": false
+  },
+  "limits": [
+    "Fixed 2026-10-21 captured official pages; eight exposed questions and 22 frozen branches",
+    "Not fresh web fetch, blind evaluation, full Graph publication, or production dense RAG acceptance",
+    "48 calls /160000 conservative tokens /$0.25 estimated guard per product; T0/default output2048/retries0; not provider billing",
+    "No additional seven-role request isolations in this round",
+    "Both Writer experiments remain default0; no training, Docker or frontend changes"
+  ],
+  "next_work": [
+    "Task5 versioned finite answer-guard/partial-delivery repair after preserving this checkpoint",
+    "Known CPU billing and public quote-rule delivery",
+    "Clarification vs factual-completion QA consistency",
+    "Compound claims and precise actor binding"
+  ],
+  "private_artifact_directory": "data/artifacts/answer-delivery-followup-2026-10-26",
+  "evidence_hashes": {
+    "content_audit": "993095e121526a63612e5bc47423f86eb86382a624299583ea7f31937ee60ec1",
+    "runtime_metrics": "088de24dccb8dc862fe25607694e41efaf4dca6658a7fb139a2755f02c78dc0f",
+    "frozen_source_manifest": "426aa637f392cad9e01615a1b09f12d9b0cf600957b534596956f2940a62a299",
+    "protocol_audit": "161e75f124b4103cef8c597799100cf7d64558f708bc512bddd30c10267e68d6"
+  },
+  "final_format_adjustment": {
+    "file": "backend/tests/unit/test_atomic_delivery_v4.py",
+    "before_sha256": "a8903f64523d20f260b5f4b32b882a9f7b2f9b3af885cdff7cb455330c098693",
+    "after_sha256": "134585e9c019125c9192e9905da5c7b51a42c852f45512affa871a205710b950",
+    "removed_bytes": 1,
+    "change": "remove one redundant final newline only",
+    "ast_equal": true,
+    "production_code_changed": false,
+    "tests_passed": 30,
+    "seconds": 2.0
+  },
+  "final_format_source_archive": {
+    "archive_sha256": "f8b78c567e5ad8217045669910de5fbf7df3d0cadc0a1b72083236531fb0bddf",
+    "manifest_sha256": "6870acc8f0c8dc11f76cc2f478357f4dab52a37bc4700b53d8b18410f50fa366",
+    "source_members": 817,
+    "total_members": 818,
+    "every_member_matches_manifest": true,
+    "actual_env_file_included": false,
+    "only_change_from_model_freeze": "backend/tests/unit/test_atomic_delivery_v4.py"
+  }
+}

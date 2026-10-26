@@ -19,7 +19,8 @@ from packages.research.evidence.source_exceptions import complete_rule_blocks
 from packages.research.models import CapturedPage, EvidenceQuote, ExtractionResult, ResearchBrief
 
 SEMANTIC_EXTRACTOR_NAMES = frozenset({"bounded_semantic_capabilities", "source_operation_rules", "source_structured_rules"})
-SEMANTIC_MAPPING_VERSION = 'question-focus-v2'
+SEMANTIC_MAPPING_VERSION = 'question-focus-v3'
+DISPLAY_SEMANTIC_MAPPING_VERSION = 'question-focus-v2'
 LEGACY_SEMANTIC_MAPPING_VERSION = 'question-focus-v1'
 
 MAX_INPUT_CHARS = 12000
@@ -945,6 +946,51 @@ def _table_context(body, start, end):
     return [header, *notes]
 
 
+def _source_table_context(body, start, end):
+    """Recover one complete row's original table, without guessing its schema."""
+    from packages.research.extraction.billing_rules import _cells
+
+    lines = body.splitlines(keepends=True)
+    offsets, offset = [], 0
+    for line in lines:
+        offsets.append(offset)
+        offset += len(line)
+    selected = body[start:end]
+    index = next((i for i, left in enumerate(offsets)
+                  if left <= start < left + len(lines[i])), None)
+    if (index is None or selected.strip() != lines[index].strip()
+            or body.count(selected) != 1):
+        return []
+    lower, upper = index, index + 1
+    while lower and lines[lower - 1].strip().startswith('|'):
+        lower -= 1
+    while upper < len(lines) and lines[upper].strip().startswith('|'):
+        upper += 1
+    if index < lower + 2:
+        return []
+    # Captured plain headings need not have Markdown prefixes. Raw pipe lines
+    # determine table boundaries; CommonMark only excludes literal code/HTML.
+    if any(token.type in {'fence', 'code_block', 'html_block'} and token.map
+           and lower < token.map[1] and token.map[0] < upper
+           for token in MarkdownIt('commonmark').parse(body)):
+        return []
+    original = [line.rstrip('\r\n') for line in lines[lower:upper]]
+    cells = [_cells(line) for line in original]
+    if (not cells or not cells[0] or len(cells[0]) < 2
+            or any(row is None or len(row) != len(cells[0]) for row in cells)):
+        return []
+    separators = [i for i, row in enumerate(cells)
+                  if all(re.fullmatch(r':?-{3,}:?', cell) for cell in row)]
+    if separators != [1]:
+        return []
+    notes = []
+    for line in lines[upper:]:
+        if not line.strip().startswith('*'):
+            break
+        notes.append(line.rstrip('\r\n'))
+    return [*original[:2], *notes]
+
+
 def _document_rule_blocks(body, page, start=0, end=None):
     end = len(body) if end is None else end
     boundaries = [start, *[position for position, _, _ in _verified_headings(body, page)
@@ -982,6 +1028,7 @@ def semantic_extraction(
     version = (extractor_version if extractor_version is not None
                else SEMANTIC_MAPPING_VERSION + ':' + focus)
     if version not in {SEMANTIC_MAPPING_VERSION + ':' + focus,
+                       DISPLAY_SEMANTIC_MAPPING_VERSION + ':' + focus,
                        LEGACY_SEMANTIC_MAPPING_VERSION + ':' + focus}:
         raise ValueError('semantic_extractor_version_unsupported')
     allowed = semantic_page_allowed(brief, page)
@@ -1013,7 +1060,8 @@ def semantic_extraction(
         quote = _restore_bullet(body, window, quote)
         if quote not in window:
             quote = _restore_markdown_quote(body, window, quote, page)
-        if quote not in window and version == SEMANTIC_MAPPING_VERSION + ':' + focus:
+        if quote not in window and version in {SEMANTIC_MAPPING_VERSION + ':' + focus,
+                                              DISPLAY_SEMANTIC_MAPPING_VERSION + ':' + focus}:
             quote = _restore_display_quote(body, window, quote, page)
         if quote in seen or (len(quote) > MAX_QUOTE_CHARS and quote not in rule_blocks):
             diagnostic['reason'] = 'duplicate' if quote in seen else 'quote_capacity'
@@ -1049,6 +1097,7 @@ def semantic_extraction(
         fact_conditions = [line for line in fact_conditions if not (role_line := _ROLE_LINE.match(line))
                            or quoted_role and role_line[1].casefold() == quoted_role[1].casefold()]
         table_context = []
+        generic_table_context = False
         if billing and quote.strip().startswith('|'):
             table_context = billing_table_context(body, start, end, section[0])
             if not table_context:
@@ -1107,12 +1156,17 @@ def semantic_extraction(
         key = "semantic_capability_" + hashlib.sha256(source_span.encode('utf-8')).hexdigest()[:16]
         if not billing and quote.strip().startswith('|'):
             table_context = _table_context(body, start, end)
-        if table_context:
+            if not table_context and version == SEMANTIC_MAPPING_VERSION + ':' + focus:
+                table_context = _source_table_context(body, start, end)
+                generic_table_context = bool(table_context)
+        if table_context and not generic_table_context:
             fact_conditions = [line for line in fact_conditions if not line.strip().startswith('*') or line in table_context]
         if any(_UNSAFE.search(term) for term in [*table_context, *fact_conditions]):
             diagnostic['reason'] = 'unsafe'
             continue
-        if billing and sum(map(len, dict.fromkeys([context, *table_context, *fact_conditions]))) > 4096:
+        if ((billing or generic_table_context)
+                and sum(map(len, dict.fromkeys(
+                    [context, *table_context, *fact_conditions]))) > 4096):
             condition_gaps.append('source_condition_context_budget_exceeded')
             diagnostic['reason'] = 'condition_capacity'
             continue

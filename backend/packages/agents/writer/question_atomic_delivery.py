@@ -21,6 +21,7 @@ from packages.agents.writer.atomic_claim_review import (
 )
 from packages.agents.writer.atomic_question_projection import (
     GENERATION_SYSTEM,
+    advisory_generation_projection,
     current_generation_projection,
     missing_task_results,
     question_projection,
@@ -68,7 +69,7 @@ GENERATE_SYSTEM = SYSTEM_IDENTITY + (
 
 
 def checked_generation_projection_version(value):
-    if type(value) is int and value == 3:
+    if type(value) is int and value in {3, 4}:
         return value
     return checked_legacy_generation_projection_version(value)
 
@@ -81,6 +82,25 @@ def atomic_system(name, language, *, review_projection_version=2, generation_pro
     version = checked_review_projection_version(review_projection_version)
     generation_version = checked_generation_projection_version(generation_projection_version)
     if name == GENERATION_NAME:
+        if generation_version == 4:
+            if version != 3:
+                raise ValueError("Atomic v4 generation requires review protocol v3")
+            return atomic_system(
+                name, language, review_projection_version=3, generation_projection_version=3,
+            ).replace("atomic generation v3. ", "atomic generation v4. ", 1).replace(
+                "This v3 generation protocol", "This v4 generation protocol", 1,
+            ).replace(
+                "Task support_ref_options are alternative SINGLE references, not a set to combine. "
+                "Keep every complete candidate available in the catalog. ",
+                "Task advisory_support_refs are ranked Top3 suggestions, not a whitelist. "
+                "Inspect the complete support_catalog and its evidence_view fact bindings for "
+                "EVERY task, including references outside its hints. Any complete legal catalog "
+                "member actually dispatched for this question and independently reconstructable "
+                "from its original is selectable. Hints neither authorize a mismatched operation "
+                "nor establish support. For billing inspect complete applicable rows and headers "
+                "for known components even when generic billing notices rank above them. ",
+                1,
+            )
         system = GENERATION_SYSTEM if generation_version >= 2 else GENERATE_SYSTEM
         if generation_version == 3:
             system = system.replace("atomic generation v2. ", "atomic generation v3. ", 1) + (
@@ -209,6 +229,11 @@ def atomic_question_context(
 ):
     version = checked_generation_projection_version(generation_projection_version)
     if version >= 2:
+        if version == 4:
+            return question_projection(
+                service, record, view, packets, question, allowed, use,
+                project=advisory_generation_projection,
+            )
         if version == 3:
             return question_projection(
                 service, record, view, packets, question, allowed, use,
@@ -579,7 +604,8 @@ def save_atomic_receipt(service, record, compact, view, use, packets):
         review_projection_version=compact["review_projection_version"],
         generation_projection_version=compact["generation_projection_version"],
     )
-    if 3 in (receipt["generation_projection_version"], receipt["review_projection_version"]):
+    if (receipt["generation_projection_version"] >= 3
+            or receipt["review_projection_version"] == 3):
         receipt["projection_identity"] = (
             f"atomic-generation-v{receipt['generation_projection_version']}-"
             f"review-v{receipt['review_projection_version']}"
@@ -728,7 +754,7 @@ def _current_request_preflight(
 
 async def execute_question_atomic_delivery(
     service, record, selected, view, use, questions, packets, allowed, boundaries, gaps,
-    *, review_projection_version=3, generation_projection_version=3,
+    *, review_projection_version=3, generation_projection_version=4,
 ):
     from packages.agents.writer.dimension_writer import (
         _support_ref_catalog,
@@ -742,10 +768,11 @@ async def execute_question_atomic_delivery(
     generation_projection_version = checked_generation_projection_version(
         generation_projection_version
     )
-    if (generation_projection_version == 3) != (review_projection_version == 3):
+    if (generation_projection_version >= 3) != (review_projection_version == 3):
         raise ValueError("Atomic v3 generation and review protocols must be paired")
     generation_system = atomic_system(
         GENERATION_NAME, record.detail.output_language,
+        review_projection_version=review_projection_version,
         generation_projection_version=generation_projection_version,
     )
     review_system = atomic_system(
@@ -855,7 +882,8 @@ async def execute_question_atomic_delivery(
         options = [dict(atom, task_id=task["task_id"])
                    for atom in options for task in payload["generation_tasks"]
                    if task["state"] == "planned"
-                   and set(atom["support_refs"]) <= set(task["support_refs"])]
+                   and (generation_projection_version == 4
+                        or set(atom["support_refs"]) <= set(task["support_refs"]))]
         # Validate before applying the forecast capacity. Invalid early display
         # candidates must not hide a later complete, legally bound support.
         legal_options = []
@@ -1352,9 +1380,9 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
     generation_projection_version = checked_generation_projection_version(
         receipt.get("generation_projection_version", 1)
     )
-    if (generation_projection_version == 3) != (review_projection_version == 3):
+    if (generation_projection_version >= 3) != (review_projection_version == 3):
         raise ValueError("Atomic v3 generation and review protocols must be paired")
-    if (3 in (generation_projection_version, review_projection_version)
+    if (generation_projection_version >= 3 or review_projection_version == 3
             or "projection_identity" in receipt):
         if receipt.get("projection_identity") != (
             f"atomic-generation-v{generation_projection_version}-review-v{review_projection_version}"
