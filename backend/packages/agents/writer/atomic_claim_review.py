@@ -11,6 +11,7 @@ from packages.research.evidence.snapshot_models import canonical_json
 
 REVIEW_PROJECTION_VERSION = 2
 REVIEW_SYSTEM_IDENTITY = "Selected support atomic review v2. "
+REVIEW_V3_SYSTEM_IDENTITY = "Selected support atomic review v3. "
 SELECTED_SUPPORT_SYSTEM = (
     "For this v2 protocol, extend the review schema above with support_witnesses. "
     "Review only the ONE supplied claim against its complete selected support_quotes and "
@@ -32,17 +33,17 @@ SELECTED_SUPPORT_SYSTEM = (
 
 
 def checked_review_projection_version(value):
-    if type(value) is not int or value not in {1, REVIEW_PROJECTION_VERSION}:
+    if type(value) is not int or value not in {1, 2, 3}:
         raise ValueError("Atomic review projection version changed")
     return value
 
 
-def review_identity_metadata(metadata):
+def review_identity_metadata(metadata, *, review_projection_version=2):
     """Keep producer identities without sending their fallible product assertions."""
     fields = ("kind", "competitor", "dimension", "snapshot_id", "producer_hash")
     return {
         **{key: value for key, value in metadata.items() if key not in ADVISORY_KEYS},
-        "review_projection_version": REVIEW_PROJECTION_VERSION,
+        "review_projection_version": checked_review_projection_version(review_projection_version),
         "upstream_identity_refs": {
             key: {field: metadata[key][field] for field in fields}
             for key in ADVISORY_KEYS
@@ -55,20 +56,20 @@ def atomic_review_payload(claims, view, questions, plans, metadata, *, review_pr
     from packages.agents.writer.dimension_writer import review_payload
 
     version = checked_review_projection_version(review_projection_version)
-    if version == 2:
+    if version >= 2:
         if len(claims) != 1:
             raise ValueError("Selected-support review requires one claim")
         ids = {claim.id for claim in claims}
         plans = [
             dict(plan, claim_ids=[cid for cid in plan["claim_ids"] if cid in ids]) for plan in plans
         ]
-        metadata = review_identity_metadata(metadata)
+        metadata = review_identity_metadata(metadata, review_projection_version=version)
     payload = dict(
         review_payload(claims, view, review_version=3, questions=questions, plans=plans),
         **metadata,
         question_answer_plans=plans,
     )
-    if version == 2:
+    if version >= 2:
         payload["constraint_context"] = isolated_review_constraints(payload)
     return payload
 
@@ -236,9 +237,69 @@ def selected_support_witness_valid(witness, selected_quotes):
     )
 
 
-def witnessed_review_row(row, selected_quotes):
+def restored_support_witness(witness, selected_quotes):
+    """Recover only a uniquely located excerpt differing in whitespace runs.
+
+    Token spelling, order and whitespace boundaries stay exact. The returned
+    offsets and original text identify the selected support, never a sibling.
+    """
+    if selected_support_witness_valid(witness, selected_quotes):
+        return witness, None
+    if not isinstance(witness, dict) or set(witness) != {"support_index", "quote"}:
+        return None, None
+    index, quote = witness["support_index"], witness["quote"]
+    if (type(index) is not int or not isinstance(selected_quotes, list)
+            or not 0 <= index < len(selected_quotes)
+            or not isinstance(selected_quotes[index], str)
+            or not isinstance(quote, str) or not quote.strip()):
+        return None, None
+    # Do not remove whitespace boundaries or allow a partial word to supply a
+    # normalized match. Exact excerpts still follow the unchanged v2 path.
+    pieces = re.split(r"(\s+)", quote)
+    pattern = "".join(r"\s+" if piece.isspace() else re.escape(piece) for piece in pieces)
+    source = selected_quotes[index]
+    # Lookahead also enumerates overlapping excerpts: "may may" has two
+    # locations in "may NBSP may NBSP may" and must not be restored.
+    matches = list(re.finditer(r"(?=((?<!\w)" + pattern + r"(?!\w)))", source))
+    if len(matches) != 1:
+        return None, None
+    match = matches[0]
+    restored = dict(support_index=index, quote=match.group(1))
+    return restored, dict(
+        support_index=index, model_quote=quote, quote=match.group(1),
+        start=match.start(1), end=match.end(1),
+        selected_support_sha256=hashlib.sha256(source.encode()).hexdigest(),
+    )
+
+
+def review_witness_restorations(response, payload):
+    """Rebuild an auditable receipt while leaving the model response untouched."""
+    from packages.agents.writer.dimension_writer import parse_json
+
+    try:
+        raw = parse_json(response)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(raw, dict) or not isinstance(raw.get("reviews"), list):
+        return []
+    claim = payload["claims"][0]
+    rows = [row for row in raw["reviews"]
+            if isinstance(row, dict) and row.get("claim_id") == claim["id"]]
+    if len(rows) != 1 or not isinstance(rows[0].get("support_witnesses"), list):
+        return []
+    result = []
+    for witness in rows[0]["support_witnesses"]:
+        _, restoration = restored_support_witness(witness, claim.get("support_quotes", []))
+        if restoration is not None:
+            result.append(dict(claim_id=claim["id"], **restoration))
+    return result
+
+
+def witnessed_review_row(row, selected_quotes, *, review_projection_version=2):
     """Check the v2 extension before passing the original schema to its strict parser."""
     witnesses = row.get("support_witnesses", [])
+    if review_projection_version == 3 and isinstance(witnesses, list):
+        witnesses = [restored_support_witness(item, selected_quotes)[0] for item in witnesses]
     if not isinstance(witnesses, list) or any(
         not selected_support_witness_valid(item, selected_quotes) for item in witnesses
     ):

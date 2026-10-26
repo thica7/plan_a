@@ -194,9 +194,10 @@ async def test_experimental_final_qa_includes_gaps_beside_eligible_findings(monk
     traced_model_double(monkeypatch, service, model)
     result = await api()(service, record, issues, evidence_issues=[])
     assert len(calls) == 1
-    assert len(calls[0]['findings']) == 3
+    rows = [row for batch in calls for row in batch['findings']]
+    assert len(rows) == 3
     assert calls[0]['findings'][0]['independent_question_check'] is True
-    assert next(row for row in calls[0]['findings']
+    assert next(row for row in rows
                 if row['issue_id'] == issues[1].id)['diagnostic_only'] is True
     assert len(result) == 1 and result[0].id == issues[1].id
 
@@ -449,7 +450,7 @@ async def test_task_final_qa_packs_whole_findings_and_keeps_unsent_ones(monkeypa
     calls = []
 
     async def model(record, **kwargs):
-        assert len(kwargs['user'].encode()) <= 6000
+        assert len(kwargs['user'].encode()) <= 8192
         payload = decode_review_payload(kwargs['user'].split('\nJSON:\n', 1)[1])
         qid = detail.report_dimension_audits[0].answer_coverage[0].question_id
         assert [row['issue_id'] for row in payload['findings']] == [

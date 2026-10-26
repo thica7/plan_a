@@ -75,7 +75,7 @@ async def test_no_reflector_still_checks_complete_current_question_and_visible_a
         assert context["question"] == QUESTION
         assert context["answer"]["answer"] in context["visible_answer"]
         assert context["claims"][0]["source_span_bindings"]
-        assert len(kwargs["user"].encode()) <= 6000
+        assert len(kwargs["user"].encode()) <= 8192
         return reviewed(payload)
 
     traced_model_double(monkeypatch, service, model)

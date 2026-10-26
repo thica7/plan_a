@@ -1,0 +1,166 @@
+{
+  "date": "2026-10-26",
+  "status": "engineering_verified_text_still_not_ready",
+  "base_commit": "9334bacdd500204cc4962be45a2e2a7cf620c82f",
+  "source": {
+    "code_sha256": "c986d19455e6be1fbfb46516230d736beb80bc5f77405868188d7d56fa457c13",
+    "packages_sha256": "9858cf23f46f6e55515022d70e54f2cda70a6fb9cf7cbbc063622a7f23fd3baf",
+    "frozen_manifest_sha256": "d5f8dfc3fe85ecb5d41cdddf7ac38c94121d5142980ac280b5f9521b2613c807",
+    "capture_date": "2026-10-21",
+    "mode": "captured_page_production_stage_replay_not_e2e"
+  },
+  "content": {
+    "questions": {
+      "denominator": 8,
+      "pass": 2,
+      "partial": 5,
+      "fail": 1
+    },
+    "branches": {
+      "denominator": 22,
+      "pass": 11,
+      "partial": 1,
+      "fail": 10
+    },
+    "claims": {
+      "denominator": 13,
+      "complete_selected_support": 12,
+      "operational_predicate_supported": 13,
+      "single_predicate": 7,
+      "both": 7,
+      "support_boundary_note": "13 条操作谓词均有支持；严格全文 12/13。唯一分歧是 Trello 第一条将 board members 写成权限类型定义；若将该词视为等义角色简称而放宽，支持为13/13，但严格完整所选口径本审计不放宽。两种口径下整题/交付结果及7/13单谓词不变。"
+    },
+    "reports": {
+      "denominator": 4,
+      "text_deliverable": 1,
+      "evidence_deliverable": 1,
+      "all_claims_atomic_deliverable": 0,
+      "strict_system_qa_deliverable": 0,
+      "atomic_and_system_qa_deliverable": 0
+    },
+    "isolated_roles": {
+      "denominator": 7,
+      "pass": 3,
+      "partial": 4,
+      "fail": 0
+    }
+  },
+  "qa": {
+    "actual_batches": 14,
+    "planned_findings": 29,
+    "raw_identity_matches": 28,
+    "schema_and_identity_bound": 25,
+    "fully_reconstructed_and_bound": 18,
+    "unverified_1password_findings": 7,
+    "malformed_bitwarden_batch_findings": 4,
+    "raw_opinions": {
+      "keep": 28,
+      "current_limitation": 1
+    },
+    "opinions_are_not_semantic_accuracy": true
+  },
+  "tests": {
+    "full_backend": {
+      "passed": 8111,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 298.09,
+      "added_vs_base": 103
+    },
+    "first_full_backend": {
+      "passed": 8110,
+      "failed": 1,
+      "skipped": 1,
+      "seconds": 271.75,
+      "failure": "sandbox denied ps; process ownership guard correctly failed closed"
+    },
+    "isolated_permitted_process_test": "1 passed in 0.53s",
+    "after_final_test_import_ordering": "85 passed in 8.46s; production unchanged; test AST equal except import order"
+  },
+  "lint": {
+    "files": 26,
+    "new_issues": 0,
+    "existing_issues": 25,
+    "standard_ruff_exit_code": 1,
+    "note": "No ignore/select override for final check; existing I001/E501 kept outside surgical scope"
+  },
+  "usage": {
+    "pipeline": {
+      "transport_calls": 77,
+      "known_prompt_tokens": 218312,
+      "known_completion_tokens": 28804,
+      "known_total_tokens": 247116,
+      "usage_unknown_count": 1,
+      "conservative_charged_tokens": 251619,
+      "timeout_count": 0,
+      "length_count": 0
+    },
+    "isolation": {
+      "transport_calls": 7,
+      "known_prompt_tokens": 23891,
+      "known_completion_tokens": 3281,
+      "known_total_tokens": 27172,
+      "usage_unknown_count": 0,
+      "conservative_charged_tokens": 27172,
+      "timeout_count": 0,
+      "length_count": 0
+    },
+    "known_total_tokens": 274288,
+    "transport_calls": 84,
+    "usage_unknown_count": 1,
+    "note": "Known total excludes one unknown usage; no same-quality cost comparison"
+  },
+  "isolated_roles": [
+    {
+      "role": "planner",
+      "verdict": "pass"
+    },
+    {
+      "role": "collector",
+      "verdict": "partial"
+    },
+    {
+      "role": "analyst",
+      "verdict": "pass"
+    },
+    {
+      "role": "comparator",
+      "verdict": "partial"
+    },
+    {
+      "role": "reflector",
+      "verdict": "partial"
+    },
+    {
+      "role": "writer",
+      "verdict": "partial"
+    },
+    {
+      "role": "qa",
+      "verdict": "pass"
+    }
+  ],
+  "known_remaining": [
+    "Canonical role table quote rejected because Role/Description header was not retained",
+    "Task top-three support suggestions can exclude actual CPU rate rows and encourage wrong references",
+    "Bitwarden one malformed digest invalidated all four finding rows in a batch",
+    "Canonical clarification and historical QA objections still conflict",
+    "1Password GEN/ANSWER export redaction blocks complete input verification"
+  ],
+  "evidence_hashes": {
+    "independent-content-audit.json": "d374bcd03565a50a21bd3482b2670138bffceb95f99a2d640a206312110d9f00",
+    "independent-protocol-audit.json": "fffb0bf622002056a1afeb3e9888ae2ed1b1e6817c3073ae9cb169962f84f64b",
+    "delivery-runtime-metrics.json": "8ebc83c4e718a21b3db911cc7060dd95b201ee7fbd4fd4223dd3f3cb4651792d",
+    "backend-first.log": "a544db8c8bc1a37cc0c80afdb5ac581d5c39ed9dcb74784409364ecc496d0313",
+    "backend-final.log": "19dc4f2d4bec111ca25eb844727c157c3e77255d0cc5b89c177d4df074ad019a",
+    "ruff-final.json": "4465547e11bb69cf7dc78e1ba0411b11ef421523f3221d1109c35e83ce25dc7c",
+    "final-test-import-format.json": "bc0975f0042aa2745ad110f849e840f5cb721b3c8e15dadd7dc38e909b5007c6"
+  },
+  "limits": [
+    "Original eight questions exposed: regression only; new offline counterexamples are not an independent blind benchmark",
+    "No new web fetch, automatic discovery, complete Graph/publication, frontend, or production dense-RAG acceptance",
+    "Model configured alias deepseek-flash; response alias only checked in isolation, weights not locked",
+    "Experiments default off; no training, Docker or frontend changes",
+    "Prior 704 originals and scores unchanged"
+  ]
+}

@@ -6,6 +6,45 @@ from collections import Counter
 from packages.research.evidence.snapshot_models import canonical_json
 
 
+def single_reference_tasks(payload):
+    """Present ranked refs as alternatives without merging facts or conditions.
+
+    The complete catalog remains available. Verified exception pairs and all
+    original publication checks still apply independently of these hints.
+    """
+    dangling_modal = re.compile(
+        r"\b(?:can|could|may|might|must|should|would|shall|will)(?:\s+not)?$"
+        r"|(?:可以|能够|必须|应当|应该)$", re.I,
+    )
+    calendar_may = re.compile(
+        r"\b(?:in|during|since|until|through|before|after|by|from|for|on|this|next|last|"
+        r"early|late|mid|is|was)\s+May$|\b[0-9]{1,2}\s+May$", re.I,
+    )
+    rejected, rows = set(), []
+    for row in payload["evidence_view"]["facts"]:
+        candidates = []
+        for span in row.get("source_span_candidates", ()):
+            tail = span["quote"].rstrip().rstrip(".!?;:。！？；：").rstrip()
+            if dangling_modal.search(tail) and not calendar_may.search(tail):
+                rejected.add(span["support_ref"])
+            else:
+                candidates.append(span)
+        rows.append(dict(row, source_span_candidates=candidates))
+    tasks = []
+    for task in payload["generation_tasks"]:
+        refs = [ref for ref in task["support_refs"] if ref not in rejected]
+        projected = dict(task, support_refs=refs)
+        if len(refs) > 1:
+            projected["support_ref_options"] = [[ref] for ref in refs]
+        tasks.append(projected)
+    return dict(
+        payload, generation_projection_version=3,
+        evidence_view=dict(payload["evidence_view"], facts=rows), generation_tasks=tasks,
+        generation_support_gaps=[task["task_id"] for task in tasks
+                                 if task.get("state") == "planned" and not task["support_refs"]],
+    )
+
+
 def _resolve_span(item, spans):
     bare = {key: value for key, value in item.items() if key != "support_ref"}
     if set(bare) == {"quote"} and isinstance(bare["quote"], str):

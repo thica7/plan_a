@@ -58,7 +58,7 @@ def question_plan_response(payload, atoms):
                 for row in required_question_clarifications(payload.get('questions', []))}
     if not payload.get('questions'):
         return json.dumps({'claims': atoms})
-    if payload.get('generation_projection_version') == 2:
+    if payload.get('generation_projection_version') in {2, 3}:
         from packages.agents.writer.atomic_question_projection import generation_task_atom_reasons
         from packages.agents.writer.question_allocation import task_support_score
         atoms = [dict(atom, task_id=next((task['task_id']

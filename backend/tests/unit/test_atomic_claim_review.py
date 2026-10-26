@@ -18,7 +18,7 @@ async def test_actual_review_isolates_one_claim_and_only_upstream_identities(mon
     assert len(batches) == 3
     for payload in batches:
         assert len(payload["claims"]) == 1
-        assert payload["review_projection_version"] == 2
+        assert payload["review_projection_version"] == 3
         assert (
             not {"upstream_analysis", "comparison_assessment", "reflection_constraints"}
             & payload.keys()
@@ -29,13 +29,13 @@ async def test_actual_review_isolates_one_claim_and_only_upstream_identities(mon
             "reflection_constraints",
         }
         assert all("content" not in ref for ref in payload["upstream_identity_refs"].values())
-    assert result["compact"]["review_projection_version"] == 2
+    assert result["compact"]["review_projection_version"] == 3
     receipt = next(
         json.loads(s.full_output)
         for s in case[1].detail.trace_spans
         if s.name == "question_atomic_delivery"
     )
-    assert receipt["review_projection_version"] == 2
+    assert receipt["review_projection_version"] == 3
 
 
 @pytest.mark.asyncio
@@ -227,7 +227,8 @@ async def test_legacy_v1_two_claim_payload_and_original_system_replay(monkeypatc
     from test_writer_artifact_consumption import record_upstream
 
     record_upstream(service, record)
-    result, _ = await execute(case, monkeypatch)
+    result, _ = await execute(case, monkeypatch, review_projection_version=2,
+                              generation_projection_version=2)
     receipt_span = next(
         s for s in record.detail.trace_spans if s.name == "question_atomic_delivery"
     )

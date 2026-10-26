@@ -63,7 +63,7 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
         user = payload["messages"][1]["content"]
         batch = decode_review_payload(user.split("\nJSON:\n", 1)[1])
         requests.append(batch)
-        assert len(user.encode()) <= 6000
+        assert len(user.encode()) <= 8192
         batch_ids = [row["issue_id"] for row in batch["findings"]]
         assert batch_ids and set(batch_ids) <= {independent_id, "issue-0", "issue-1"}
         for row in batch["findings"]:
@@ -87,7 +87,7 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
     result = await reconcile_question_findings(service, record, issues, evidence_issues=[])
     expected_kept = [] if second_batch == "valid" else ["issue-1"]
     assert [issue.id for issue in result] == expected_kept
-    # v5 shares exact repeated support while retaining every complete finding.
+    # The readable named question context keeps all same-question findings whole.
     assert len(requests) == 2
     assert [row["issue_id"] for batch in requests for row in batch["findings"]] == [
         independent_id, "issue-0", "issue-1"]
@@ -100,9 +100,14 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
     complete = json.loads(detail.trace_spans[-1].full_input)['findings']
     expected = {row['issue_id']: row for row in complete}
     from packages.agents.qa.independent_question_review import INDEPENDENT_SYSTEM
-    from packages.agents.qa.question_review_encoding import dumps
+    from packages.agents.qa.question_review_transport import dumps, final_review_batches, loads
     for span, batch in zip(spans, requests, strict=True):
-        assert span.full_input == INDEPENDENT_SYSTEM + '\n\n\nJSON:\n' + dumps(batch)
+        wire = loads(span.full_input.split('\nJSON:\n', 1)[1])
+        rebuilt, omitted = final_review_batches(
+            [expected[row['issue_id']] for row in batch['findings']],
+            batch['basis_hash'], max_bytes=8192, max_batches=1)
+        assert not omitted and wire == rebuilt[0]
+        assert span.full_input == INDEPENDENT_SYSTEM + '\n\n\nJSON:\n' + dumps(wire)
         assert all(row == expected[row['issue_id']] for row in batch['findings'])
     assert all(span.metadata["llm_transport_attempts"] == 1 for span in spans)
     assert all(span.metadata["llm_request_attempts"] == 1 for span in spans)

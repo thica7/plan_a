@@ -37,6 +37,17 @@ GENERATION_SYSTEM = GENERATION_SYSTEM_IDENTITY + (
 )
 
 
+def current_generation_projection(payload):
+    """V3-only capacity for separate published rules and scenario predicates."""
+    from packages.agents.writer.readable_support import single_reference_tasks
+
+    tasks = [dict(task, max_claims=(3 if task["focus"] == "billing_inputs" else 2))
+             if task["focus"] == "billing_inputs" or task.get("request_property") in {
+                 "people_limit", "container_limit"} else dict(task)
+             for task in payload["generation_tasks"]]
+    return single_reference_tasks(dict(payload, generation_tasks=tasks))
+
+
 def checked_generation_projection_version(value):
     if type(value) is not int or value not in {1, 2}:
         raise ValueError("Atomic generation projection version changed")
@@ -241,7 +252,7 @@ def task_support_hints(tasks, payload, facts):
     return result
 
 
-def question_projection(service, record, view, packets, question, allowed, use):
+def question_projection(service, record, view, packets, question, allowed, use, *, project=None):
     from packages.agents.writer.dimension_writer import compact_prompt_json
     from packages.agents.writer.question_allocation import task_support_score
     from packages.agents.writer.question_atomic_delivery import handoff_context
@@ -373,7 +384,7 @@ def question_projection(service, record, view, packets, question, allowed, use):
             for task in result["generation_tasks"]
             if task["state"] == "planned" and not task["support_refs"]
         ]
-        return result
+        return project(result) if project is not None else result
 
     priority = list(dict.fromkeys([*pool["core_fact_ids"], *pool["required_exception_fact_ids"]]))
     for task in tasks:
@@ -461,6 +472,9 @@ def scoped_generation_response(response, payload, *, forecast=False):
                 and (
                     task["focus"] == "source_rule"
                     and not task.get("request_property")
+                    or payload.get("generation_projection_version") == 3
+                    and (task["focus"] == "billing_inputs" or task.get("request_property") in {
+                        "people_limit", "container_limit"})
                     or counts[task["task_id"]] == 1
                 )
                 and (

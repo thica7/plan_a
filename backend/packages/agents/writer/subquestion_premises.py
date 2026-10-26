@@ -144,7 +144,8 @@ def _scope_objects(text):
 
 def _counts(text, *, upper=False):
     if upper and re.search(
-        r"\b(?:if|unless|recommend\w*|suggest\w*)\b|如果|若|除非|建议",
+        r"\b(?:if|unless|provided|assuming|recommend\w*|suggest\w*)\b"
+        r"|如果|若|仅当|除非|假设|假定|建议|推荐",
         text,
         re.I,
     ):
@@ -165,8 +166,8 @@ def _counts(text, *, upper=False):
                 if re.search(r"\b(?:not|never)\b|并非|不是|不限", local, re.I):
                     continue
                 limit = re.search(
-                    r"(?:\bonly|\bup\s+to|\bmaximum\s+of|最多|至多|上限为?|仅限)\s*$"
-                    r"|(?:最多|至多)(?:只能|仅能|可|可以)?(?:使用|提供|拥有|包含)\s*$"
+                    r"(?:\bonly|\bup\s+to|\bat\s+most|\bmaximum\s+of|最多|至多|上限为?|仅限|不超过)\s*$"
+                    r"|(?:最多|至多)(?:只能|仅能|可|可以)?(?:使用|提供|拥有|包含|支持|容纳|允许)\s*$"
                     r"|(?:只能|仅能|只可|仅可)(?:访问|加入)(?:由[^，。；;!?？\n]{1,40}选择的)?\s*$",
                     before,
                     re.I,
@@ -221,8 +222,29 @@ def _destruction_denies_retention(question, texts):
     return False
 
 
-def _explicit_negative_text(text):
-    if _NEGATIVE.search(text):
+def _explicit_negative_text(text, *, question=""):
+    # An outer uncertainty/negation or an unresolved condition cannot prove a
+    # plain no. The reviewer still decides the meaning of eligible assertions.
+    if re.search(
+        r"无法(?:确认|确定|证明)|未(?:确认|确定|证实)|不能(?:确认|确定|断言)|并非|不是|"
+        r"如果|若|仅当|除非|假设|假定|"
+        r"\b(?:if|unless|assuming|unconfirmed|not\s+(?:necessarily|true))\b",
+        text, re.I,
+    ):
+        return False
+    nonautomatic = re.fullmatch(
+        r"[^。；;.!?？\n]+不会自动(?:决定|改变|影响)[^。；;.!?？\n]+[。.!]?", text.strip())
+    if nonautomatic:
+        # This finite new assertion form does not gain truth from advice or an
+        # outer denial. An explicit conditional prefix must also be a request
+        # input here; absent parent context cannot establish that premise.
+        if re.search(r"建议|推荐|最好|不能(?:说|认为|断定|认定)", text):
+            return False
+        condition = re.match(r"\s*(在[^，,。；;.!?？\n]{1,100}?(?:条件下|情况下|前提下|时))",
+                             text)
+        if condition and condition[1] not in question:
+            return False
+    if _NEGATIVE.search(text) or nonautomatic:
         return True
     # Only the plain present-tense possession form with a simple noun subject
     # gains this shortcut. Modal, probabilistic or outer-negated wording needs
@@ -235,9 +257,23 @@ def _explicit_negative_text(text):
 def _negative_supported(binding, selected):
     texts = [claim["text"] for claim in selected]
     if binding.relation == "explicit_negative":
-        negatives = [text for text in texts if _explicit_negative_text(text)]
+        negatives = [text for text in texts if _explicit_negative_text(
+            text, question=binding.question_quote)]
         # A positive sibling cannot supply the object of a different negative
         # atom. Claim atomicity and unrecognized predicates remain model checks.
+        def named_types(text):
+            return {match['label'].upper(): _scope_objects(match['noun']) for match in re.finditer(
+                rf"(?P<noun>{_RESOURCE_NOUN})\s*(?P<label>{_RESOURCE_NAME})(?![A-Za-z0-9_])",
+                text, re.I)}
+
+        requested = named_types(binding.question_quote)
+        requested_names = set(requested) | {
+            label.upper() for label in named_resource_items(binding.question_quote)}
+        # A generic product rule need not repeat the scenario's labels. When
+        # both texts name resources, an extra label or changed object conflicts.
+        negatives = [text for text in negatives if not requested_names or all(
+            label in requested_names and (label not in requested or requested[label] == objects)
+            for label, objects in named_types(text).items())]
         objects = set().union(*(_scope_objects(text) for text in negatives)) if negatives else set()
         return bool(negatives) and _scope_objects(binding.question_quote) <= objects
     if binding.relation == "upper_bound":

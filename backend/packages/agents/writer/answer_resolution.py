@@ -81,9 +81,9 @@ _CHINESE_NON_ASSERTION = re.compile(
 )
 _CHINESE_QUOTATION = re.compile(r"[“”‘’\"'「」『』]")
 _QUANTITY_CAP = re.compile(
-    r"[^。.!?？\n]+?\b(?:has\s+a\s+maximum\s+of|includes?\s+up\s+to)"
+    r"[^。.!?？\n]+?\b(?:has\s+a\s+maximum\s+of|includes?\s+up\s+to|supports?\s+at\s+most)"
     r"\s+\d+(?:\.\d+)?\s+[A-Za-z][A-Za-z -]*[.!]?|"
-    r"[^。.!?？\n]+?(?:最多(?:包含|容纳|包括)?|至多(?:包含|容纳|包括)?|上限为?|不超过)"
+    r"[^。.!?？\n]+?(?:(?:最多|至多)(?:可|可以)?(?:包含|容纳|包括|支持|允许)?|上限为?|不超过)"
     r"\s*[0-9一二两三四五六七八九十百千]+\s*(?:人|(?:名|位|个|条|次)\s*\w+)"
     r"(?:[ \t]+[^。；;.!?？\n]+)?[。.!]?",
     re.I,

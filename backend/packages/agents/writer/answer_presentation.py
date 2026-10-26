@@ -33,7 +33,7 @@ def audit_heading(audit, language):
     return f"### {plain(audit.competitor)} — {plain(dimension)}"
 
 
-def answer_decision_lines(answer, language):
+def answer_decision_lines(answer, language, *, claims=()):
     """Decision wording has one extension point for reviewed subquestion decisions."""
     zh = language.startswith("zh")
     if answer.resolution == "clarification":
@@ -61,7 +61,25 @@ def answer_decision_lines(answer, language):
             "not_applicable": "Conclusion: not applicable",
         }
     )
-    return ["  " + decisions[answer.conclusion]]
+    lines = ["  " + decisions[answer.conclusion]]
+    branches = answer.subquestion_bindings
+    if (len(branches) > 1 or answer.status == "partial" and any(
+            branch.conclusion == "unknown" for branch in branches)):
+        from packages.agents.writer.answer_coverage import selection_binding_reasons
+        from packages.agents.writer.subquestion_premises import subquestion_binding_reasons
+
+        # Display existing decisions only after their exact selected text and
+        # premise receipts still match. This check supplies no semantic verdict.
+        if (not selection_binding_reasons(answer, claims)
+                and not subquestion_binding_reasons(answer, claims)):
+            by_id = {claim["id"]: claim for claim in claims}
+            for branch in branches:
+                sources = {sid for cid in branch.claim_ids
+                           for sid in by_id[cid].get("source_ids", ())}
+                citations = "".join(f"[source:{sid}]" for sid in sorted(sources))
+                lines.append((f"  - {plain(branch.question_quote)} — "
+                              f"{decisions[branch.conclusion]} {citations}").rstrip())
+    return lines
 
 
 def question_coverage_lines(audit, language, *, detail=None):
@@ -82,7 +100,8 @@ def question_coverage_lines(audit, language, *, detail=None):
         status = names[answer.status] if zh else answer.status
         lines.append(f"- {plain(answer.question)} — {status}")
         if answer.answer and answer.status in {"answered", "partial"}:
-            lines.extend(answer_decision_lines(answer, language))
+            lines.extend(answer_decision_lines(answer, language,
+                claims=[claim.model_dump(mode="json") for claim in supported.values()]))
             sources = {
                 sid
                 for claim_id in answer.claim_ids

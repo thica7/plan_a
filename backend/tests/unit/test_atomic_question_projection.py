@@ -308,11 +308,11 @@ async def test_replay_exposes_question_local_actual_originals(monkeypatch):
     replay = replay_atomic_delivery(case[0], case[1].detail, case[2], use, case[4])
     qid = case[6][0]["questions"][0]["question_id"]
     assert replay.get("facts_by_question", {}).get(qid) == replay["facts"]
-    assert result["compact"].get("generation_projection_version") == 2
+    assert result["compact"].get("generation_projection_version") == 3
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("version", [True, False, 0, 3, "2", None])
+@pytest.mark.parametrize("version", [True, False, 0, 4, "2", None])
 async def test_generation_version_is_exact_and_rejects_unknown_receipt_values(monkeypatch, version):
     case = await atomic_case(["Guests have no personal area."])
     await execute(case, monkeypatch)

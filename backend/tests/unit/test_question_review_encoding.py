@@ -322,6 +322,7 @@ def test_irreducible_long_context_is_wholly_unsent_and_reserve_stays_bounded():
         FINAL_QA_REQUEST_RESERVE,
         INDEPENDENT_SYSTEM,
         MAX_REVIEW_OUTPUT_TOKENS,
+        TASK_REVIEW_BYTES,
     )
 
     text = "".join(hashlib.sha256(str(i).encode()).hexdigest() for i in range(150))
@@ -329,8 +330,10 @@ def test_irreducible_long_context_is_wholly_unsent_and_reserve_stays_bounded():
     packed, omitted = codec().final_review_batches([row], "basis", max_bytes=6000, max_batches=6)
     assert packed == [] and omitted == ["whole"]
     assert len(row["claims"][0]["quote"]) == len(text)
-    assert FINAL_QA_REQUEST_RESERVE <= 12000
-    assert len(INDEPENDENT_SYSTEM.encode()) <= 4142 and MAX_REVIEW_OUTPUT_TOKENS == 1600
+    # The historical codec still has its 6000-byte limit above. Current v6
+    # protects the readable 8192-byte request plus its actual system and output.
+    assert TASK_REVIEW_BYTES == 8192 and MAX_REVIEW_OUTPUT_TOKENS == 1600
+    assert FINAL_QA_REQUEST_RESERVE == len(INDEPENDENT_SYSTEM.encode()) + 8192 + 256 + 1600 + 2
 
 
 @pytest.mark.asyncio

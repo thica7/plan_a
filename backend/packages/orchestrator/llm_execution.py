@@ -152,10 +152,7 @@ class LLMExecutionMixin:
                     )
 
                     # Protect the real complete system/user/output envelope.
-                    desired = (
-                        min(FINAL_QA_REQUEST_RESERVE, int(budget.max_tokens * .15))
-                        if budget.max_tokens else FINAL_QA_REQUEST_RESERVE
-                    )
+                    desired = FINAL_QA_REQUEST_RESERVE
                 else:
                     desired = min(32000, int(budget.max_tokens * fractions[agent] / count)) if budget.max_tokens else 32000
                 if phase in budget.delivery_reserves:

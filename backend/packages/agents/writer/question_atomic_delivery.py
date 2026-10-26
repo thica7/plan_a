@@ -9,20 +9,25 @@ from types import SimpleNamespace
 
 from packages.agents.writer.atomic_claim_review import (
     REVIEW_SYSTEM_IDENTITY,
+    REVIEW_V3_SYSTEM_IDENTITY,
     SELECTED_SUPPORT_SYSTEM,
     atomic_review_payload,
     checked_review_projection_version,
     incomplete_review_restrictions,
     review_identity_metadata,
+    review_witness_restorations,
     validated_review_payload,
     witnessed_review_row,
 )
 from packages.agents.writer.atomic_question_projection import (
     GENERATION_SYSTEM,
-    checked_generation_projection_version,
+    current_generation_projection,
     missing_task_results,
     question_projection,
     scoped_generation_response,
+)
+from packages.agents.writer.atomic_question_projection import (
+    checked_generation_projection_version as checked_legacy_generation_projection_version,
 )
 from packages.agents.writer.task_execution import ADVISORY_KEYS
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
@@ -62,6 +67,12 @@ GENERATE_SYSTEM = SYSTEM_IDENTITY + (
 )
 
 
+def checked_generation_projection_version(value):
+    if type(value) is int and value == 3:
+        return value
+    return checked_legacy_generation_projection_version(value)
+
+
 def atomic_system(name, language, *, review_projection_version=2, generation_projection_version=2):
     from packages.agents.writer.answer_coverage import SUBQUESTION_REVIEW_SYSTEM
     from packages.agents.writer.question_repair import REPAIR_REVIEW_SYSTEM
@@ -70,15 +81,45 @@ def atomic_system(name, language, *, review_projection_version=2, generation_pro
     version = checked_review_projection_version(review_projection_version)
     generation_version = checked_generation_projection_version(generation_projection_version)
     if name == GENERATION_NAME:
-        system = GENERATION_SYSTEM if generation_version == 2 else GENERATE_SYSTEM
+        system = GENERATION_SYSTEM if generation_version >= 2 else GENERATE_SYSTEM
+        if generation_version == 3:
+            system = system.replace("atomic generation v2. ", "atomic generation v3. ", 1) + (
+                "This v3 generation protocol requires review_projection_version=3. "
+                "Task support_ref_options are alternative SINGLE references, not a set to combine. "
+                "Keep every complete candidate available in the catalog. Select exactly one "
+                "reference per atom unless the selected two s-references form a supplied "
+                "source_exception_bindings pair and the atom states the complete exception. "
+                "Identical quote text from different facts never proves equal scope, operations "
+                "or conditions. Never combine such alternatives merely because their text matches. "
+                "For each task publish one independent predicate per atom. Separate independent "
+                "permission actors into their own single-reference claims; do not invent only, "
+                "a joint actor, or an AND prerequisite between independent authorization rules. "
+                "For a named role use its complete permission row, including its operation, "
+                "object and conditions; a generic role-scope sentence cannot replace that row. "
+                "For quantity requests publish the same-unit cap as a fact and a separate "
+                "conditional inference applying that cap to the stated requirement, within "
+                "that quantity task's two-claim allowance. Preserve all scenario conditions; "
+                "do not combine people, collections or core features into one predicate. "
+                "For obligation questions explain only that "
+                "permission alone does not entail obligation; "
+                "never infer that no duty exists from other rules. "
+                "For billing_inputs publish separate known billing components, such as the "
+                "applicable CPU allowance/rate with its complete row/header conditions and an "
+                "independent request fee or minimum, within its three-claim allowance. "
+                "A missing input for a complete bill does not erase those known components, "
+                "and known components do not establish the complete bill. Never substitute "
+                "a workspace permission rule for billing evidence or invent missing inputs. "
+                "Cover separate tasks before additional atoms; the total limit remains eight. "
+            )
         return system + language_instruction(language)
     if name == REVIEW_NAME:
-        if version == 2:
+        if version >= 2:
             return (
                 SYSTEM_IDENTITY
-                + REVIEW_SYSTEM_IDENTITY
+                + (REVIEW_V3_SYSTEM_IDENTITY if version == 3 else REVIEW_SYSTEM_IDENTITY)
                 + REPAIR_REVIEW_SYSTEM
-                + SELECTED_SUPPORT_SYSTEM
+                + (SELECTED_SUPPORT_SYSTEM.replace("this v2 protocol", "this v3 protocol", 1)
+                   if version == 3 else SELECTED_SUPPORT_SYSTEM)
             )
         return SYSTEM_IDENTITY + REPAIR_REVIEW_SYSTEM
     if name == ANSWER_NAME:
@@ -122,8 +163,9 @@ def validate_atomic_handoff(service, record, payload, view, *, review_projection
         raise EvidenceUseRejectedError("Atomic parent request context changed")
     version = checked_review_projection_version(review_projection_version)
     upstream = service._dimension_upstream_context(record, view, projection_version=2)
-    expected = review_identity_metadata(upstream) if version == 2 else upstream
-    if version == 2:
+    expected = (review_identity_metadata(upstream, review_projection_version=version)
+                if version >= 2 else upstream)
+    if version >= 2:
         if (
             type(payload.get("review_projection_version")) is not int
             or payload["review_projection_version"] != version
@@ -166,7 +208,12 @@ def atomic_question_context(
     service, record, view, packets, question, allowed, use, *, generation_projection_version=2
 ):
     version = checked_generation_projection_version(generation_projection_version)
-    if version == 2:
+    if version >= 2:
+        if version == 3:
+            return question_projection(
+                service, record, view, packets, question, allowed, use,
+                project=current_generation_projection,
+            )
         return question_projection(service, record, view, packets, question, allowed, use)
     return _legacy_atomic_question_context(service, record, view, packets, question, allowed, use)
 
@@ -331,7 +378,7 @@ def parse_atomic_generation(response, payload, view, use, *, _forecast=False):
 
     version = checked_generation_projection_version(payload.get("generation_projection_version", 1))
     task_gaps, outcomes, task_bindings = set(), [], []
-    if version == 2:
+    if version >= 2:
         response, task_gaps, outcomes, task_bindings = scoped_generation_response(
             response, payload, forecast=_forecast
         )
@@ -353,7 +400,7 @@ def parse_atomic_generation(response, payload, view, use, *, _forecast=False):
     def identity(claim):
         return canonical_json(claim.model_dump(mode="json", exclude={"id"}))
 
-    if version == 2:
+    if version >= 2:
         from packages.agents.writer.dimension_writer import parse_json
 
         by_task = {row["task_id"]: row for row in outcomes}
@@ -385,7 +432,7 @@ def parse_atomic_generation(response, payload, view, use, *, _forecast=False):
                              if binding["question_id"] == plan["question_id"]]
         response = encoded(cleaned)
     claims, gaps, plans = strict_parse(response)
-    if version == 2:
+    if version >= 2:
         actual = {identity(claim): claim.id for claim in claims}
         used = set()
         for binding in selected:
@@ -430,7 +477,7 @@ def atomic_review_batches(
             for c in rows
         )
         return (
-            len(rows) <= (1 if version == 2 else 2)
+            len(rows) <= (1 if version >= 2 else 2)
             and checks <= 10
             and len(("\nJSON:\n" + compact_prompt_json(payload(rows))).encode()) <= max_bytes
         )
@@ -457,11 +504,11 @@ def parse_atomic_reviews(response, claims, *, payload=None, review_projection_ve
     raw = parse_json(response)
     if not isinstance(raw, dict) or set(raw) != {"reviews"} or not isinstance(raw["reviews"], list):
         raise ValueError("Invalid atomic review envelope")
-    if version == 2:
+    if version >= 2:
         if (
             not isinstance(payload, dict)
             or type(payload.get("review_projection_version")) is not int
-            or payload["review_projection_version"] != 2
+            or payload["review_projection_version"] != version
             or len(payload.get("claims", ())) != 1
             or len(claims) != 1
             or payload["claims"][0].get("id") != claims[0].id
@@ -472,10 +519,13 @@ def parse_atomic_reviews(response, claims, *, payload=None, review_projection_ve
         rows = [r for r in raw["reviews"] if isinstance(r, dict) and r.get("claim_id") == claim.id]
         if len(rows) != 1:
             continue
-        if version == 2:
+        if version >= 2:
             if rows[0].get("verdict") == "supported" and incomplete_review_restrictions(payload):
                 continue
-            row = witnessed_review_row(rows[0], payload["claims"][0].get("support_quotes", []))
+            row = witnessed_review_row(
+                rows[0], payload["claims"][0].get("support_quotes", []),
+                review_projection_version=version,
+            )
             if row is None:
                 continue
             rows = [row]
@@ -529,6 +579,11 @@ def save_atomic_receipt(service, record, compact, view, use, packets):
         review_projection_version=compact["review_projection_version"],
         generation_projection_version=compact["generation_projection_version"],
     )
+    if 3 in (receipt["generation_projection_version"], receipt["review_projection_version"]):
+        receipt["projection_identity"] = (
+            f"atomic-generation-v{receipt['generation_projection_version']}-"
+            f"review-v{receipt['review_projection_version']}"
+        )
     live = service._evidence_live_record(record)
     existing = [
         s
@@ -672,7 +727,8 @@ def _current_request_preflight(
 
 
 async def execute_question_atomic_delivery(
-    service, record, selected, view, use, questions, packets, allowed, boundaries, gaps
+    service, record, selected, view, use, questions, packets, allowed, boundaries, gaps,
+    *, review_projection_version=3, generation_projection_version=3,
 ):
     from packages.agents.writer.dimension_writer import (
         _support_ref_catalog,
@@ -682,13 +738,25 @@ async def execute_question_atomic_delivery(
     from packages.research.evidence.report_claims import claim_rule_reasons
 
     scope = f"{view.competitor}/{view.dimension}"
-    generation_system = atomic_system(GENERATION_NAME, record.detail.output_language)
-    review_system = atomic_system(REVIEW_NAME, record.detail.output_language)
+    review_projection_version = checked_review_projection_version(review_projection_version)
+    generation_projection_version = checked_generation_projection_version(
+        generation_projection_version
+    )
+    if (generation_projection_version == 3) != (review_projection_version == 3):
+        raise ValueError("Atomic v3 generation and review protocols must be paired")
+    generation_system = atomic_system(
+        GENERATION_NAME, record.detail.output_language,
+        generation_projection_version=generation_projection_version,
+    )
+    review_system = atomic_system(
+        REVIEW_NAME, record.detail.output_language,
+        review_projection_version=review_projection_version,
+    )
     claims, reviews, sizes, sent_ids, dependencies = [], [], [], set(), ()
     compact = dict(
         question_atomic_contract=CONTRACT,
-        review_projection_version=2,
-        generation_projection_version=2,
+        review_projection_version=review_projection_version,
+        generation_projection_version=generation_projection_version,
         question_answer_plans=[],
         dispatches=[],
         evidence_view=dict(facts=[]),
@@ -709,7 +777,10 @@ async def execute_question_atomic_delivery(
                 )
             )
             continue
-        payload = atomic_question_context(service, record, view, packets, question, allowed, use)
+        payload = atomic_question_context(
+            service, record, view, packets, question, allowed, use,
+            generation_projection_version=generation_projection_version,
+        )
         validate_atomic_handoff(service, record, payload, view)
         prompt = compact_prompt_json(payload)
         sent = {row["id"] for row in payload["evidence_view"]["facts"]}
@@ -850,7 +921,8 @@ async def execute_question_atomic_delivery(
                 )
             ]
         future_reviews, _ = atomic_review_batches(
-            anticipated, view, [question], anticipated_plans, metadata, max_bytes=max_bytes
+            anticipated, view, [question], anticipated_plans, metadata, max_bytes=max_bytes,
+            review_projection_version=review_projection_version,
         )
         future_answer = atomic_answer_payload(
             service,
@@ -981,7 +1053,8 @@ async def execute_question_atomic_delivery(
             )
         ]
         batches, omitted = atomic_review_batches(
-            valid, view, [question], plans, metadata, max_bytes=max_bytes
+            valid, view, [question], plans, metadata, max_bytes=max_bytes,
+            review_projection_version=review_projection_version,
         )
         if omitted:
             plan["omitted_review_claim_ids"] = omitted
@@ -1023,7 +1096,9 @@ async def execute_question_atomic_delivery(
                 )
                 gaps = tuple(sorted(set(gaps) | {"claim_execution_budget_exceeded"}))
                 continue
-            validate_atomic_handoff(service, record, batch, view, review_projection_version=2)
+            validate_atomic_handoff(
+                service, record, batch, view, review_projection_version=review_projection_version
+            )
             batch_claims = [c for c in valid if c.id in {row["id"] for row in batch["claims"]}]
             review_prompt = compact_prompt_json(batch)
             user = "\nJSON:\n" + review_prompt
@@ -1060,7 +1135,8 @@ async def execute_question_atomic_delivery(
                     (
                         *dependencies,
                         *validate_atomic_handoff(
-                            service, record, actual, view, review_projection_version=2
+                            service, record, actual, view,
+                            review_projection_version=review_projection_version,
                         ),
                     )
                 )
@@ -1073,8 +1149,15 @@ async def execute_question_atomic_delivery(
                     fact_ids={fid for c in batch_claims for fid in c.fact_ids},
                 )
             )
+            if review_projection_version == 3:
+                compact["dispatches"][-1]["support_witness_restorations"] = (
+                    review_witness_restorations(response, actual)
+                )
             try:
-                reviews.extend(parse_atomic_reviews(response, batch_claims, payload=actual))
+                reviews.extend(parse_atomic_reviews(
+                    response, batch_claims, payload=actual,
+                    review_projection_version=review_projection_version,
+                ))
             except (ValueError, TypeError, AttributeError):
                 gaps = tuple(sorted(set(gaps) | {"claim_review_invalid"}))
     compact["evidence_view"]["facts"] = [dict(id=fid) for fid in sorted(sent_ids)]
@@ -1269,6 +1352,14 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
     generation_projection_version = checked_generation_projection_version(
         receipt.get("generation_projection_version", 1)
     )
+    if (generation_projection_version == 3) != (review_projection_version == 3):
+        raise ValueError("Atomic v3 generation and review protocols must be paired")
+    if (3 in (generation_projection_version, review_projection_version)
+            or "projection_identity" in receipt):
+        if receipt.get("projection_identity") != (
+            f"atomic-generation-v{generation_projection_version}-review-v{review_projection_version}"
+        ):
+            raise ValueError("Atomic projection identity changed")
     questions = research_questions(detail, view.competitor, view.dimension)
     if (
         receipt["contract"] != CONTRACT
@@ -1369,7 +1460,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 service, record, view, packets, known_questions[qid], allowed, use,
                 generation_projection_version=generation_projection_version,
             )
-            if generation_projection_version == 2:
+            if generation_projection_version >= 2:
                 validated_review_payload(raw, expected)
             if payload != expected:
                 raise ValueError("Atomic dispatched originals or support catalog changed")
@@ -1393,7 +1484,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                         ),
                     )
                 ]
-                if generation_projection_version == 2:
+                if generation_projection_version >= 2:
                     plans[0]["task_results"] = missing_task_results(payload)
             if (
                 dispatch["claim_ids"] != [c.id for c in current]
@@ -1401,7 +1492,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 != sorted(row["id"] for row in payload["evidence_view"]["facts"])
                 or planned[qid]["claim_ids"] != plans[0]["claim_ids"]
                 or planned[qid]["missing_fields"] != plans[0]["missing_fields"]
-                or generation_projection_version == 2
+                or generation_projection_version >= 2
                 and planned[qid].get("task_results") != plans[0].get("task_results")
             ):
                 raise ValueError("Atomic output or plan changed")
@@ -1431,12 +1522,16 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 handoff_context(service, record, view, payload["questions"], use),
                 review_projection_version=review_projection_version,
             )
-            if review_projection_version == 2:
+            if review_projection_version >= 2:
                 validated_review_payload(raw, expected)
             if payload != expected or dispatch["fact_ids"] != sorted(
                 {fid for c in current for fid in c.fact_ids}
             ):
                 raise ValueError("Atomic review support changed")
+            if review_projection_version == 3 and dispatch.get("support_witness_restorations") != (
+                review_witness_restorations(span.full_output, payload)
+            ):
+                raise ValueError("Atomic support witness restoration changed")
             reviewed_claim_ids.update(claim_ids)
             try:
                 reviews.extend(
@@ -1463,7 +1558,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
             expected = atomic_answer_payload(
                 service, record, payload["questions"], supported, view, use, compact
             )
-            if generation_projection_version == 2:
+            if generation_projection_version >= 2:
                 validated_review_payload(raw, expected)
             if (
                 payload != expected

@@ -97,7 +97,8 @@ def atomic_model(service, seen, *, bad_atom=False, bad_review=False, attempts=1)
     return model
 
 
-async def execute(case, monkeypatch, **model_options):
+async def execute(case, monkeypatch, *, review_projection_version=3,
+                  generation_projection_version=3, **model_options):
     from packages.agents.writer.question_atomic_delivery import execute_question_atomic_delivery
 
     service, record, _, selected, view, use, packets, boundaries, allowed = case
@@ -114,6 +115,8 @@ async def execute(case, monkeypatch, **model_options):
         allowed,
         boundaries,
         (),
+        review_projection_version=review_projection_version,
+        generation_projection_version=generation_projection_version,
     )
     return result, seen
 
@@ -1031,7 +1034,10 @@ def anonymous_live_envelopes(service, record):
         (atomic.REVIEW_NAME, "qa", 11196),
         (atomic.ANSWER_NAME, "qa", 16112),
     ):
-        system = atomic.atomic_system(name, record.detail.output_language)
+        system = atomic.atomic_system(
+            name, record.detail.output_language,
+            review_projection_version=3, generation_projection_version=3,
+        )
         user = "x" * (size - len(system.encode()) - 2)
         assert len(user.encode()) <= 14000
         requests.append((name, agent, system, user, 1600))
@@ -1096,7 +1102,10 @@ async def test_live_checkpoint_current_requests_run_despite_nonbinding_future_fo
         name = next(
             name
             for name in (atomic.GENERATION_NAME, atomic.REVIEW_NAME, atomic.ANSWER_NAME)
-            if system == atomic.atomic_system(name, record.detail.output_language)
+            if system == atomic.atomic_system(
+                name, record.detail.output_language,
+                review_projection_version=3, generation_projection_version=3,
+            )
         )
         transported.append(name)
         if name == atomic.GENERATION_NAME:
@@ -1278,7 +1287,9 @@ async def test_current_review_exhaustion_after_real_generation_leaves_claim_unpu
 
     async def post(url, payload, headers):
         system, user = [row["content"] for row in payload["messages"]]
-        assert system == atomic.atomic_system(atomic.GENERATION_NAME, record.detail.output_language)
+        assert system == atomic.atomic_system(
+            atomic.GENERATION_NAME, record.detail.output_language, generation_projection_version=3
+        )
         transported.append(atomic.GENERATION_NAME)
         body = expand_prompt_payload(json.loads(user.split("\nJSON:\n", 1)[1]))
         span = body["evidence_view"]["facts"][0]["source_span_candidates"][0]
