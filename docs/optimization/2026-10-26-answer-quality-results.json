@@ -1,0 +1,1185 @@
+{
+  "schema_version": 1,
+  "status": "engineering_verified_report_delivery_not_accepted",
+  "date": "2026-10-26",
+  "base_commit": "43ade3d7d25545d7a7b6b7b03694e82dc15855a6",
+  "branch": "codex/pastoral-desktop",
+  "production_code_sha256": "cc7896022e4d2fab6bff370c6d07bf402d6c50b169d213c238cd8da9cc38f479",
+  "production_packages_sha256": "8a1782fb2ce95150bf8b54541d6f9fe6bf0eca68c076462dde6d5f7546fa6785",
+  "frozen_source_sha256": "008c1a470fc41bf131020b74084921ddd5596492c9e10d05d23521fc6eb33c13",
+  "protocol_versions": {
+    "atomic_generation": 2,
+    "single_claim_review": 2,
+    "independent_final_qa": 5,
+    "review_codec": 1,
+    "legacy_v1_replay_preserved": true
+  },
+  "engineering": {
+    "final_backend": {
+      "status": "passed",
+      "passed": 8008,
+      "failed": 0,
+      "skipped": 1,
+      "warnings": 212,
+      "seconds": 283.86,
+      "new_test_cases_vs_base": 156,
+      "base_passed": 7852,
+      "log": "data/artifacts/answer-quality-2026-10-26/backend-final-verified.log",
+      "log_sha256": "dd08435f5ce8834498ed4c8266624a8e32311e764752e4d29c0f6c2d222113c1",
+      "frozen_source_sha256": "008c1a470fc41bf131020b74084921ddd5596492c9e10d05d23521fc6eb33c13",
+      "source_before_after_equal": true,
+      "initial_failure_record": "backend-first-result.json",
+      "initial_failure_retained": true,
+      "external_model_calls": 0
+    },
+    "ruff": {
+      "changed_python_files": 18,
+      "issues": 0
+    },
+    "portable_new_module": {
+      "passed": 24,
+      "skipped": 1,
+      "seconds": 2.18,
+      "ignored_artifacts_present": false
+    },
+    "single_claim_review_and_projection_spec_quality_approved": true,
+    "review_codec_system_bytes": 3367,
+    "review_request_reserve": 11225,
+    "complete_fixture_wire_bytes": {
+      "bitwarden": 4808,
+      "1password": 4964
+    }
+  },
+  "evaluation": {
+    "input_mode": "fixed_2026-10-21_captured_pages",
+    "new_fetch_or_discovery": false,
+    "full_graph_or_publication": false,
+    "n_per_request": 1,
+    "exposed_regression_not_blind": true,
+    "reference_answers_supplied_to_agents": false,
+    "model_alias": "deepseek-flash",
+    "provider": "deepseek",
+    "underlying_weight_version_independently_verified": false,
+    "pipeline_profile": {
+      "calls": 48,
+      "tokens": 160000,
+      "cost_usd_estimate_guard": 0.25,
+      "temperature": 0,
+      "default_max_output_tokens": 2048,
+      "retries": 0,
+      "timeout_seconds": 1200
+    },
+    "previous_diagnostic_profile": {
+      "calls": 24,
+      "tokens": 80000
+    },
+    "same_budget_or_causal_cost_comparison": false,
+    "flags_default": {
+      "WRITER_TASK_EXECUTION_ENABLED": false,
+      "WRITER_QUESTION_ATOMIC_ENABLED": false
+    }
+  },
+  "score": {
+    "strict_pass": 2,
+    "denominator": 8,
+    "pass_rate": 0.25,
+    "questions": {
+      "fail": 1,
+      "partial": 5,
+      "pass": 2
+    },
+    "branches": {
+      "fail": 13,
+      "pass": 8,
+      "partial": 1
+    },
+    "branch_denominator": 22,
+    "visible_unique_claims": 10,
+    "complete_selected_support": 9,
+    "single_predicate": 6,
+    "both": 5,
+    "delivery_ready_reports": 0,
+    "report_denominator": 4
+  },
+  "baseline_score": {
+    "strict_pass": 3,
+    "denominator": 8,
+    "questions": {
+      "pass": 3,
+      "partial": 4,
+      "fail": 1
+    },
+    "delivery_ready_reports": 0
+  },
+  "observed_question_pass_change": {
+    "previous": 3,
+    "current": 2,
+    "interpretation": "文本回归退化；不是质量改善或统计因果结论。"
+  },
+  "questions": [
+    {
+      "original_question_id": "Trello-1",
+      "original_input_id": "claim-semantics-candidate-20261020-trello-001",
+      "question": "假设 Trello Workspace 已订阅 Premium，小林已分别被设为看板 A 和 B 的 Observer；A 未启用卡片投票，B 已启用且允许该 Observer 投票。仅依据所给官方页面，逐项判断：小林能在 A、B 投票吗？他能下载 A 的卡片附件并导出 A 吗？B 允许投票，是否意味着他必须给每张卡片投票？请将可以执行的操作、启用条件与是否存在强制义务分别说明。",
+      "verdict": "fail",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/pipeline-captures.json"
+      ],
+      "branch_ids": [
+        "Trello-1.1",
+        "Trello-1.2",
+        "Trello-1.3",
+        "Trello-1.4",
+        "Trello-1.5"
+      ]
+    },
+    {
+      "original_question_id": "Trello-2",
+      "original_input_id": "claim-semantics-candidate-20261020-trello-002",
+      "question": "假设某 Trello Workspace 已订阅 Premium，管理员把看板 A 上现有协作者小周的权限改成了 Observer。同一 Workspace 另有看板 B，但题设没有说明小周是否加入 B、在 B 上的权限，或他属于 Workspace 成员还是哪一种 guest。仅依据所给页面，逐项回答：能否在 Workspace 层级把他统一设置成 Observer，A 上这次改权是否自动决定他在 B 的权限；谁有权把 A 的现有成员改为 Observer；只凭 A 上的 Observer 标签，能否确定他一定免费或一定计费？不要推定题设未说明的成员资格。",
+      "verdict": "partial",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/pipeline-captures.json"
+      ],
+      "branch_ids": [
+        "Trello-2.1",
+        "Trello-2.2",
+        "Trello-2.3",
+        "Trello-2.4"
+      ]
+    },
+    {
+      "original_question_id": "Cloudflare-1",
+      "original_input_id": "agent-readiness-holdout-v1-007",
+      "question": "同事只被授予 example.com 的 Cache Domain Purge 角色，没有任何其他角色。他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？",
+      "verdict": "partial",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/pipeline-captures.json"
+      ],
+      "branch_ids": [
+        "Cloudflare-1.1",
+        "Cloudflare-1.2",
+        "Cloudflare-1.3"
+      ]
+    },
+    {
+      "original_question_id": "Cloudflare-2",
+      "original_input_id": "agent-readiness-holdout-v1-008",
+      "question": "我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？",
+      "verdict": "partial",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/pipeline-captures.json"
+      ],
+      "branch_ids": [
+        "Cloudflare-2.1",
+        "Cloudflare-2.2"
+      ]
+    },
+    {
+      "original_question_id": "Bitwarden-1",
+      "original_input_id": "agent-readiness-holdout-v1-001",
+      "question": "我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？",
+      "verdict": "partial",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/pipeline-captures.json"
+      ],
+      "branch_ids": [
+        "Bitwarden-1.1"
+      ]
+    },
+    {
+      "original_question_id": "Bitwarden-2",
+      "original_input_id": "agent-readiness-holdout-v1-002",
+      "question": "我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？",
+      "verdict": "pass",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/pipeline-captures.json"
+      ],
+      "branch_ids": [
+        "Bitwarden-2.1",
+        "Bitwarden-2.2"
+      ]
+    },
+    {
+      "original_question_id": "1Password-1",
+      "original_input_id": "agent-readiness-holdout-v1-003",
+      "question": "在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？",
+      "verdict": "pass",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/pipeline-captures.json"
+      ],
+      "branch_ids": [
+        "1Password-1.1",
+        "1Password-1.2"
+      ]
+    },
+    {
+      "original_question_id": "1Password-2",
+      "original_input_id": "agent-readiness-holdout-v1-004",
+      "question": "我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。",
+      "verdict": "partial",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/pipeline-captures.json"
+      ],
+      "branch_ids": [
+        "1Password-2.1",
+        "1Password-2.2",
+        "1Password-2.3"
+      ]
+    }
+  ],
+  "branches": [
+    {
+      "id": "Trello-1.1",
+      "original_question_id": "Trello-1",
+      "requirement": "A投票否定及启用条件",
+      "verdict": "fail",
+      "reason": "正文投票子题明确“未回答”；没有A不允许投票及启用条件的已发表结论。",
+      "evidence_id": "span-43",
+      "occurrence_layer": "GEN已送完整投票原句并生成A否定候选；strict parser未准入，plans.task_results=claim_candidate_invalid。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Trello-1.2",
+      "original_question_id": "Trello-1",
+      "requirement": "B投票允许及启用条件",
+      "verdict": "fail",
+      "reason": "正文投票子题明确“未回答”；没有B允许投票及启用条件的已发表结论。",
+      "evidence_id": "span-43",
+      "occurrence_layer": "GEN已送且生成B许可候选，strict parser未准入。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Trello-1.3",
+      "original_question_id": "Trello-1",
+      "requirement": "下载A卡片附件",
+      "verdict": "fail",
+      "reason": "“他能下载A的卡片附件并导出A吗”正文明确“未回答”，无下载观察。",
+      "evidence_id": "span-46",
+      "occurrence_layer": "完整Observer原句实际送达并生成下载A候选；选s12+s7两条同文span后claim_candidate_invalid，未进入REVIEW。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Trello-1.4",
+      "original_question_id": "Trello-1",
+      "requirement": "导出A",
+      "verdict": "fail",
+      "reason": "同一子题“未回答”，无导出A结论。",
+      "evidence_id": "span-46",
+      "occurrence_layer": "完整原句与父题A的Observer/Premium假设实际送达；导出候选被strict parser拒绝。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Trello-1.5",
+      "original_question_id": "Trello-1",
+      "requirement": "允许投票不推出每卡强制义务",
+      "verdict": "fail",
+      "reason": "义务子题正文“未回答”，不可用内部claim补正文。",
+      "evidence_id": "span-48/span-50",
+      "occurrence_layer": "GEN生成许可/非义务inference；REVIEW返回supported但witness把NBSP改为空格，生产parse_atomic_reviews返回0，claim-454757b5c1d642b9b8b0=unreviewed。非“页面缺少允许原句”。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Trello-2.1",
+      "original_question_id": "Trello-2",
+      "requirement": "Workspace不能统一设Observer",
+      "verdict": "pass",
+      "reason": "正文：“由于 Observer 是看板成员权限，目前无法在 Workspace 层级将用户统一设置为 Observer。” 精确所选原句完整支持。",
+      "evidence_id": "claim-96169480972bae8da7d1",
+      "occurrence_layer": "span-52生成，span-54审核，已发表。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Trello-2.2",
+      "original_question_id": "Trello-2",
+      "requirement": "A改权不自动决定B具体权限",
+      "verdict": "fail",
+      "reason": "正文仅有“每个 Observer 需按成员、按看板逐一单独设置”，没有明确回答A改权不自动决定B的具体权限；不能用隐藏supported候选补正文。",
+      "evidence_id": "claim-efaa674a6d7460978fa2",
+      "occurrence_layer": "span-52生成有证A→B有限推论，span-56判supported；ANSWER span-63经coverage guard拒绝，未投影到正式正文。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Trello-2.3",
+      "original_question_id": "Trello-2",
+      "requirement": "谁可把A现有成员设Observer",
+      "verdict": "fail",
+      "reason": "正文没有谁有权改变A现有成员权限的结论。",
+      "evidence_id": "span-52",
+      "occurrence_layer": "GEN已送完整“only Workspace admins and board admins”原句，模型选s25+s27生成完整主体，strict parse得到operation_binding_required，未准入/未送claim REVIEW。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Trello-2.4",
+      "original_question_id": "Trello-2",
+      "requirement": "仅凭Observer标签不能确定免费/计费",
+      "verdict": "fail",
+      "reason": "正文没有Observer标签不足以确定免费或计费的结论。",
+      "evidence_id": "claim-15e6debf4bf758620fee",
+      "occurrence_layer": "当前qid GEN未送完整billable/non-billable分类原句；模型选择s12的Workspace/每板设置句代替计费依据，span-58误判supported但未发表。不能借其它qid的value/上游建议补此qid。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Cloudflare-1.1",
+      "original_question_id": "Cloudflare-1",
+      "requirement": "Cache Domain Purge特定域权限规则",
+      "verdict": "fail",
+      "reason": "正文没有Cache Domain Purge特定域清边缘缓存的规则。",
+      "evidence_id": "claim-82427bda45161ae2bfe5",
+      "occurrence_layer": "span-46实际送完整Cache Domain Purge表行，但生成选s28的一般scope介绍句；span-53正确unsupported，未发表。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Cloudflare-1.2",
+      "original_question_id": "Cloudflare-1",
+      "requirement": "角色只能被赋予其给定域范围",
+      "verdict": "pass",
+      "reason": "正文：“Cloudflare 的角色只能被授予其给定作用域，且同一策略可分配多个角色。” 所选原文含Roles can only ever be assigned to their given scope。",
+      "evidence_id": "claim-536f1d3b10293c0a7d8f",
+      "occurrence_layer": "已发表且全文有支持；额外多角色句使claim非单谓词。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Cloudflare-1.3",
+      "original_question_id": "Cloudflare-1",
+      "requirement": "example.com角色不能据此清除other.example",
+      "verdict": "fail",
+      "reason": "正文该原题标“尚未核实”，未明确回答example.com角色不能据此清other.example。",
+      "evidence_id": "span-58",
+      "occurrence_layer": "GEN未生成other.example outcome，task_result_missing；ANSWER review尝试从两条scope规则给出no，但coverage guard以answer_subquestion_negative_unproven/answer_operation_not_grounded拒绝。已证限域规则+题设资源可作有限非扩展推断，不能推产品实际强制机制；本次未发表，仍不计通过。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Cloudflare-2.1",
+      "original_question_id": "Cloudflare-2",
+      "requirement": "不能仅据15M请求报准确完整美元账单",
+      "verdict": "pass",
+      "reason": "正文明确“本次请求及已准入资料不足以核实准确的完整账单”，保留Workers Paid/美元及CPU等缺失输入；未编造金额。",
+      "evidence_id": "question-dd9aeefb8be2a32bc5bf",
+      "occurrence_layer": "安全拒绝准确完整金额，符合此必要分支。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Cloudflare-2.2",
+      "original_question_id": "Cloudflare-2",
+      "requirement": "CPU为独立用量计费，须CPU输入",
+      "verdict": "fail",
+      "reason": "正文只请求CPU总用量，没有发表CPU是独立用量收费项目及有证计费前提。",
+      "evidence_id": "span-55",
+      "occurrence_layer": "本qid实际GEN包含完整Standard行、Requests/CPU表头、CPU费率/用量条件；模型仅生成请求收费候选，错选s8计划资格+s17最低月费且strict parser拒绝。CPU计价与运行限制未生成，不能借原表或最终QA current_limitation代正文。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Bitwarden-1.1",
+      "original_question_id": "Bitwarden-1",
+      "requirement": "Free organization无法满足3人且3collections整体请求",
+      "verdict": "partial",
+      "reason": "正文有完整所选支持的“最多支持2名用户（含所有者）”规则，但没有把3人且3collections需求明确判为无法满足；3collections上限也未发表。部分提供人数限制，不计完整场景回答。",
+      "evidence_id": "claim-17b1d8eb8538abbf2312",
+      "occurrence_layer": "span-49实际GEN送Free organizations完整段，含两用户/最多两collections。模型第二atom把两用户功能和collections混在同一个container task，generation_task_invalid被拒；第一atom审核通过。ANSWER span-55给场景no后被answer_subquestion_negative_unproven拒绝。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Bitwarden-2.1",
+      "original_question_id": "Bitwarden-2",
+      "requirement": "澄清移除成员还是永久删除账户/数据",
+      "verdict": "pass",
+      "reason": "正式正文：“请确认具体操作：您准备移除成员，还是永久删除账户或数据？”操作歧义已清楚提出。",
+      "evidence_id": "question-63762e09ae5d8faa1071",
+      "occurrence_layer": "server request-only canonical clarification；此必要澄清不要求编产品留存事实。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "Bitwarden-2.2",
+      "original_question_id": "Bitwarden-2",
+      "requirement": "澄清个人数据还是组织数据",
+      "verdict": "pass",
+      "reason": "正式正文：“请确认数据归属：相关数据属于个人，还是组织？”数据归属歧义已清楚提出。",
+      "evidence_id": "question-63762e09ae5d8faa1071",
+      "occurrence_layer": "最终QA span-64对该qid以仍需用户输入/缺产品规则keep，属对必要澄清的误阻；不降低本题独立内容分。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "1Password-1.1",
+      "original_question_id": "1Password-1",
+      "requirement": "访客不能同时加入2共享vault",
+      "verdict": "pass",
+      "reason": "正文：“访客只能访问一个由邀请者选定的共享保险库。”选中single vault原句完整支持；与题设已接受并确认结合，足以排除同时两个共享vault，无需借未选invited-at-a-time句。",
+      "evidence_id": "claim-a54c4e6dda21b48f4018",
+      "occurrence_layer": "span-53单claim审核可读且receipt hash匹配；正文尚未核实标签不抹掉已发表完整局部限制。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "1Password-1.2",
+      "original_question_id": "1Password-1",
+      "requirement": "访客没有自己的Private vault",
+      "verdict": "pass",
+      "reason": "正文：“访客没有自己的 Private vault（私人保险库）。”精确所选They don’t have their own private vaults完整支持。",
+      "evidence_id": "claim-4580e3a8ff8a399b817f",
+      "occurrence_layer": "span-49审核可读且hash匹配。题设前提已给；该题两必要限制均可见。额外添加保险库claim引用错误另列，不能以整报告问题消掉这两分支。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "1Password-2.1",
+      "original_question_id": "1Password-2",
+      "requirement": "不编造精确RMB含税总价",
+      "verdict": "pass",
+      "reason": "正文声明不足以核实准确当前报价、列缺失输入，未给伪造精确人民币含税价。",
+      "evidence_id": "question-26d795d67d79bd12e05d",
+      "occurrence_layer": "安全拒编金额分支通过。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "1Password-2.2",
+      "original_question_id": "1Password-2",
+      "requirement": "公开报价性质有官方证据",
+      "verdict": "fail",
+      "reason": "正式正文没有公开报价性质的有证判断；仅声明缺资料/缺输入，不能代替Unified Access公开报价规则。",
+      "evidence_id": "span-59",
+      "occurrence_layer": "该GEN实际输入因脱敏未验；可见输出仅收集来源未提供精确金额候选，选3refs违反1–2refs并被strict parser拒绝；不能凭重建候选/原网页补正文。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/pipeline-captures.json"
+      ]
+    },
+    {
+      "id": "1Password-2.3",
+      "original_question_id": "1Password-2",
+      "requirement": "有证官方销售/报价下一步",
+      "verdict": "fail",
+      "reason": "正式正文没有有官方证据的联系销售/获取报价下一步；“补齐适用定价资料和输入”不是该必要分支。",
+      "evidence_id": "question-26d795d67d79bd12e05d",
+      "occurrence_layer": "未发表官方销售报价下一步；最终QA该qid错误讨论guest-sharing，另列语义串题误阻。",
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/report.md",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/run.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/trace.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/snapshot.json",
+        "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/pipeline-captures.json"
+      ]
+    }
+  ],
+  "visible_unique_claims": [
+    {
+      "product": "trello",
+      "id": "claim-96169480972bae8da7d1",
+      "text": "由于 Observer 是看板成员权限，目前无法在 Workspace 层级将用户统一设置为 Observer。",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": false,
+      "both": false,
+      "atomicity_reason": "定义Observer是看板权限与Workspace统一设置禁令是可独立判断的两个事实。",
+      "support_reason": "完整精确所选原句支持全文及有限题设应用。",
+      "upstream_complete_replay_verified": false
+    },
+    {
+      "product": "trello",
+      "id": "claim-abd93cab502a4a3632d1",
+      "text": "每个 Observer 需按成员、按看板逐一单独设置。",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "both": true,
+      "atomicity_reason": "同一设置操作的按成员/按看板作用域条件。",
+      "support_reason": "完整精确所选原句支持全文及有限题设应用。",
+      "upstream_complete_replay_verified": false
+    },
+    {
+      "product": "cloudflare",
+      "id": "claim-536f1d3b10293c0a7d8f",
+      "text": "Cloudflare 的角色只能被授予其给定作用域，且同一策略可分配多个角色。",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": false,
+      "both": false,
+      "atomicity_reason": "只能赋予给定scope与同策略可分多个roles是两条规则。",
+      "support_reason": "完整精确所选原句支持全文及有限题设应用。",
+      "upstream_complete_replay_verified": false
+    },
+    {
+      "product": "cloudflare",
+      "id": "claim-61db3c63402ec369a0f3",
+      "text": "Cloudflare 的域级作用域角色仅适用于账户内某个特定域。",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "both": true,
+      "atomicity_reason": "一条域作用域限制。",
+      "support_reason": "完整精确所选原句支持全文及有限题设应用。",
+      "upstream_complete_replay_verified": false
+    },
+    {
+      "product": "bitwarden",
+      "id": "claim-17b1d8eb8538abbf2312",
+      "text": "Bitwarden 的 Free organization 允许用户与另外一名用户存储并安全共享数据，即免费组织最多支持 2 名用户（含所有者）。",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": false,
+      "both": false,
+      "atomicity_reason": "存储与安全共享是两个操作；两用户上限是同句有限计数推论。",
+      "support_reason": "完整精确所选原句支持全文及有限题设应用。",
+      "upstream_complete_replay_verified": false
+    },
+    {
+      "product": "1password",
+      "id": "claim-0d3b3d2123fae31b7da2",
+      "text": "访客必须先接受邀请并被确认，之后才能与其共享保险库。",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "both": true,
+      "atomicity_reason": "共享同一动作的接受邀请AND确认及先后前提，不应拆掉AND。",
+      "support_reason": "完整精确所选原句支持全文及有限题设应用。",
+      "upstream_complete_replay_verified": false
+    },
+    {
+      "product": "1password",
+      "id": "claim-4580e3a8ff8a399b817f",
+      "text": "访客没有自己的 Private vault（私人保险库）。",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "both": true,
+      "atomicity_reason": "一个Private vault否定权限。",
+      "support_reason": "完整精确所选原句支持全文及有限题设应用。",
+      "upstream_complete_replay_verified": false
+    },
+    {
+      "product": "1password",
+      "id": "claim-6713e721725952c82f09",
+      "text": "确认访客后，可以将其添加到保险库。",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": false,
+      "single_predicate": true,
+      "both": false,
+      "atomicity_reason": "单个添加操作，但选中原文截断于After you’ve confirmed a guest, you can，既无添加动作也无vault对象。",
+      "support_reason": "所选原句只完整说接受邀请/确认的共享前提；后半截断于you can，不能用父文档链接/旁边claim补添加vault。span-51 REVIEW将其误判supported。",
+      "upstream_complete_replay_verified": false
+    },
+    {
+      "product": "1password",
+      "id": "claim-a54c4e6dda21b48f4018",
+      "text": "访客只能访问一个由邀请者选定的共享保险库。",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": true,
+      "both": true,
+      "atomicity_reason": "单个访问操作的数量/选择者作用域限制。",
+      "support_reason": "完整精确所选原句支持全文及有限题设应用。",
+      "upstream_complete_replay_verified": false
+    },
+    {
+      "product": "1password",
+      "id": "claim-0773a1d0b3899e253cbe",
+      "text": "若要让访客拥有自己的 Private vault 并访问多个共享保险库，可将其从访客升级为家庭成员。",
+      "kind": "fact",
+      "binding_kind": "span",
+      "binding_identity_valid": true,
+      "current_use_fact_membership": true,
+      "full_selected_support": true,
+      "single_predicate": false,
+      "both": false,
+      "atomicity_reason": "可升级的建议同时附Private vault与多个shared vault两独立访问结果；保留可，不改成必须升级。",
+      "support_reason": "完整精确所选原句支持全文及有限题设应用。",
+      "upstream_complete_replay_verified": false
+    }
+  ],
+  "qa": {
+    "actual_qa_transport_receipt_span_hash_identity": {
+      "planned": 27,
+      "sent": 27,
+      "wire_identity_valid": 27,
+      "batches": 8,
+      "input_output_hash_matched_batches": 8,
+      "pending": 0,
+      "unsent": 0,
+      "timeouts": 0,
+      "meaning": "实际完整wire经生产loads展开、IDs/qid/digest/expected claim IDs与receipt/span/hash匹配；不证明上游资格或内容正确。"
+    },
+    "complete_producer_candidate_basis_server_reconstruction": {
+      "qualified_reviews": 20,
+      "unverified_reviews": 7,
+      "qualified_products": [
+        "trello",
+        "cloudflare",
+        "bitwarden"
+      ],
+      "unverified_products": [
+        "1password"
+      ],
+      "meaning": "三家当前服务端完整重建候选/basis与实际wire完全相同，再经生产_bound_batch_reviews通过。1P整个producer链不完整，因此该产品全部7项完整重建资格未验，不能只把3个字段差异候选扣除后称其余4项全验。"
+    },
+    "independent_semantic_correctness": {
+      "all_reports_accepted": false,
+      "errors": [
+        "BW离职qid必要操作/归属澄清完整，span-64仍因用户输入pending及无产品规则keep；用户澄清不应当成投递遗漏。",
+        "1P pricing qid question-26d795d67d79bd12e05d实际wire清楚是300员工一年RMB含税价格，span-71对应review却讨论guest-sharing，身份合法但语义串题。",
+        "Trello/1P局部正式观察已发表但question局部可见性窗口claims=[]；整题keep并不能消灭本审计已核的局部正文。",
+        "投票许可不推出逐卡义务无需证明所有可能义务不存在；隔离QA及部分真实review reason要求额外显式负面原句。"
+      ]
+    }
+  },
+  "atomic_transport": {
+    "generation_calls": 9,
+    "generation_hash_authenticated_inputs": 7,
+    "generation_inputs_unverified": 2,
+    "single_claim_review_calls": 15,
+    "single_claim_review_hash_authenticated_inputs": 15,
+    "legal_claim_review_responses": 14,
+    "invalid_witness_review_responses": 1,
+    "answer_review_calls": 4,
+    "answer_hash_authenticated_inputs": 3,
+    "answer_inputs_unverified": 1,
+    "full_atomic_replay_products": 3,
+    "unverified_product": "1password"
+  },
+  "core_delivery_audit": {
+    "trello": {
+      "actual_current_qid_gen_verified": [
+        "span-43",
+        "span-46",
+        "span-48",
+        "span-52"
+      ],
+      "facts_and_conditions": "投票/下载/导出原文在各自qid真实GEN完整可见，父题含Premium和A/B角色/投票假设；Trello-2的Workspace范围及两类管理员原文完整可见。",
+      "gap": "Trello-2计费任务窗口未有完整billable/non-billable分类原句；missing_core_fact_ids=[]不能证明此语义core齐全。其它qid含局部分类或上游建议不补当前qid。"
+    },
+    "cloudflare": {
+      "current_scope_rules_complete": true,
+      "specific_role_row_complete": true,
+      "cpu_rule_with_table_context_complete": true,
+      "actual_spans": [
+        "span-46",
+        "span-55"
+      ],
+      "gap": "完整原句送达不等于所选引用正确或正文发表；具体角色错选一般scope，CPU前提未生成。"
+    },
+    "bitwarden": {
+      "actual_gen_span": "span-49",
+      "complete_two_users_and_two_collections_original_sent": true,
+      "gap": "collections atom混人数功能而被generation_task_invalid；人数规则未投影场景否定。离职canonical必要澄清无需产品GEN。"
+    },
+    "1password": {
+      "actual_gen_full_content_verified": false,
+      "span_ids": [
+        "span-44",
+        "span-59"
+      ],
+      "answer_input_span": "span-62",
+      "reason": "三次full_input含[redacted:secret]且与receipt原始hash/长度不符；仅可核当前可见片段/返回，不宣称完整core实际送达。六REVIEW真实完整输入可读且hash匹配。"
+    }
+  },
+  "occurrence_layers": [
+    {
+      "product": "trello",
+      "span_ids": [
+        "span-43",
+        "span-46"
+      ],
+      "layer": "actual_GEN_sent_then_strict_parser_rejected",
+      "finding": "原文可见且A/B、下载/导出候选生成；s12+s7两个同文span/非operation引用，生产parse拒绝，非模型未作答或采集不到。"
+    },
+    {
+      "product": "trello",
+      "span_ids": [
+        "span-48",
+        "span-50"
+      ],
+      "layer": "claim_review_witness_invalid",
+      "finding": "义务inference已生成、真实review supported，但精确witness空白变形导致无合法review，最终不发表。"
+    },
+    {
+      "product": "trello",
+      "span_ids": [
+        "span-52",
+        "span-58",
+        "span-63"
+      ],
+      "layer": "wrong_selected_support_plus_answer_projection",
+      "finding": "billing原文未送当前qid且误选Workspace句，claim reviewer误判supported；A→B有证推论审核supported但ANSWER投影拒绝，隐藏两条不能当正文。"
+    },
+    {
+      "product": "cloudflare",
+      "span_ids": [
+        "span-46",
+        "span-53",
+        "span-58"
+      ],
+      "layer": "wrong_selection_correct_review_rejection_and_unpublished_negative",
+      "finding": "已送Cache Domain Purge完整行，模型却s28错引scope句，review正确拒绝；GEN遗漏跨域task，ANSWER尝试no又被guard拒绝。"
+    },
+    {
+      "product": "cloudflare",
+      "span_ids": [
+        "span-55"
+      ],
+      "layer": "actual_GEN_complete_billing_core_not_generated",
+      "finding": "CPU row/header/条件完整可见，但只生成请求价且所选不支持，parser拒绝；安全金额澄清仍发表。"
+    },
+    {
+      "product": "bitwarden",
+      "span_ids": [
+        "span-49",
+        "span-55",
+        "span-64"
+      ],
+      "layer": "generation_task_invalid_answer_projection_and_QA_false_block",
+      "finding": "collections混独立人数功能被拒；容量场景no被guard拒绝；离职两项必要澄清正确发表但QA误阻。"
+    },
+    {
+      "product": "1password",
+      "span_ids": [
+        "span-44",
+        "span-51",
+        "span-59",
+        "span-62",
+        "span-71"
+      ],
+      "layer": "upstream_trace_redaction_selected_support_error_and_semantic_QA_mixup",
+      "finding": "2GEN+1ANSWER实际完整输入未验；六REVIEW可核，span-51却批准截断在you can的添加vault；final pricing review合法IDs却讨论guest-sharing。"
+    }
+  ],
+  "roles": {
+    "planner": {
+      "request_content_verdict": "pass",
+      "reason": "保留Trello/feature及两原题范围，将brief当context；提醒B成员资格未知并区分许可/义务。固定scope请求有用，主页发现/实际抓取未测。",
+      "source_span_id": "span-1",
+      "request_count": 1,
+      "exact_saved_logical_request": true,
+      "finish_reason": "stop",
+      "finish_reason_known": true,
+      "transport_attempts": 1,
+      "full_lifecycle_accepted": false,
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/isolate-planner-verified/requests.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-planner-verified/calls.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-planner-verified/summary.json"
+      ]
+    },
+    "collector": {
+      "request_content_verdict": "pass",
+      "reason": "六条原句经生产_research_brief/semantic_extraction/admit_evidence_items纯离线复核全部准入，覆盖允许/禁止动作、角色定义/计费分类、Workspace范围、两类管理员。空格/换行由生产恢复，不把raw非逐字当新增事实。",
+      "source_span_id": "span-3",
+      "request_count": 1,
+      "exact_saved_logical_request": true,
+      "finish_reason": "stop",
+      "finish_reason_known": true,
+      "transport_attempts": 1,
+      "full_lifecycle_accepted": false,
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/isolate-collector-verified/requests.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-collector-verified/calls.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-collector-verified/summary.json"
+      ],
+      "offline_parser_admission": {
+        "proposals": 6,
+        "accepted": 6,
+        "raw_byte_literal_in_body": 1,
+        "restored_source_offsets": 6,
+        "production_brief_used": true,
+        "fetch_tested": false,
+        "persistence_tested": false,
+        "proof": "data/artifacts/answer-quality-2026-10-26/independent-protocol-audit.json"
+      }
+    },
+    "analyst": {
+      "request_content_verdict": "partial",
+      "reason": "操作树保留源身份及Premium/投票条件，给出有用可执行权限与计费标签观察；输出未覆盖Workspace层级禁统一设置及现有成员改权的两类管理员，summary仍混多操作。实际输入视窗省略材料，遗漏归分析交接范围，不声称原页无规则。comment条件指代歧义按rubric不另扣。",
+      "source_span_id": "span-17",
+      "request_count": 1,
+      "exact_saved_logical_request": true,
+      "finish_reason": "stop",
+      "finish_reason_known": true,
+      "transport_attempts": 1,
+      "full_lifecycle_accepted": false,
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/isolate-analyst-verified/requests.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-analyst-verified/calls.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-analyst-verified/summary.json"
+      ]
+    },
+    "comparator": {
+      "request_content_verdict": "partial",
+      "reason": "单产品winner=null，A/B投票和附件/导出推断有用；scenario把小林/小周都描述为A/B Observer，扩大小周题设；把未知B成员资格当成无法判断A是否自动影响B，并把视窗缺失泛为需补规则。context_budget_exceeded的原文省略声明应与产品缺失区分。",
+      "source_span_id": "span-26",
+      "request_count": 1,
+      "exact_saved_logical_request": true,
+      "finish_reason": "stop",
+      "finish_reason_known": true,
+      "transport_attempts": 1,
+      "full_lifecycle_accepted": false,
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/isolate-comparator-verified/requests.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-comparator-verified/calls.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-comparator-verified/summary.json"
+      ]
+    },
+    "reflector": {
+      "request_content_verdict": "fail",
+      "reason": "把无逐字负面原句视为许可非义务/禁投票推论缺口；附件下载/导出已有允许规则，却要求再证明A关闭投票不影响这些操作；计费分类已有billable/non-billable仍以未采另页为阻断。writer_constraints有正确提醒，但核心缺口诊断包含误阻。comment条件歧义不另扣。",
+      "source_span_id": "span-34",
+      "request_count": 1,
+      "exact_saved_logical_request": true,
+      "finish_reason": "stop",
+      "finish_reason_known": true,
+      "transport_attempts": 1,
+      "full_lifecycle_accepted": false,
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/isolate-reflector-verified/requests.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-reflector-verified/calls.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-reflector-verified/summary.json"
+      ]
+    },
+    "writer": {
+      "request_content_verdict": "fail",
+      "reason": "本隔离请求当前仅A/B投票三个task，原文及完整父题实际可见。输出第一atom混查看/下载/评论/投票/导出；三atom均选s12+s7两个同文span，production parse无准入。A/B情景明确但未形成合法可交付结果。",
+      "source_span_id": "span-43",
+      "request_count": 1,
+      "exact_saved_logical_request": true,
+      "finish_reason": "stop",
+      "finish_reason_known": true,
+      "transport_attempts": 1,
+      "full_lifecycle_accepted": false,
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/isolate-writer-verified/requests.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-writer-verified/calls.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-writer-verified/summary.json"
+      ],
+      "offline_parser_support": {
+        "raw_atoms": 3,
+        "production_parsed": 0,
+        "parser_gaps": [
+          "claim_candidate_invalid",
+          "operation_binding_required"
+        ],
+        "review_or_publication_tested": false
+      }
+    },
+    "qa": {
+      "request_content_verdict": "partial",
+      "reason": "真实v5 payload的五issue IDs/空claim IDs回传合法，对三条真实未回答正文保持keep有根据；但reason要求投票非义务必须显式原句，称许可非义务“cannot be resolved by inference alone”，违反rubric允许的有限非蕴含推断。此窗口无产品claim，不能宣称已测完整claim语义审查。",
+      "source_span_id": "span-72",
+      "request_count": 1,
+      "exact_saved_logical_request": true,
+      "finish_reason": "stop",
+      "finish_reason_known": true,
+      "transport_attempts": 1,
+      "full_lifecycle_accepted": false,
+      "paths": [
+        "data/artifacts/answer-quality-2026-10-26/isolate-qa-verified/requests.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-qa-verified/calls.json",
+        "data/artifacts/answer-quality-2026-10-26/isolate-qa-verified/summary.json"
+      ]
+    }
+  },
+  "role_request_content_summary": {
+    "pass": 2,
+    "partial": 3,
+    "fail": 2
+  },
+  "upstream_module_execution": {
+    "analyst_comparator_reflector_llm": 12,
+    "fallbacks": 0,
+    "full_lifecycle_accepted": false
+  },
+  "report_deliverability": {
+    "trello": {
+      "ready": false,
+      "complete_answers": false,
+      "selected_citations_all_complete": true,
+      "qa_actual_sent": true,
+      "qa_wire_identity_valid": true,
+      "qa_full_server_reconstruction_verified": true,
+      "reason": "Trello-1全未回答，Trello-2只一分支完整；局部claims有证不等于报告交付。",
+      "report_path": "data/artifacts/answer-quality-2026-10-26/live-trello-verified/execution/report.md",
+      "visible_report_request_premises_complete": true,
+      "full_generation_answer_request_content_verified": true
+    },
+    "cloudflare": {
+      "ready": false,
+      "complete_answers": false,
+      "selected_citations_all_complete": true,
+      "qa_actual_sent": true,
+      "qa_wire_identity_valid": true,
+      "qa_full_server_reconstruction_verified": true,
+      "reason": "缺具体角色/跨域结论及CPU计费前提；QA current_limitation仅认可安全拒编金额。",
+      "report_path": "data/artifacts/answer-quality-2026-10-26/live-cloudflare-verified/execution/report.md",
+      "visible_report_request_premises_complete": true,
+      "full_generation_answer_request_content_verified": true
+    },
+    "bitwarden": {
+      "ready": false,
+      "complete_answers": false,
+      "selected_citations_all_complete": true,
+      "qa_actual_sent": true,
+      "qa_wire_identity_valid": true,
+      "qa_full_server_reconstruction_verified": true,
+      "reason": "容量只人数规则、整体需求判断缺失；离职澄清正确，QA误阻。",
+      "report_path": "data/artifacts/answer-quality-2026-10-26/live-bitwarden-verified/execution/report.md",
+      "visible_report_request_premises_complete": true,
+      "full_generation_answer_request_content_verified": true
+    },
+    "1password": {
+      "ready": false,
+      "complete_answers": false,
+      "selected_citations_all_complete": false,
+      "qa_actual_sent": true,
+      "qa_wire_identity_valid": true,
+      "qa_full_server_reconstruction_verified": false,
+      "reason": "访客两限制有证，但另条添加vault引用截断，价格两必要分支未发表；上游3实际输入未验且QA串题。",
+      "report_path": "data/artifacts/answer-quality-2026-10-26/live-1password-verified/execution/report.md",
+      "visible_report_request_premises_complete": true,
+      "full_generation_answer_request_content_verified": false
+    }
+  },
+  "cost": {
+    "pipelines": {
+      "transport_calls": 63,
+      "known_prompt_tokens": 188470,
+      "known_completion_tokens": 24114,
+      "known_total_tokens": 212584,
+      "usage_unknown_count": 0,
+      "conservative_charged_tokens": 212584,
+      "timeout_count": 0,
+      "length_count": 0
+    },
+    "isolations": {
+      "transport_calls": 7,
+      "known_prompt_tokens": 22955,
+      "known_completion_tokens": 3907,
+      "known_total_tokens": 26862,
+      "usage_unknown_count": 0,
+      "conservative_charged_tokens": 26862,
+      "timeout_count": 0,
+      "length_count": 0
+    },
+    "combined": {
+      "transport_calls": 70,
+      "known_prompt_tokens": 211425,
+      "known_completion_tokens": 28021,
+      "known_total_tokens": 239446,
+      "usage_unknown_count": 0,
+      "conservative_charged_tokens": 239446,
+      "timeout_count": 0,
+      "length_count": 0
+    },
+    "not_actual_invoice_usd": true
+  },
+  "limits": [
+    "原8题已曝光；每请求n=1，非独立盲样本/泛化改善/训练成果。",
+    "固定2026-10-21封存官方页回放，固定scope Planner；没有新发现/新抓取、全Graph、生产稠密RAG、前端或发布验收。",
+    "七role均为一次真实请求隔离，ready/finish stop不是角色完整生命周期或正式人工验收；Collector仅纯离线parser/admission复核。",
+    "383源码hash与原件锁一致；8008pass/1skip工程测试不替代本内容分数。",
+    "旧轮3/8、本轮2/8仅曝光回归的描述结果，预算不同、n=1，不作统计或因果质量/成本结论。",
+    "本轮结束保持实验开关默认0；四份报告均未达到交付验收。",
+    "1Password正文保留了完整原题前提；未验的是2次GEN和1次ANSWER实际完整输入，六次REVIEW完整可核。",
+    "验收原始输出与详细审计保存在本机gitignored目录；GitHub提交汇总、源代码和最小公开夹具。"
+  ],
+  "training_performed": false,
+  "evidence": {
+    "local_ignored_directory": "data/artifacts/answer-quality-2026-10-26",
+    "artifact_sha256": {
+      "independent-content-audit.json": "b9ca8bb1ecfaa17b1918ac47d9ac2b5e89e805c44cc995fd0c35335c23154fd9",
+      "independent-protocol-audit.json": "66fb11827498144e0f9fa78b3ba1bfb69a598355dfc9b5a90aa8a9760e95bafd",
+      "independent-audit-verification.json": "74097c753005c437f322caa6bf2e348bad136fe760902bb3d231c1f72ff1a486",
+      "delivery-runtime-metrics.json": "ba2e5422b60841b222129f1bf0aed2c04c1a929609afcd3b10ce4ffcb4eda313",
+      "frozen-source.json": "008c1a470fc41bf131020b74084921ddd5596492c9e10d05d23521fc6eb33c13",
+      "backend-final-result.json": "5e768719ddea155f04212fca116d0bbecdb649577d2014277a1f360a06062ca9",
+      "backend-first-result.json": "4f644662c622feb02e84affdc5246b44c3a291451ab7bcd637b8d2294f6c872d",
+      "portability-result-final.json": "d02e7649628be90d32402b08d581f2dc9c9f9853578aeb4a0a4d2dac118223b3",
+      "ruff-final.json": "0f112380ec292700b7ccb93d2431592512e67f133785a547c61dbd8b89e2a980"
+    },
+    "historical_originals_locked": 527,
+    "pipeline_originals_locked": 68,
+    "isolation_originals_locked": 35,
+    "source_unchanged_during_tests_and_models": true
+  },
+  "release": {
+    "state": "precommit_review_pending",
+    "target": "existing codex/pastoral-desktop branch",
+    "main_merge": false,
+    "post_push_receipt": "local ignored release-verification.json"
+  }
+}

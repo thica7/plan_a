@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import httpx
 import pytest
+from question_review_fixture import review_payload as decode_review_payload
 from test_final_question_reconciliation import QUESTION, finding_context, reviewed, scope_case
 from test_task_delivery_budget import task_service
 
@@ -60,7 +61,7 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
     async def post(url, payload, headers):
         nonlocal first_response
         user = payload["messages"][1]["content"]
-        batch = json.loads(user.split("\nJSON:\n", 1)[1])
+        batch = decode_review_payload(user.split("\nJSON:\n", 1)[1])
         requests.append(batch)
         assert len(user.encode()) <= 6000
         batch_ids = [row["issue_id"] for row in batch["findings"]]
@@ -86,18 +87,23 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
     result = await reconcile_question_findings(service, record, issues, evidence_issues=[])
     expected_kept = [] if second_batch == "valid" else ["issue-1"]
     assert [issue.id for issue in result] == expected_kept
-    # Complete parent context now requires three bounded requests; its text is
-    # retained rather than forcing the previous two-request fixture layout.
-    assert len(requests) == 3
+    # v5 shares exact repeated support while retaining every complete finding.
+    assert len(requests) == 2
     assert [row["issue_id"] for batch in requests for row in batch["findings"]] == [
         independent_id, "issue-0", "issue-1"]
     spans = [span for span in detail.trace_spans if span.name == "final_question_reconciliation"]
-    assert len(spans) == 3
+    assert len(spans) == 2
     assert [span.status for span in spans] == [
-        "ok",
         "ok",
         "error" if second_batch == "unavailable" else "ok",
     ]
+    complete = json.loads(detail.trace_spans[-1].full_input)['findings']
+    expected = {row['issue_id']: row for row in complete}
+    from packages.agents.qa.independent_question_review import INDEPENDENT_SYSTEM
+    from packages.agents.qa.question_review_encoding import dumps
+    for span, batch in zip(spans, requests, strict=True):
+        assert span.full_input == INDEPENDENT_SYSTEM + '\n\n\nJSON:\n' + dumps(batch)
+        assert all(row == expected[row['issue_id']] for row in batch['findings'])
     assert all(span.metadata["llm_transport_attempts"] == 1 for span in spans)
     assert all(span.metadata["llm_request_attempts"] == 1 for span in spans)
     assert all(span.metadata["llm_phase"] == "final_qa:run" for span in spans)
@@ -108,11 +114,11 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
     assert sum(span.metadata["llm_tokens_charged"] for span in spans) == conservative_charge
     assert service._run_llm_budget(record) is budget
     assert budget.tokens_used == conservative_charge
-    assert budget.calls == 3 and budget.tokens_reserved == 0
+    assert budget.calls == 2 and budget.tokens_reserved == 0
     assert budget.max_calls == 24 and budget.max_tokens == 80000
     assert budget.tokens_used <= budget.max_tokens
     receipt = json.loads(detail.trace_spans[-1].full_output)
-    assert receipt["planned_batches"] == 3
+    assert receipt["planned_batches"] == 2
     assert receipt["unsent_issue_ids"] == []
     assert [row["issue_id"] for row in receipt["model_review"]["reviews"]] == (
         [independent_id, "issue-0", "issue-1"]
@@ -122,7 +128,7 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
 
     cached_result = await reconcile_question_findings(service, record, issues, evidence_issues=[])
     assert [issue.id for issue in cached_result] == expected_kept
-    expected_calls = 3 if second_batch == 'valid' else 4
+    expected_calls = 2 if second_batch == 'valid' else 3
     assert len(requests) == expected_calls
     if second_batch != 'valid':
         assert [row['issue_id'] for row in requests[-1]['findings']] == failed_batch_ids

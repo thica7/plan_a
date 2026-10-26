@@ -14,6 +14,7 @@ from claim_review_fixture import (
     supported_review,
 )
 from pydantic import HttpUrl, TypeAdapter
+from question_review_fixture import review_payload as decode_review_payload
 from test_question_retrieval import research_case
 from test_writer_question_delivery import service_for
 
@@ -156,7 +157,7 @@ async def test_experimental_final_qa_diagnoses_integrity_gaps_without_clearing_t
 
     async def model(record, **kwargs):
         assert kwargs['name'] == 'final_question_reconciliation'
-        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        payload = decode_review_payload(kwargs['user'].split('\nJSON:\n', 1)[1])
         calls.append(payload)
         assert payload['findings'][0]['diagnostic_only'] is True
         context = finding_context(payload, payload['findings'][0])
@@ -185,7 +186,7 @@ async def test_experimental_final_qa_includes_gaps_beside_eligible_findings(monk
     calls = []
 
     async def model(record, **kwargs):
-        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        payload = decode_review_payload(kwargs['user'].split('\nJSON:\n', 1)[1])
         calls.append(payload)
         return reviewed(payload)
 
@@ -217,7 +218,7 @@ async def test_task_diagnostic_excludes_another_questions_visible_claims(monkeyp
     seen = []
 
     async def model(record, **kwargs):
-        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        payload = decode_review_payload(kwargs['user'].split('\nJSON:\n', 1)[1])
         seen.extend(c['id'] for r in payload['findings']
                     for c in finding_context(payload, r).get('claims', []))
         return reviewed(payload)
@@ -239,7 +240,7 @@ async def test_final_scope_no_reconciles_old_blocker_with_receipt_and_keeps_hist
     async def model(record, **kwargs):
         calls.append(kwargs)
         assert kwargs["name"] == "final_question_reconciliation"
-        payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+        payload = decode_review_payload(kwargs["user"].split("\nJSON:\n", 1)[1])
         assert payload["findings"][0]["finding"] == OLD
         assert payload["findings"][0]["answer"]["conclusion"] == "no"
         assert payload["findings"][0]["claims"][0]["source_span_bindings"]
@@ -286,7 +287,7 @@ async def test_no_affirmative_complete_receipt_keeps_the_original_blocker(monkey
         calls.append(kwargs)
         if change == "unavailable":
             raise RuntimeError("offline unavailable")
-        payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+        payload = decode_review_payload(kwargs["user"].split("\nJSON:\n", 1)[1])
         response = json.loads(reviewed(payload))
         row = response["reviews"][0]
         if change == "bad_digest":
@@ -357,7 +358,7 @@ async def test_final_question_review_rejects_changed_report_or_writer_dependenci
     issues = service._build_reflector_qa_issues(detail)
 
     async def model(record, **kwargs):
-        payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+        payload = decode_review_payload(kwargs["user"].split("\nJSON:\n", 1)[1])
         detail.report_md += "\nChanged during review."
         return reviewed(payload)
 
@@ -371,7 +372,7 @@ async def test_real_final_qa_entry_reconciles_instead_of_copying_old_question_bl
     detail, service, record = await scope_case(monkeypatch)
 
     async def model(record, **kwargs):
-        payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+        payload = decode_review_payload(kwargs["user"].split("\nJSON:\n", 1)[1])
         return reviewed(payload)
 
     monkeypatch.setattr(service, "_trace_llm_text", model)
@@ -411,7 +412,7 @@ async def test_safe_missing_quote_remains_an_explicit_current_limitation(monkeyp
     assert service._final_qa_producer_verified(record, current_snapshot(detail))
 
     async def model(record, **kwargs):
-        payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+        payload = decode_review_payload(kwargs["user"].split("\nJSON:\n", 1)[1])
         return reviewed(payload, "current_limitation")
 
     monkeypatch.setattr(service, "_trace_llm_text", model)
@@ -449,7 +450,7 @@ async def test_task_final_qa_packs_whole_findings_and_keeps_unsent_ones(monkeypa
 
     async def model(record, **kwargs):
         assert len(kwargs['user'].encode()) <= 6000
-        payload = json.loads(kwargs['user'].split('\nJSON:\n', 1)[1])
+        payload = decode_review_payload(kwargs['user'].split('\nJSON:\n', 1)[1])
         qid = detail.report_dimension_audits[0].answer_coverage[0].question_id
         assert [row['issue_id'] for row in payload['findings']] == [
             f"final-question-{qid}", original.id]
@@ -487,7 +488,7 @@ async def test_mixed_source_or_citation_findings_cannot_be_retired_by_semantic_r
 
     async def model(record, **kwargs):
         calls.append(kwargs)
-        payload = json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+        payload = decode_review_payload(kwargs["user"].split("\nJSON:\n", 1)[1])
         return reviewed(payload)
 
     monkeypatch.setattr(service, "_trace_llm_text", model)

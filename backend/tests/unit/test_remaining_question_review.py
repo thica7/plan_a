@@ -179,7 +179,7 @@ async def test_real_adapter_uses_last_four_calls_and_keeps_cached_reviews(monkey
     requests = []
 
     async def post(url, payload, headers):
-        batch = json.loads(payload["messages"][1]["content"].split("\nJSON:\n", 1)[1])
+        batch = payload_from({"user": payload["messages"][1]["content"]})
         requests.append(batch)
         return httpx.Response(
             200,

@@ -488,6 +488,7 @@ async def test_real_independent_qa_sends_nine_lossless_findings_and_never_reuses
 ):
     from dataclasses import replace
 
+    from question_review_fixture import review_payload as decode_review_payload
     from test_final_question_reconciliation import reviewed, scope_case
     from test_independent_final_question_qa import receipt
 
@@ -557,7 +558,7 @@ async def test_real_independent_qa_sends_nine_lossless_findings_and_never_reuses
         system, user = [message["content"] for message in payload["messages"]]
         assert system == qa.INDEPENDENT_SYSTEM
         assert len(user.encode()) <= 6000
-        batch = json.loads(user.split("\nJSON:\n", 1)[1])
+        batch = decode_review_payload(user.split("\nJSON:\n", 1)[1])
         requests.append(batch)
         return httpx.Response(
             200,
@@ -589,7 +590,7 @@ async def test_real_independent_qa_sends_nine_lossless_findings_and_never_reuses
     span.full_output = json.dumps(old_receipt)
     await qa.review_current_questions(service, record, historical, evidence_issues=[])
     assert len(requests) == 8 and budget.calls == 8 and budget.tokens_used == 1200
-    assert receipt(detail)["mode"] == "independent_questions_v4"
+    assert receipt(detail)["mode"] == "independent_questions_v5"
     assert (budget.max_calls, budget.max_tokens) == (24, 80000)
 
 

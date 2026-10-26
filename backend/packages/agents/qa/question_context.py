@@ -418,3 +418,44 @@ def question_context_blocks(service, detail, snapshot, use, view, gaps, request_
     except (ValueError, KeyError, TypeError, AttributeError, IndexError):
         # Legacy/redacted/unknown provenance retains the previous blocking gate.
         return True
+
+
+def question_delivery_complete(service, detail, snapshot, audit, question, *, request_only=False):
+    """Replay current-qid obligations against its actual generation originals."""
+    from packages.research.evidence.views import select_evidence_view
+
+    try:
+        uses = [use for use in detail.evidence_consumptions if use.id == audit.consumption_id]
+        if len(uses) != 1:
+            return False
+        use = uses[0]
+        view = select_evidence_view(
+            snapshot, agent='writer', competitor=use.competitor, dimension=use.dimension,
+            source_ids=use.requested_source_ids, fact_ids=use.requested_fact_ids,
+            max_bytes=use.view_max_bytes or use.max_bytes)
+        if (audit.question_atomic_contract is not None
+                or audit.question_atomic_receipt_digest is not None):
+            from packages.agents.writer.question_atomic_delivery import replay_atomic_delivery
+
+            replay = replay_atomic_delivery(service, detail, snapshot, use, view, audit=audit)
+            selection = _observations(detail, 'question_evidence_selection', use.id)
+            packets = selection['packets']
+            if len(packets) != 1:
+                return False
+            packet = dict(packets[0], questions=[question])
+            actual = reconcile_packet_originals(
+                packet, snapshot, replay['facts_by_question'][question['question_id']])
+            replays = [actual]
+        else:
+            replays = _question_replays(service, detail, snapshot, use, view)
+        for replay in replays:
+            rows = [row for row in replay['questions']
+                    if row['question_id'] == question['question_id']]
+            if len(rows) != 1:
+                return False
+            gaps = set(rows[0]['evidence_gaps'])
+            if gaps and (not request_only or gaps != {CORE_GAP}):
+                return False
+        return True
+    except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
+        return False

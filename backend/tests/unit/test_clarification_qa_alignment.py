@@ -5,6 +5,7 @@ import json
 from dataclasses import replace
 
 import pytest
+from question_review_fixture import review_payload as decode_review_payload
 from test_final_question_reconciliation import reviewed
 from test_independent_final_question_qa import context_for, payload_from, receipt
 from test_question_context_qa import CLARIFY, case, findings
@@ -154,12 +155,12 @@ async def test_response_without_actual_qa_trace_cannot_pass(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_v4_cache_needs_current_actual_qa_trace_and_hashes(monkeypatch):
+async def test_v5_cache_needs_current_actual_qa_trace_and_hashes(monkeypatch):
     service, record, _ = qa_case()
     calls = install_review(monkeypatch, service)
     assert await reconcile_question_findings(service, record, [], evidence_issues=[]) == []
     output = receipt(record.detail)
-    assert output['mode'] == 'independent_questions_v4'
+    assert output['mode'] == 'independent_questions_v5'
     batch = output['batch_receipts'][0]
     span = next(s for s in record.detail.trace_spans if s.id == batch['span_id'])
     assert batch['full_input_sha256'] == hashlib.sha256(span.full_input.encode()).hexdigest()
@@ -176,7 +177,7 @@ async def test_v4_cache_needs_current_actual_qa_trace_and_hashes(monkeypatch):
 @pytest.mark.parametrize('mutation', [
     'kind', 'agent', 'subagent', 'status', 'transport_zero', 'transport_bool',
     'input_hash', 'output_hash', 'system_rehashed', 'payload_rehashed',
-    'identity_rehashed', 'receipt_only', 'v3',
+    'identity_rehashed', 'receipt_only', 'v3', 'v4', 'duplicate_key', 'unused_table',
 ])
 async def test_cached_local_receipt_cannot_substitute_for_actual_review(monkeypatch, mutation):
     service, record, _ = qa_case()
@@ -188,8 +189,8 @@ async def test_cached_local_receipt_cannot_substitute_for_actual_review(monkeypa
     span = next(s for s in record.detail.trace_spans if s.id == batch['span_id'])
     if mutation == 'receipt_only':
         output['batch_receipts'] = []
-    elif mutation == 'v3':
-        output['mode'] = 'independent_questions_v3'
+    elif mutation in {'v3', 'v4'}:
+        output['mode'] = 'independent_questions_' + mutation
     elif mutation in {'kind', 'agent', 'subagent', 'status'}:
         setattr(span, mutation, {'kind': 'tool', 'agent': 'writer',
                                 'subagent': 'feature', 'status': 'error'}[mutation])
@@ -203,12 +204,23 @@ async def test_cached_local_receipt_cannot_substitute_for_actual_review(monkeypa
         span.full_input = span.full_input.replace(
             independent.INDEPENDENT_SYSTEM, 'Different system')
         batch['full_input_sha256'] = hashlib.sha256(span.full_input.encode()).hexdigest()
+    elif mutation in {'duplicate_key', 'unused_table'}:
+        raw = span.full_input.split('\nJSON:\n', 1)[1]
+        if mutation == 'duplicate_key':
+            raw = raw.replace('"c":1', '"c":1,"c":1', 1)
+        else:
+            wire = json.loads(raw)
+            wire['t'].append('Unsent hidden condition')
+            from packages.research.evidence.snapshot_models import canonical_json
+            raw = canonical_json(wire)
+        span.full_input = independent.INDEPENDENT_SYSTEM + '\n\n\nJSON:\n' + raw
+        batch['full_input_sha256'] = hashlib.sha256(span.full_input.encode()).hexdigest()
     elif mutation == 'payload_rehashed':
-        payload = json.loads(span.full_input.split('\nJSON:\n', 1)[1])
+        payload = decode_review_payload(span.full_input.split('\nJSON:\n', 1)[1])
         row = payload['findings'][0]
         context_for(payload, row)['visible_answer'] += ' Claimed product behavior.'
-        from packages.research.evidence.snapshot_models import canonical_json
-        span.full_input = independent.INDEPENDENT_SYSTEM + '\n\n\nJSON:\n' + canonical_json(payload)
+        from packages.agents.qa.question_review_encoding import dumps
+        span.full_input = independent.INDEPENDENT_SYSTEM + '\n\n\nJSON:\n' + dumps(payload)
         batch['full_input_sha256'] = hashlib.sha256(span.full_input.encode()).hexdigest()
     else:
         response = json.loads(span.full_output)

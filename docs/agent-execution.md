@@ -2,7 +2,13 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-本轮[按题证据池与多原子交付复验](optimization/2026-10-26-question-pool-atomic.md)（2026-10-26）：**原八题严格3/8，四份报告均未达标，实验默认关闭**。完整候选池、按题多原子生成、逐条审核、正文投影及严格必要澄清已进实际入口；18个可见唯一主张17条完整所选支持、10条单谓词，Trello下载仍有选错原句却被审核放行。最终QA为28计划／23送达且身份合法／5超窗未送，10个内部原问8个送达；仅必要澄清记current_limitation，正文得分不等于QA放行。七角色单请求隔离3通过／2部分／2失败；非完整Agent闭环。最终全后端**7852通过／1跳过**，新增127项，变更Ruff新增0。首轮Writer未执行，追加一次通用预算修正；修正轮66次／243053 token，**两轮累计108次／384517已知token，未知0**，不能称同等质量降本。1Password六次原子请求（含两次生成）输入因脱敏未验完整送达；未训练、未验新抓取／全Graph／发布／生产稠密RAG。[结构化结果](optimization/2026-10-26-question-pool-atomic-results.json)。
+**预算口径：** 下文历史复验中的24次调用／80000 token是当时的诊断配置，不是生产配置默认值。实际运行受部署设置、研究模式和已持久化额度约束；代码中 `run_llm_max_calls` 默认160，`run_llm_max_tokens=0` 表示不单设全局token上限，费用及其他限制仍适用。每轮验收须另列实际配置，不能把不同预算的结果称为同条件对照。
+
+本轮[逐题文本质量与独立QA复验](optimization/2026-10-26-answer-quality.md)：**原八题2/8，低于上轮3/8，四报告均未达标，实验默认关闭**。生成v2、单条审核v2及最终QA v5已进入实际实验入口；27项QA wire身份合法，但仅前三家20项可完成服务端完整重建，1Password7项资格未验（2GEN＋1ANSWER脱敏）。正文10条唯一主张9条完整支持、6条单谓词、同时5条。七角色请求隔离2通过／3部分／2失败，12个分析／比较／反思模块均真实LLM无回退，均不能代替完整Agent闭环验收。
+
+最终后端8008通过／1跳过，新增156项、Ruff0问题；首次1项测试桩解码失败已保留，最小适配后完整重跑。当前轮70调用／239446已知token，未知0；质量profile48次／160000不同于旧24次／80000。Trello错选引用／漏答、CF角色及CPU未发表、BW场景结论及澄清误阻、1Password不完整支持与QA串题仍未解决。未训练，未验新抓取／全Graph／发布／生产稠密RAG。[结构化结果](optimization/2026-10-26-answer-quality-results.json)。
+
+上一轮[按题证据池与多原子交付复验](optimization/2026-10-26-question-pool-atomic.md)（2026-10-26）：**原八题严格3/8，四份报告均未达标，实验默认关闭**。完整候选池、按题多原子生成、逐条审核、正文投影及严格必要澄清已进实际入口；18个可见唯一主张17条完整所选支持、10条单谓词，Trello下载仍有选错原句却被审核放行。最终QA为28计划／23送达且身份合法／5超窗未送，10个内部原问8个送达；仅必要澄清记current_limitation，正文得分不等于QA放行。七角色单请求隔离3通过／2部分／2失败；非完整Agent闭环。最终全后端**7852通过／1跳过**，新增127项，变更Ruff新增0。首轮Writer未执行，追加一次通用预算修正；修正轮66次／243053 token，**两轮累计108次／384517已知token，未知0**，不能称同等质量降本。1Password六次原子请求（含两次生成）输入因脱敏未验完整送达；未训练、未验新抓取／全Graph／发布／生产稠密RAG。[结构化结果](optimization/2026-10-26-question-pool-atomic-results.json)。
 
 上一轮[Collector 原文入库、逐子问选证与交付预算复验](optimization/2026-10-25-collector-task-delivery.md)（2026-10-25）：**正文严格1/8，低于上一轮3/8，四份报告均未达标，实验默认关闭**。新Collector隔离返回6条提案，经生产定位与准入离线重验6/6；逐任务说明、候选合并和完整父题设进入实际入口。最终QA计划28项全部实际送达且身份合法，10个内部原问也全部送达，但机制仍判0通过／10阻断；送达不是内容通过。七角色各一条请求隔离为5通过／1部分／1失败，Writer仍生成越出单任务的复合主张；Trello逐板规则在上游逐题检索时已从Writer范围丢失，另有9次生成及1次尾答零派送预算拒绝。四家70次／193892 token，七隔离7次／26616 token，**本轮合计77实际调用／220508已知token，未知0**；未重跑single，不与上轮single混作同版对照。新增69项测试；全后端首次7724通过、1项沙箱ps受阻、1跳过，仅受阻项以必要权限复验通过，同源码7725个不同用例验证通过，非单次全套全绿。1Password两条生成完整输入因导出脱敏仍未验；未训练，未验新抓取／全Graph／生产稠密RAG。[结构化结果](optimization/2026-10-25-collector-task-delivery-results.json)。
 
@@ -44,7 +50,19 @@
 
 此前真实验证见[完整证据与答案发表恢复](optimization/2026-10-18-evidence-recovery-delivery.md)：5664项后端通过，四组40次真实调用；正文3正确／1错误／4遗漏，记录2正确／6遗漏，仍0/4报告达标。下面是有限规则及实际入口；中文数量结论误拒、下载规则投影遗漏、计费行／FAQ漏提取和错误缺证陈述仍未解决。实现检查通过不等于语义验收。
 
-## 按题证据池与多原子交付合同（2026-10-25—26）
+## 当前生成v2、单主张审核v2与最终QA v5（2026-10-26）
+
+仅在两个实验开关均为1时使用以下按题入口；默认仍为0，其他维度和旧路径保持。实现不等于真实正文已达交付标准。
+
+- [`atomic_question_projection.py`](../backend/packages/agents/writer/atomic_question_projection.py) 生成当前子问的服务器任务、请求片段、操作、对象和合法支持提示。完整父题保留假设，不成为兄弟输出任务；数量意图分别绑定人数和容器。核心事实与完整例外先实际装入14KB请求，编号目录不能代替原文；回放返回 `facts_by_question`，记录各题真实生成输入。
+- [`atomic_claim_review.py`](../backend/packages/agents/writer/atomic_claim_review.py) 将每条主张单独送审，剥离上游建议的产品正文，要求每段所选支持的精确见证。未知可能适用的限制保留缺口；精确节选只证明出处，不能代替完整语义蕴含。生成与审核收据独立保存投影版本；历史缺版本请求按原v1 SYSTEM和目录重放，不能删除新字段降级。
+- [`question_context.py`](../backend/packages/agents/qa/question_context.py) 与 [`independent_question_review.py`](../backend/packages/agents/qa/independent_question_review.py) 重放本题实际派送，核验完整原题、正文和支持。只有实际重建的 `answer_coverage_incomplete` 可按题隔离；其他claim硬错误及所有source／unknown issue继续阻断。另一题发送的事实不能补本题核心。必要澄清仍保留严格服务端合同，模型能否正确接受须单独验收。
+- [`question_review_encoding.py`](../backend/packages/agents/qa/question_review_encoding.py) 仅共享完全相同的结构和字符串，保持完整引用、坐标、条件、模态与父子问。实际v5 wire须与服务端重建一致；坏引用、循环、额外／未使用表项、重复JSON键及跨包替换均拒绝。编码不是来源认证器。旧共享最终审核SYSTEM不变，旧v4正向缓存不复用为v5。
+- 最终QA保持6000B用户输入／最多六批／每项两次实际请求／1600输出；新SYSTEM为3367B、请求保护11225。历史持久化额度保留；当前质量复验另用48次／160000 token配置，不修改生产默认值。正文不因QA返回而事后改写签名依据。
+
+本轮实现集中在Writer与QA。Collector提供准入原文，Analyst、Comparator和Reflector提供可出错建议，建议不能作为独立引用。完整证据输入、实际执行和高质量结论是三个不同验收项目。详见[本轮交付](optimization/2026-10-26-answer-quality.md)。
+
+## 历史v1按题证据池与多原子交付合同（2026-10-25—26）
 
 新实验入口须同时启用 `WRITER_TASK_EXECUTION_ENABLED=1` 和 `WRITER_QUESTION_ATOMIC_ENABLED=1`；两者默认均为0。沿用原24次调用／80000保守token，不把实现检查当作报告验收。
 

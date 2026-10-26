@@ -52,11 +52,22 @@ def sent_source_atom(rows, text, *, support_text=None):
 def question_plan_response(payload, atoms):
     """Explicit current transport fixture; legacy no-question drafts keep their shape."""
     import json
+
     from packages.research.evidence.source_exceptions import required_question_clarifications
     required = {row['question_id']: row['missing_fields']
                 for row in required_question_clarifications(payload.get('questions', []))}
     if not payload.get('questions'):
         return json.dumps({'claims': atoms})
+    if payload.get('generation_projection_version') == 2:
+        from packages.agents.writer.atomic_question_projection import generation_task_atom_reasons
+        from packages.agents.writer.question_allocation import task_support_score
+        atoms = [dict(atom, task_id=next((task['task_id']
+            for task in sorted(payload['generation_tasks'], key=lambda t: -task_support_score(
+                t, atom.get('text', ''), payload['questions'][0]['question'],
+                payload['segment_competitor']))
+            if task['state'] == 'planned' and not generation_task_atom_reasons(
+                task, atom.get('text', ''), kind=atom.get('kind'))), 'unknown-task'))
+            for atom in atoms]
     return json.dumps({'question_plans': [dict(question_id=q['question_id'], atoms=atoms,
         missing_fields=required.get(q['question_id'], [])) for q in payload['questions']]})
 
@@ -80,7 +91,8 @@ def answer_response(payload, response, *, relation='direct'):
         questions = {q['question_id']: q['question'] for q in payload['questions']}
         for row in response.get('answers', []):
             if (row['status'] in {'answered', 'partial'}
-                    and row['resolution'] in {'direct', 'conditional'} and 'subquestions' not in row):
+                    and row['resolution'] in {'direct', 'conditional'}
+                    and 'subquestions' not in row):
                 row['subquestions'] = [dict(question_quote=questions[row['question_id']],
                     claim_ids=row['claim_ids'], conclusion=row['conclusion'], relation=relation)]
     return json.dumps(response)

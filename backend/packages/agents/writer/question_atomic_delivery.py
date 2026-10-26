@@ -7,6 +7,23 @@ import json
 from copy import copy
 from types import SimpleNamespace
 
+from packages.agents.writer.atomic_claim_review import (
+    REVIEW_SYSTEM_IDENTITY,
+    SELECTED_SUPPORT_SYSTEM,
+    atomic_review_payload,
+    checked_review_projection_version,
+    incomplete_review_restrictions,
+    review_identity_metadata,
+    validated_review_payload,
+    witnessed_review_row,
+)
+from packages.agents.writer.atomic_question_projection import (
+    GENERATION_SYSTEM,
+    checked_generation_projection_version,
+    missing_task_results,
+    question_projection,
+    scoped_generation_response,
+)
 from packages.agents.writer.task_execution import ADVISORY_KEYS
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.research.evidence.snapshot_models import canonical_json
@@ -45,14 +62,24 @@ GENERATE_SYSTEM = SYSTEM_IDENTITY + (
 )
 
 
-def atomic_system(name, language):
+def atomic_system(name, language, *, review_projection_version=2, generation_projection_version=2):
     from packages.agents.writer.answer_coverage import SUBQUESTION_REVIEW_SYSTEM
     from packages.agents.writer.question_repair import REPAIR_REVIEW_SYSTEM
     from packages.i18n.language import language_instruction
 
+    version = checked_review_projection_version(review_projection_version)
+    generation_version = checked_generation_projection_version(generation_projection_version)
     if name == GENERATION_NAME:
-        return GENERATE_SYSTEM + language_instruction(language)
+        system = GENERATION_SYSTEM if generation_version == 2 else GENERATE_SYSTEM
+        return system + language_instruction(language)
     if name == REVIEW_NAME:
+        if version == 2:
+            return (
+                SYSTEM_IDENTITY
+                + REVIEW_SYSTEM_IDENTITY
+                + REPAIR_REVIEW_SYSTEM
+                + SELECTED_SUPPORT_SYSTEM
+            )
         return SYSTEM_IDENTITY + REPAIR_REVIEW_SYSTEM
     if name == ANSWER_NAME:
         return (
@@ -75,7 +102,7 @@ def digest(value):
     ).hexdigest()
 
 
-def validate_atomic_handoff(service, record, payload, view):
+def validate_atomic_handoff(service, record, payload, view, *, review_projection_version=1):
     """Rebuild complete question, parent and all three advisory identities."""
     from packages.research.question_scope import question_request_context, questions_match_scope
 
@@ -93,13 +120,29 @@ def validate_atomic_handoff(service, record, payload, view):
         detail, view.competitor, view.dimension, payload["questions"]
     ):
         raise EvidenceUseRejectedError("Atomic parent request context changed")
+    version = checked_review_projection_version(review_projection_version)
     upstream = service._dimension_upstream_context(record, view, projection_version=2)
+    expected = review_identity_metadata(upstream) if version == 2 else upstream
+    if version == 2:
+        if (
+            type(payload.get("review_projection_version")) is not int
+            or payload["review_projection_version"] != version
+            or len(payload.get("claims", ())) != 1
+            or any(key in payload for key in ADVISORY_KEYS)
+        ):
+            raise EvidenceUseRejectedError("Atomic selected-support review context changed")
+        if payload.get("upstream_identity_refs") != expected["upstream_identity_refs"]:
+            raise EvidenceUseRejectedError("Atomic advisory identity references changed")
     for key in (*ADVISORY_KEYS, "upstream_context_gaps", "upstream_projection_version"):
-        if (key in payload) != (key in upstream) or payload.get(key) != upstream.get(key):
+        if (key in payload) != (key in expected) or payload.get(key) != expected.get(key):
             raise EvidenceUseRejectedError("Atomic advisory context changed")
     if type(payload.get("upstream_projection_version")) is not int:
         raise EvidenceUseRejectedError("Atomic advisory projection changed")
-    return service._validate_dimension_upstream(record, payload)
+    # Dependencies are rebuilt against server content, never inferred from an
+    # identity reference as proof that the reviewer saw the upstream assertions.
+    return service._validate_dimension_upstream(
+        record, dict(upstream, segment_competitor=view.competitor, dimension=view.dimension)
+    )
 
 
 def handoff_context(service, record, view, questions, use):
@@ -119,7 +162,16 @@ def handoff_context(service, record, view, questions, use):
     )
 
 
-def atomic_question_context(service, record, view, packets, question, allowed, use):
+def atomic_question_context(
+    service, record, view, packets, question, allowed, use, *, generation_projection_version=2
+):
+    version = checked_generation_projection_version(generation_projection_version)
+    if version == 2:
+        return question_projection(service, record, view, packets, question, allowed, use)
+    return _legacy_atomic_question_context(service, record, view, packets, question, allowed, use)
+
+
+def _legacy_atomic_question_context(service, record, view, packets, question, allowed, use):
     """All complete candidates in the one authorized view, ordered by question pool rank."""
     from packages.orchestrator.question_packets import question_pool_facts
     from packages.research.evidence.operations import operation_binding, operation_observations
@@ -268,44 +320,108 @@ def atomic_question_context(service, record, view, packets, question, allowed, u
     return assemble(chosen)
 
 
-def parse_atomic_generation(response, payload, view, use):
+def parse_atomic_generation(response, payload, view, use, *, _forecast=False):
+    """Only local sizing shadows may skip task semantics; actual/replay never do."""
     from packages.agents.writer.dimension_writer import (
         _support_ref_catalog,
+        encoded,
         parse_question_claim_plans,
     )
     from packages.agents.writer.readable_support import dispatched_span_candidates
 
+    version = checked_generation_projection_version(payload.get("generation_projection_version", 1))
+    task_gaps, outcomes, task_bindings = set(), [], []
+    if version == 2:
+        response, task_gaps, outcomes, task_bindings = scoped_generation_response(
+            response, payload, forecast=_forecast
+        )
     sent = {row["id"] for row in payload["evidence_view"]["facts"]}
     candidates = {
         op["observation_id"]: op
         for row in payload["evidence_view"]["facts"]
         for op in row.get("operation_observations", ())
     }
-    return parse_question_claim_plans(
-        response,
-        payload["questions"],
-        candidates,
-        sent,
-        use.id,
-        source_facts=view.facts,
-        span_candidates=dispatched_span_candidates(payload, view.facts, sent),
-        support_refs=_support_ref_catalog(payload, view.facts, sent),
-    )
+    span_candidates = dispatched_span_candidates(payload, view.facts, sent)
+    support_refs = _support_ref_catalog(payload, view.facts, sent)
+
+    def strict_parse(text):
+        return parse_question_claim_plans(
+            text, payload["questions"], candidates, sent, use.id,
+            source_facts=view.facts, span_candidates=span_candidates, support_refs=support_refs,
+        )
+
+    def identity(claim):
+        return canonical_json(claim.model_dump(mode="json", exclude={"id"}))
+
+    if version == 2:
+        from packages.agents.writer.dimension_writer import parse_json
+
+        by_task = {row["task_id"]: row for row in outcomes}
+        tasks = {task["task_id"]: task for task in payload["generation_tasks"]}
+        selected, task_counts = [], {}
+        for binding in task_bindings:
+            probe, invalid, _ = strict_parse(
+                encoded(dict(question_plans=[dict(
+                    question_id=binding["question_id"],
+                    missing_fields=payload["question_plan_missing_fields"][0]["missing_fields"],
+                    atoms=[binding["atom"]],
+                )]))
+            )
+            task_gaps.update(invalid)
+            outcome = by_task[binding["task_id"]]
+            if not probe:
+                if not task_counts.get(binding["task_id"]):
+                    outcome.update(state="rejected", reason="claim_candidate_invalid")
+                continue
+            count = task_counts.get(binding["task_id"], 0)
+            if count >= tasks[binding["task_id"]]["max_claims"]:
+                outcome["deferred_atom_count"] = outcome.get("deferred_atom_count", 0) + 1
+                continue
+            task_counts[binding["task_id"]] = count + 1
+            selected.append(dict(binding, identity=identity(probe[0])))
+        cleaned = parse_json(response)
+        for plan in cleaned["question_plans"]:
+            plan["atoms"] = [binding["atom"] for binding in selected
+                             if binding["question_id"] == plan["question_id"]]
+        response = encoded(cleaned)
+    claims, gaps, plans = strict_parse(response)
+    if version == 2:
+        actual = {identity(claim): claim.id for claim in claims}
+        used = set()
+        for binding in selected:
+            outcome = by_task[binding["task_id"]]
+            cid = actual.get(binding["identity"])
+            if cid and cid not in used:
+                outcome.update(state="generated")
+                outcome.pop("reason", None)
+                outcome.setdefault("claim_ids", []).append(cid)
+                used.add(cid)
+            elif not outcome.get("claim_ids"):
+                outcome.update(
+                    state="deferred", reason="claim_capacity_exceeded",
+                )
+            else:
+                outcome["deferred_atom_count"] = outcome.get("deferred_atom_count", 0) + 1
+        for plan in plans:
+            plan["task_results"] = outcomes
+    return claims, set(gaps) | task_gaps, plans
 
 
-def atomic_review_batches(claims, view, questions, plans, metadata, *, max_bytes):
+def atomic_review_batches(
+    claims, view, questions, plans, metadata, *, max_bytes, review_projection_version=2
+):
     """Bound each complete review group; never silently limit the number of groups."""
-    from packages.agents.writer.dimension_writer import compact_prompt_json, review_payload
+    from packages.agents.writer.dimension_writer import compact_prompt_json
     from packages.research.evidence.report_claims import (
         required_claim_checks,
         required_operation_checks,
     )
 
+    version = checked_review_projection_version(review_projection_version)
+
     def payload(rows):
-        return dict(
-            review_payload(rows, view, review_version=3, questions=questions, plans=plans),
-            **metadata,
-            question_answer_plans=plans,
+        return atomic_review_payload(
+            rows, view, questions, plans, metadata, review_projection_version=version
         )
 
     def fits(rows):
@@ -314,7 +430,7 @@ def atomic_review_batches(claims, view, questions, plans, metadata, *, max_bytes
             for c in rows
         )
         return (
-            len(rows) <= 2
+            len(rows) <= (1 if version == 2 else 2)
             and checks <= 10
             and len(("\nJSON:\n" + compact_prompt_json(payload(rows))).encode()) <= max_bytes
         )
@@ -333,18 +449,36 @@ def atomic_review_batches(claims, view, questions, plans, metadata, *, max_bytes
     return batches, omitted
 
 
-def parse_atomic_reviews(response, claims):
+def parse_atomic_reviews(response, claims, *, payload=None, review_projection_version=2):
     """A malformed review poisons only its own claim, including duplicates."""
     from packages.agents.writer.dimension_writer import encoded, parse_claim_reviews, parse_json
 
+    version = checked_review_projection_version(review_projection_version)
     raw = parse_json(response)
     if not isinstance(raw, dict) or set(raw) != {"reviews"} or not isinstance(raw["reviews"], list):
         raise ValueError("Invalid atomic review envelope")
+    if version == 2:
+        if (
+            not isinstance(payload, dict)
+            or type(payload.get("review_projection_version")) is not int
+            or payload["review_projection_version"] != 2
+            or len(payload.get("claims", ())) != 1
+            or len(claims) != 1
+            or payload["claims"][0].get("id") != claims[0].id
+        ):
+            return []
     reviews = []
     for claim in claims:
         rows = [r for r in raw["reviews"] if isinstance(r, dict) and r.get("claim_id") == claim.id]
         if len(rows) != 1:
             continue
+        if version == 2:
+            if rows[0].get("verdict") == "supported" and incomplete_review_restrictions(payload):
+                continue
+            row = witnessed_review_row(rows[0], payload["claims"][0].get("support_quotes", []))
+            if row is None:
+                continue
+            rows = [row]
         try:
             parsed, _ = parse_claim_reviews(encoded(dict(reviews=rows)), {claim.id})
             reviews.extend(parsed)
@@ -392,6 +526,8 @@ def save_atomic_receipt(service, record, compact, view, use, packets):
         question_ids=[q["question_id"] for q in packets[0]["questions"]],
         question_answer_plans=compact["question_answer_plans"],
         dispatches=compact["dispatches"],
+        review_projection_version=compact["review_projection_version"],
+        generation_projection_version=compact["generation_projection_version"],
     )
     live = service._evidence_live_record(record)
     existing = [
@@ -538,9 +674,12 @@ def _current_request_preflight(
 async def execute_question_atomic_delivery(
     service, record, selected, view, use, questions, packets, allowed, boundaries, gaps
 ):
-    from packages.agents.writer.dimension_writer import compact_prompt_json, encoded, parse_json
+    from packages.agents.writer.dimension_writer import (
+        _support_ref_catalog,
+        compact_prompt_json,
+        encoded,
+    )
     from packages.research.evidence.report_claims import claim_rule_reasons
-    from packages.research.question_delivery import _expand_text_refs
 
     scope = f"{view.competitor}/{view.dimension}"
     generation_system = atomic_system(GENERATION_NAME, record.detail.output_language)
@@ -548,6 +687,8 @@ async def execute_question_atomic_delivery(
     claims, reviews, sizes, sent_ids, dependencies = [], [], [], set(), ()
     compact = dict(
         question_atomic_contract=CONTRACT,
+        review_projection_version=2,
+        generation_projection_version=2,
         question_answer_plans=[],
         dispatches=[],
         evidence_view=dict(facts=[]),
@@ -578,7 +719,11 @@ async def execute_question_atomic_delivery(
             question_id=qid,
             claim_ids=[],
             missing_fields=list(_missing_question_inputs(question["question"])),
+            missing_core_fact_ids=payload["missing_core_fact_ids"],
+            task_results=missing_task_results(payload),
         )
+        if plan["missing_core_fact_ids"]:
+            gaps = tuple(sorted(set(gaps) | {"question_core_context_budget_exceeded"}))
         from packages.orchestrator.question_packets import question_pool_facts
 
         plan["deferred_fact_ids"] = [
@@ -624,7 +769,7 @@ async def execute_question_atomic_delivery(
                 ],
                 *[
                     dict(
-                        text=" ".join(span["quote"].split()),
+                        text=" ".join(span["quote"].replace("|", " ").split()),
                         kind="fact",
                         support_refs=[span["support_ref"]],
                     )
@@ -632,10 +777,23 @@ async def execute_question_atomic_delivery(
                 ],
             ]
         ]
+        # Forecasts bind the same server tasks as real generation; they never
+        # authorize a claim or turn an unknown future response into a gate.
+        # A full table can contain several predicates. Its plain display is
+        # only a sizing estimate; the real task parser still requires one.
+        options = [dict(atom, task_id=task["task_id"])
+                   for atom in options for task in payload["generation_tasks"]
+                   if task["state"] == "planned"
+                   and set(atom["support_refs"]) <= set(task["support_refs"])]
         # Validate before applying the forecast capacity. Invalid early display
         # candidates must not hide a later complete, legally bound support.
         legal_options = []
         for atom in options:
+            task = next(t for t in payload["generation_tasks"] if t["task_id"] == atom["task_id"])
+            if (task["focus"] != "source_rule" or task.get("request_property")) and any(
+                option["task_id"] == atom["task_id"] for option in legal_options
+            ):
+                continue
             parsed, _, _ = parse_atomic_generation(
                 encoded(
                     dict(
@@ -649,6 +807,7 @@ async def execute_question_atomic_delivery(
                 payload,
                 view,
                 use,
+                _forecast=True,
             )
             if parsed:
                 legal_options.append(atom)
@@ -664,29 +823,20 @@ async def execute_question_atomic_delivery(
             )
         )
         anticipated, _, anticipated_plans = parse_atomic_generation(
-            forecast_response, payload, view, use
+            forecast_response, payload, view, use, _forecast=True
         )
         candidate_count = len(anticipated)
         metadata = handoff_context(service, record, view, [question], use)
-        # Unknown model atoms cannot guarantee a full delivery chain. Retain a
-        # complete candidate review window, then admit each actual request below.
+        # A complete source supports a conservative sizing shadow. Its text is
+        # never published or reused as a real generation/review credential.
         if anticipated:
-            from packages.agents.writer.dimension_writer import review_payload
-
             anticipated = [
                 min(
                     anticipated,
                     key=lambda c: len(
                         compact_prompt_json(
-                            dict(
-                                review_payload(
-                                    [c],
-                                    view,
-                                    review_version=3,
-                                    questions=[question],
-                                    plans=anticipated_plans,
-                                ),
-                                **metadata,
+                            atomic_review_payload(
+                                [c], view, [question], anticipated_plans, metadata
                             )
                         ).encode()
                     ),
@@ -737,14 +887,14 @@ async def execute_question_atomic_delivery(
             future_requests=requests,
             candidate_review_available=bool(anticipated and future_reviews),
         )
-        admitted = (
-            bool(anticipated and future_reviews) and diagnostic["current_request"]["admitted"]
-        )
+        actual_support_available = bool(_support_ref_catalog(payload, view.facts, sent))
+        admitted = actual_support_available and diagnostic["current_request"]["admitted"]
         forecast = dict(
             question_id=qid,
             contract="candidate-support-estimate-v2",
             version=2,
             predictive_only=True,
+            source_catalog_available=actual_support_available,
             all_atoms_delivery_guaranteed=False,
             generated_atom_limit=8,
             candidate_claim_count=candidate_count,
@@ -762,16 +912,14 @@ async def execute_question_atomic_delivery(
         if not admitted:
             reason = (
                 "question_candidate_support_unavailable"
-                if not anticipated
-                else "question_review_candidate_unavailable"
-                if not future_reviews
+                if not actual_support_available
                 else "question_delivery_budget_unavailable"
             )
             forecast["failure_reason"] = reason
             plan.update(state="deferred", reason=reason)
             gap = (
                 "claim_execution_budget_exceeded"
-                if anticipated and future_reviews
+                if actual_support_available
                 else "claim_generation_unavailable"
             )
             gaps = tuple(sorted(set(gaps) | {gap}))
@@ -805,7 +953,7 @@ async def execute_question_atomic_delivery(
             plan.update(state="deferred", reason="question_generation_transport_unverified")
             gaps = tuple(sorted(set(gaps) | {"claim_generation_unavailable"}))
             continue
-        actual = _expand_text_refs(parse_json(span.full_input.split("\nJSON:\n", 1)[1]))
+        actual = validated_review_payload(span.full_input.split("\nJSON:\n", 1)[1], payload)
         actual_dependencies = validate_atomic_handoff(service, record, actual, view)
         dependencies = tuple(dict.fromkeys((*dependencies, *actual_dependencies)))
         sent_ids.update(sent)
@@ -869,13 +1017,13 @@ async def execute_question_atomic_delivery(
                 future_requests=requests,
                 candidate_review_available=complete_tail,
             )
-            if not complete_tail or not diagnostic["current_request"]["admitted"]:
+            if not diagnostic["current_request"]["admitted"]:
                 plan.setdefault("omitted_review_claim_ids", []).extend(
                     row["id"] for row in batch["claims"]
                 )
                 gaps = tuple(sorted(set(gaps) | {"claim_execution_budget_exceeded"}))
                 continue
-            validate_atomic_handoff(service, record, batch, view)
+            validate_atomic_handoff(service, record, batch, view, review_projection_version=2)
             batch_claims = [c for c in valid if c.id in {row["id"] for row in batch["claims"]}]
             review_prompt = compact_prompt_json(batch)
             user = "\nJSON:\n" + review_prompt
@@ -906,10 +1054,15 @@ async def execute_question_atomic_delivery(
             if span is None:
                 gaps = tuple(sorted(set(gaps) | {"claim_review_invalid"}))
                 continue
-            actual = _expand_text_refs(parse_json(span.full_input.split("\nJSON:\n", 1)[1]))
+            actual = validated_review_payload(span.full_input.split("\nJSON:\n", 1)[1], batch)
             dependencies = tuple(
                 dict.fromkeys(
-                    (*dependencies, *validate_atomic_handoff(service, record, actual, view))
+                    (
+                        *dependencies,
+                        *validate_atomic_handoff(
+                            service, record, actual, view, review_projection_version=2
+                        ),
+                    )
                 )
             )
             compact["dispatches"].append(
@@ -921,7 +1074,7 @@ async def execute_question_atomic_delivery(
                 )
             )
             try:
-                reviews.extend(parse_atomic_reviews(response, batch_claims))
+                reviews.extend(parse_atomic_reviews(response, batch_claims, payload=actual))
             except (ValueError, TypeError, AttributeError):
                 gaps = tuple(sorted(set(gaps) | {"claim_review_invalid"}))
     compact["evidence_view"]["facts"] = [dict(id=fid) for fid in sorted(sent_ids)]
@@ -1041,7 +1194,8 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
         if span is None:
             gaps = tuple(sorted(set(gaps) | {"answer_semantic_review_unavailable"}))
             continue
-        validate_atomic_handoff(service, record, payload, view)
+        actual = validated_review_payload(span.full_input.split("\nJSON:\n", 1)[1], payload)
+        validate_atomic_handoff(service, record, actual, view)
         allowed = {c["id"] for c in payload["claims"]}
         full_claims = [c.model_dump(mode="json") for c in supported if c.id in allowed]
         parsed = parse_answer_coverage(
@@ -1080,7 +1234,7 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
 def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
     """Reconstruct current claims from actual generation and independent review transports."""
     from packages.agents.qa.question_context import _observations
-    from packages.agents.writer.dimension_writer import parse_json, review_payload
+    from packages.agents.writer.dimension_writer import parse_json
     from packages.orchestrator.question_packets import selection_receipt, validate_packets
     from packages.research.evidence.report_claims import audit_report_claims
     from packages.research.question_delivery import _expand_text_refs
@@ -1109,6 +1263,12 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
         raise ValueError("Atomic selection changed")
     scope = f"{view.competitor}/{view.dimension}"
     receipt = _observations(detail, "question_atomic_delivery", use.id, scope=scope)
+    review_projection_version = checked_review_projection_version(
+        receipt.get("review_projection_version", 1)
+    )
+    generation_projection_version = checked_generation_projection_version(
+        receipt.get("generation_projection_version", 1)
+    )
     questions = research_questions(detail, view.competitor, view.dimension)
     if (
         receipt["contract"] != CONTRACT
@@ -1139,6 +1299,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
     known_questions = {q["question_id"]: q for q in questions}
     record = SimpleNamespace(detail=detail, evidence_origin=None)
     generated, reviews, sent, seen, generated_qids, answers = {}, [], {}, set(), set(), {}
+    facts_by_question = {qid: [] for qid in known_questions}
     plan_rows = receipt["question_answer_plans"]
     if (
         not isinstance(plan_rows, list)
@@ -1174,13 +1335,17 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
             or span.metadata["llm_transport_attempts"] <= 0
             or digest(span.full_input) != dispatch["full_input_sha256"]
             or digest(span.full_output) != dispatch["full_output_sha256"]
-            or not span.full_input.startswith(SYSTEM_IDENTITY)
         ):
             raise ValueError("Atomic transport unverified")
         system, separator, raw = span.full_input.partition("\nJSON:\n")
         if (
             not separator
-            or system.rstrip("\n") != atomic_system(span.name, detail.output_language)
+            or system.rstrip("\n") != atomic_system(
+                span.name,
+                detail.output_language,
+                review_projection_version=review_projection_version,
+                generation_projection_version=generation_projection_version,
+            )
             or len(("\nJSON:\n" + raw).encode()) > min(14000, use.max_bytes)
         ):
             raise ValueError("Atomic context budget exceeded")
@@ -1191,15 +1356,21 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
             or payload.get("questions") != [known_questions[qid] for qid in ids]
         ):
             raise ValueError("Atomic dispatch use or questions changed")
-        validate_atomic_handoff(service, record, payload, view)
+        validate_atomic_handoff(
+            service, record, payload, view,
+            review_projection_version=review_projection_version if span.name == REVIEW_NAME else 1,
+        )
         seen.add(span.id)
         if span.name == GENERATION_NAME:
             if len(ids) != 1 or set(ids) & generated_qids:
                 raise ValueError("Atomic generation question repeated")
             qid = ids[0]
             expected = atomic_question_context(
-                service, record, view, packets, known_questions[qid], allowed, use
+                service, record, view, packets, known_questions[qid], allowed, use,
+                generation_projection_version=generation_projection_version,
             )
+            if generation_projection_version == 2:
+                validated_review_payload(raw, expected)
             if payload != expected:
                 raise ValueError("Atomic dispatched originals or support catalog changed")
             try:
@@ -1222,18 +1393,24 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                         ),
                     )
                 ]
+                if generation_projection_version == 2:
+                    plans[0]["task_results"] = missing_task_results(payload)
             if (
                 dispatch["claim_ids"] != [c.id for c in current]
                 or dispatch["fact_ids"]
                 != sorted(row["id"] for row in payload["evidence_view"]["facts"])
                 or planned[qid]["claim_ids"] != plans[0]["claim_ids"]
                 or planned[qid]["missing_fields"] != plans[0]["missing_fields"]
+                or generation_projection_version == 2
+                and planned[qid].get("task_results") != plans[0].get("task_results")
             ):
                 raise ValueError("Atomic output or plan changed")
-            actual_plans[qid] = plans[0]
+            actual_plans[qid] = {key: value for key, value in plans[0].items()
+                                 if key != "task_results"}
             generated_qids.add(qid)
             generated.update((c.id, (qid, c)) for c in current)
             sent.update((row["id"], row) for row in payload["evidence_view"]["facts"])
+            facts_by_question[qid] = payload["evidence_view"]["facts"]
         elif span.name == REVIEW_NAME:
             if len(ids) != 1 or ids[0] not in actual_plans:
                 raise ValueError("Atomic review question changed")
@@ -1246,24 +1423,28 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
             ):
                 raise ValueError("Atomic review claims changed")
             current = [generated[cid][1] for cid in claim_ids]
-            expected = dict(
-                review_payload(
-                    current,
-                    view,
-                    review_version=3,
-                    questions=payload["questions"],
-                    plans=[actual_plans[ids[0]]],
-                ),
-                **handoff_context(service, record, view, payload["questions"], use),
-                question_answer_plans=[actual_plans[ids[0]]],
+            expected = atomic_review_payload(
+                current,
+                view,
+                payload["questions"],
+                [actual_plans[ids[0]]],
+                handoff_context(service, record, view, payload["questions"], use),
+                review_projection_version=review_projection_version,
             )
+            if review_projection_version == 2:
+                validated_review_payload(raw, expected)
             if payload != expected or dispatch["fact_ids"] != sorted(
                 {fid for c in current for fid in c.fact_ids}
             ):
                 raise ValueError("Atomic review support changed")
             reviewed_claim_ids.update(claim_ids)
             try:
-                reviews.extend(parse_atomic_reviews(span.full_output, current))
+                reviews.extend(
+                    parse_atomic_reviews(
+                        span.full_output, current, payload=payload,
+                        review_projection_version=review_projection_version,
+                    )
+                )
             except (ValueError, TypeError, AttributeError):
                 # Reproduce the exact local parser failure without granting a
                 # review to this batch or invalidating independent peers.
@@ -1282,6 +1463,8 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
             expected = atomic_answer_payload(
                 service, record, payload["questions"], supported, view, use, compact
             )
+            if generation_projection_version == 2:
+                validated_review_payload(raw, expected)
             if (
                 payload != expected
                 or dispatch["claim_ids"] != [c["id"] for c in payload["claims"]]
@@ -1333,6 +1516,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
         claims=[c for _, c in generated.values()],
         reviews=reviews,
         facts=list(sent.values()),
+        facts_by_question=facts_by_question,
         sent_fact_ids=set(sent),
         answers=answers,
         receipt=receipt,

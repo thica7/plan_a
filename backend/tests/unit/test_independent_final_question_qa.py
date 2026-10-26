@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import httpx
 import pytest
+from question_review_fixture import review_payload as decode_review_payload
 from test_final_question_reconciliation import QUESTION, reviewed, scope_case
 
 from packages.agents.qa.question_reconciliation import reconcile_question_findings
@@ -15,7 +16,7 @@ from packages.schema.models import TraceSpan
 
 
 def payload_from(kwargs):
-    return json.loads(kwargs["user"].split("\nJSON:\n", 1)[1])
+    return decode_review_payload(kwargs["user"].split("\nJSON:\n", 1)[1])
 
 
 def context_for(payload, row):
@@ -390,7 +391,7 @@ async def test_actual_timeout_transport_preserves_byte_charge_and_checkpoint_on_
     requests = []
 
     async def post(url, payload, headers):
-        batch = json.loads(payload["messages"][1]["content"].split("\nJSON:\n", 1)[1])
+        batch = decode_review_payload(payload["messages"][1]["content"].split("\nJSON:\n", 1)[1])
         requests.append(batch)
         if len(requests) == 1:
             if timeout_kind == "provider_wrapped":
@@ -567,7 +568,8 @@ async def test_real_adapter_retains_any_timeout_across_later_failure_or_success(
     requests = []
 
     async def http_post(client, url, **kwargs):
-        batch = json.loads(kwargs["json"]["messages"][1]["content"].split("\nJSON:\n", 1)[1])
+        batch = decode_review_payload(
+            kwargs["json"]["messages"][1]["content"].split("\nJSON:\n", 1)[1])
         requests.append(batch)
         if len(requests) == 1:
             raise httpx.ReadTimeout("controlled first-provider timeout")

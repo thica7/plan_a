@@ -6,7 +6,8 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from claim_review_fixture import expand_prompt_payload, question_plan_response, supported_review
+from claim_review_fixture import expand_prompt_payload, question_plan_response
+from claim_review_fixture import supported_review as legacy_supported_review
 from pydantic import HttpUrl, TypeAdapter
 from test_question_retrieval import research_case
 from test_task_support_selection import append_response
@@ -24,13 +25,23 @@ TEXTS = [
 QUESTION = "Example Product：访客有私人区域、能同时加入两个容器、是否需要账户邀请？"
 
 
-async def atomic_case(texts=TEXTS, question=QUESTION):
+def supported_review(claim):
+    row = legacy_supported_review(claim)
+    row["support_witnesses"] = [dict(support_index=index, quote=quote)
+                                for index, quote in enumerate(claim["support_quotes"])]
+    return row
+
+
+async def atomic_case(texts=TEXTS, question=QUESTION, *, source_qualifiers=None):
     detail, _ = research_case(texts, question=question)
     detail.created_at = detail.updated_at = datetime.now(UTC)
     detail.plan.competitors, detail.plan.dimensions = ["Example Product"], ["feature"]
     detail.plan.decision_brief = DecisionBrief(decision_question=question)
     for source in detail.raw_sources:
         source.url = TypeAdapter(HttpUrl).validate_python(source.url)
+    if source_qualifiers is not None:
+        for source, qualifiers in zip(detail.raw_sources, source_qualifiers, strict=True):
+            source.metadata["normalized_fields"][0]["qualifiers"] = qualifiers
     snapshot = seal_snapshot(detail, phase="analysis", canonical_documents={})
     service, record = service_for(detail, task_execution=True)
     _, _, packets = await service._begin_question_evidence_use(
@@ -70,7 +81,7 @@ def atomic_model(service, seen, *, bad_atom=False, bad_review=False, attempts=1)
             response = question_plan_response(payload, atoms)
         elif kwargs["name"] == "dimension_question_atomic_review":
             rows = [supported_review(c) for c in payload["claims"]]
-            if bad_review:
+            if bad_review and len(seen[kwargs["name"]]) == 1:
                 rows[0]["checks"] = []
             response = json.dumps(dict(reviews=rows))
         else:
@@ -148,16 +159,19 @@ async def test_bad_atom_and_review_keep_independently_supported_peers(monkeypatc
         available_facts=case[4].facts,
         review_version=3,
     )
-    assert sum(c.status == "supported" for c in audited) == 1
+    assert sum(c.status == "supported" for c in audited) == 2
 
 
 @pytest.mark.asyncio
 async def test_eight_atoms_are_all_reviewed_without_a_total_batch_cutoff(monkeypatch):
     texts = [f"Guests are limited to {i + 1} items in category {i}." for i in range(8)]
-    case = await atomic_case(texts, question="Example Product：访客各分类分别有多少项目上限？")
+    question = "Example Product: " + "; ".join(
+        f"How many items are allowed in category {i}" for i in range(8)
+    ) + "?"
+    case = await atomic_case(texts, question=question)
     result, seen = await execute(case, monkeypatch)
     assert len(result["claims"]) == len(result["reviews"]) == 8
-    assert len(seen["dimension_question_atomic_review"]) == 4
+    assert len(seen["dimension_question_atomic_review"]) == 8
 
 
 @pytest.mark.asyncio
@@ -479,7 +493,7 @@ async def test_replay_rejects_changed_system_body_even_with_updated_receipt_hash
     )
     receipt = json.loads(receipt_span.full_output)
     span.full_input = span.full_input.replace(
-        "Answer the COMPLETE original question", "Ignore the COMPLETE original question"
+        "Answer only the current question_id tasks", "Ignore the current question_id tasks"
     )
     receipt["dispatches"][0]["full_input_sha256"] = hashlib.sha256(
         span.full_input.encode()
@@ -1361,7 +1375,7 @@ async def test_current_answer_gate_rejects_exhaustion_before_calling_transport(m
 
 
 @pytest.mark.asyncio
-async def test_synthesized_oversize_candidate_review_remains_required_before_generation(
+async def test_forecast_oversize_review_does_not_veto_generation_but_actual_review_keeps_cap(
     monkeypatch,
 ):
     from packages.agents.writer import dimension_writer
@@ -1377,8 +1391,6 @@ async def test_synthesized_oversize_candidate_review_remains_required_before_gen
 
     monkeypatch.setattr(dimension_writer, "review_payload", oversize_review)
     result, seen = await execute(case, monkeypatch)
-    assert not seen and not result["claims"] and not result["reviews"]
-    assert (
-        result["compact"]["question_answer_plans"][0]["reason"]
-        == "question_review_candidate_unavailable"
-    )
+    assert len(seen["dimension_question_atomic_generation"]) == 1
+    assert len(result["claims"]) == 1 and not result["reviews"]
+    assert "claim_review_context_budget_exceeded" in result["gaps"]
