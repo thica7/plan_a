@@ -12,6 +12,7 @@ from packages.research.evidence.answer_coverage_models import AnswerSubquestionB
 from packages.research.evidence.snapshot_models import canonical_json
 
 CONTRACT = "subquestion-premises-v1"
+CONTRACT_V2 = "subquestion-premises-v2"
 _RESOURCE_NAME = r"[A-Z](?:[0-9]{1,3})?"
 _RESOURCE_NOUN = r"(?:boards?|看板|白板|vaults?|保险库|folders?|文件夹|workspaces?|工作区|resources?|资源)"
 
@@ -356,7 +357,9 @@ def bind_subquestions(rows, question, claims):
     return tuple(bindings)
 
 
-def subquestion_binding_reasons(record, claims, *, required=False):
+def subquestion_binding_reasons(record, claims, *, required=False, answer_review_contract=CONTRACT):
+    if answer_review_contract not in {CONTRACT, CONTRACT_V2}:
+        return ('answer_review_contract_invalid',)
     bindings = record.subquestion_bindings
     resource_reasons = named_resource_outcome_reasons(record, claims)
     if not bindings:
@@ -387,7 +390,10 @@ def subquestion_binding_reasons(record, claims, *, required=False):
             not selected or binding.conclusion == "unknown" or binding.relation == "unresolved"
         ):
             reasons.add("answer_subquestion_premise_missing")
-        if binding.conclusion == "no" and not _negative_supported(binding, selected):
+        if binding.conclusion == "no" and not (
+            _negative_supported_v2(binding, selected)[0] if answer_review_contract == CONTRACT_V2
+            else _negative_supported(binding, selected)
+        ):
             reasons.add("answer_subquestion_negative_unproven")
         outcomes.append(binding.conclusion)
     if record.question[cursor:].strip():
@@ -397,3 +403,265 @@ def subquestion_binding_reasons(record, claims, *, required=False):
     if record.conclusion in {"yes", "no"} and any(value != record.conclusion for value in outcomes):
         reasons.add("answer_subquestion_conclusion_mismatch")
     return tuple(sorted(reasons))
+
+
+def _decision_question(text):
+    # Remove only this complete source-reading instruction, never its target
+    # predicate or a scenario condition involving an actual business page.
+    return re.sub(r'仅依据所给(?:官方)?页面[，,]\s*逐项(?:回答|判断)[：:]', '', text)
+
+
+_FINITE_UNSAFE = re.compile(
+    r'\b(?:if|unless|when|assuming|provided|recommend\w*|suggest\w*|not|never|'
+    r'unconfirmed|unverified|may|might|could|would|cannot)\b'
+    r'|如果|若|仅当|除非|假设|假定|建议|推荐|并非|不是|未确认|未核实|不只|不仅|不限|例如|比如|示例'
+    r'|不能(?:说|认定|确定|断言|认为)|无法(?:确认|确定|证明)|未(?:确认|证实|核实)|可能|也许|或许|不一定|未必'
+    r'|[“”‘’「」『』"]', re.I)
+_FINITE_PLAN = re.compile(r'\b(free|paid|premium|enterprise|business|standard)\b', re.I)
+_COUNT_ACTIONS = {
+    'share': r'\bshar(?:e[ds]?|ing)\b|共享|分享',
+    'join': r'\b(?:join\w*|invit\w*)\b|加入',
+    'access': r'\baccess\b|访问',
+    'edit': r'\bedit\w*\b|编辑|修改',
+    'delete': r'\b(?:delet\w*|remov\w*)\b|删除|移除',
+    'create': r'\bcreat\w*\b|创建|新建',
+}
+
+
+def _count_clause(text, match):
+    before = re.split(r'[,，。；;.!?？\n]', text[:match.start()])[-1]
+    after = re.split(r'[,，。；;.!?？\n]', text[match.end():], maxsplit=1)[0]
+    # A noun such as "shared vault" is not itself a sharing operation.
+    return before + ' ' + after
+
+
+def _count_actions(text):
+    from packages.agents.writer.answer_action_scope import _ACTIONS
+    return {key for key, pattern in (_COUNT_ACTIONS | _ACTIONS).items()
+            if re.search(pattern, text, re.I)}
+
+
+def _count_occurrences(text):
+    for unit, pattern in _UNITS.items():
+        if unit == 'vaults':
+            pattern = (r'(?:个\s*)?(?:由[^，。；;!?？\n]{1,40}选择的)?'
+                       r'(?:(?:shared\s+|private\s+)?vaults?|(?:共享|私人|私有|个人)?保险库)')
+        for match in re.finditer(rf'(?P<n>{_COUNT})\s*{pattern}', text, re.I):
+            raw = match['n'].casefold()
+            yield unit, int(raw) if raw.isdigit() else _NUMBERS[raw], match
+
+
+def _finite_scope_matches(question, text):
+    requested, offered = _scope_objects(_decision_question(question)), _scope_objects(text)
+    for key, pattern in (('private_vault', r'(?<![A-Za-z])private\s+vaults?(?![A-Za-z])'),
+                         ('shared_vault', r'(?<![A-Za-z])shared\s+vaults?(?![A-Za-z])')):
+        if re.search(pattern, question, re.I):
+            requested.add(key)
+        if re.search(pattern, text, re.I):
+            offered.add(key)
+    if 'vault' in offered:
+        offered |= {'shared_vault', 'private_vault'}
+    if not requested <= offered:
+        return False
+    plans = set(word.casefold() for word in _FINITE_PLAN.findall(question))
+    other = set(word.casefold() for word in _FINITE_PLAN.findall(text))
+    if plans and other and not other <= plans:
+        return False
+    def names(value):
+        return {m.group().casefold() for m in re.finditer(
+            rf'{_RESOURCE_NOUN}\s*{_RESOURCE_NAME}(?![A-Za-z0-9_])', value, re.I)}
+    if names(text) and names(question) != names(text):
+        return False
+    from packages.agents.writer.answer_resolution import _subjects
+    wanted, _ = _subjects(_decision_question(question))
+    actual, _ = _subjects(text)
+    return not (wanted and actual and wanted.isdisjoint(actual))
+
+
+def finite_decision_witnesses(binding, selected):
+    """Finite eligibility witnesses, reconstructed from whole published atoms.
+
+    They do not replace source/schema or independent semantic review. No model
+    witness, reason, unseen fact, or conditional fragment supplies a premise.
+    """
+    question = binding.question_quote
+    witnesses = {}
+    if re.search(
+        r"并非|不是|不能|无法|不意味|不推出|\b(?:not|never|false|incorrect)\b", question, re.I
+    ):
+        return witnesses
+    for claim in selected:
+        text = claim['text']
+        if _FINITE_UNSAFE.search(text) or not _finite_scope_matches(question, text):
+            continue
+        if claim.get('kind') == 'fact' and not re.search(r'或|\bor\b', question, re.I):
+            for unit, maximum, cap in _count_occurrences(text):
+                before, after = text[:cap.start()], text[cap.end():]
+                limit = re.search(
+                    r'(?:\bonly|\bup\s+to|\bat\s+most|\bmaximum\s+of|最多|至多|上限为?|仅限|不超过)'
+                    r'\s*(?:(?:只能|仅能|可|可以)?(?:使用|提供|拥有|包含|支持|容纳|允许)(?:在)?\s*)?$'
+                    r'|(?:只能|仅能|只可|仅可)(?:被邀请)?(?:访问|加入)\s*$', before, re.I)
+                at_time = bool(re.search(r'一次|\bat\s+a\s+time\b', before + after, re.I))
+                if (
+                    not limit
+                    or at_time
+                    and not re.search(r"同时|\bsimultaneous\w*\b|\bconcurrent\w*\b", question, re.I)
+                ):
+                    continue
+                for wanted_unit, required, request in _count_occurrences(question):
+                    cap_clause, request_clause = (
+                        _count_clause(text, cap),
+                        _count_clause(question, request),
+                    )
+                    if (wanted_unit == unit and maximum < required
+                            and _count_actions(cap_clause) == _count_actions(request_clause)):
+                        witnesses.setdefault(
+                            "upper_bound",
+                            dict(
+                                kind="upper_bound",
+                                claim_id=claim["id"],
+                                cap_quote=cap.group(),
+                                request_quote=request.group(),
+                                unit=unit,
+                                maximum=maximum,
+                                required=required,
+                            ),
+                        )
+        if (re.search(r'意味|推出|\b(?:mean|imply|entail)', question, re.I)
+                and re.search(r'必须|义务|\b(?:must|required|obligat)', question, re.I)
+                and re.search(r'可以|允许|\b(?:can|may|allowed|permitted)\b', text, re.I)):
+            from packages.agents.writer.answer_action_scope import (
+                _ACTIONS,
+                requested_answer_actions,
+            )
+
+            implication = re.search(r'意味|推出|\b(?:mean|imply|entail)', question, re.I)
+            actions = requested_answer_actions(question)
+            permitted = {action for action, pattern in _ACTIONS.items()
+                         if re.search(pattern, question[:implication.start()], re.I)}
+            required = {action for action, pattern in _ACTIONS.items()
+                        if re.search(pattern, question[implication.end():], re.I)}
+            # A stated duty (outside the limited denial of entailment) cannot
+            # gain this shortcut from its neighbouring permission clause.
+            remainder = re.sub(r'并?不(?:构成|意味|推出)[^。；;.!?？]*', '', text)
+            if actions and permitted == required == actions and not re.search(
+                    r'必须|义务|\b(?:must|required|obligat)', remainder, re.I):
+                if all(re.search(_ACTIONS[action], text, re.I) for action in actions):
+                    witnesses.setdefault(
+                        "permission_entailment",
+                        dict(
+                            kind="permission_entailment",
+                            claim_id=claim["id"],
+                            permission_quote=text,
+                            requested_actions=sorted(actions),
+                        ),
+                    )
+    return witnesses
+
+
+def _negative_supported_v2(binding, selected):
+    if binding.relation in {'upper_bound', 'permission_entailment'}:
+        witness = finite_decision_witnesses(binding, selected).get(binding.relation)
+        return bool(witness), witness
+    question = _decision_question(binding.question_quote)
+    if binding.relation == 'explicit_negative':
+        selected = [claim for claim in selected if not re.search(
+            r'不能(?:说|认定|确定|断言|认为)|无法(?:确认|确定|证明)|未(?:确认|证实|核实)|可能|也许|或许|不一定|未必'
+            r'|\b(?:unconfirmed|unverified|may|might|could|would)\b'
+            r'|\bcannot\s+(?:say|confirm|determine|assert)\b', claim['text'], re.I)]
+    return _negative_supported(
+        binding.model_copy(update={"question_quote": question}), selected
+    ), None
+
+
+def canonical_subquestions_v2(rows, question, claims, parent_claim_ids):
+    """Keep individually qualified peers; receipt diagnostics bind every change."""
+    if not isinstance(rows, list) or not 1 <= len(rows) <= 8:
+        raise ValueError('missing subquestion decisions')
+    bindings = []
+    for row in rows:
+        if (
+            not isinstance(row, dict)
+            or set(row) != {"question_quote", "claim_ids", "conclusion", "relation"}
+            or not isinstance(row["claim_ids"], list)
+        ):
+            raise ValueError('invalid subquestion decision')
+        bindings.append(AnswerSubquestionBinding(**row, support_digest='0' * 64))
+    canonical, adjustments, witnesses = [], [], []
+    cursor = 0
+    for index, binding in enumerate(bindings):
+        start = question.find(binding.question_quote, cursor)
+        if start < 0 or question.find(binding.question_quote, start + 1) >= 0:
+            raise ValueError('ambiguous or incomplete subquestion partition')
+        gap = question[cursor:start]
+        if gap.strip():
+            if not index or not re.fullmatch(r'\s*[,，;；、]\s*', gap):
+                raise ValueError('incomplete subquestion partition')
+            canonical[-1]['question_quote'] += gap
+            adjustments.append(dict(kind='separator_restored', branch_index=index - 1,
+                                    offset=cursor, separator=gap))
+        canonical.append(
+            dict(
+                question_quote=binding.question_quote,
+                claim_ids=list(binding.claim_ids),
+                conclusion=binding.conclusion,
+                relation=binding.relation,
+            )
+        )
+        cursor = start + len(binding.question_quote)
+    if question[cursor:].strip():
+        raise ValueError('incomplete subquestion partition')
+    by_id = {claim['id']: claim for claim in claims}
+    for index, row in enumerate(canonical):
+        ids = row['claim_ids']
+        if row['conclusion'] == 'unknown' or row['relation'] == 'unresolved':
+            if ids or row['conclusion'] != 'unknown' or row['relation'] != 'unresolved':
+                adjustments.append(dict(kind='branch_demoted', branch_index=index,
+                    original_conclusion=row['conclusion'], original_relation=row['relation'],
+                    original_claim_ids=list(ids)))
+            row.update(claim_ids=[], conclusion='unknown', relation='unresolved')
+            continue
+        valid = (len(ids) == len(set(ids)) and set(ids) <= set(parent_claim_ids)
+                 and set(ids) <= by_id.keys())
+        selected = [by_id[cid] for cid in ids] if valid else []
+        binding = AnswerSubquestionBinding(**row, support_digest='0' * 64)
+        witness = None
+        if valid and row['conclusion'] == 'no':
+            valid, witness = _negative_supported_v2(binding, selected)
+            if not valid and row['relation'] == 'explicit_negative':
+                candidates = finite_decision_witnesses(binding, selected)
+                if len(candidates) == 1:
+                    relation, witness = next(iter(candidates.items()))
+                    adjustments.append(dict(kind='relation_restored', branch_index=index,
+                        original_relation=row['relation'], applied_relation=relation))
+                    row['relation'], valid = relation, True
+        if row['conclusion'] not in {'unknown', 'not_applicable'} and not selected:
+            valid = False
+        if valid and row['conclusion'] != 'unknown':
+            from packages.agents.writer.answer_action_scope import (
+                _ACTIONS,
+                requested_answer_actions,
+            )
+            from packages.agents.writer.answer_resolution import resolution_reasons
+
+            body = '\n'.join(claim['text'] for claim in selected)
+            local = dict(
+                status="answered",
+                answer=body,
+                resolution="direct",
+                conclusion=row["conclusion"],
+                claim_ids=ids,
+                evidence_spans=[dict(claim_id=c["id"], quote=c["text"]) for c in selected],
+            )
+            valid = not resolution_reasons(
+                local, _decision_question(row["question_quote"]), selected
+            )
+            valid &= all(re.search(_ACTIONS[action], body, re.I)
+                         for action in requested_answer_actions(row['question_quote']))
+        if not valid:
+            adjustments.append(dict(kind='branch_demoted', branch_index=index,
+                original_conclusion=row['conclusion'], original_relation=row['relation']))
+            row.update(claim_ids=[], conclusion='unknown', relation='unresolved')
+        elif witness:
+            witnesses.append(dict(branch_index=index, **witness))
+    return canonical, dict(adjustments=adjustments, finite_witnesses=witnesses)

@@ -1102,10 +1102,12 @@ async def test_live_checkpoint_current_requests_run_despite_nonbinding_future_fo
         name = next(
             name
             for name in (atomic.GENERATION_NAME, atomic.REVIEW_NAME, atomic.ANSWER_NAME)
-            if system == atomic.atomic_system(
-                name, record.detail.output_language,
-                review_projection_version=3, generation_projection_version=4,
-            )
+            if system in {
+                atomic.atomic_system(name, record.detail.output_language,
+                    review_projection_version=3, generation_projection_version=4,
+                    answer_review_contract=contract)
+                for contract in ('subquestion-premises-v1', 'subquestion-premises-v2')
+            }
         )
         transported.append(name)
         if name == atomic.GENERATION_NAME:
@@ -1161,6 +1163,7 @@ async def test_live_checkpoint_current_requests_run_despite_nonbinding_future_fo
         allowed,
         boundaries,
         (),
+        answer_review_contract="subquestion-premises-v2",
     )
     audited = audit_report_claims(
         result["claims"],

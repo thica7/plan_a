@@ -960,7 +960,8 @@ class DimensionWriterMixin:
                 and compact.get('question_atomic_contract') == 'question-atomic-delivery-v1'):
             from packages.agents.writer.question_atomic_delivery import atomic_answer_coverage
             coverage, gaps, sizes = await atomic_answer_coverage(
-                self, record, pending, compact, supported, view, use, gaps)
+                self, record, pending, compact, supported, view, use, gaps,
+                answer_review_contract='subquestion-premises-v2')
         elif pending and supported:
             task_workflow = 'question_task_ledger' in compact
             payload = compact_prompt_json(answer_review_payload(pending, supported, view,
@@ -1127,13 +1128,30 @@ class DimensionWriterMixin:
         # Preserve actual source/context gaps while using the finite local result.
         for qid, answer in clarification_candidates.items():
             current = by_id[qid]
-            if current.status != 'answered' and not is_qualified_partial_clarification(current, published, facts=view.facts):
+            if current.status != "answered" and not is_qualified_partial_clarification(
+                current,
+                published,
+                facts=view.facts,
+                answer_review_contract=compact.get(
+                    "answer_review_contract", "subquestion-premises-v1"
+                ),
+            ):
                 by_id[qid] = answer
         coverage = tuple(by_id[question['question_id']] for question in questions)
         if price_answers:
             gaps = tuple(sorted(set(gaps) | {'current_price_unverified'}))
-        if any(item.status != 'answered' and not is_qualified_partial_clarification(
-                item, published, facts=view.facts) for item in coverage):
+        if any(
+            item.status != "answered"
+            and not is_qualified_partial_clarification(
+                item,
+                published,
+                facts=view.facts,
+                answer_review_contract=compact.get(
+                    "answer_review_contract", "subquestion-premises-v1"
+                ),
+            )
+            for item in coverage
+        ):
             gaps = tuple(sorted(set(gaps) | {'answer_coverage_incomplete'}))
         return coverage, gaps, sizes
 
@@ -1322,7 +1340,8 @@ class DimensionWriterMixin:
                         )
                         task_result = await execute_question_atomic_delivery(
                             self, record, selected, view, use, questions,
-                            question_packets, allowed, boundaries, gaps)
+                            question_packets, allowed, boundaries, gaps,
+                            answer_review_contract='subquestion-premises-v2')
                     else:
                         from packages.agents.writer.task_execution import execute_question_tasks
                         task_result = await execute_question_tasks(
@@ -1668,13 +1687,25 @@ class DimensionWriterMixin:
                         gaps = tuple(sorted(set(gaps) | {reason}))
                 if not any(c.status == "supported" for c in audited):
                     gaps = tuple(sorted(set(gaps) | {"no_reviewed_claims"}))
-                audit = ReportDimensionAudit(competitor=product, dimension=dimension, consumption_id=use.id,
-                    claims=tuple(audited), gaps=gaps, review_context_bytes=tuple(sizes), answer_coverage=coverage,
-                    answer_binding_version=3 if questions else 2, claim_review_version=3 if questions else None,
-                    answer_review_contract="subquestion-premises-v1" if questions else None,
+                audit = ReportDimensionAudit(
+                    competitor=product,
+                    dimension=dimension,
+                    consumption_id=use.id,
+                    claims=tuple(audited),
+                    gaps=gaps,
+                    review_context_bytes=tuple(sizes),
+                    answer_coverage=coverage,
+                    answer_binding_version=3 if questions else 2,
+                    claim_review_version=3 if questions else None,
+                    answer_review_contract=compact.get(
+                        "answer_review_contract", "subquestion-premises-v1"
+                    )
+                    if questions
+                    else None,
                     upstream_dependencies=upstream_dependencies,
-                    question_atomic_contract=compact.get('question_atomic_contract'),
-                    question_atomic_receipt_digest=compact.get('question_atomic_receipt_digest'))
+                    question_atomic_contract=compact.get("question_atomic_contract"),
+                    question_atomic_receipt_digest=compact.get("question_atomic_receipt_digest"),
+                )
                 audits.append(audit)
                 self._validate_evidence_use(record, use)
                 self._trace_local_tool(record, agent="writer", subagent=f"{product}/{dimension}",

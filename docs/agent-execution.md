@@ -4,7 +4,9 @@
 
 **预算口径：** 下文历史复验中的24次调用／80000 token是当时的诊断配置，不是生产配置默认值。实际运行受部署设置、研究模式和已持久化额度约束；代码中 `run_llm_max_calls` 默认160，`run_llm_max_tokens=0` 表示不单设全局token上限，费用及其他限制仍适用。每轮验收须另列实际配置，不能把不同预算的结果称为同条件对照。
 
-本轮[原表格、完整选证与最终QA补修](optimization/2026-10-27-answer-delivery-followup.md)：**直接问答2/8题、11/22分支、0/4报告，尚未整体达标**。冻结语义覆盖4/8题、16/22分支与直接交付分别计。Collector v3原表上下文、Writer生成v4／审核v3、QA v7已接实际入口；17条唯一主张完整所选支持16、单谓词11。QA28个唯一项均实际送达有效，29行完整重建，单坏行续审不丢合法同行。后端8204通过／1跳过，新增93项；17文件Ruff新增0／遗留67（退出1）。四家78次transport／253908已知token，usage未知0；没有额外角色隔离。实际原件保留，下一批修最终回答守卫及局部交付，不把协议通过冒充正文合格。[结构化结果](optimization/2026-10-27-answer-delivery-followup-results.json)。
+本轮[最终答案交付与QA目标修复](optimization/2026-10-27-answer-guard-qa-target-delivery.md)：**直接2/8题、13/22分支、0/4完整报告，仍未达标**。尾答前提v2、未知分支空引用／局部角色对象审核、QA8目标分离已接实际实验入口并双审。13条可见唯一主张完整支持13、单谓词6；冻结规则覆盖3/8题、15/22分支。QA31计划／25送达／24有效，17阻断、6超窗未送、1项两次格式失败。后端8267通过／1跳过；18变更Python Ruff新增0，历史540（基线555）。正式四家72调用／235840已知token另1次usage未知，Trello Analyst超时回退，其余11核心阶段模型成功；旧SYS单独诊断1调用／1764token另列。四份真实报告原样提交，未训练、默认开关仍0。[结构化结果](optimization/2026-10-27-answer-guard-qa-target-results.json)。
+
+上一轮[原表格、完整选证与最终QA补修](optimization/2026-10-27-answer-delivery-followup.md)：**直接问答2/8题、11/22分支、0/4报告，尚未整体达标**。冻结语义覆盖4/8题、16/22分支与直接交付分别计。Collector v3原表上下文、Writer生成v4／审核v3、QA v7已接实际入口；17条唯一主张完整所选支持16、单谓词11。QA28个唯一项均实际送达有效，29行完整重建，单坏行续审不丢合法同行。后端8204通过／1跳过，新增93项；17文件Ruff新增0／遗留67（退出1）。四家78次transport／253908已知token，usage未知0；没有额外角色隔离。实际原件保留，下一批修最终回答守卫及局部交付，不把协议通过冒充正文合格。[结构化结果](optimization/2026-10-27-answer-delivery-followup-results.json)。
 
 上一轮[已采证据到最终答案的交付复验](optimization/2026-10-26-answer-delivery-repair.md)：**原八题2/8，正文与证据完整1/4、系统交付0/4，默认仍关闭**。22分支11通过／1部分／10失败。13条唯一主张严格完整支持12、单谓词7。QA29项25项schema/身份有效、18项服务端完整重建；BW一条坏digest拒绝整批4项，1Password七项输入取证未验。12个核心模块均实际调用，CF Analyst解析失败后回退；七角色隔离3通过／4部分。后端8111通过／1跳过，新增103项；Ruff新增0、遗留25项。84调用／274288已知token，另1次usage未知；不是新抓取／全Graph／生产稠密RAG验收，未训练。[结构化结果](optimization/2026-10-26-answer-delivery-repair-results.json)。
 
@@ -54,7 +56,19 @@
 
 此前真实验证见[完整证据与答案发表恢复](optimization/2026-10-18-evidence-recovery-delivery.md)：5664项后端通过，四组40次真实调用；正文3正确／1错误／4遗漏，记录2正确／6遗漏，仍0/4报告达标。下面是有限规则及实际入口；中文数量结论误拒、下载规则投影遗漏、计费行／FAQ漏提取和错误缺证陈述仍未解决。实现检查通过不等于语义验收。
 
-## 当前生成v4、单主张审核v3与最终QA v7（2026-10-27）
+## 当前尾答前提v2与最终QA v8（2026-10-27）
+
+- `question_atomic_delivery.py` 保持GEN v4／单主张REVIEW v3；新实验入口显式使用 `subquestion-premises-v2`，公开回答绑定仍为version3。真实完整ANSWER SYSTEM决定解析合同，payload、receipt、audit必须一致；每次内部`answer_validation`从原响应及本题已审主张重建有限见证、调整和规范答案摘要，删改或局部重签不能降级。
+- `subquestion_premises.py` 只为同单位、对象、操作、套餐明确上限与许可不推出义务提供有限见证。一次访问上限仅否定同时请求；未知条件、外层否定、建议、错对象／角色等继续拒绝。仅唯一有序分段之间的纯分隔标点可恢复，不补词或前提。原模型响应和负面主张审核保持。
+- `answer_coverage.py` 逐分支保留本题白名单中的已审合法结论；unknown／unresolved清空引用并保留缺口，全坏未核实，不适用澄清字段不会抹掉合法局部。局部角色与对象检查实际执行，不能由其他分支的合集补齐。`answer_presentation.py`与QA使用认证audit的同一合同，局部结果仍partial，不伪造整题完成。
+- `independent_question_review.py` 新QA8为每个服务器finding绑定`verification_target`。只有producer有效、原请求确实缺输入、唯一父请求绑定、完整canonical正文且无产品主张的当前独立澄清，使用`canonical_clarification_delivery`。其余当前事实及全部历史问题使用`complete_finding_resolution`；历史不能借当前澄清解除。
+- 模型必须真实返回对应目标的`current_limitation / finding_fully_addressed=true / remaining_gaps=[]`才能认可澄清交付；原答案保持`partial / clarification / missing_fields / depends`，事实仍未解决。`keep`、false、有缺口、diagnostic_only均保留，不由服务端改写。
+- `question_review_transport.py`仅QA8按`(question_id, verification_target)`分批，同题完整context仍可浅层共享。目标进入support digest、basis、实际wire、SYSTEM和缓存重建；旧QA5／6／7字节及显式行为保持。六批总窗口、每项累计两次、初次优先及有效负面不重试规则不变，历史超窗或预算未送仍pending／blocker。
+- QA8 SYSTEM为5200 UTF-8 bytes、user8192B、输出1600，新请求保护15250。保留已有checkpoint额度及费用，不提升全局上限。完整真实QA入口、持久化恢复、旧原件回放与正文质量分别验证；合同通过不能证明报告合格。默认实验开关仍关闭，未训练。
+
+当前真实正文、逐题得分与剩余缺口见[本轮交付](optimization/2026-10-27-answer-guard-qa-target-delivery.md)。
+
+## 历史生成v4、单主张审核v3与最终QA v7（2026-10-27）
 
 - Collector 新默认 `question-focus-v3:<focus>` 保留同一连续 Markdown 原表格的真实表头、分隔行和全部相邻注释。完整行唯一定位、列数一致、完整上下文不超过4096字符才进入通用表格路径；不跨段拼接。表前共享限制同样保留，不套用旧角色列专用过滤。历史显式v1/v2、角色列与计费合同保持。
 - `atomic_question_projection.py` 和 `readable_support.py` 在实际字节计量前接线v4：任务 `advisory_support_refs` 仅排序建议，`support_catalog` 是本题真实发送的合法完整目录。选择提示之外的成员仍须通过同源、完整条件、支持绑定及逐条审核；池内未发送成员无引用资格。保持14KB输入、数量与计费容量、公平分配及最多8条，旧v1/v2/v3投影及SYSTEM保持。
@@ -63,7 +77,7 @@
 - `independent_question_review.py` 先处理初次队列，再用剩余最多六批／每项累计两次的额度续审成功返回但无效或缺席的项目。有效keep不重发，超时／服务失败后续恢复，未送项不空转。缓存从真实span重建有效／无效／缺席、尝试和超时；超时只接受实际绑定span的正整数计数，不能靠收据改写。
 - QA v7 SYSTEM为4289B、user8192B、输出1600，请求保护14339；新建阶段使用新保护，旧持久化额度与用量不改。背景日期不自动变成额外产品政策证明义务，明确上限只支持给定场景下的有界否定。真实日期例外、未知前提、漏答及独立结构问题仍阻断；服务器不改写模型语义意见。必要澄清可合理partial，不证明产品事实或全局报告合格。
 
-本轮实现与真实正文验收分别见[补修记录](optimization/2026-10-27-answer-delivery-followup.md)。默认实验开关仍关闭，不训练模型。
+该历史轮实现与真实正文验收分别见[补修记录](optimization/2026-10-27-answer-delivery-followup.md)。默认实验开关仍关闭，不训练模型。
 
 ## 上一轮生成v3、单主张审核v3与最终QA v6（2026-10-26）
 
@@ -328,9 +342,9 @@ v3 逐条隔离支持审核：仅选定 operation quote／source span 及完整�
 
 实验任务入口使用 [`independent_question_review.py`](../backend/packages/agents/qa/independent_question_review.py)，从当前 report audit 的真实原题建立独立检查，优先于历史 Reflector finding；反思无 finding 或回退不会因此跳过最终逐题审核。模型核对实际可见正文和所选支持，资格不足只能诊断，不能解除阻断。完全缺少 audit 时依赖现有报告缺失阻断，零候选收据为 `not_requested`，不声称模型已审。
 
-以下为历史 `independent_questions_v2` 合同，当前入口以页首v7／8192B／14339预留为准。该历史模式每次最多六批，每批最多10项与6000 UTF-8 bytes；完整题目上下文装不下则整项保留未送，不裁前提。未送项优先于已付费失败项，同类先审原题，再审历史问题。合法同行缓存；失败、超时与未送项可在后续审核调用中按剩余预算续审，不是无界或后台自动重试。每项最多两次实际请求，provider 内置重试及备用 provider 共用本次剩余额度；`max_request_attempts` 经实际调用预算约束，不修改共享 settings，默认 None 保留其他入口的旧行为。
+以下为历史 `independent_questions_v2` 合同，当前入口以页首v8／8192B／15250预留为准。该历史模式每次最多六批，每批最多10项与6000 UTF-8 bytes；完整题目上下文装不下则整项保留未送，不裁前提。未送项优先于已付费失败项，同类先审原题，再审历史问题。合法同行缓存；失败、超时与未送项可在后续审核调用中按剩余预算续审，不是无界或后台自动重试。每项最多两次实际请求，provider 内置重试及备用 provider 共用本次剩余额度；`max_request_attempts` 经实际调用预算约束，不修改共享 settings，默认 None 保留其他入口的旧行为。
 
-历史v2预算说明（非当前v7额度）：`expected_claim_ids` 显式给出整题 answer 的回显身份，`task_support_claim_ids` 另列同题局部支持；审核返回仍须严格等于整题 IDs，包括空列表，不能用局部任务 ID 替代或把局部支持升级为整题完成。新运行最终QA预留覆盖完整 system＋6000B user＋256余量＋1600输出（该历史阶段11000）；最终回答12000、全局24调用／80000 token不变。调用预留按真实问题数有界安排且不超全局；旧明确持久化预留保持。可继续派送的待审项保留阶段，新 basis 只重开阶段、不清零旧用量，完成或已无可继续项时释放。
+历史v2预算说明（非当前v8额度）：`expected_claim_ids` 显式给出整题 answer 的回显身份，`task_support_claim_ids` 另列同题局部支持；审核返回仍须严格等于整题 IDs，包括空列表，不能用局部任务 ID 替代或把局部支持升级为整题完成。新运行最终QA预留覆盖完整 system＋6000B user＋256余量＋1600输出（该历史阶段11000）；最终回答12000、全局24调用／80000 token不变。调用预留按真实问题数有界安排且不超全局；旧明确持久化预留保持。可继续派送的待审项保留阶段，新 basis 只重开阶段、不清零旧用量，完成或已无可继续项时释放。
 
 `planned_issue_ids`、`sent_issue_ids`、`valid_review_issue_ids`、`unsent_issue_ids` 与 `model_unreviewed_issue_ids` 分开；`completed` 要求已有候选全部返回合法审核，不表示报告已通过。历史 `timeout_issue_ids` 与仍未完成的 `unresolved_timeout_issue_ids` 分开：真实 adapter 的 `llm_timeout_attempts` 不被后续错误或成功覆盖。无 usage 按完整输入字节上界加输出预留保守记账；缓存不伪造新 transport，checkpoint恢复保留已扣账。异常链只保留新建脱敏 cause 和超时类型，不能借诊断回显凭证。
 
@@ -404,7 +418,7 @@ Collector 对校验通过的上下文保留完整片段，避免原先的 1000 �
 
 上一轮[事实保留与回答复核回归](optimization/2026-10-18-answer-preservation-delivery.md)使用同一已曝光八题：40 调用／151462 token，4 正确、2 错误、2 遗漏，0/4 完整报告达到内容标准。二次模型审核仍未纠正 SSO 例外和取消共享结论，运行时零阻断不能作正确性证明；两道计费题仍未答。模型调用和工程测试通过均不转成训练成功标签，后续需先补例外闭合与计费意图／准入。
 
-以下为历史11000 QA预留调整记录，当前新运行最终QA以页首v7的14339预留为准。该历史实验任务模式新运行的最终回答预留为12000 token；对应单次完整回答审核请求最多10000 UTF-8 bytes，加256记账余量和1600输出，最坏11856不超过预留。最终QA预留11000，其他全局调用／token／费用上限不变。旧checkpoint中的20000回答及既有QA额度保留，不在恢复时压缩；未完成的后续阶段继续受保护。超窗时保留未核实，不裁来源条件或伪造审核成功。这一调整经过实际 admission／transport 回放，但没有根治所有任务延期。
+以下为历史11000 QA预留调整记录，当前新运行最终QA以页首v8的15250预留为准。该历史实验任务模式新运行的最终回答预留为12000 token；对应单次完整回答审核请求最多10000 UTF-8 bytes，加256记账余量和1600输出，最坏11856不超过预留。最终QA预留11000，其他全局调用／token／费用上限不变。旧checkpoint中的20000回答及既有QA额度保留，不在恢复时压缩；未完成的后续阶段继续受保护。超窗时保留未核实，不裁来源条件或伪造审核成功。这一调整经过实际 admission／transport 回放，但没有根治所有任务延期。
 
 ### 部署、缓存和中断恢复
 

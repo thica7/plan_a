@@ -33,7 +33,9 @@ def audit_heading(audit, language):
     return f"### {plain(audit.competitor)} — {plain(dimension)}"
 
 
-def answer_decision_lines(answer, language, *, claims=()):
+def answer_decision_lines(
+    answer, language, *, claims=(), answer_review_contract="subquestion-premises-v1"
+):
     """Decision wording has one extension point for reviewed subquestion decisions."""
     zh = language.startswith("zh")
     if answer.resolution == "clarification":
@@ -70,8 +72,9 @@ def answer_decision_lines(answer, language, *, claims=()):
 
         # Display existing decisions only after their exact selected text and
         # premise receipts still match. This check supplies no semantic verdict.
-        if (not selection_binding_reasons(answer, claims)
-                and not subquestion_binding_reasons(answer, claims)):
+        if not selection_binding_reasons(answer, claims) and not subquestion_binding_reasons(
+            answer, claims, answer_review_contract=answer_review_contract
+        ):
             by_id = {claim["id"]: claim for claim in claims}
             for branch in branches:
                 sources = {sid for cid in branch.claim_ids
@@ -101,7 +104,8 @@ def question_coverage_lines(audit, language, *, detail=None):
         lines.append(f"- {plain(answer.question)} — {status}")
         if answer.answer and answer.status in {"answered", "partial"}:
             lines.extend(answer_decision_lines(answer, language,
-                claims=[claim.model_dump(mode="json") for claim in supported.values()]))
+                claims=[claim.model_dump(mode="json") for claim in supported.values()],
+                answer_review_contract=audit.answer_review_contract or 'subquestion-premises-v1'))
             sources = {
                 sid
                 for claim_id in answer.claim_ids

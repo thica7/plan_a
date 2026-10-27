@@ -202,7 +202,16 @@ def saved_coverage_reason(record):
     return reason + ('; inputs to confirm: ' + ', '.join(labels) if labels else '') + '.'
 
 
-def coverage_resolution_reasons(record, claims, *, require_v2=False, required_binding_version=None, facts=(), require_subquestions=False):
+def coverage_resolution_reasons(
+    record,
+    claims,
+    *,
+    require_v2=False,
+    required_binding_version=None,
+    facts=(),
+    require_subquestions=False,
+    answer_review_contract="subquestion-premises-v1",
+):
     """Replay answer guards against the exact published claims, never review reasons."""
     from packages.agents.writer.answer_resolution import resolution_reasons
     from packages.agents.writer.answer_plan_scope import plan_exclusivity_reasons
@@ -211,8 +220,17 @@ def coverage_resolution_reasons(record, claims, *, require_v2=False, required_bi
         required_binding_version = 2
     reasons = selection_binding_reasons(record, claims, required_binding_version=required_binding_version)
     from packages.agents.writer.subquestion_premises import subquestion_binding_reasons
-    branch_reasons = subquestion_binding_reasons(record, claims, required=(require_subquestions
-        and record.status in {"answered", "partial"} and record.resolution in {"direct", "conditional"}))
+
+    branch_reasons = subquestion_binding_reasons(
+        record,
+        claims,
+        answer_review_contract=answer_review_contract,
+        required=(
+            require_subquestions
+            and record.status in {"answered", "partial"}
+            and record.resolution in {"direct", "conditional"}
+        ),
+    )
     reasons.extend(branch_reasons)
     if record.binding_version == 3 and record.resolution == 'clarification' and not record.claim_ids:
         # This finite record has no product assertion. Exact reconstruction
@@ -228,12 +246,22 @@ def coverage_resolution_reasons(record, claims, *, require_v2=False, required_bi
     if (len(record.claim_ids) != len(set(record.claim_ids))
             or not set(record.claim_ids) <= {c["id"] for c in claims}):
         reasons.append("answer_claim_ids_invalid")
+    scope_question = record.question
+    if answer_review_contract == 'subquestion-premises-v2':
+        from packages.agents.writer.subquestion_premises import _decision_question
+        if record.status == 'partial' and record.subquestion_bindings:
+            scope_question = "\n".join(
+                branch.question_quote
+                for branch in record.subquestion_bindings
+                if branch.claim_ids and branch.conclusion != "unknown"
+            )
+        scope_question = _decision_question(scope_question)
     # Clarification also needs the original rule that makes this input necessary.
     if record.resolution == "clarification" and record.status in {"answered", "partial"}:
         direct = record.model_dump(mode="json") | {"resolution": "conditional", "conclusion": "depends"}
-        reasons.extend(reason for reason in resolution_reasons(direct, record.question, claims)
+        reasons.extend(reason for reason in resolution_reasons(direct, scope_question, claims)
                        if reason != 'answer_body_unresolved')
-    resolution_checks = resolution_reasons(record.model_dump(mode="json"), record.question, claims)
+    resolution_checks = resolution_reasons(record.model_dump(mode="json"), scope_question, claims)
     # The finite, source-bound deletion proof is itself an assertion. Preserve
     # all role/object/exception checks; only the older assertion vocabulary is bypassed.
     proven_deletion = bool(record.subquestion_bindings) and not branch_reasons and all(
@@ -254,7 +282,8 @@ def coverage_resolution_reasons(record, claims, *, require_v2=False, required_bi
     return tuple(dict.fromkeys(reasons))
 
 
-def is_qualified_partial_clarification(record, claims, *, facts=(), report_md=None):
+def is_qualified_partial_clarification(record, claims, *, facts=(), report_md=None,
+                                       answer_review_contract='subquestion-premises-v1'):
     """A reviewed source rule plus complete input clarification is a local delivery.
 
     This never upgrades partial to answered or waives any source/answer guard.
@@ -263,7 +292,13 @@ def is_qualified_partial_clarification(record, claims, *, facts=(), report_md=No
     if (record.status != 'partial' or record.resolution != 'clarification'
             or record.binding_version not in (2, 3) or record.conclusion != 'depends'):
         return False
-    if coverage_resolution_reasons(record, claims, required_binding_version=record.binding_version, facts=facts):
+    if coverage_resolution_reasons(
+        record,
+        claims,
+        required_binding_version=record.binding_version,
+        facts=facts,
+        answer_review_contract=answer_review_contract,
+    ):
         return False
     if record.binding_version == 3 and not record.claim_ids:
         if report_md is None:
@@ -321,9 +356,13 @@ def selected_claim_texts(claim_ids, claims):
 
 def parse_answer_coverage(
     text, questions, supported_claim_ids, *, claims=(), require_v2=False, required_binding_version=None, facts=(),
-    require_subquestions=False
+    require_subquestions=False, answer_review_contract='subquestion-premises-v1', diagnostics=None,
+    question_claim_whitelist=None,
 ):
     try:
+        from packages.agents.writer.subquestion_premises import CONTRACT, CONTRACT_V2
+        if answer_review_contract not in {CONTRACT, CONTRACT_V2}:
+            raise ValueError('unsupported answer review contract')
         data = json.loads(text)
         if (
             not isinstance(data, dict)
@@ -352,6 +391,9 @@ def parse_answer_coverage(
         result = []
         for question in questions:
             row = by_id.get(question["question_id"], {})
+            diagnostic = dict(
+                question_id=question["question_id"], adjustments=[], finite_witnesses=[]
+            )
             try:
                 if counts[question["question_id"]] != 1 or not {
                     "question_id", "status", "claim_ids", "reason",
@@ -366,10 +408,52 @@ def parse_answer_coverage(
                         "question_id", "status", "claim_ids", "reason", "resolution", "conclusion", "missing_fields",
                     } or not isinstance(row["claim_ids"], list):
                         raise ValueError("invalid claim selection row")
-                    if not set(row["claim_ids"]) <= supported_claim_ids:
+                    if (answer_review_contract == CONTRACT
+                            and not set(row["claim_ids"]) <= supported_claim_ids):
                         raise ValueError("coverage cites unpublished claims")
                     if data['version'] == 3 and row['resolution'] == 'clarification' and not row['claim_ids']:
                         raise ValueError('empty clarification is server generated only')
+                    if (answer_review_contract == CONTRACT_V2 and subquestions is not None
+                            and row['status'] in {'answered', 'partial'}):
+                        from packages.agents.writer.subquestion_premises import (
+                            canonical_subquestions_v2,
+                        )
+
+                        local_ids = (supported_claim_ids if question_claim_whitelist is None
+                                     else question_claim_whitelist[question['question_id']])
+                        subquestions, checks = canonical_subquestions_v2(
+                            subquestions, question['question'],
+                            [claim for claim in claims if claim['id'] in supported_claim_ids
+                             and claim['id'] in local_ids], row['claim_ids'])
+                        diagnostic.update(checks)
+                        retained = {cid for branch in subquestions for cid in branch['claim_ids']}
+                        row = dict(
+                            row, claim_ids=[cid for cid in row["claim_ids"] if cid in retained]
+                        )
+                        if not row['claim_ids']:
+                            raise ValueError('no independently qualified subquestion premises')
+                        bad_clarification = False
+                        if row['resolution'] == 'clarification':
+                            from packages.research.evidence.source_exceptions import (
+                                _missing_question_inputs,
+                            )
+
+                            required = _missing_question_inputs(question['question'])
+                            bad_clarification = not required or set(row["missing_fields"]) != set(
+                                required
+                            )
+                            if bad_clarification:
+                                diagnostic['adjustments'].append(dict(kind='invalid_clarification_omitted',
+                                    original_fields=row['missing_fields']))
+                        if bad_clarification or any(
+                            branch["conclusion"] == "unknown" for branch in subquestions
+                        ):
+                            row.update(
+                                status="partial",
+                                resolution="conditional",
+                                conclusion="depends",
+                                missing_fields=[],
+                            )
                     texts = selected_claim_texts(row["claim_ids"], claims)
                     from packages.agents.writer.subquestion_premises import bind_subquestions
                     bindings = bind_subquestions(subquestions, question["question"], claims) if subquestions is not None else ()
@@ -388,7 +472,13 @@ def parse_answer_coverage(
                     raise ValueError("coverage cites unpublished claims")
                 if record.binding_version == 3:
                     record = record.model_copy(update={'reason': saved_coverage_reason(record)})
-                reasons = coverage_resolution_reasons(record, claims, facts=facts, require_subquestions=require_subquestions)
+                reasons = coverage_resolution_reasons(
+                    record,
+                    claims,
+                    facts=facts,
+                    require_subquestions=require_subquestions,
+                    answer_review_contract=answer_review_contract,
+                )
                 if reasons:
                     raise ValueError("coverage guard rejected: " + ",".join(reasons))
                 result.append(record)
@@ -398,6 +488,13 @@ def parse_answer_coverage(
                         [question], ("Answer coverage response was missing or invalid: " + str(error))[:800]
                     )
                 )
+            if answer_review_contract == CONTRACT_V2 and diagnostics is not None:
+                import hashlib
+
+                from packages.research.evidence.snapshot_models import canonical_json
+                diagnostic['canonical_answer_digest'] = hashlib.sha256(
+                    canonical_json(result[-1].model_dump(mode='json')).encode()).hexdigest()
+                diagnostics.append(diagnostic)
         return tuple(result)
     except (TypeError, ValueError):
         return unverified_coverage(questions, "Answer coverage could not be verified.")
@@ -518,4 +615,21 @@ SUBQUESTION_REVIEW_SYSTEM = (
     "destructive_effect permits only an explicit complete deletion of the same data to deny retention; "
     "removing membership does not imply deletion. Preserve exceptions and actor/scope. "
     "Return the same version 3 schema plus subquestions; no support_digest (server creates it). "
+)
+
+SUBQUESTION_V2_REVIEW_SYSTEM = SUBQUESTION_REVIEW_SYSTEM + (
+    " Server subquestion premises v2. The version 3 response schema is unchanged. "
+    "Choose a typed relation for the actual requested decision: upper_bound for a same-scope "
+    "numeric "
+    "maximum below a required count (including sharing in collections and simultaneous vault "
+    "membership); permission_entailment only for whether permission implies a duty, never for "
+    "an actual duty question. "
+    "A single-vault-at-a-time rule denies two simultaneous vaults, not successive access. "
+    "Select independently supported local premises even if another branch remains "
+    "unknown/unresolved. "
+    "An evidence gap about billing or membership is not data_ownership clarification. "
+    "Use partial, conditional, depends with unknown branches for such gaps, never invent a "
+    "clarification field. The server can retain only independently qualified branches and audit "
+    "finite relation or separator restorations against the complete selected premises. "
+    "Never infer a product rule from an omission. "
 )

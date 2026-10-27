@@ -243,13 +243,15 @@ def _answer_support(detail, snapshot, audit, answer, question):
         if (
             audit.claim_review_version != 3
             or audit.answer_binding_version != 3
-            or audit.answer_review_contract != "subquestion-premises-v1"
+            or audit.answer_review_contract
+            not in {"subquestion-premises-v1", "subquestion-premises-v2"}
             or coverage_resolution_reasons(
                 answer,
                 [claim.model_dump(mode="json") for claim in published],
                 required_binding_version=3,
                 facts=facts,
                 require_subquestions=True,
+                answer_review_contract=audit.answer_review_contract,
             )
         ):
             return None

@@ -87,7 +87,9 @@ def answer_response(payload, response, *, relation='direct'):
     import json
     from copy import deepcopy
     response = deepcopy(response)
-    if payload.get('answer_review_contract') == 'subquestion-premises-v1':
+    if payload.get('answer_review_contract') in {
+        'subquestion-premises-v1', 'subquestion-premises-v2',
+    }:
         questions = {q['question_id']: q['question'] for q in payload['questions']}
         for row in response.get('answers', []):
             if (row['status'] in {'answered', 'partial'}

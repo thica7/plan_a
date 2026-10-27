@@ -65,9 +65,20 @@ def loads(raw, *, expected=None):
     return value
 
 
-def final_review_batches(candidates, basis_hash, *, max_bytes, max_batches):
+def final_review_batches(candidates, basis_hash, *, max_bytes, max_batches,
+                         protocol="independent_questions_v7"):
     """Admit complete same-question items using the actual readable wire bytes."""
     from packages.agents.qa.question_reconciliation import MAX_FINDINGS
+
+    if protocol not in {"independent_questions_v6", "independent_questions_v7",
+                        "independent_questions_v8"}:
+        raise ValueError("Unsupported final QA wire protocol")
+    if protocol == "independent_questions_v8" and any(
+        row.get("verification_target") not in {
+            "complete_finding_resolution", "canonical_clarification_delivery"}
+        for row in candidates
+    ):
+        raise ValueError("Final QA verification target missing or invalid")
 
     def payload(rows):
         result = dict(version=1, basis_hash=basis_hash, findings=rows)
@@ -104,7 +115,10 @@ def final_review_batches(candidates, basis_hash, *, max_bytes, max_batches):
     groups, omitted = [], []
     for row in candidates:
         for group in groups:
-            if group[0]["question_id"] == row["question_id"] and fits([*group, row]):
+            if (group[0]["question_id"] == row["question_id"]
+                    and (protocol != "independent_questions_v8"
+                         or group[0]["verification_target"] == row["verification_target"])
+                    and fits([*group, row])):
                 group.append(row)
                 break
         else:

@@ -84,7 +84,9 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
             if audit.answer_binding_version == 3 and audit.claim_review_version != 3:
                 reasons.add('claim_review_version_required')
             def answer_invalid(item, *, required_version=audit.answer_binding_version,
-                               answer_facts=view.facts):
+                               answer_facts=view.facts, answer_claims=published_claims,
+                               answer_ids=published_ids,
+                               review_contract=audit.answer_review_contract):
                 if item.resolution == 'insufficient':
                     original = price_answers.get(item.question_id)
                     return (item.status != 'partial' or original is None
@@ -93,16 +95,47 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                     return True
                 if item.binding_version == 3 and item.resolution == 'clarification' and not item.claim_ids:
                     original = clarification_answers.get(item.question_id)
-                    return (required_version != 3 or original is None or item != original
-                            or not is_qualified_partial_clarification(item, published_claims,
-                                facts=answer_facts, report_md=record.detail.report_md))
-                qualified_clarification = required_version in (2, 3) and is_qualified_partial_clarification(
-                    item, published_claims, facts=answer_facts, report_md=record.detail.report_md)
-                return ((item.status != 'answered' and not qualified_clarification) or not item.claim_ids
-                        or not set(item.claim_ids) <= published_ids
-                        or bool(coverage_resolution_reasons(item, published_claims,
-                            required_binding_version=required_version, facts=answer_facts,
-                            require_subquestions=audit.answer_review_contract is not None)))
+                    return (
+                        required_version != 3
+                        or original is None
+                        or item != original
+                        or not is_qualified_partial_clarification(
+                            item,
+                            answer_claims,
+                            facts=answer_facts,
+                            report_md=record.detail.report_md,
+                            answer_review_contract=review_contract
+                            or "subquestion-premises-v1",
+                        )
+                    )
+                qualified_clarification = required_version in (
+                    2,
+                    3,
+                ) and is_qualified_partial_clarification(
+                    item,
+                    answer_claims,
+                    facts=answer_facts,
+                    report_md=record.detail.report_md,
+                    answer_review_contract=review_contract
+                    or "subquestion-premises-v1",
+                )
+                return (
+                    (item.status != "answered" and not qualified_clarification)
+                    or not item.claim_ids
+                    or not set(item.claim_ids) <= answer_ids
+                    or bool(
+                        coverage_resolution_reasons(
+                            item,
+                            answer_claims,
+                            required_binding_version=required_version,
+                            facts=answer_facts,
+                            require_subquestions=review_contract is not None,
+                            answer_review_contract=review_contract
+                            or "subquestion-premises-v1",
+                        )
+                    )
+                )
+
             from packages.agents.qa.question_context import question_context_blocks
             request_only_ids = {item.question_id for item in audit.answer_coverage
                 if audit.answer_binding_version == 3 and item == clarification_answers.get(item.question_id)

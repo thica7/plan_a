@@ -112,10 +112,11 @@ def test_original_bitwarden_bad_digest_keeps_three_authentic_decisions():
 
 
 def test_protocol_and_legacy_system_are_frozen_without_ignored_artifacts():
-    assert qa.PROTOCOL == "independent_questions_v7"
+    assert qa.PROTOCOL == "independent_questions_v8"
     assert hashlib.sha256(qa.INDEPENDENT_SYSTEM_V6.encode()).hexdigest() == (
         "077d6cffe1ace86417e94cb16baa4747ca081d285dc2a3f17ed70c2f931fae43")
-    assert qa.INDEPENDENT_SYSTEM.startswith("Independent final question QA v7.")
+    assert qa.INDEPENDENT_SYSTEM_V7.startswith("Independent final question QA v7.")
+    assert qa.INDEPENDENT_SYSTEM.startswith("Independent final question QA v8.")
     assert "background date" in qa.INDEPENDENT_SYSTEM
     assert "explicitly date-qualified" in qa.INDEPENDENT_SYSTEM
     assert "diagnostic_only must always keep" in qa.INDEPENDENT_SYSTEM

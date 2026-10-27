@@ -161,7 +161,7 @@ async def test_current_cache_needs_current_actual_qa_trace_and_hashes(monkeypatc
     calls = install_review(monkeypatch, service)
     assert await reconcile_question_findings(service, record, [], evidence_issues=[]) == []
     output = receipt(record.detail)
-    assert output['mode'] == 'independent_questions_v7'
+    assert output['mode'] == 'independent_questions_v8'
     batch = output['batch_receipts'][0]
     span = next(s for s in record.detail.trace_spans if s.id == batch['span_id'])
     assert batch['full_input_sha256'] == hashlib.sha256(span.full_input.encode()).hexdigest()
@@ -262,7 +262,7 @@ async def test_producer_is_rechecked_even_when_unrelated_evidence_issues_exist(m
 
 
 @pytest.mark.asyncio
-async def test_only_request_limitation_history_can_be_downgraded(monkeypatch):
+async def test_clarification_delivery_cannot_downgrade_historical_fact_findings(monkeypatch):
     service, record, snapshot = qa_case(factual=True, missing_for='factual')
     audit, question, answer = clarification(record)
     issue = QCIssue(id='clarification-history', severity='blocker', detected_by='reflector',
@@ -277,7 +277,7 @@ async def test_only_request_limitation_history_can_be_downgraded(monkeypatch):
     result = await reconcile_question_findings(service, record, [issue, structural],
         evidence_issues=findings(service, record, snapshot))
     by_id = {i.id: i for i in result}
-    assert by_id[issue.id].severity == 'info'
+    assert by_id[issue.id].severity == 'blocker'
     assert by_id[structural.id].severity == 'blocker'
     assert answer.status == 'partial' and answer.resolution == 'clarification'
     assert receipt(record.detail)['passed_question_ids'] == [question['question_id']]

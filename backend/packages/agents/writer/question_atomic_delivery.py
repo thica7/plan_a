@@ -74,8 +74,12 @@ def checked_generation_projection_version(value):
     return checked_legacy_generation_projection_version(value)
 
 
-def atomic_system(name, language, *, review_projection_version=2, generation_projection_version=2):
-    from packages.agents.writer.answer_coverage import SUBQUESTION_REVIEW_SYSTEM
+def atomic_system(name, language, *, review_projection_version=2, generation_projection_version=2,
+                  answer_review_contract='subquestion-premises-v1'):
+    from packages.agents.writer.answer_coverage import (
+        SUBQUESTION_REVIEW_SYSTEM,
+        SUBQUESTION_V2_REVIEW_SYSTEM,
+    )
     from packages.agents.writer.question_repair import REPAIR_REVIEW_SYSTEM
     from packages.i18n.language import language_instruction
 
@@ -143,9 +147,12 @@ def atomic_system(name, language, *, review_projection_version=2, generation_pro
             )
         return SYSTEM_IDENTITY + REPAIR_REVIEW_SYSTEM
     if name == ANSWER_NAME:
+        if answer_review_contract not in {'subquestion-premises-v1', 'subquestion-premises-v2'}:
+            raise ValueError('Atomic answer contract changed')
         return (
             SYSTEM_IDENTITY
-            + SUBQUESTION_REVIEW_SYSTEM
+            + (SUBQUESTION_V2_REVIEW_SYSTEM if answer_review_contract == 'subquestion-premises-v2'
+               else SUBQUESTION_REVIEW_SYSTEM)
             + (
                 " question_claim_whitelist strictly limits each question to its own "
                 "independently reviewed claims. "
@@ -155,6 +162,14 @@ def atomic_system(name, language, *, review_projection_version=2, generation_pro
             + language_instruction(language)
         )
     raise ValueError("Atomic phase changed")
+
+
+def answer_contract_from_system(system, language):
+    """Actual complete transport SYSTEM selects semantics, never a local flag."""
+    for contract in ('subquestion-premises-v1', 'subquestion-premises-v2'):
+        if system == atomic_system(ANSWER_NAME, language, answer_review_contract=contract):
+            return contract
+    raise ValueError('Atomic answer SYSTEM unverified')
 
 
 def digest(value):
@@ -610,6 +625,8 @@ def save_atomic_receipt(service, record, compact, view, use, packets):
             f"atomic-generation-v{receipt['generation_projection_version']}-"
             f"review-v{receipt['review_projection_version']}"
         )
+    if compact.get('answer_review_contract') == 'subquestion-premises-v2':
+        receipt['answer_review_contract'] = compact['answer_review_contract']
     live = service._evidence_live_record(record)
     existing = [
         s
@@ -755,6 +772,7 @@ def _current_request_preflight(
 async def execute_question_atomic_delivery(
     service, record, selected, view, use, questions, packets, allowed, boundaries, gaps,
     *, review_projection_version=3, generation_projection_version=4,
+    answer_review_contract='subquestion-premises-v1',
 ):
     from packages.agents.writer.dimension_writer import (
         _support_ref_catalog,
@@ -779,6 +797,8 @@ async def execute_question_atomic_delivery(
         REVIEW_NAME, record.detail.output_language,
         review_projection_version=review_projection_version,
     )
+    answer_system = atomic_system(ANSWER_NAME, record.detail.output_language,
+                                  answer_review_contract=answer_review_contract)
     claims, reviews, sizes, sent_ids, dependencies = [], [], [], set(), ()
     compact = dict(
         question_atomic_contract=CONTRACT,
@@ -963,6 +983,7 @@ async def execute_question_atomic_delivery(
                 question_answer_plans=anticipated_plans,
                 dispatches=[dict(name=GENERATION_NAME, question_ids=[qid], fact_ids=sorted(sent))],
             ),
+            answer_review_contract=answer_review_contract,
         )
         requests = [(GENERATION_NAME, "writer", generation_system, "\nJSON:\n" + prompt, 1600)]
         requests.extend(
@@ -973,7 +994,7 @@ async def execute_question_atomic_delivery(
             (
                 ANSWER_NAME,
                 "qa",
-                atomic_system(ANSWER_NAME, record.detail.output_language),
+                answer_system,
                 "\nJSON:\n" + compact_prompt_json(future_answer),
                 1600,
             )
@@ -1094,14 +1115,15 @@ async def execute_question_atomic_delivery(
             future_supported = [c for c in valid if c.id in trial_ids]
             future_compact = dict(question_answer_plans=plans, dispatches=compact["dispatches"])
             future_answer = atomic_answer_payload(
-                service, record, [question], future_supported, view, use, future_compact
+                service, record, [question], future_supported, view, use, future_compact,
+                answer_review_contract=answer_review_contract,
             )
             requests = [
                 (REVIEW_NAME, "qa", review_system, "\nJSON:\n" + compact_prompt_json(batch), 1600),
                 (
                     ANSWER_NAME,
                     "qa",
-                    atomic_system(ANSWER_NAME, record.detail.output_language),
+                    answer_system,
                     "\nJSON:\n" + compact_prompt_json(future_answer),
                     1600,
                 ),
@@ -1202,7 +1224,8 @@ async def execute_question_atomic_delivery(
     )
 
 
-def atomic_answer_payload(service, record, questions, supported, view, use, compact):
+def atomic_answer_payload(service, record, questions, supported, view, use, compact, *,
+                          answer_review_contract='subquestion-premises-v1'):
     from packages.agents.writer.answer_coverage import answer_review_payload
 
     local = {p["question_id"]: set(p["claim_ids"]) for p in compact["question_answer_plans"]}
@@ -1219,7 +1242,7 @@ def atomic_answer_payload(service, record, questions, supported, view, use, comp
         questions, claims, view, additional_fact_ids=sent_ids, compact_semantics=True
     )
     payload.update(handoff_context(service, record, view, questions, use))
-    payload["answer_review_contract"] = "subquestion-premises-v1"
+    payload["answer_review_contract"] = answer_review_contract
     payload["question_claim_whitelist"] = [
         dict(
             question_id=q["question_id"],
@@ -1230,12 +1253,15 @@ def atomic_answer_payload(service, record, questions, supported, view, use, comp
     return payload
 
 
-async def atomic_answer_coverage(service, record, questions, compact, supported, view, use, gaps):
+async def atomic_answer_coverage(service, record, questions, compact, supported, view, use, gaps, *,
+                                  answer_review_contract='subquestion-premises-v1'):
     from packages.agents.qa.question_context import _observations
     from packages.agents.writer.answer_coverage import parse_answer_coverage, unverified_coverage
     from packages.agents.writer.dimension_writer import compact_prompt_json
 
-    system = atomic_system(ANSWER_NAME, record.detail.output_language)
+    system = atomic_system(
+        ANSWER_NAME, record.detail.output_language, answer_review_contract=answer_review_contract
+    )
     answers = {
         row.question_id: row
         for row in unverified_coverage(questions, "Answer semantic review was not completed.")
@@ -1243,7 +1269,8 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
     windows, current, sizes = [], [], []
     for question in questions:
         candidate = atomic_answer_payload(
-            service, record, [*current, question], supported, view, use, compact
+            service, record, [*current, question], supported, view, use, compact,
+            answer_review_contract=answer_review_contract,
         )
         if len(("\nJSON:\n" + compact_prompt_json(candidate)).encode()) <= min(
             14000, use.max_bytes
@@ -1254,7 +1281,8 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
             windows.append(current)
             current = []
         candidate = atomic_answer_payload(
-            service, record, [question], supported, view, use, compact
+            service, record, [question], supported, view, use, compact,
+            answer_review_contract=answer_review_contract,
         )
         if len(("\nJSON:\n" + compact_prompt_json(candidate)).encode()) <= min(
             14000, use.max_bytes
@@ -1265,7 +1293,8 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
     if current:
         windows.append(current)
     for window in windows:
-        payload = atomic_answer_payload(service, record, window, supported, view, use, compact)
+        payload = atomic_answer_payload(service, record, window, supported, view, use, compact,
+                                       answer_review_contract=answer_review_contract)
         validate_atomic_handoff(service, record, payload, view)
         user = "\nJSON:\n" + compact_prompt_json(payload)
         diagnostic = _current_request_preflight(
@@ -1309,6 +1338,11 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
         validate_atomic_handoff(service, record, actual, view)
         allowed = {c["id"] for c in payload["claims"]}
         full_claims = [c.model_dump(mode="json") for c in supported if c.id in allowed]
+        contract = answer_contract_from_system(
+            span.full_input.partition("\nJSON:\n")[0].rstrip("\n"), record.detail.output_language
+        )
+        diagnostics = []
+        local = {r["question_id"]: set(r["claim_ids"]) for r in payload["question_claim_whitelist"]}
         parsed = parse_answer_coverage(
             response,
             window,
@@ -1317,8 +1351,10 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
             required_binding_version=3,
             require_subquestions=True,
             facts=view.facts,
+            answer_review_contract=contract,
+            diagnostics=diagnostics,
+            question_claim_whitelist=local,
         )
-        local = {r["question_id"]: set(r["claim_ids"]) for r in payload["question_claim_whitelist"]}
         for question, row in zip(window, parsed, strict=True):
             answers[row.question_id] = (
                 row
@@ -1327,14 +1363,16 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
                     0
                 ]
             )
-        compact["dispatches"].append(
-            dispatch_row(
+        dispatch = dispatch_row(
                 span,
                 question_ids=[q["question_id"] for q in window],
                 claim_ids=[c["id"] for c in payload["claims"]],
                 fact_ids={fid for c in supported if c.id in allowed for fid in c.fact_ids},
             )
-        )
+        if contract == 'subquestion-premises-v2':
+            compact['answer_review_contract'] = contract
+            dispatch['answer_validation'] = diagnostics
+        compact['dispatches'].append(dispatch)
     selection = _observations(
         service._evidence_live_record(record).detail, "question_evidence_selection", use.id
     )
@@ -1427,6 +1465,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
         raise ValueError("Atomic question plan scope changed")
     planned = {r["question_id"]: r for r in plan_rows}
     actual_plans, reviewed_claim_ids = {}, set()
+    answer_contract = None
     for dispatch in receipt["dispatches"]:
         ids = dispatch["question_ids"]
         if (
@@ -1457,6 +1496,16 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
         ):
             raise ValueError("Atomic transport unverified")
         system, separator, raw = span.full_input.partition("\nJSON:\n")
+        contract = 'subquestion-premises-v1'
+        if span.name == ANSWER_NAME:
+            contract = answer_contract_from_system(system.rstrip('\n'), detail.output_language)
+            if answer_contract is not None and answer_contract != contract:
+                raise ValueError('Atomic answer contracts mixed')
+            answer_contract = contract
+            expected_marker = contract if contract == 'subquestion-premises-v2' else None
+            if (receipt.get('answer_review_contract') != expected_marker
+                    or audit is not None and audit.answer_review_contract != contract):
+                raise ValueError('Atomic actual answer contract changed')
         if (
             not separator
             or system.rstrip("\n") != atomic_system(
@@ -1464,6 +1513,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 detail.output_language,
                 review_projection_version=review_projection_version,
                 generation_projection_version=generation_projection_version,
+                answer_review_contract=contract,
             )
             or len(("\nJSON:\n" + raw).encode()) > min(14000, use.max_bytes)
         ):
@@ -1584,7 +1634,8 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
             supported = [r.claim for r in audited if r.status == "supported"]
             compact = dict(question_answer_plans=plan_rows, dispatches=receipt["dispatches"])
             expected = atomic_answer_payload(
-                service, record, payload["questions"], supported, view, use, compact
+                service, record, payload["questions"], supported, view, use, compact,
+                answer_review_contract=contract,
             )
             if generation_projection_version >= 2:
                 validated_review_payload(raw, expected)
@@ -1599,6 +1650,10 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 raise ValueError("Atomic answer support or whitelist changed")
             from packages.agents.writer.answer_coverage import parse_answer_coverage
 
+            diagnostics = []
+            local = {
+                p["question_id"]: set(p["claim_ids"]) for p in payload["question_claim_whitelist"]
+            }
             parsed = parse_answer_coverage(
                 span.full_output,
                 payload["questions"],
@@ -1609,10 +1664,17 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 required_binding_version=3,
                 require_subquestions=True,
                 facts=view.facts,
+                answer_review_contract=contract,
+                diagnostics=diagnostics,
+                question_claim_whitelist=local,
             )
-            local = {
-                p["question_id"]: set(p["claim_ids"]) for p in payload["question_claim_whitelist"]
-            }
+            if (
+                contract == "subquestion-premises-v2"
+                and dispatch.get("answer_validation") != diagnostics
+                or contract == "subquestion-premises-v1"
+                and "answer_validation" in dispatch
+            ):
+                raise ValueError('Atomic answer validation changed')
             for row in parsed:
                 if row.question_id in answers or not set(row.claim_ids) <= local[row.question_id]:
                     raise ValueError("Atomic answer question borrowed or repeated")
