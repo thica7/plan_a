@@ -221,7 +221,9 @@ async def test_real_admission_blocks_task_spending_and_admits_complete_final_pay
     assert len(requests) == 2
     assert record.detail.trace_spans[-1].metadata["llm_phase"] == "final_qa:run"
     assert budget.tokens_used <= 80000 and budget.tokens_reserved == 0
-    assert budget.tokens_used > 50000 + 20000
+    assert budget.tokens_used == (80000 - 12000 - FINAL_QA_REQUEST_RESERVE
+                                  + sum(s.metadata["llm_tokens_charged"]
+                                        for s in record.detail.trace_spans if s.kind == "llm"))
     service._finish_delivery_phase(record, "final_qa", None)
     assert budget.protected_tokens(None) == 0
 

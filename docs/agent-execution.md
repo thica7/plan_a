@@ -4,7 +4,11 @@
 
 **预算口径：** 下文历史复验中的24次调用／80000 token是当时的诊断配置，不是生产配置默认值。实际运行受部署设置、研究模式和已持久化额度约束；代码中 `run_llm_max_calls` 默认160，`run_llm_max_tokens=0` 表示不单设全局token上限，费用及其他限制仍适用。每轮验收须另列实际配置，不能把不同预算的结果称为同条件对照。
 
-本轮[最终答案交付与QA目标修复](optimization/2026-10-27-answer-guard-qa-target-delivery.md)：**直接2/8题、13/22分支、0/4完整报告，仍未达标**。尾答前提v2、未知分支空引用／局部角色对象审核、QA8目标分离已接实际实验入口并双审。13条可见唯一主张完整支持13、单谓词6；冻结规则覆盖3/8题、15/22分支。QA31计划／25送达／24有效，17阻断、6超窗未送、1项两次格式失败。后端8267通过／1跳过；18变更Python Ruff新增0，历史540（基线555）。正式四家72调用／235840已知token另1次usage未知，Trello Analyst超时回退，其余11核心阶段模型成功；旧SYS单独诊断1调用／1764token另列。四份真实报告原样提交，未训练、默认开关仍0。[结构化结果](optimization/2026-10-27-answer-guard-qa-target-results.json)。
+本轮[逐项生成、上限结论与QA范围复验](optimization/2026-10-27-task-scope-delivery.md)：**最终3通过／2部分／3失败，22分支12通过／4部分／6失败，完整报告0/4**。GEN5、前提v5、QA9已接实际实验入口，旧协议回放保留；原文绑定数量证明在旧真实输入中恢复No，但第三轮BW复合生成被拒、支持推断缺合格cap事实，最终仍未发表。Trello下载／导出／义务及CF跨域否定已交付；跨板、引用、双vault、CPU及报价仍有缺口。
+
+最终后端8532通过／1跳过，30文件Ruff新增0（558→557），接口编译通过。四家87实际调用／296919已知tokens／未知0，CF Analyst空结构回退1；QA28项全送达有效、22keep，系统13blocker，仍有父子范围模型误判及正文／规范状态冲突。16条唯一可见产品主张14完整支持、6单谓词。三轮累计257调用／875729tokens，不作泛化、因果或降本结论；默认开关仍0，不训练。[结构化结果及原样报告](optimization/2026-10-27-task-scope-delivery-results.json)。
+
+上一轮[最终答案交付与QA目标修复](optimization/2026-10-27-answer-guard-qa-target-delivery.md)：**直接2/8题、13/22分支、0/4完整报告，仍未达标**。尾答前提v2、未知分支空引用／局部角色对象审核、QA8目标分离已接实际实验入口并双审。13条可见唯一主张完整支持13、单谓词6；冻结规则覆盖3/8题、15/22分支。QA31计划／25送达／24有效，17阻断、6超窗未送、1项两次格式失败。后端8267通过／1跳过；18变更Python Ruff新增0，历史540（基线555）。正式四家72调用／235840已知token另1次usage未知，Trello Analyst超时回退，其余11核心阶段模型成功；旧SYS单独诊断1调用／1764token另列。四份真实报告原样提交，未训练、默认开关仍0。[结构化结果](optimization/2026-10-27-answer-guard-qa-target-results.json)。
 
 上一轮[原表格、完整选证与最终QA补修](optimization/2026-10-27-answer-delivery-followup.md)：**直接问答2/8题、11/22分支、0/4报告，尚未整体达标**。冻结语义覆盖4/8题、16/22分支与直接交付分别计。Collector v3原表上下文、Writer生成v4／审核v3、QA v7已接实际入口；17条唯一主张完整所选支持16、单谓词11。QA28个唯一项均实际送达有效，29行完整重建，单坏行续审不丢合法同行。后端8204通过／1跳过，新增93项；17文件Ruff新增0／遗留67（退出1）。四家78次transport／253908已知token，usage未知0；没有额外角色隔离。实际原件保留，下一批修最终回答守卫及局部交付，不把协议通过冒充正文合格。[结构化结果](optimization/2026-10-27-answer-delivery-followup-results.json)。
 
@@ -56,7 +60,19 @@
 
 此前真实验证见[完整证据与答案发表恢复](optimization/2026-10-18-evidence-recovery-delivery.md)：5664项后端通过，四组40次真实调用；正文3正确／1错误／4遗漏，记录2正确／6遗漏，仍0/4报告达标。下面是有限规则及实际入口；中文数量结论误拒、下载规则投影遗漏、计费行／FAQ漏提取和错误缺证陈述仍未解决。实现检查通过不等于语义验收。
 
-## 当前尾答前提v2与最终QA v8（2026-10-27）
+## 当前逐项生成v5、尾答前提v5与最终QA v9（2026-10-27）
+
+- `atomic_question_projection.py`／`question_atomic_delivery.py`：实际入口使用GEN5、单主张REVIEW3。初次生成和审核全部完成后，每题只对缺任务、解析或审核失败最多补交一次，从同一授权view/pool按失败任务重新投影完整目录；成功主张文本/ID/审核保留，新主张使用服务端派生命名空间、逐条重审。每题最终最多8条，普通阶段真实计量，不增加Graph修复限额；旧GEN1–4回放保留。
+- `subquestion_premises.py`：新显式v5保留v4的完整组织用户共享人数重述与有限否定蕴含句法。相同主体/套餐/对象/动作/人口、明确“即／i.e.／that is”、已知等价套餐组织括注及peer+1=cap才桥接，未知限制、不同人口或分组继续拒绝。否定蕴含须是完整有限单操作义务片段；其他谓词、未闭合尾句和后续真实必须/义务不删除。完整原句与关系见证入收据，非一般语义推理器。 v5的新增source路径仅匹配完整无条件的组织安全数据共享collections上限；从真实快照严格重建单个selected span，再与当前已发表且独立审核fact自己的同单位／数值／动作／明确上限求交。宽引文里没发表的属性、inference、未知parent条件和缺facts均拒绝，不扩大为任意数量推理。
+- `answer_coverage.py`／`dimension_writer.py`：公开回答绑定version3保持；两处当前实验入口显式使用前提合同v5，真实完整ANSWER SYSTEM识别版本，payload/receipt/diagnostics/audit/replay必须一致。旧v1–v4真实失败按原语义保留。`answer_presentation.py`和QA一致性检查使用同一真实快照facts重核，不信缓存见证或未发表候选。未知分支空引用、局部合法分支partial；不能用未发表候选或review理由补正文。
+- `independent_question_review.py`／`question_review_transport.py`：QA9以服务器`review_scope`区分当前完整canonical child和历史finding；父题仅提供共享题设，不成为产品事实或兄弟输出任务。历史和结构问题仍完整审核。当前必要澄清按交付目标检查，事实继续partial；一个child通过不清兄弟或历史。
+- 最终QA receipt的`parent_review_states`按canonical绑定重建 expected/passed/blocked/pending child IDs、子问事实状态、交付完成和事实解决；未绑定范围阻止错误complete。这是当前交付汇总，不等于历史QA或报告通过。
+- QA9完整明文user cap14000B、SYSTEM3844B、输出1600、fresh reserve19702。旧QA5–8 SYS/8192B边界/缓存/重放保持；既有checkpoint已付费用和限额不重置。六批为每个执行窗口上限，恢复可续窗，但每finding累计最多两次实际尝试且仍受全局预算限制。无效reason不截改；超窗保持未送审，模型keep不由服务器覆盖。
+- 标准生成流程同步OpenAPI/TypeScript可选合同；没有UI、Collector、生产开关默认值或全局预算修改。实现、离线协议证明、真实正文验收分开记录。
+
+当前真实报告与剩余缺口见[逐项生成与QA范围交付复验](optimization/2026-10-27-task-scope-delivery.md)。
+
+## 历史尾答前提v2与最终QA v8（2026-10-27）
 
 - `question_atomic_delivery.py` 保持GEN v4／单主张REVIEW v3；新实验入口显式使用 `subquestion-premises-v2`，公开回答绑定仍为version3。真实完整ANSWER SYSTEM决定解析合同，payload、receipt、audit必须一致；每次内部`answer_validation`从原响应及本题已审主张重建有限见证、调整和规范答案摘要，删改或局部重签不能降级。
 - `subquestion_premises.py` 只为同单位、对象、操作、套餐明确上限与许可不推出义务提供有限见证。一次访问上限仅否定同时请求；未知条件、外层否定、建议、错对象／角色等继续拒绝。仅唯一有序分段之间的纯分隔标点可恢复，不补词或前提。原模型响应和负面主张审核保持。
@@ -66,7 +82,7 @@
 - `question_review_transport.py`仅QA8按`(question_id, verification_target)`分批，同题完整context仍可浅层共享。目标进入support digest、basis、实际wire、SYSTEM和缓存重建；旧QA5／6／7字节及显式行为保持。六批总窗口、每项累计两次、初次优先及有效负面不重试规则不变，历史超窗或预算未送仍pending／blocker。
 - QA8 SYSTEM为5200 UTF-8 bytes、user8192B、输出1600，新请求保护15250。保留已有checkpoint额度及费用，不提升全局上限。完整真实QA入口、持久化恢复、旧原件回放与正文质量分别验证；合同通过不能证明报告合格。默认实验开关仍关闭，未训练。
 
-当前真实正文、逐题得分与剩余缺口见[本轮交付](optimization/2026-10-27-answer-guard-qa-target-delivery.md)。
+该历史轮正文与逐题得分见[当轮交付](optimization/2026-10-27-answer-guard-qa-target-delivery.md)。
 
 ## 历史生成v4、单主张审核v3与最终QA v7（2026-10-27）
 

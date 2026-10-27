@@ -322,7 +322,7 @@ async def test_oversized_complete_context_is_unsent_with_explicit_pending_reason
     detail, service, record = await independent_case(monkeypatch)
     from packages.agents.qa import independent_question_review
 
-    monkeypatch.setattr(independent_question_review, "TASK_REVIEW_BYTES", 1)
+    monkeypatch.setattr(independent_question_review, "CURRENT_TASK_REVIEW_BYTES", 1)
 
     async def forbidden(*args, **kwargs):
         pytest.fail("Complete oversized questions must not be truncated and dispatched")

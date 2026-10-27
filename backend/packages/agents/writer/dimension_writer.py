@@ -961,7 +961,7 @@ class DimensionWriterMixin:
             from packages.agents.writer.question_atomic_delivery import atomic_answer_coverage
             coverage, gaps, sizes = await atomic_answer_coverage(
                 self, record, pending, compact, supported, view, use, gaps,
-                answer_review_contract='subquestion-premises-v2')
+                answer_review_contract='subquestion-premises-v5')
         elif pending and supported:
             task_workflow = 'question_task_ledger' in compact
             payload = compact_prompt_json(answer_review_payload(pending, supported, view,
@@ -1341,7 +1341,7 @@ class DimensionWriterMixin:
                         task_result = await execute_question_atomic_delivery(
                             self, record, selected, view, use, questions,
                             question_packets, allowed, boundaries, gaps,
-                            answer_review_contract='subquestion-premises-v2')
+                            answer_review_contract='subquestion-premises-v5')
                     else:
                         from packages.agents.writer.task_execution import execute_question_tasks
                         task_result = await execute_question_tasks(
@@ -1928,7 +1928,9 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
                 lines.extend([f"- {prefix}{plain(item.claim.text)} {citations}", ""])
             if not supported:
                 lines.extend(["- 暂无通过主张审核的证据观察。" if zh else "- No observation passed claim review.", ""])
-            lines.extend(question_coverage_lines(audit, detail.output_language, detail=task_projection_detail or detail))
+            lines.extend(question_coverage_lines(audit, detail.output_language,
+                detail=task_projection_detail or detail,
+                facts=snapshot.facts if snapshot is not None else None))
             if audit.gaps and not partial:
                 names = {"billing_interval": "付款周期", "market": "地区", "tax_scope": "税费", "seat_type": "席位类型", "context_budget_exceeded": "已采资料超出本段上下文，未全部选入", "no_reviewed_claims": "未取得已审核主张"}
                 names.update({"plan": "套餐", "amount": "报价金额", "currency": "币种", "current_price": "适用价格", "supporting_facts": "可支持主张的原始证据", "claim_review_invalid": "审核响应无效，主张未发布", "claim_review_context_budget_exceeded": "完整审核证据超出容量，主张未发布", "promotional_claim_not_concrete": "套餐宣传未证明具体功能", "operation_object_scope_omitted": "操作对象限定被遗漏，主张未发布"})

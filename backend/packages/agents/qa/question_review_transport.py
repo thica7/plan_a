@@ -71,14 +71,21 @@ def final_review_batches(candidates, basis_hash, *, max_bytes, max_batches,
     from packages.agents.qa.question_reconciliation import MAX_FINDINGS
 
     if protocol not in {"independent_questions_v6", "independent_questions_v7",
-                        "independent_questions_v8"}:
+                        "independent_questions_v8", "independent_questions_v9"}:
         raise ValueError("Unsupported final QA wire protocol")
-    if protocol == "independent_questions_v8" and any(
+    if protocol in {"independent_questions_v8", "independent_questions_v9"} and any(
         row.get("verification_target") not in {
             "complete_finding_resolution", "canonical_clarification_delivery"}
         for row in candidates
     ):
         raise ValueError("Final QA verification target missing or invalid")
+    if protocol == "independent_questions_v9" and any(
+        row.get("review_scope") != {"kind": (
+            "current_question" if row.get("independent_question_check") is True
+            else "historical_finding")}
+        for row in candidates
+    ):
+        raise ValueError("Final QA review scope missing or invalid")
 
     def payload(rows):
         result = dict(version=1, basis_hash=basis_hash, findings=rows)
@@ -116,7 +123,7 @@ def final_review_batches(candidates, basis_hash, *, max_bytes, max_batches,
     for row in candidates:
         for group in groups:
             if (group[0]["question_id"] == row["question_id"]
-                    and (protocol != "independent_questions_v8"
+                    and (protocol not in {"independent_questions_v8", "independent_questions_v9"}
                          or group[0]["verification_target"] == row["verification_target"])
                     and fits([*group, row])):
                 group.append(row)

@@ -161,7 +161,7 @@ async def test_current_cache_needs_current_actual_qa_trace_and_hashes(monkeypatc
     calls = install_review(monkeypatch, service)
     assert await reconcile_question_findings(service, record, [], evidence_issues=[]) == []
     output = receipt(record.detail)
-    assert output['mode'] == 'independent_questions_v8'
+    assert output['mode'] == 'independent_questions_v9'
     batch = output['batch_receipts'][0]
     span = next(s for s in record.detail.trace_spans if s.id == batch['span_id'])
     assert batch['full_input_sha256'] == hashlib.sha256(span.full_input.encode()).hexdigest()

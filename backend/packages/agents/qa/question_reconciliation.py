@@ -143,7 +143,7 @@ def _visible_question_block(detail, audit, question):
     start = headings[0] + 1
     end = next((i for i in range(start, len(lines))
                 if lines[i].startswith(("# ", "## ", "### "))), len(lines))
-    coverage = question_coverage_lines(audit, detail.output_language)
+    coverage = question_coverage_lines(audit, detail.output_language, detail=detail)
     blocks = [i for i in range(start, end) if coverage and lines[i] == coverage[0]]
     if len(blocks) != 1:
         return ""
@@ -192,7 +192,8 @@ def _request_only_clarification(detail, audit, answer, question):
     # Render just the canonical question; metadata or a matching substring cannot
     # excuse additional local assertions or a changed publication.
     expected = question_coverage_lines(
-        audit.model_copy(update={'answer_coverage': [answer]}), detail.output_language)
+        audit.model_copy(update={'answer_coverage': [answer]}), detail.output_language,
+        detail=detail)
     return _visible_question_block(detail, audit, question) == '\n'.join(expected[2:]).rstrip()
 
 
@@ -244,7 +245,8 @@ def _answer_support(detail, snapshot, audit, answer, question):
             audit.claim_review_version != 3
             or audit.answer_binding_version != 3
             or audit.answer_review_contract
-            not in {"subquestion-premises-v1", "subquestion-premises-v2"}
+            not in {"subquestion-premises-v1", "subquestion-premises-v2",
+                    "subquestion-premises-v3", "subquestion-premises-v4", "subquestion-premises-v5"}
             or coverage_resolution_reasons(
                 answer,
                 [claim.model_dump(mode="json") for claim in published],

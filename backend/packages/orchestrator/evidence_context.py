@@ -1011,6 +1011,7 @@ class EvidenceContextMixin:
         context_reserve_bytes: int | Callable[[tuple], int] = 0,
         question_scopes=None,
         question_pool_selection=False,
+        qa_review_protocol=None,
     ) -> tuple[StageEvidenceView, EvidenceConsumption]:
         record = self._evidence_live_record(record)
         if record.detail.evidence_inputs_dirty:
@@ -1021,6 +1022,10 @@ class EvidenceContextMixin:
             if snapshot.fact_market_policy_version != FACT_MARKET_POLICY_VERSION:
                 raise EvidenceUseRejectedError("evidence market policy requires accepted resealing")
         budget = _DEPTH_BYTES.get(record.detail.plan.research_depth, 8192)
+        if agent == "qa" and qa_review_protocol == "independent_questions_v9":
+            from packages.agents.qa.independent_question_review import review_byte_limit
+
+            budget = max(budget, review_byte_limit(qa_review_protocol))
         if agent in {'analyst', 'writer'} and dimension in {'feature', 'pricing'}:
             budget = min(32768, budget * 2)
         requested_fact_ids = tuple(dict.fromkeys(fact_ids)) if fact_ids is not None else None

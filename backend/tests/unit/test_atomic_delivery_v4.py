@@ -23,6 +23,7 @@ def context(case, version=4):
 async def run(case, monkeypatch, model, **versions):
     service, record, _, selected, view, use, packets, boundaries, allowed = case
     monkeypatch.setattr(service, "_trace_llm_text", model)
+    versions.setdefault("generation_projection_version", 4)
     return await atomic.execute_question_atomic_delivery(
         service, record, selected, view, use, packets[0]["questions"], packets,
         allowed, boundaries, (), **versions,
@@ -31,7 +32,7 @@ async def run(case, monkeypatch, model, **versions):
 
 def test_v4_is_only_the_new_execute_default_and_legacy_systems_are_frozen():
     parameters = inspect.signature(atomic.execute_question_atomic_delivery).parameters
-    assert parameters["generation_projection_version"].default == 4
+    assert parameters["generation_projection_version"].default == 5
     assert parameters["review_projection_version"].default == 3
     assert inspect.signature(atomic.atomic_question_context).parameters[
         "generation_projection_version"
@@ -418,7 +419,7 @@ async def test_v4_exact_actual_envelope_budget_boundary_dispatches_only_when_aff
     monkeypatch.setattr(service._llm, "_post_chat_completion", post)
     result = await atomic.execute_question_atomic_delivery(
         service, record, selected, view, use, packets[0]["questions"], packets,
-        allowed, boundaries, (),
+        allowed, boundaries, (), generation_projection_version=4,
     )
     assert len(transported) == int(shortfall == 0)
     assert budget.calls == before_calls + int(shortfall == 0)

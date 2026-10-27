@@ -1,0 +1,31 @@
+# 局部调研报告
+
+## 执行摘要
+
+仅展示通过逐条审核的资料观察；未完成问题仍待核实，不能据此排名。
+
+## 竞争发现
+
+### 功能
+
+### Bitwarden — 功能
+
+- Free organization 的共享仅限与另外 1 位用户（即共 2 位用户）进行。 [source:raw-source-476cdfef80ec06d6a285]
+
+- Free organization 的共享数据最多可放入 2 个 collections。 [source:raw-source-476cdfef80ec06d6a285]
+
+#### 问题回答情况
+
+- Bitwarden: 我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？ — 尚未核实
+  本次已审核证据尚未完整覆盖此问题。
+- Bitwarden: 我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？ — 部分回答
+  需要先澄清问题中的条件。
+  请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？
+
+## 置信度说明
+
+已审核只表示绑定证据在本次模型审核中支持该观察，不代表人工验收或产品总体质量。未发布的主张保留在审核记录中。下一步：核验相同任务的操作、角色与条件。
+
+## 证据附录
+
+- Bitwarden：Password Manager Plans | Bitwarden [source:raw-source-476cdfef80ec06d6a285]

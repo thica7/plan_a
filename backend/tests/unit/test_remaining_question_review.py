@@ -226,7 +226,7 @@ async def test_complete_review_envelope_fits_its_reserved_global_budget():
     budget = service._run_llm_budget(record)
     expected = (
         len(independent.INDEPENDENT_SYSTEM.encode())
-        + independent.TASK_REVIEW_BYTES
+        + independent.review_byte_limit(independent.PROTOCOL)
         + 256
         + 1600
         + 2
@@ -244,7 +244,8 @@ async def test_complete_review_envelope_fits_its_reserved_global_budget():
 
     service._llm._post_chat_completion = post
     payload = '{"version":1,"basis_hash":"offline","findings":[]}'
-    user = " " * (independent.TASK_REVIEW_BYTES - len(payload.encode())) + payload
+    padding = independent.review_byte_limit(independent.PROTOCOL) - len(payload.encode())
+    user = " " * padding + payload
     await service._trace_llm_text(
         record,
         agent="qa",

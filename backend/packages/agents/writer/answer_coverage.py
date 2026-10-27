@@ -224,6 +224,7 @@ def coverage_resolution_reasons(
     branch_reasons = subquestion_binding_reasons(
         record,
         claims,
+        facts=facts,
         answer_review_contract=answer_review_contract,
         required=(
             require_subquestions
@@ -247,7 +248,9 @@ def coverage_resolution_reasons(
             or not set(record.claim_ids) <= {c["id"] for c in claims}):
         reasons.append("answer_claim_ids_invalid")
     scope_question = record.question
-    if answer_review_contract == 'subquestion-premises-v2':
+    if answer_review_contract in {
+            'subquestion-premises-v2', 'subquestion-premises-v3',
+            'subquestion-premises-v4', 'subquestion-premises-v5'}:
         from packages.agents.writer.subquestion_premises import _decision_question
         if record.status == 'partial' and record.subquestion_bindings:
             scope_question = "\n".join(
@@ -267,8 +270,12 @@ def coverage_resolution_reasons(
     proven_deletion = bool(record.subquestion_bindings) and not branch_reasons and all(
         branch.relation == 'destructive_effect' and branch.conclusion == 'no'
         for branch in record.subquestion_bindings)
+    proven_cap = (answer_review_contract == 'subquestion-premises-v5'
+        and bool(record.subquestion_bindings) and not branch_reasons and all(
+            branch.relation == 'upper_bound' and branch.conclusion == 'no'
+            for branch in record.subquestion_bindings))
     reasons.extend(reason for reason in resolution_checks
-                   if not (proven_deletion and reason == 'answer_body_unresolved'))
+                   if not ((proven_deletion or proven_cap) and reason == 'answer_body_unresolved'))
     reasons.extend(plan_exclusivity_reasons(record, claims))
     from packages.agents.writer.answer_action_scope import answer_action_scope_reasons
     reasons.extend(answer_action_scope_reasons(record, claims))
@@ -360,8 +367,15 @@ def parse_answer_coverage(
     question_claim_whitelist=None,
 ):
     try:
-        from packages.agents.writer.subquestion_premises import CONTRACT, CONTRACT_V2
-        if answer_review_contract not in {CONTRACT, CONTRACT_V2}:
+        from packages.agents.writer.subquestion_premises import (
+            CONTRACT,
+            CONTRACT_V2,
+            CONTRACT_V3,
+            CONTRACT_V4,
+            CONTRACT_V5,
+        )
+        if answer_review_contract not in {
+                CONTRACT, CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5}:
             raise ValueError('unsupported answer review contract')
         data = json.loads(text)
         if (
@@ -413,7 +427,9 @@ def parse_answer_coverage(
                         raise ValueError("coverage cites unpublished claims")
                     if data['version'] == 3 and row['resolution'] == 'clarification' and not row['claim_ids']:
                         raise ValueError('empty clarification is server generated only')
-                    if (answer_review_contract == CONTRACT_V2 and subquestions is not None
+                    if (answer_review_contract in {
+                            CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5}
+                            and subquestions is not None
                             and row['status'] in {'answered', 'partial'}):
                         from packages.agents.writer.subquestion_premises import (
                             canonical_subquestions_v2,
@@ -424,7 +440,12 @@ def parse_answer_coverage(
                         subquestions, checks = canonical_subquestions_v2(
                             subquestions, question['question'],
                             [claim for claim in claims if claim['id'] in supported_claim_ids
-                             and claim['id'] in local_ids], row['claim_ids'])
+                             and claim['id'] in local_ids], row['claim_ids'],
+                            facts=facts,
+                            premise_version=(
+                                5 if answer_review_contract == CONTRACT_V5 else
+                                4 if answer_review_contract == CONTRACT_V4 else
+                                3 if answer_review_contract == CONTRACT_V3 else 2))
                         diagnostic.update(checks)
                         retained = {cid for branch in subquestions for cid in branch['claim_ids']}
                         row = dict(
@@ -488,7 +509,8 @@ def parse_answer_coverage(
                         [question], ("Answer coverage response was missing or invalid: " + str(error))[:800]
                     )
                 )
-            if answer_review_contract == CONTRACT_V2 and diagnostics is not None:
+            if (answer_review_contract in {CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5}
+                    and diagnostics is not None):
                 import hashlib
 
                 from packages.research.evidence.snapshot_models import canonical_json
@@ -632,4 +654,42 @@ SUBQUESTION_V2_REVIEW_SYSTEM = SUBQUESTION_REVIEW_SYSTEM + (
     "clarification field. The server can retain only independently qualified branches and audit "
     "finite relation or separator restorations against the complete selected premises. "
     "Never infer a product rule from an omission. "
+)
+
+
+SUBQUESTION_V3_REVIEW_SYSTEM = SUBQUESTION_V2_REVIEW_SYSTEM + (
+    " Server subquestion premises v3. The version 3 response schema is unchanged. "
+    "For upper_bound a complete published fact may explicitly restate the same product, "
+    "plan, organization, user category and operation using 即, i.e. or that is. "
+    "Keep that entire fact, including its action antecedent and numeric restatement. "
+    "Never borrow an action from another sentence, clause without that restatement, "
+    "claim, product, plan, role or resource. Inference does not establish a numeric cap. "
+    "All existing same-unit, strict excess, conjunction, negation, condition and "
+    "simultaneous-use boundaries still apply. Unknown scope requires partial/unverified. "
+)
+
+
+SUBQUESTION_V4_REVIEW_SYSTEM = SUBQUESTION_V3_REVIEW_SYSTEM + (
+    " Server subquestion premises v4. The version 3 response schema is unchanged. "
+    "An organization identity may include a complete known bilingual plan/organization alias "
+    "only if it means exactly the same plan and organization. Keep the entire original fact "
+    "and action antecedent, including that alias. For a generic user sharing with N other users, "
+    "the same-fact explicit total cap must equal N plus the user. Unknown populations, role, "
+    "plan, grouping, concurrency or exclusion qualifiers remain unresolved. "
+    "For permission_entailment, the explicit denial 并不蕴含 can reject permission implying "
+    "a duty for the same requested operation. It never proves that no actual duty exists. "
+    "Any independent must/duty clause, including after a comma or conjunction in the same "
+    "sentence, must remain visible and cannot be erased by the denied entailment phrase. "
+)
+
+
+SUBQUESTION_V5_REVIEW_SYSTEM = SUBQUESTION_V4_REVIEW_SYSTEM + (
+    " Server subquestion premises v5. The version 3 response schema is unchanged. "
+    "For a published fact explicitly stating an organization sharing collections maximum, "
+    "the server may reconstruct the same unit, maximum and operation from that fact's own "
+    "complete selected source span in the admitted snapshot. The published cap itself, "
+    "not an inference or another property hidden in a wider quote, must state that maximum. "
+    "Exact immutable fact hash, member path, coordinates and span identity are required. "
+    "Unknown source conditions, dates, populations, grouping or exceptions remain unresolved. "
+    "Missing originals cannot be replaced by model quotes, metadata or cached witnesses. "
 )

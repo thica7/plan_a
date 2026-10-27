@@ -55,6 +55,20 @@ def advisory_generation_projection(payload):
     return advisory_reference_tasks(current_generation_projection(payload))
 
 
+def task_scoped_generation_projection(payload):
+    """GEN5 guidance describes the requested predicate, never a source assertion."""
+    from packages.agents.writer.task_execution import task_instruction
+
+    result = advisory_generation_projection(payload)
+    repair = result.get("generation_repair", {})
+    limits = repair.get("task_claim_limits", {})
+    return dict(result, generation_projection_version=5,
+                projection_identity="atomic-generation-v5-review-v3",
+                generation_tasks=[dict(task, task_instruction=task_instruction(task),
+                    max_claims=min(task["max_claims"], limits.get(task["task_id"], 8)))
+                    for task in result["generation_tasks"]])
+
+
 def checked_generation_projection_version(value):
     if type(value) is not int or value not in {1, 2}:
         raise ValueError("Atomic generation projection version changed")
@@ -259,7 +273,8 @@ def task_support_hints(tasks, payload, facts):
     return result
 
 
-def question_projection(service, record, view, packets, question, allowed, use, *, project=None):
+def question_projection(service, record, view, packets, question, allowed, use, *, project=None,
+                        generation_repair=None):
     from packages.agents.writer.dimension_writer import compact_prompt_json
     from packages.agents.writer.question_allocation import task_support_score
     from packages.agents.writer.question_atomic_delivery import handoff_context
@@ -282,6 +297,13 @@ def question_projection(service, record, view, packets, question, allowed, use, 
         if row["question_id"] == question["question_id"]
     )
     tasks = generation_tasks(question, f"{view.competitor}/{view.dimension}")
+    if generation_repair is not None:
+        target_ids = generation_repair["target_task_ids"]
+        tasks = [task for task in tasks if task["task_id"] in target_ids]
+        if [task["task_id"] for task in tasks] != target_ids or any(
+            task["state"] != "planned" for task in tasks
+        ):
+            raise ValueError("Atomic repair task scope changed")
     payload = dict(
         handoff_context(service, record, view, [question], use),
         generation_projection_version=2,
@@ -292,6 +314,8 @@ def question_projection(service, record, view, packets, question, allowed, use, 
             )
         ],
     )
+    if generation_repair is not None:
+        payload["generation_repair"] = generation_repair
     rows, si, oi = [], 0, 0
     for fact in ranked:
         if fact.id not in known:
@@ -379,7 +403,7 @@ def question_projection(service, record, view, packets, question, allowed, use, 
             for packet in service._question_packet_prompt(record, packets, chosen)
         ]
         result["generation_tasks"] = task_support_hints(tasks, result, view.facts)
-        if missing:
+        if missing and generation_repair is None:
             result["generation_tasks"] = [
                 dict(task, state="deferred", reason="question_core_context_budget_exceeded")
                 if task["focus"] == "billing_inputs"
@@ -393,20 +417,40 @@ def question_projection(service, record, view, packets, question, allowed, use, 
         ]
         return project(result) if project is not None else result
 
-    priority = list(dict.fromkeys([*pool["core_fact_ids"], *pool["required_exception_fact_ids"]]))
+    priority = ([] if generation_repair is not None else
+                list(dict.fromkeys([*pool["core_fact_ids"], *pool["required_exception_fact_ids"]])))
     for task in tasks:
         scores = {
             row["id"]: task_support_score(task, row["quote"], question["question"], view.competitor)
             for row in rows
         }
         if scores and max(scores.values()) > 0:
+            def repair_priority(row, *, task=task, scores=scores):
+                from packages.agents.writer.answer_coverage import question_terms
+                from packages.research.extraction.billing_rules import billing_rule_text_signal
+
+                request = task.get("request", task.get("question_quote", question["question"]))
+                # task_support_score adds domain routing weights to lexical
+                # overlap. Compare those existing domain weights first, then
+                # prefer a compact whole original over a broad capability list.
+                lexical = len(question_terms(request, view.competitor)
+                              & question_terms(row["quote"], view.competitor))
+                billing = bool(re.search(r"计费|免费|账单|\b(?:billable|free|bill|billing)\b",
+                                         request, re.I))
+                concrete_billing = billing and (billing_rule_text_signal(row["quote"]) or
+                    re.search(r"\b(?:non-)?billable\b[^.!?\n]{0,80}"
+                              r"\b(?:members?|guests?|users?|seats?)\b", row["quote"], re.I))
+                return (-int(bool(concrete_billing)), -(scores[row["id"]] - lexical),
+                        len(compact_prompt_json(row).encode()), -scores[row["id"]], rows.index(row))
+
             best = min(
-                rows,
-                key=lambda row: (
+                [row for row in rows if scores[row["id"]] > 0],
+                key=(repair_priority if generation_repair is not None
+                     else lambda row, scores=scores: (
                     -scores[row["id"]],
                     len(compact_prompt_json(row).encode()),
                     rows.index(row),
-                ),
+                )),
             )
             if best["id"] not in priority:
                 priority.append(best["id"])
@@ -479,14 +523,16 @@ def scoped_generation_response(response, payload, *, forecast=False):
                 and (
                     task["focus"] == "source_rule"
                     and not task.get("request_property")
-                    or payload.get("generation_projection_version") in {3, 4}
+                    or payload.get("generation_projection_version") in {3, 4, 5}
                     and (task["focus"] == "billing_inputs" or task.get("request_property") in {
                         "people_limit", "container_limit"})
                     or counts[task["task_id"]] == 1
                 )
                 and (
                     forecast
-                    or not generation_task_atom_reasons(task, atom["text"], kind=atom["kind"])
+                    or not generation_task_atom_reasons(task, atom["text"], kind=atom["kind"],
+                        generation_projection_version=payload.get(
+                            "generation_projection_version", 2))
                 )
             )
             if valid:
@@ -495,9 +541,17 @@ def scoped_generation_response(response, payload, *, forecast=False):
                 )
             else:
                 gaps.add("generation_task_invalid")
+                reasons = (generation_task_atom_reasons(task, atom["text"], kind=atom["kind"],
+                    generation_projection_version=5)
+                    if payload.get("generation_projection_version") == 5 and task
+                    and isinstance(atom.get("text"), str) and isinstance(atom.get("kind"), str)
+                    else ())
+                gaps.update(reasons)
                 if task and task["state"] == "planned":
                     states[task["task_id"]] = dict(
-                        task_id=task["task_id"], state="rejected", reason="generation_task_invalid"
+                        task_id=task["task_id"], state="rejected", reason="generation_task_invalid",
+                        **({"diagnostic": ["generation_task_invalid", *reasons]}
+                           if payload.get("generation_projection_version") == 5 else {}),
                     )
         atoms = []
         for index in range(max(map(len, accepted.values()), default=0)):
@@ -534,12 +588,31 @@ def missing_task_results(payload):
     ]
 
 
-def generation_task_atom_reasons(task, text, *, kind):
+def generation_task_atom_reasons(task, text, *, kind, generation_projection_version=2):
     from packages.agents.writer.task_protocol import task_atom_reasons
     from packages.research.evidence.operations import OPERATIONS
     from packages.research.evidence.report_claims import claim_operations
 
     reasons = task_atom_reasons(task, text, kind=kind)
+    if generation_projection_version == 5:
+        from packages.agents.writer.question_allocation import (
+            _SOURCE_EN,
+            _SOURCE_ZH,
+            document_absence_claim,
+        )
+
+        # Source subjects can precede several explanatory clauses. Keep the
+        # extension within that sentence; ordinary negative product rules have
+        # no document subject and retain the independent semantic review.
+        if document_absence_claim(text) or re.search(
+            _SOURCE_ZH + r"[^。！？\n]{0,500}(?:并未|未|没有)(?:明确)?"
+            r"(?:规定|要求|记载|说明|提及|提供)"
+            r"|\b" + _SOURCE_EN + r"\b[^.!?\n]{0,700}\b(?:has|have)\s+not\s+"
+            r"(?:specified|required|stated|mentioned|provided|described)\b"
+            r"|\b" + _SOURCE_EN + r"\b[^.!?\n]{0,700}\b(?:does?|do)\s+not\s+"
+            r"(?:specify|require|state|mention|provide|describe)\b", text, re.I,
+        ):
+            reasons = (*reasons, "source_document_absence_unverified")
     focus = task["focus"].removeprefix("rule_")
     if focus in OPERATIONS and set(claim_operations(text)) != {focus}:
         return (*reasons, "task_predicate_not_addressed")

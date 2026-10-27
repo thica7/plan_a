@@ -58,7 +58,7 @@ def question_plan_response(payload, atoms):
                 for row in required_question_clarifications(payload.get('questions', []))}
     if not payload.get('questions'):
         return json.dumps({'claims': atoms})
-    if payload.get('generation_projection_version') in {2, 3, 4}:
+    if payload.get('generation_projection_version') in {2, 3, 4, 5}:
         from packages.agents.writer.atomic_question_projection import generation_task_atom_reasons
         from packages.agents.writer.question_allocation import task_support_score
         atoms = [dict(atom, task_id=next((task['task_id']
@@ -89,6 +89,7 @@ def answer_response(payload, response, *, relation='direct'):
     response = deepcopy(response)
     if payload.get('answer_review_contract') in {
         'subquestion-premises-v1', 'subquestion-premises-v2',
+        'subquestion-premises-v3', 'subquestion-premises-v4', 'subquestion-premises-v5',
     }:
         questions = {q['question_id']: q['question'] for q in payload['questions']}
         for row in response.get('answers', []):

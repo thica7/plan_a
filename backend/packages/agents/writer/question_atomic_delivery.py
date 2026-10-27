@@ -26,6 +26,7 @@ from packages.agents.writer.atomic_question_projection import (
     missing_task_results,
     question_projection,
     scoped_generation_response,
+    task_scoped_generation_projection,
 )
 from packages.agents.writer.atomic_question_projection import (
     checked_generation_projection_version as checked_legacy_generation_projection_version,
@@ -69,7 +70,7 @@ GENERATE_SYSTEM = SYSTEM_IDENTITY + (
 
 
 def checked_generation_projection_version(value):
-    if type(value) is int and value in {3, 4}:
+    if type(value) is int and value in {3, 4, 5}:
         return value
     return checked_legacy_generation_projection_version(value)
 
@@ -79,6 +80,9 @@ def atomic_system(name, language, *, review_projection_version=2, generation_pro
     from packages.agents.writer.answer_coverage import (
         SUBQUESTION_REVIEW_SYSTEM,
         SUBQUESTION_V2_REVIEW_SYSTEM,
+        SUBQUESTION_V3_REVIEW_SYSTEM,
+        SUBQUESTION_V4_REVIEW_SYSTEM,
+        SUBQUESTION_V5_REVIEW_SYSTEM,
     )
     from packages.agents.writer.question_repair import REPAIR_REVIEW_SYSTEM
     from packages.i18n.language import language_instruction
@@ -86,6 +90,28 @@ def atomic_system(name, language, *, review_projection_version=2, generation_pro
     version = checked_review_projection_version(review_projection_version)
     generation_version = checked_generation_projection_version(generation_projection_version)
     if name == GENERATION_NAME:
+        if generation_version == 5:
+            if version != 3:
+                raise ValueError("Atomic v5 generation requires review protocol v3")
+            return atomic_system(name, language, review_projection_version=3,
+                generation_projection_version=4).replace("atomic generation v4. ",
+                "atomic generation v5. ", 1).replace("This v4 generation protocol",
+                "This v5 generation protocol", 1) + (
+                "Task task_instruction identifies ONLY the predicate to answer. Preserve scenario "
+                "assignments in request_context as hypothetical premises; do not restate them as "
+                "executed manage_access operations or add read/edit to a download assertion. "
+                "For cross-resource scope publish only the finite inference that the known role "
+                "on one resource does not establish the unknown role on another. Do not assert "
+                "a runtime denial. For obligation publish the conditional inference that "
+                "permission "
+                "does not entail obligation; never claim that the page has not specified a duty "
+                "or that no duty exists. Source-document absence assertions are rejected. "
+                "generation_repair is server diagnostic data, never evidence: answer only its "
+                "target tasks using THIS actual catalog. Never repeat or rewrite retained claims. "
+                "Its retained_claims and failed_claims contain complete prior text and task IDs "
+                "only to identify what must stay unchanged and what needs replacement; none of "
+                "that text is selectable support. Exact retained-text duplicates are rejected. "
+            )
         if generation_version == 4:
             if version != 3:
                 raise ValueError("Atomic v4 generation requires review protocol v3")
@@ -147,11 +173,19 @@ def atomic_system(name, language, *, review_projection_version=2, generation_pro
             )
         return SYSTEM_IDENTITY + REPAIR_REVIEW_SYSTEM
     if name == ANSWER_NAME:
-        if answer_review_contract not in {'subquestion-premises-v1', 'subquestion-premises-v2'}:
+        if answer_review_contract not in {
+                'subquestion-premises-v1', 'subquestion-premises-v2',
+                'subquestion-premises-v3', 'subquestion-premises-v4', 'subquestion-premises-v5'}:
             raise ValueError('Atomic answer contract changed')
         return (
             SYSTEM_IDENTITY
-            + (SUBQUESTION_V2_REVIEW_SYSTEM if answer_review_contract == 'subquestion-premises-v2'
+            + (SUBQUESTION_V5_REVIEW_SYSTEM if answer_review_contract == 'subquestion-premises-v5'
+               else SUBQUESTION_V4_REVIEW_SYSTEM
+               if answer_review_contract == 'subquestion-premises-v4'
+               else SUBQUESTION_V3_REVIEW_SYSTEM
+               if answer_review_contract == 'subquestion-premises-v3'
+               else SUBQUESTION_V2_REVIEW_SYSTEM
+               if answer_review_contract == 'subquestion-premises-v2'
                else SUBQUESTION_REVIEW_SYSTEM)
             + (
                 " question_claim_whitelist strictly limits each question to its own "
@@ -166,7 +200,9 @@ def atomic_system(name, language, *, review_projection_version=2, generation_pro
 
 def answer_contract_from_system(system, language):
     """Actual complete transport SYSTEM selects semantics, never a local flag."""
-    for contract in ('subquestion-premises-v1', 'subquestion-premises-v2'):
+    for contract in (
+            'subquestion-premises-v1', 'subquestion-premises-v2',
+            'subquestion-premises-v3', 'subquestion-premises-v4', 'subquestion-premises-v5'):
         if system == atomic_system(ANSWER_NAME, language, answer_review_contract=contract):
             return contract
     raise ValueError('Atomic answer SYSTEM unverified')
@@ -240,10 +276,16 @@ def handoff_context(service, record, view, questions, use):
 
 
 def atomic_question_context(
-    service, record, view, packets, question, allowed, use, *, generation_projection_version=2
+    service, record, view, packets, question, allowed, use, *, generation_projection_version=2,
+    generation_repair=None,
 ):
     version = checked_generation_projection_version(generation_projection_version)
+    if generation_repair is not None and version != 5:
+        raise ValueError("Atomic repair requires generation v5")
     if version >= 2:
+        if version == 5:
+            return question_projection(service, record, view, packets, question, allowed, use,
+                project=task_scoped_generation_projection, generation_repair=generation_repair)
         if version == 4:
             return question_projection(
                 service, record, view, packets, question, allowed, use,
@@ -445,8 +487,15 @@ def parse_atomic_generation(response, payload, view, use, *, _forecast=False):
 
         by_task = {row["task_id"]: row for row in outcomes}
         tasks = {task["task_id"]: task for task in payload["generation_tasks"]}
+        retained_texts = ({row["text"] for row in payload["generation_repair"].get(
+            "retained_claims", ())} if version == 5 and "generation_repair" in payload else set())
         selected, task_counts = [], {}
         for binding in task_bindings:
+            if binding["atom"]["text"].strip() in retained_texts:
+                task_gaps.add("retained_claim_duplicate")
+                by_task[binding["task_id"]].update(
+                    state="rejected", reason="retained_claim_duplicate")
+                continue
             probe, invalid, _ = strict_parse(
                 encoded(dict(question_plans=[dict(
                     question_id=binding["question_id"],
@@ -457,6 +506,8 @@ def parse_atomic_generation(response, payload, view, use, *, _forecast=False):
             task_gaps.update(invalid)
             outcome = by_task[binding["task_id"]]
             if not probe:
+                if version == 5 and "claim_candidate_invalid" not in outcome.get("diagnostic", ()):
+                    outcome.setdefault("diagnostic", []).append("claim_candidate_invalid")
                 if not task_counts.get(binding["task_id"]):
                     outcome.update(state="rejected", reason="claim_candidate_invalid")
                 continue
@@ -470,8 +521,27 @@ def parse_atomic_generation(response, payload, view, use, *, _forecast=False):
         for plan in cleaned["question_plans"]:
             plan["atoms"] = [binding["atom"] for binding in selected
                              if binding["question_id"] == plan["question_id"]]
+        if version == 5 and "generation_repair" in payload:
+            limit = payload["generation_repair"]["claim_limit"]
+            for plan in cleaned["question_plans"]:
+                plan["atoms"] = plan["atoms"][:limit]
         response = encoded(cleaned)
     claims, gaps, plans = strict_parse(response)
+    if version == 5 and "generation_repair" in payload:
+        # Every new ID is derived locally, including its question, task and
+        # attempt. A model-supplied atom index cannot collide with kept claims.
+        counts, replacements = {}, {}
+        for claim in claims:
+            binding = next(b for b in selected if b["identity"] == identity(claim))
+            tid, qid = binding["task_id"], binding["question_id"]
+            index = counts.get(tid, 0)
+            counts[tid] = index + 1
+            replacements[claim.id] = "claim-" + digest([
+                use.id, qid, tid, payload["generation_repair"]["attempt"], index,
+            ])[:20]
+        claims = [c.model_copy(update={"id": replacements[c.id]}) for c in claims]
+        for plan in plans:
+            plan["claim_ids"] = [replacements[cid] for cid in plan["claim_ids"]]
     if version >= 2:
         actual = {identity(claim): claim.id for claim in claims}
         used = set()
@@ -594,17 +664,90 @@ def transport_span(detail, start, *, name, agent, scope, system, user, response)
     return span
 
 
-def dispatch_row(span, *, question_ids, claim_ids, fact_ids):
+def dispatch_row(span, *, question_ids, claim_ids, fact_ids, attempt=0):
     return dict(
         span_id=span.id,
         name=span.name,
         question_ids=list(question_ids),
         claim_ids=list(claim_ids),
         fact_ids=sorted(fact_ids),
-        attempt=0,
+        attempt=attempt,
         full_input_sha256=digest(span.full_input),
         full_output_sha256=digest(span.full_output),
     )
+
+
+def generation_repair_context(payload, plan, claims, reviews, dispatches, view, boundaries, use):
+    """Derive one finite retry from actual acceptance failures and review output."""
+    from packages.research.evidence.report_claims import audit_report_claims, claim_rule_reasons
+
+    current = [c for c in claims if c.id in plan["claim_ids"]]
+    audited = audit_report_claims(current, reviews, view, boundaries,
+                                 available_facts=view.facts, review_version=3)
+    kept = {row.claim.id for row in audited if row.status == "supported"}
+    reviewed = {cid for d in dispatches if d["name"] == REVIEW_NAME for cid in d["claim_ids"]}
+    omitted = set(plan.get("omitted_review_claim_ids", ()))
+    outcomes = {row["task_id"]: row for row in plan["task_results"]}
+    by_id = {c.id: c for c in current}
+    targets, diagnostics, limits, failed_ids = [], [], {}, []
+    for task in payload["generation_tasks"]:
+        tid, result = task["task_id"], outcomes[task["task_id"]]
+        if task["state"] != "planned":
+            continue
+        ids = result.get("claim_ids", [])
+        failed = [cid for cid in ids if cid not in kept and cid not in omitted and (
+            cid in reviewed or claim_rule_reasons(by_id[cid], view, boundaries,
+                                                  available_facts=view.facts))]
+        reasons = list(result.get("diagnostic", ()))
+        if result.get("reason") in {"task_result_missing", "generation_task_invalid",
+                                    "claim_candidate_invalid"}:
+            reasons.append(result["reason"])
+        for cid in failed:
+            rules = claim_rule_reasons(by_id[cid], view, boundaries, available_facts=view.facts)
+            reasons.extend(rules or ("claim_review_not_supported",))
+        remaining = task["max_claims"] - len(set(ids) & kept)
+        if reasons and remaining > 0:
+            targets.append(tid)
+            diagnostics.append(dict(task_id=tid, reasons=sorted(set(reasons))))
+            limits[tid] = remaining
+            failed_ids.extend(failed)
+    claim_limit = 8 - len(kept)
+    if not targets or claim_limit <= 0:
+        return None
+    qid = payload["questions"][0]["question_id"]
+    task_by_claim = {cid: row["task_id"] for row in plan["task_results"]
+                     for cid in row.get("claim_ids", ())}
+    return dict(attempt=1, target_task_ids=targets, diagnostics=diagnostics,
+                prior_failed_claim_ids=failed_ids,
+                retained_claim_ids=[c.id for c in current if c.id in kept],
+                diagnostic_scope="prior_claim_text_is_not_evidence",
+                retained_claims=[dict(task_id=task_by_claim[c.id], claim_id=c.id, text=c.text)
+                                 for c in current if c.id in kept],
+                failed_claims=[dict(task_id=task_by_claim[cid], claim_id=cid, text=by_id[cid].text)
+                               for cid in failed_ids],
+                repair_namespace=digest([use.id, qid, "atomic-generation-v5", 1]),
+                claim_limit=claim_limit, task_claim_limits=limits)
+
+
+def merge_generation_plan(plan, parsed, *, attempt):
+    """Keep initial IDs and failures while recording the new candidate outcome."""
+    snapshot = dict(attempt=attempt, claim_ids=list(parsed["claim_ids"]),
+                    task_results=parsed["task_results"])
+    plan.setdefault("generation_attempts", []).append(snapshot)
+    if not attempt:
+        plan.update(parsed)
+        return
+    plan["claim_ids"] = [*plan["claim_ids"], *parsed["claim_ids"]]
+    additions = {row["task_id"]: row for row in parsed["task_results"]}
+    merged = []
+    for row in plan["task_results"]:
+        new = additions.get(row["task_id"])
+        if new is None:
+            merged.append(row)
+            continue
+        ids = [*row.get("claim_ids", []), *new.get("claim_ids", [])]
+        merged.append(dict(new, **({"claim_ids": ids, "state": "generated"} if ids else {})))
+    plan["task_results"] = merged
 
 
 def save_atomic_receipt(service, record, compact, view, use, packets):
@@ -625,7 +768,9 @@ def save_atomic_receipt(service, record, compact, view, use, packets):
             f"atomic-generation-v{receipt['generation_projection_version']}-"
             f"review-v{receipt['review_projection_version']}"
         )
-    if compact.get('answer_review_contract') == 'subquestion-premises-v2':
+    if compact.get('answer_review_contract') in {
+            'subquestion-premises-v2', 'subquestion-premises-v3',
+            'subquestion-premises-v4', 'subquestion-premises-v5'}:
         receipt['answer_review_contract'] = compact['answer_review_contract']
     live = service._evidence_live_record(record)
     existing = [
@@ -771,7 +916,7 @@ def _current_request_preflight(
 
 async def execute_question_atomic_delivery(
     service, record, selected, view, use, questions, packets, allowed, boundaries, gaps,
-    *, review_projection_version=3, generation_projection_version=4,
+    *, review_projection_version=3, generation_projection_version=5,
     answer_review_contract='subquestion-premises-v1',
 ):
     from packages.agents.writer.dimension_writer import (
@@ -809,7 +954,19 @@ async def execute_question_atomic_delivery(
         evidence_view=dict(facts=[]),
     )
     max_bytes = min(14000, use.max_bytes)
-    for question in questions:
+    # The sentinel schedules retries only after every question's first attempt.
+    pending = [(question, None) for question in questions] + [(None, None)]
+    first_attempts = []
+    for question, repair in pending:
+        if question is None:
+            if generation_projection_version == 5:
+                for question, initial_payload, initial_plan in first_attempts:
+                    repair = generation_repair_context(initial_payload, initial_plan, claims,
+                        reviews, compact["dispatches"], view, boundaries, use)
+                    if repair is not None:
+                        pending.append((question, repair))
+            continue
+        attempt = 1 if repair is not None else 0
         qid = question["question_id"]
         from packages.agents.writer.request_clarification import server_clarification_answer
 
@@ -827,6 +984,7 @@ async def execute_question_atomic_delivery(
         payload = atomic_question_context(
             service, record, view, packets, question, allowed, use,
             generation_projection_version=generation_projection_version,
+            generation_repair=repair,
         )
         validate_atomic_handoff(service, record, payload, view)
         prompt = compact_prompt_json(payload)
@@ -854,7 +1012,12 @@ async def execute_question_atomic_delivery(
             )
             if f.id not in sent
         ]
-        compact["question_answer_plans"].append(plan)
+        retained_plan = None
+        if attempt:
+            retained_plan = next(p for p in compact["question_answer_plans"]
+                                 if p["question_id"] == qid)
+        else:
+            compact["question_answer_plans"].append(plan)
         if not sent and payload.get("deferred_exception_group_count"):
             plan.update(
                 state="deferred",
@@ -902,7 +1065,7 @@ async def execute_question_atomic_delivery(
         options = [dict(atom, task_id=task["task_id"])
                    for atom in options for task in payload["generation_tasks"]
                    if task["state"] == "planned"
-                   and (generation_projection_version == 4
+                   and (generation_projection_version >= 4
                         or set(atom["support_refs"]) <= set(task["support_refs"]))]
         # Validate before applying the forecast capacity. Invalid early display
         # candidates must not hide a later complete, legally bound support.
@@ -1085,8 +1248,15 @@ async def execute_question_atomic_delivery(
         except (ValueError, TypeError, AttributeError):
             current = []
             plan.update(state="deferred", reason="question_generation_invalid")
+        if generation_projection_version == 5:
+            parsed = dict(question_id=qid, claim_ids=plan["claim_ids"],
+                          missing_fields=plan["missing_fields"], task_results=plan["task_results"])
+            merge_generation_plan(retained_plan if attempt else plan, parsed, attempt=attempt)
+            if not attempt:
+                first_attempts.append((question, actual, plan))
         compact["dispatches"].append(
-            dispatch_row(span, question_ids=[qid], claim_ids=[c.id for c in current], fact_ids=sent)
+            dispatch_row(span, question_ids=[qid], claim_ids=[c.id for c in current], fact_ids=sent,
+                         attempt=attempt)
         )
         claims.extend(current)
         valid = [
@@ -1197,6 +1367,7 @@ async def execute_question_atomic_delivery(
                     question_ids=[qid],
                     claim_ids=[c.id for c in batch_claims],
                     fact_ids={fid for c in batch_claims for fid in c.fact_ids},
+                    attempt=attempt,
                 )
             )
             if review_projection_version == 3:
@@ -1369,7 +1540,9 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
                 claim_ids=[c["id"] for c in payload["claims"]],
                 fact_ids={fid for c in supported if c.id in allowed for fid in c.fact_ids},
             )
-        if contract == 'subquestion-premises-v2':
+        if contract in {
+                'subquestion-premises-v2', 'subquestion-premises-v3',
+                'subquestion-premises-v4', 'subquestion-premises-v5'}:
             compact['answer_review_contract'] = contract
             dispatch['answer_validation'] = diagnostics
         compact['dispatches'].append(dispatch)
@@ -1465,6 +1638,8 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
         raise ValueError("Atomic question plan scope changed")
     planned = {r["question_id"]: r for r in plan_rows}
     actual_plans, reviewed_claim_ids = {}, set()
+    initial_payloads, initial_plans, merged_plans, claim_attempts = {}, {}, {}, {}
+    repaired_qids, validated_dispatches = set(), []
     answer_contract = None
     for dispatch in receipt["dispatches"]:
         ids = dispatch["question_ids"]
@@ -1474,7 +1649,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
             or len(ids) != len(set(ids))
             or not set(ids) <= known_questions.keys()
             or type(dispatch.get("attempt")) is not int
-            or dispatch["attempt"] != 0
+            or dispatch["attempt"] not in ({0, 1} if generation_projection_version == 5 else {0})
             or dispatch["span_id"] in seen
         ):
             raise ValueError("Atomic dispatch scope or attempt changed")
@@ -1502,7 +1677,9 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
             if answer_contract is not None and answer_contract != contract:
                 raise ValueError('Atomic answer contracts mixed')
             answer_contract = contract
-            expected_marker = contract if contract == 'subquestion-premises-v2' else None
+            expected_marker = contract if contract in {
+                'subquestion-premises-v2', 'subquestion-premises-v3',
+                'subquestion-premises-v4', 'subquestion-premises-v5'} else None
             if (receipt.get('answer_review_contract') != expected_marker
                     or audit is not None and audit.answer_review_contract != contract):
                 raise ValueError('Atomic actual answer contract changed')
@@ -1531,12 +1708,22 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
         )
         seen.add(span.id)
         if span.name == GENERATION_NAME:
-            if len(ids) != 1 or set(ids) & generated_qids:
+            attempt = dispatch["attempt"]
+            if (len(ids) != 1 or not attempt and (set(ids) & generated_qids or repaired_qids)
+                    or attempt and (ids[0] not in initial_payloads or ids[0] in repaired_qids)):
                 raise ValueError("Atomic generation question repeated")
             qid = ids[0]
+            repair = None
+            if attempt:
+                repair = generation_repair_context(initial_payloads[qid], initial_plans[qid],
+                    [c for _, c in generated.values()], reviews, validated_dispatches,
+                    view, boundaries or [SimpleNamespace(allowed_fact_ids=allowed)], use)
+                if repair is None:
+                    raise ValueError("Atomic repair has no failed task")
             expected = atomic_question_context(
                 service, record, view, packets, known_questions[qid], allowed, use,
                 generation_projection_version=generation_projection_version,
+                generation_repair=repair,
             )
             if generation_projection_version >= 2:
                 validated_review_payload(raw, expected)
@@ -1548,8 +1735,10 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 from packages.research.evidence.source_exceptions import _missing_question_inputs
 
                 if (
+                    generation_projection_version != 5 and (
                     planned[qid].get("state") != "deferred"
                     or planned[qid].get("reason") != "question_generation_invalid"
+                    )
                 ):
                     raise ValueError("Atomic invalid generation outcome changed") from None
                 current = []
@@ -1568,18 +1757,29 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 dispatch["claim_ids"] != [c.id for c in current]
                 or dispatch["fact_ids"]
                 != sorted(row["id"] for row in payload["evidence_view"]["facts"])
-                or planned[qid]["claim_ids"] != plans[0]["claim_ids"]
+                or generation_projection_version != 5 and (
+                planned[qid]["claim_ids"] != plans[0]["claim_ids"]
                 or planned[qid]["missing_fields"] != plans[0]["missing_fields"]
                 or generation_projection_version >= 2
                 and planned[qid].get("task_results") != plans[0].get("task_results")
+                )
             ):
                 raise ValueError("Atomic output or plan changed")
+            if generation_projection_version == 5:
+                if attempt:
+                    repaired_qids.add(qid)
+                else:
+                    initial_payloads[qid], initial_plans[qid] = payload, plans[0]
+                    merged_plans[qid] = {}
+                merge_generation_plan(merged_plans[qid], plans[0], attempt=attempt)
             actual_plans[qid] = {key: value for key, value in plans[0].items()
                                  if key != "task_results"}
             generated_qids.add(qid)
             generated.update((c.id, (qid, c)) for c in current)
+            claim_attempts.update((c.id, attempt) for c in current)
             sent.update((row["id"], row) for row in payload["evidence_view"]["facts"])
-            facts_by_question[qid] = payload["evidence_view"]["facts"]
+            facts_by_question[qid] = list({row["id"]: row for row in [
+                *facts_by_question[qid], *payload["evidence_view"]["facts"]]}.values())
         elif span.name == REVIEW_NAME:
             if len(ids) != 1 or ids[0] not in actual_plans:
                 raise ValueError("Atomic review question changed")
@@ -1589,6 +1789,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 or not claim_ids
                 or any(cid not in generated or generated[cid][0] != ids[0] for cid in claim_ids)
                 or reviewed_claim_ids.intersection(claim_ids)
+                or any(claim_attempts.get(cid) != dispatch["attempt"] for cid in claim_ids)
             ):
                 raise ValueError("Atomic review claims changed")
             current = [generated[cid][1] for cid in claim_ids]
@@ -1623,6 +1824,8 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 # review to this batch or invalidating independent peers.
                 pass
         elif span.name == ANSWER_NAME:
+            if dispatch["attempt"] != 0:
+                raise ValueError("Atomic answer attempt changed")
             audited = audit_report_claims(
                 [c for _, c in generated.values()],
                 reviews,
@@ -1669,7 +1872,8 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 question_claim_whitelist=local,
             )
             if (
-                contract == "subquestion-premises-v2"
+                contract in {"subquestion-premises-v2", "subquestion-premises-v3",
+                             "subquestion-premises-v4", "subquestion-premises-v5"}
                 and dispatch.get("answer_validation") != diagnostics
                 or contract == "subquestion-premises-v1"
                 and "answer_validation" in dispatch
@@ -1681,9 +1885,15 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 answers[row.question_id] = row
         else:
             raise ValueError("Atomic dispatch phase changed")
+        validated_dispatches.append(dispatch)
     for qid, row in planned.items():
         if row["claim_ids"] and qid not in generated_qids:
             raise ValueError("Atomic plan has no generation")
+        if generation_projection_version == 5 and qid in merged_plans and any(
+            row.get(key) != merged_plans[qid].get(key)
+            for key in ("claim_ids", "missing_fields", "task_results", "generation_attempts")
+        ):
+            raise ValueError("Atomic merged generation plan changed")
     if audit is not None:
         published = [item for item in audit.claims if item.status == "supported"]
         reviewed = {r.claim_id: r for r in reviews}

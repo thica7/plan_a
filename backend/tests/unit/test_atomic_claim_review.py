@@ -377,8 +377,9 @@ async def test_same_original_sibling_and_advisory_cannot_supply_download_witness
 @pytest.mark.parametrize(
     "bad_review", ["wrong_witness", "missing_witness", "no_transport", "timeout"]
 )
+@pytest.mark.parametrize("generation_version", [None, 4], ids=["current_default", "legacy_gen4"])
 async def test_bad_review_retains_other_independent_reviews_in_execution_and_replay(
-    monkeypatch, bad_review
+    monkeypatch, bad_review, generation_version
 ):
     from test_question_atomic_delivery import atomic_model
 
@@ -387,7 +388,8 @@ async def test_bad_review_retains_other_independent_reviews_in_execution_and_rep
 
     case = await atomic_case()
     service, record, snapshot, selected, view, use, packets, boundaries, allowed = case
-    normal = atomic_model(service, {})
+    normal_seen = {}
+    normal = atomic_model(service, normal_seen)
     damaged = False
 
     async def model(record, **kwargs):
@@ -422,6 +424,8 @@ async def test_bad_review_retains_other_independent_reviews_in_execution_and_rep
         allowed,
         boundaries,
         (),
+        **({} if generation_version is None else {
+            "generation_projection_version": generation_version}),
     )
     audited = audit_report_claims(
         result["claims"],
@@ -431,11 +435,33 @@ async def test_bad_review_retains_other_independent_reviews_in_execution_and_rep
         available_facts=view.facts,
         review_version=3,
     )
-    assert len(result["claims"]) == 3
-    assert sum(c.status == "supported" for c in audited) == 2
+    current = generation_version is None
+    repaired = current and bad_review in {"wrong_witness", "missing_witness"}
+    assert result["compact"]["generation_projection_version"] == (5 if current else 4)
+    assert len(normal_seen[atomic.GENERATION_NAME]) == (2 if repaired else 1)
+    assert len(result["claims"]) == (4 if repaired else 3)
+    assert sum(c.status == "supported" for c in audited) == (3 if repaired else 2)
+    assert result["claims"][0].id not in {row.claim_id for row in result["reviews"]}
+    claims_by_id = {claim.id: claim for claim in result["claims"]}
+    for payload in normal_seen[atomic.REVIEW_NAME]:
+        assert len(payload["claims"]) == 1 and payload["review_projection_version"] == 3
+        claim = payload["claims"][0]
+        assert claim["support_quotes"] == [
+            binding.quote for binding in claims_by_id[claim["id"]].source_span_bindings
+        ]
+    if repaired:
+        repair = normal_seen[atomic.GENERATION_NAME][1]["generation_repair"]
+        kept = result["claims"][1:3]
+        assert repair["retained_claim_ids"] == [claim.id for claim in kept]
+        assert [row["text"] for row in repair["retained_claims"]] == [claim.text for claim in kept]
+        assert "retained_claim_duplicate" in result["gaps"]
+        assert result["claims"][3].text == result["claims"][0].text
+        assert result["claims"][3].id not in {claim.id for claim in result["claims"][:3]}
+        assert normal_seen[atomic.REVIEW_NAME][-1]["claims"][0]["id"] == result["claims"][3].id
     use = next(u for u in record.detail.evidence_consumptions if u.id == use.id)
     replay = atomic.replay_atomic_delivery(service, record.detail, snapshot, use, view)
-    assert replay["reviews"] == result["reviews"] and len(replay["reviews"]) == 2
+    assert replay["claims"] == result["claims"] and replay["reviews"] == result["reviews"]
+    assert len(replay["reviews"]) == (3 if repaired else 2)
 
 
 def test_single_claim_projection_retains_complete_operation_conditions_and_required_checks():
@@ -482,8 +508,9 @@ def test_single_claim_projection_retains_complete_operation_conditions_and_requi
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("independent", [False, True])
+@pytest.mark.parametrize("generation_version", [None, 4], ids=["current_default", "legacy_gen4"])
 async def test_actual_download_review_never_receives_unselected_temporal_permission(
-    monkeypatch, independent
+    monkeypatch, independent, generation_version
 ):
     from claim_review_fixture import expand_prompt_payload, question_plan_response
     from test_task_support_selection import append_response
@@ -505,11 +532,12 @@ async def test_actual_download_review_never_receives_unselected_temporal_permiss
         ),
     )
     service, record, snapshot, context, view, use, packets, boundaries, allowed = case
-    seen = []
+    seen, generations = [], []
 
     async def model(record, **kwargs):
         payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
         if kwargs["name"] == atomic.GENERATION_NAME:
+            generations.append(payload)
             candidate = next(
                 span
                 for row in payload["evidence_view"]["facts"]
@@ -542,19 +570,35 @@ async def test_actual_download_review_never_receives_unselected_temporal_permiss
         allowed,
         boundaries,
         (),
+        **({} if generation_version is None else {
+            "generation_projection_version": generation_version}),
     )
-    assert len(seen) == 1 and len(result["claims"]) == 1
-    assert seen[0]["claims"][0]["support_quotes"] == [selected]
-    # Claim text necessarily repeats the assertion being judged. No other
-    # source-context member may carry the unselected affirmative permission.
-    context_only = {key: value for key, value in seen[0].items() if key != "claims"}
-    assert permission not in json.dumps(context_only)
+    current = generation_version is None
+    attempts = 2 if current and not independent else 1
+    assert result["compact"]["generation_projection_version"] == (5 if current else 4)
+    assert len(generations) == (2 if current else 1)
+    assert len(seen) == len(result["claims"]) == attempts
+    assert len({claim.id for claim in result["claims"]}) == attempts
+    if current and independent:
+        # The failed download task cannot borrow the already retained vote
+        # atom. Its invalid resubmission receives no additional review.
+        repair = generations[1]["generation_repair"]
+        assert repair["retained_claim_ids"] == [result["claims"][0].id]
+        assert repair["retained_claims"][0]["text"] == selected
+        assert "generation_task_invalid" in result["gaps"]
+    for payload in seen:
+        assert len(payload["claims"]) == 1 and payload["review_projection_version"] == 3
+        assert payload["claims"][0]["support_quotes"] == [selected]
+        # No source-context member may carry the unselected permission,
+        # including the separately reviewed attempt1 candidate.
+        context_only = {key: value for key, value in payload.items() if key != "claims"}
+        assert permission not in json.dumps(context_only)
+        temporal = payload["constraint_context"][0]["temporal_conditions"]
+        assert temporal and all(row["requires_complete_support"] != independent for row in temporal)
     assert len(result["reviews"]) == int(independent)
     use = next(u for u in record.detail.evidence_consumptions if u.id == use.id)
-    assert (
-        atomic.replay_atomic_delivery(service, record.detail, snapshot, use, view)["reviews"]
-        == result["reviews"]
-    )
+    replay = atomic.replay_atomic_delivery(service, record.detail, snapshot, use, view)
+    assert replay["claims"] == result["claims"] and replay["reviews"] == result["reviews"]
 
 
 @pytest.mark.asyncio
@@ -703,8 +747,9 @@ def test_unrelated_copy_exception_does_not_supply_prose_or_block_independent_vot
         ("remove files", "delete files"),
     ],
 )
+@pytest.mark.parametrize("generation_version", [None, 4], ids=["current_default", "legacy_gen4"])
 async def test_action_alias_or_object_wording_does_not_prove_temporal_independence(
-    monkeypatch, source_action, selected_action
+    monkeypatch, source_action, selected_action, generation_version
 ):
     from claim_review_fixture import expand_prompt_payload, question_plan_response
     from test_task_support_selection import append_response
@@ -719,11 +764,12 @@ async def test_action_alias_or_object_wording_does_not_prove_temporal_independen
         question=f"Example Product: May Observers {selected_action}?",
     )
     service, record, snapshot, context, view, use, packets, boundaries, allowed = case
-    seen = []
+    seen, generations = [], []
 
     async def model(record, **kwargs):
         payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
         if kwargs["name"] == atomic.GENERATION_NAME:
+            generations.append(payload)
             support = next(
                 span
                 for row in payload["evidence_view"]["facts"]
@@ -753,8 +799,14 @@ async def test_action_alias_or_object_wording_does_not_prove_temporal_independen
         allowed,
         boundaries,
         (),
+        **({} if generation_version is None else {
+            "generation_projection_version": generation_version}),
     )
-    assert len(result["claims"]) == len(seen) == 1
+    current = generation_version is None
+    attempts = 2 if current else 1
+    assert result["compact"]["generation_projection_version"] == (5 if current else 4)
+    assert len(generations) == len(result["claims"]) == len(seen) == attempts
+    assert len({claim.id for claim in result["claims"]}) == attempts
     audited = audit_report_claims(
         result["claims"],
         result["reviews"],
@@ -765,10 +817,15 @@ async def test_action_alias_or_object_wording_does_not_prove_temporal_independen
     )
     use = next(u for u in record.detail.evidence_consumptions if u.id == use.id)
     replay = atomic.replay_atomic_delivery(service, record.detail, snapshot, use, view)
+    assert replay["claims"] == result["claims"]
     assert not result["reviews"] and not replay["reviews"]
     assert all(row.status != "supported" for row in audited)
-    temporal = seen[0]["constraint_context"][0]["temporal_conditions"]
-    assert temporal and all(row["requires_complete_support"] for row in temporal)
+    for payload in seen:
+        assert len(payload["claims"]) == 1 and payload["review_projection_version"] == 3
+        assert payload["claims"][0]["support_quotes"] == [selected]
+        assert restriction not in json.dumps(payload)
+        temporal = payload["constraint_context"][0]["temporal_conditions"]
+        assert temporal and all(row["requires_complete_support"] for row in temporal)
 
 
 @pytest.mark.asyncio

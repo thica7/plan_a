@@ -333,7 +333,7 @@ def test_irreducible_long_context_is_wholly_unsent_and_reserve_stays_bounded():
     # The historical codec still has its 6000-byte limit above. Current v6
     # protects the readable 8192-byte request plus its actual system and output.
     assert TASK_REVIEW_BYTES == 8192 and MAX_REVIEW_OUTPUT_TOKENS == 1600
-    assert FINAL_QA_REQUEST_RESERVE == len(INDEPENDENT_SYSTEM.encode()) + 8192 + 256 + 1600 + 2
+    assert FINAL_QA_REQUEST_RESERVE == len(INDEPENDENT_SYSTEM.encode()) + 14000 + 256 + 1600 + 2
 
 
 @pytest.mark.asyncio

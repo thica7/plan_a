@@ -366,6 +366,7 @@ async def test_production_writer_uses_pool_and_binds_atomic_receipt(monkeypatch)
     await service._real_writer_step(record)
     audit = record.detail.report_dimension_audits[0]
     assert audit.question_atomic_contract == "question-atomic-delivery-v1"
+    assert audit.answer_review_contract == "subquestion-premises-v5"
     assert audit.question_atomic_receipt_digest
     assert audit.answer_coverage[0].status == "answered"
     assert "否" in record.detail.report_md
@@ -1106,7 +1107,9 @@ async def test_live_checkpoint_current_requests_run_despite_nonbinding_future_fo
                 atomic.atomic_system(name, record.detail.output_language,
                     review_projection_version=3, generation_projection_version=4,
                     answer_review_contract=contract)
-                for contract in ('subquestion-premises-v1', 'subquestion-premises-v2')
+                for contract in ('subquestion-premises-v1', 'subquestion-premises-v2',
+                                 'subquestion-premises-v3', 'subquestion-premises-v4',
+                                 'subquestion-premises-v5')
             }
         )
         transported.append(name)
@@ -1164,6 +1167,7 @@ async def test_live_checkpoint_current_requests_run_despite_nonbinding_future_fo
         boundaries,
         (),
         answer_review_contract="subquestion-premises-v2",
+        generation_projection_version=4,
     )
     audited = audit_report_claims(
         result["claims"],
@@ -1330,6 +1334,7 @@ async def test_current_review_exhaustion_after_real_generation_leaves_claim_unpu
         allowed,
         boundaries,
         (),
+        generation_projection_version=4,
     )
     assert transported == [atomic.GENERATION_NAME]
     assert len(result["claims"]) == 1 and not result["reviews"]

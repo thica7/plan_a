@@ -128,9 +128,10 @@ class ReportDimensionAudit(BaseModel):
     review_context_bytes: tuple[int, ...] = ()
     answer_coverage: tuple[ReportAnswerCoverage, ...] = ()
     answer_binding_version: Literal[2, 3] | None = None
-    answer_review_contract: Literal["subquestion-premises-v1", "subquestion-premises-v2"] | None = (
-        None
-    )
+    answer_review_contract: Literal[
+        "subquestion-premises-v1", "subquestion-premises-v2",
+        "subquestion-premises-v3", "subquestion-premises-v4", "subquestion-premises-v5"
+    ] | None = None
     claim_review_version: Literal[3] | None = None
     upstream_dependencies: tuple[EvidenceArtifactDependency, ...] | None = None
     question_atomic_contract: Literal["question-atomic-delivery-v1"] | None = None

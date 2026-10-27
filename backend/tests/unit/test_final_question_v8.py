@@ -64,7 +64,7 @@ async def test_current_delivery_is_separate_and_history_cannot_borrow_its_approv
             assert context["question"] == current["question"]
             assert context["visible_answer"] == current["visible_answer"]
     output = receipt(record.detail)
-    assert output["mode"] == V8
+    assert output["mode"] == qa.PROTOCOL
     assert output["passed_question_ids"] == [current["question_id"]]
     assert len(output["model_review"]["reviews"]) == 3
     assert output["question_review_states"][current["question_id"]] == "current_limitation"
@@ -73,7 +73,7 @@ async def test_current_delivery_is_separate_and_history_cannot_borrow_its_approv
             {key: value for key, value in row.items() if key != "support_digest"})
     assert output["basis_hash"] == service._evidence_artifact_hash(dict(
         dependencies=qa._basis(service, record, service._final_qa_snapshot(record)),
-        protocol=V8, candidates=list(rows.values())))
+        protocol=qa.PROTOCOL, candidates=list(rows.values())))
     assert record.detail.report_md == before["report_md"]
     assert record.detail.report_dimension_audits[0].model_dump(mode="json") == before[
         "report_dimension_audits"][0]
@@ -126,19 +126,19 @@ async def test_noncanonical_or_unverified_clarification_never_receives_delivery_
 
 
 def test_protocol_freezes_old_systems_and_scopes_boolean_to_verification_target():
-    assert qa.PROTOCOL == V8
+    assert qa.PROTOCOL == "independent_questions_v9"
     for name, expected in {
         "INDEPENDENT_SYSTEM_V5": "d3b389c339ed353b83560842c33f5f64acd500e2241ce49a40ea9f5a1c7466c5",
         "INDEPENDENT_SYSTEM_V6": "077d6cffe1ace86417e94cb16baa4747ca081d285dc2a3f17ed70c2f931fae43",
         "INDEPENDENT_SYSTEM_V7": "29d1a48473e58ae2f85f487476f33ced368b6b2acde98fb4fd972d85d4244a9d",
     }.items():
         assert hashlib.sha256(getattr(qa, name).encode()).hexdigest() == expected
-    assert qa.INDEPENDENT_SYSTEM.startswith("Independent final question QA v8.")
+    assert qa.INDEPENDENT_SYSTEM_V8.startswith("Independent final question QA v8.")
     assert "verification_target" in qa.INDEPENDENT_SYSTEM
     assert "assigned verification target" in qa.INDEPENDENT_SYSTEM
     assert "Pending user inputs are not delivery omissions" in qa.INDEPENDENT_SYSTEM
     assert qa.FINAL_QA_REQUEST_RESERVE == (
-        len(qa.INDEPENDENT_SYSTEM.encode()) + 8192 + 256 + 1600 + 2)
+        len(qa.INDEPENDENT_SYSTEM.encode()) + 14000 + 256 + 1600 + 2)
 
 
 @pytest.mark.asyncio
@@ -277,7 +277,7 @@ async def test_real_adapter_full_qa_preserves_partial_history_budget_and_cache(m
     body = record.detail.report_md
     await service._real_qa_step(record)
     output = receipt(record.detail)
-    assert output["mode"] == V8
+    assert output["mode"] == qa.PROTOCOL
     assert len(requests) == 2, {
         "rows": [(r["verification_target"], r["support_verified"], r["diagnostic_only"])
                  for r in candidates(record.detail).values()],

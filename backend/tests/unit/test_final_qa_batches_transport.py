@@ -1,7 +1,9 @@
 """Final QA batching preserves transport, budget, and cache provenance."""
 
+import hashlib
 import json
 from dataclasses import replace
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -9,8 +11,10 @@ from question_review_fixture import review_payload as decode_review_payload
 from test_final_question_reconciliation import QUESTION, finding_context, reviewed, scope_case
 from test_task_delivery_budget import task_service
 
+from packages.agents.qa import independent_question_review as qa
 from packages.agents.qa.question_reconciliation import reconcile_question_findings
 from packages.orchestrator.llm_execution import LLMExecutionMixin
+from packages.schema.models import TraceSpan
 
 
 @pytest.mark.asyncio
@@ -47,7 +51,7 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
         original.model_copy(
             update={
                 "id": f"issue-{index}",
-                "problem": "Q1: " + "condition remains unmet. " * 100 + str(index),
+                "problem": "Q1: " + "condition remains unmet. " * 200 + str(index),
             }
         )
         for index in range(2)
@@ -63,7 +67,7 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
         user = payload["messages"][1]["content"]
         batch = decode_review_payload(user.split("\nJSON:\n", 1)[1])
         requests.append(batch)
-        assert len(user.encode()) <= 8192
+        assert len(user.encode()) <= qa.review_byte_limit(qa.PROTOCOL) == 14000
         batch_ids = [row["issue_id"] for row in batch["findings"]]
         assert batch_ids and set(batch_ids) <= {independent_id, "issue-0", "issue-1"}
         for row in batch["findings"]:
@@ -94,6 +98,8 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
         independent_id, "issue-0", "issue-1"] + (["issue-1"] if second_batch == "foreign" else [])
     spans = [span for span in detail.trace_spans if span.name == "final_question_reconciliation"]
     assert len(spans) == initial_calls
+    assert max(len(span.full_input.split("\nJSON:\n", 1)[1].encode()) + 7
+               for span in spans) > 8192
     assert [span.status for span in spans] == [
         "ok",
         "error" if second_batch == "unavailable" else "ok",
@@ -106,7 +112,8 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
         wire = loads(span.full_input.split('\nJSON:\n', 1)[1])
         rebuilt, omitted = final_review_batches(
             [expected[row['issue_id']] for row in batch['findings']],
-            batch['basis_hash'], max_bytes=8192, max_batches=1)
+            batch['basis_hash'], max_bytes=qa.review_byte_limit(qa.PROTOCOL),
+            max_batches=1, protocol=qa.PROTOCOL)
         assert not omitted and wire == rebuilt[0]
         assert span.full_input == INDEPENDENT_SYSTEM + '\n\n\nJSON:\n' + dumps(wire)
         assert all(row == expected[row['issue_id']] for row in batch['findings'])
@@ -124,6 +131,7 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
     assert budget.max_calls == 24 and budget.max_tokens == 80000
     assert budget.tokens_used <= budget.max_tokens
     receipt = json.loads(detail.trace_spans[-1].full_output)
+    assert receipt["mode"] == qa.PROTOCOL == "independent_questions_v9"
     assert receipt["planned_batches"] == initial_calls
     assert receipt["unsent_issue_ids"] == []
     assert [row["issue_id"] for row in receipt["model_review"]["reviews"]] == (
@@ -152,3 +160,58 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
     final_result = await reconcile_question_findings(service, record, issues, evidence_issues=[])
     assert final_result == cached_result
     assert len(requests) == expected_calls  # No third paid attempt for an unsuccessful finding.
+
+
+def test_explicit_v8_wire_parser_cache_and_cap_keep_their_original_identity():
+    from packages.agents.qa.question_review_transport import dumps, final_review_batches
+
+    protocol = "independent_questions_v8"
+    assert qa.review_byte_limit(protocol) == 8192
+    assert hashlib.sha256(qa.INDEPENDENT_SYSTEM_V8.encode()).hexdigest() == (
+        "1c493c5a733f1406fcd8c19dd8246d0a87bf9d56ed2a79bd9f2846216ec067ec"
+    )
+    row = dict(
+        issue_id="legacy-current", question_id="legacy-question", question="Can A export?",
+        answer=dict(claim_ids=[], status="answered", resolution="direct"),
+        visible_answer="A may export under the complete selected conditions.",
+        diagnostic_only=False, independent_question_check=True,
+        verification_target="complete_finding_resolution", expected_claim_ids=[],
+        support_digest="1" * 64,
+    )
+    candidates = {row["issue_id"]: row}
+    batches, omitted = final_review_batches([row], "legacy-basis", max_bytes=8192,
+                                           max_batches=1, protocol=protocol)
+    assert not omitted and batches[0]["findings"] == [row]
+    assert "review_scope" not in dumps(batches[0])
+    response = reviewed(batches[0])
+    parsed = qa._batch_response(response, "legacy-basis", candidates, protocol=protocol)
+    assert list(parsed.reviews) == [row["issue_id"]]
+    assert qa._affirmative(parsed.reviews[row["issue_id"]], row, protocol=protocol)
+    span = TraceSpan(id="legacy-v8-span", kind="llm", agent="qa",
+        name="final_question_reconciliation", status="ok", duration_ms=0,
+        full_input=qa.INDEPENDENT_SYSTEM_V8 + "\n\n\nJSON:\n" + dumps(batches[0]),
+        full_output=response, metadata={"llm_transport_attempts": 1, "llm_request_attempts": 1})
+    bound = dict(issue_ids=[row["issue_id"]], span_id=span.id,
+        full_input_sha256=hashlib.sha256(span.full_input.encode()).hexdigest(),
+        full_output_sha256=hashlib.sha256(span.full_output.encode()).hexdigest())
+    local = TraceSpan(id="legacy-v8-receipt", kind="tool", agent="qa", name=qa.RECEIPT_NAME,
+        status="ok", duration_ms=0, metadata={"basis_hash": "legacy-basis"},
+        full_output=json.dumps(dict(mode=protocol, batch_receipts=[bound])))
+    detail = SimpleNamespace(trace_spans=[span, local])
+    cache = qa._cache(detail, "legacy-basis", candidates, protocol=protocol)
+    assert list(cache[0]) == [row["issue_id"]]
+    assert cache[1] == {row["issue_id"]: 1} and cache[2] == {row["issue_id"]}
+    assert cache[3] == set() and len(cache[4]) == 1
+    assert qa._cache(detail, "legacy-basis", candidates)[0] == {}
+    # Rehashing a complete payload inside the new cap cannot expand old v8.
+    row["visible_answer"] += "x" * 9000
+    large = dict(version=1, basis_hash="legacy-basis", findings=[row])
+    user = "\nJSON:\n" + dumps(large)
+    assert 8192 < len(user.encode()) < 14000
+    span.full_input = qa.INDEPENDENT_SYSTEM_V8 + "\n\n" + user
+    span.full_output = reviewed(large)
+    bound.update(full_input_sha256=hashlib.sha256(span.full_input.encode()).hexdigest(),
+                 full_output_sha256=hashlib.sha256(span.full_output.encode()).hexdigest())
+    assert (
+        qa._bound_batch_reviews(detail, "legacy-basis", candidates, bound, protocol=protocol) == {}
+    )

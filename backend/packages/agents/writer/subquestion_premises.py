@@ -13,6 +13,9 @@ from packages.research.evidence.snapshot_models import canonical_json
 
 CONTRACT = "subquestion-premises-v1"
 CONTRACT_V2 = "subquestion-premises-v2"
+CONTRACT_V3 = "subquestion-premises-v3"
+CONTRACT_V4 = "subquestion-premises-v4"
+CONTRACT_V5 = "subquestion-premises-v5"
 _RESOURCE_NAME = r"[A-Z](?:[0-9]{1,3})?"
 _RESOURCE_NOUN = r"(?:boards?|看板|白板|vaults?|保险库|folders?|文件夹|workspaces?|工作区|resources?|资源)"
 
@@ -357,8 +360,9 @@ def bind_subquestions(rows, question, claims):
     return tuple(bindings)
 
 
-def subquestion_binding_reasons(record, claims, *, required=False, answer_review_contract=CONTRACT):
-    if answer_review_contract not in {CONTRACT, CONTRACT_V2}:
+def subquestion_binding_reasons(record, claims, *, required=False,
+                               answer_review_contract=CONTRACT, facts=()):
+    if answer_review_contract not in {CONTRACT, CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5}:
         return ('answer_review_contract_invalid',)
     bindings = record.subquestion_bindings
     resource_reasons = named_resource_outcome_reasons(record, claims)
@@ -391,7 +395,12 @@ def subquestion_binding_reasons(record, claims, *, required=False, answer_review
         ):
             reasons.add("answer_subquestion_premise_missing")
         if binding.conclusion == "no" and not (
-            _negative_supported_v2(binding, selected)[0] if answer_review_contract == CONTRACT_V2
+            _negative_supported_v2(binding, selected,
+                premise_version=(5 if answer_review_contract == CONTRACT_V5 else
+                                 4 if answer_review_contract == CONTRACT_V4
+                                 else 3 if answer_review_contract == CONTRACT_V3 else 2),
+                facts=facts)[0]
+            if answer_review_contract in {CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5}
             else _negative_supported(binding, selected)
         ):
             reasons.add("answer_subquestion_negative_unproven")
@@ -478,12 +487,335 @@ def _finite_scope_matches(question, text):
     return not (wanted and actual and wanted.isdisjoint(actual))
 
 
-def finite_decision_witnesses(binding, selected):
+_RESTATEMENT = re.compile(r'[,，]\s*(?P<link>即|i\.e\.|that\s+is)\s*', re.I)
+_RESTATEMENT_SCOPE = re.compile(
+    r'^\s*(?P<product>[A-Za-z][A-Za-z0-9 .\'-]*?\s+)?'
+    r'(?P<plan>free|paid|premium|enterprise|business|standard|免费|付费)\s*'
+    r'(?P<resource>organizations?(?![A-Za-z])|组织)', re.I)
+_RESTATEMENT_PERMISSION = re.compile(
+    rf'\s*(?:允许\s*用户(?:\s*与\s*(?:另外\s*)?(?:其他|{_COUNT}\s*(?:个|名|位)?\s*)?用户)?'
+    r'\s*(?:存储并)?(?:安全)?(?:共享|分享)(?:数据|密码)'
+    r'|allows?\s+users?\s+to\s+(?:store\s+and\s+)?(?:securely\s+)?share\s+(?:data|passwords?)'
+    rf'(?:\s+with\s+(?:other\s+|another\s+|{_COUNT}\s+)?users?)?)\s*', re.I)
+_RESTATEMENT_PEER_V4 = re.compile(
+    rf'\s*仅支持与另外\s*{_COUNT}\s*(?:个|名|位)?用户'
+    r'(?:存储并)?(?:安全)?(?:共享|分享)(?:数据|密码)\s*', re.I)
+
+
+def _organization_alias_v4(text, identity):
+    """Consume one complete, exactly equivalent plan/organization alias only."""
+    tail = text[identity.end():]
+    if not re.match(r'\s*[（(]', tail):
+        return identity.end(), ''
+    match = re.match(r'\s*(?P<quote>\((?P<ascii>[^()（）]+)\)|（(?P<cjk>[^()（）]+)）)', tail)
+    alias = _RESTATEMENT_SCOPE.fullmatch(
+        (match['ascii'] or match['cjk']).strip()) if match else None
+    plans = {'免费': 'free', '付费': 'paid'}
+    original_plan = plans.get(identity['plan'].casefold(), identity['plan'].casefold())
+    if (not alias or alias['product']
+            or plans.get(alias['plan'].casefold(), alias['plan'].casefold()) != original_plan):
+        return None
+    return identity.end() + match.end(), match['quote']
+
+
+def _restated_count_action(text, cap, question, unit, *, premise_version=3):
+    """Bridge only an explicit adjacent restatement of a finite organization rule.
+
+    Every quote is taken from this complete published fact. Unrecognized subjects,
+    packages, resources and user categories cannot establish this new witness.
+    """
+    if unit != 'people':
+        return None
+    links = [link for link in _RESTATEMENT.finditer(text) if link.end() <= cap.start()]
+    if not links:
+        return None
+    link = links[-1]
+    # Consume the complete antecedent region; earlier qualifiers cannot be
+    # discarded merely because a recognized permission follows a delimiter.
+    antecedent = text[:link.start()].strip()
+    restatement = text[link.end():]
+    # A later delimiter or sentence cannot supply this cap or its operation.
+    if re.search(r'[,，。；;.!?？\n]', text[link.end():cap.start()]):
+        return None
+    if not re.fullmatch(r'[^,，。；;.!?？\n]+[。.!]?', restatement):
+        return None
+    left, right = _RESTATEMENT_SCOPE.match(antecedent), _RESTATEMENT_SCOPE.match(restatement)
+    if not left or not right:
+        return None
+    plans = {'免费': 'free', '付费': 'paid'}
+
+    def plan(value):
+        return plans.get(value.casefold(), value.casefold())
+
+    if plan(left['plan']) != plan(right['plan']):
+        return None
+    requested_plans = {plan(m.group()) for m in re.finditer(
+        r'\b(?:free|paid|premium|enterprise|business|standard)\b|免费|付费', question, re.I)}
+    if requested_plans != {plan(left['plan'])}:
+        return None
+    left_product, right_product = ((match['product'] or '').strip().casefold()
+                                   for match in (left, right))
+    if right_product and right_product != left_product:
+        return None
+    if left_product and not re.search(r'(?<![A-Za-z0-9])' + re.escape(left_product)
+                                     + r'(?![A-Za-z0-9])', question, re.I):
+        return None
+    if (_scope_objects(antecedent) != {'organization'}
+            or _scope_objects(restatement) != {'organization'}):
+        return None
+    left_end, right_end = left.end(), right.end()
+    extra = {}
+    if premise_version == 4:
+        left_alias = _organization_alias_v4(antecedent, left)
+        right_alias = _organization_alias_v4(restatement, right)
+        if left_alias is None or right_alias is None:
+            return None
+        left_end, alias_quote = left_alias
+        right_end, _ = right_alias
+        if alias_quote:
+            extra['organization_alias_quote'] = alias_quote
+    left_tail = antecedent[left_end:]
+    # Only an explicit generic-user permission and an organization user cap are
+    # supported here. Other roles/labels and unknown categories remain unresolved.
+    if not (_RESTATEMENT_PERMISSION.fullmatch(left_tail)
+            or premise_version == 4 and _RESTATEMENT_PEER_V4.fullmatch(left_tail)):
+        return None
+    if premise_version == 4:
+        peers = list(_count_occurrences(left_tail))
+        if peers:
+            raw = cap['n'].casefold()
+            maximum = int(raw) if raw.isdigit() else _NUMBERS[raw]
+            if len(peers) != 1 or peers[0][0] != 'people' or peers[0][1] + 1 != maximum:
+                return None
+            extra['peer_count'] = peers[0][1]
+    if not re.fullmatch(
+            r'\s*(?:(?:最多|至多|上限为?|仅限|不超过)(?:只能|仅能|可|可以)?'
+            r'(?:使用|提供|拥有|包含|支持|容纳|允许)?|(?:supports?\s+)?(?:at\s+most|up\s+to|only))\s*',
+            text[link.end() + right_end:cap.start()], re.I):
+        return None
+    # Inclusion of an owner is the only finite count-population annotation.
+    # Unknown exclusions, grouping and active-user qualifiers must stay unknown.
+    if not re.fullmatch(
+            r'\s*(?:（含所有者）|\(including\s+(?:the\s+)?owner\))?[。.!]?\s*',
+            text[cap.end():], re.I):
+        return None
+    from packages.agents.writer.answer_resolution import _SUBJECT
+
+    for value in (antecedent, text[link.end():cap.end()], question):
+        if any(match.lastgroup != 'generic' for match in _SUBJECT.finditer(value)):
+            return None
+    actions = _count_actions(antecedent)
+    if not actions or _count_actions(restatement) - actions:
+        return None
+    return dict(actions=actions, cap_sentence=text, action_antecedent_quote=antecedent,
+                cap_clause_quote=restatement, restatement_quote=link['link'], **extra)
+
+
+def _permission_remainder_v4(text, actions):
+    """Remove only a finite denied duty, preserving every independent obligation."""
+    verbs = {'vote': '投票', 'download': '下载', 'export': '导出', 'import': '导入'}
+    if len(actions) != 1 or not actions <= verbs.keys():
+        return text, []
+    verb = verbs[next(iter(actions))]
+    actor = re.match(r'\s*([A-Za-z][A-Za-z0-9_-]*)\s+', text)
+    subject = rf'(?:{re.escape(actor[1])}\s+)?' if actor else ''
+    object_phrase = r'(?:每张|每个|所有|全部)?(?:卡片|附件|看板)'
+    # One known subject, one must, one operation/object and a closed duty noun.
+    # Arbitrary predicates on either side of must are never consumed.
+    duty_pattern = (
+        rf'\s*{subject}必须\s*(?:(?:对|给)\s*{object_phrase}\s*{verb}'
+        rf'|{verb}(?:\s*{object_phrase})?)\s*的(?:强制)?义务'
+    )
+    quotes = []
+
+    def denied(match):
+        if not re.fullmatch(duty_pattern, match['duty']):
+            return match.group()
+        quotes.append(match.group())
+        return ''
+
+    remainder = re.sub(
+        r'并?不(?:构成|意味|推出|蕴含)(?P<duty>[^,，。；;.!?？\n]{1,160}?义务)'
+        r'(?=\s*(?:$|[,，。；;.!?？\n]))', denied, text)
+    return remainder, quotes
+
+
+_SOURCE_ORGANIZATION_V5 = (
+    r'(?:[A-Za-z][A-Za-z0-9_-]*\s+)?'
+    r'(?:Free|Paid|Premium|Enterprise|Business|Standard)\s+organizations?'
+)
+_SOURCE_CAP_V5 = re.compile(
+    rf'\s*{_SOURCE_ORGANIZATION_V5}\s+'
+    r'(?:offer(?:s)?\s+(?:both\s+users\s+all\s+the\s+core\s+features\s+of\s+'
+    r'Password\s+Manager\s+and\s+)?|supports?\s+)'
+    rf'(?:secure\s+)?data\s+sharing\s+in\s+up\s+to\s+{_COUNT}\s+collections?\s*\.?\s*', re.I)
+_SOURCE_CONTEXT_V5 = re.compile(
+    rf'\s*(?:Free\s+organizations?\s*\n\s*)?'
+    rf'(?:Start\s+a\s+{_SOURCE_ORGANIZATION_V5}\s+to\s+store\s+and\s+securely\s+'
+    r'share\s+data\s+with\s+one\s+other\s+user\.\s*)?'
+    + _SOURCE_CAP_V5.pattern +
+    r'(?:Any\s+user\s+of\s+any\s+plan\s+can\s+be\s+the\s+owner\s+of\s+one\s+'
+    r'Free\s+organization\.\s*)?', re.I)
+
+
+def _source_context_v5(fact):
+    """A closed sharing-cap paragraph, including every parent qualifier.
+
+    These transparent envelope fields supply no positive premise. Unknown
+    dates, populations, exceptions, grouping or text remain unconsumed/rejected.
+    """
+    members = [fact.quote, *(fact.value if isinstance(fact.value, list) else [fact.value])]
+    if any(not isinstance(text, str) or not (_SOURCE_CONTEXT_V5.fullmatch(text)
+           or re.fullmatch(r'\s*(?:Password\s+Manager\s+Plans|Personal\s+plans)\s*', text, re.I))
+           for text in members if text):
+        return False
+    qualifiers = fact.qualifiers
+    if set(qualifiers) - {'operations', 'slot', 'source_scope'}:
+        return False
+    if not isinstance(qualifiers.get('operations', []), list):
+        return False
+    operations = list(qualifiers.get('operations', ()))
+    scope = qualifiers.get('source_scope', {})
+    if not isinstance(scope, dict) or set(scope) - {
+            'captured_page_id', 'context', 'operations', 'raw_source_id', 'source_url'}:
+        return False
+    context = scope.get('context', {})
+    if (not isinstance(context, dict)
+            or set(context) - {'document_section', 'plan', 'role', 'section_path'}
+            or any(context.get(key) is not None for key in ('plan', 'role', 'section_path'))):
+        return False
+    if not isinstance(scope.get('operations', []), list):
+        return False
+    operations.extend(scope.get('operations', ()))
+    for operation in operations:
+        if (not isinstance(operation, dict) or set(operation) - {
+                'operation', 'effect', 'plan', 'role', 'access_scope', 'object_type',
+                'object_quote', 'operation_quote', 'prerequisites', 'missing_fields'}
+                or operation.get('operation') != 'share' or operation.get('effect') != 'allowed'
+                or operation.get('plan') not in {None, 'Personal plans'}
+                or any(operation.get(key) is not None
+                       for key in ('role', 'access_scope', 'object_type', 'object_quote'))
+                or set(operation.get('missing_fields', ())) - {'role', 'access_scope'}):
+            return False
+        quote = operation.get('operation_quote', '')
+        if not isinstance(quote, str) or not (
+                _SOURCE_CONTEXT_V5.fullmatch(quote) or re.fullmatch(
+                    r'Start\s+a\s+Free\s+organization\s+to\s+store\s+and\s+securely\s+'
+                    r'share\s+data\s+with\s+one\s+other\s+user\.?', quote, re.I)):
+            return False
+        for prerequisite in operation.get('prerequisites', ()):
+            if (not isinstance(prerequisite, dict) or set(prerequisite) != {'kind', 'quote'}
+                    or prerequisite['kind'] != 'plan'
+                    or not _SOURCE_CONTEXT_V5.fullmatch(prerequisite['quote'])):
+                return False
+    return True
+
+
+def _verified_cap_span_v5(row, facts):
+    """Require a fact's own literal identity; no unbound-helper fallback."""
+    from packages.research.evidence.report_claims import ReportClaim
+    from packages.research.evidence.source_spans import projected_source_facts
+
+    if row.get('kind') != 'fact':
+        return None
+    try:
+        claim = ReportClaim.model_validate(row)
+    except ValueError:
+        return None
+    if (len(claim.source_span_bindings) != 1
+            or set(claim.source_ids) != {claim.source_span_bindings[0].source_id}):
+        return None
+    projected, reasons = projected_source_facts(claim, facts)
+    if (reasons or not projected or any(
+            (fact.competitor, fact.dimension) != (claim.competitor, claim.dimension)
+            for fact in projected)):
+        return None
+    return claim, projected
+
+
+def _source_cap_witness_v5(binding, selected, facts):
+    """Intersect one published cap property with its own verified literal span."""
+    from packages.agents.writer.answer_action_scope import _INVERTED
+
+    parents = {fact.id: fact for fact in facts}
+    for row in selected:
+        verified = _verified_cap_span_v5(row, facts)
+        if not verified:
+            continue
+        claim, projected = verified
+        if any(not _source_context_v5(parents[fact.id]) for fact in projected):
+            continue
+        text = claim.text
+        identity = _RESTATEMENT_SCOPE.match(text)
+        counts = list(_count_occurrences(text))
+        # The publication must itself state a maximum, for this single shared
+        # collections property. Source text cannot turn a capability into a cap.
+        if (not identity or len(counts) != 1 or counts[0][0] != 'collections'
+                or _FINITE_UNSAFE.search(text) or _count_actions(text) != {'share'}
+                or not _finite_scope_matches(binding.question_quote, text)):
+            continue
+        unit, maximum, count = counts[0]
+        prefix = text[identity.end():count.start()]
+        if not re.fullmatch(
+                r'\s*(?:的)?(?:安全)?(?:数据)?共享(?:数据|密码)?\s*'
+                r'(?:最多|至多|上限为?|不超过)\s*(?:(?:可|可以)(?:放入|容纳|支持)?)?\s*', prefix):
+            continue
+        if not re.fullmatch(r'\s*[。.]?\s*', text[count.end():]):
+            continue
+        subject = binding.question_quote
+        inverted = _INVERTED.match(subject)
+        if inverted:
+            subject = subject[inverted.end():]
+        question_scope = re.match(r'\s*([^:：?？\n]+)[:：]', subject)
+        if question_scope:
+            subject = subject[question_scope.end():]
+        inverted = _INVERTED.match(subject)
+        if inverted:
+            subject = subject[inverted.end():]
+        if re.match(r'\s*[^:：?？\n]+[:：]', subject):
+            continue
+        question_identity = _RESTATEMENT_SCOPE.match(subject)
+        question_products = (question_scope[1] if question_scope else None,
+                             question_identity['product'] if question_identity else None)
+        for fact in projected:
+            original = fact.quote
+            source_identity = _RESTATEMENT_SCOPE.match(original)
+            if (not _SOURCE_CAP_V5.fullmatch(original) or not source_identity
+                    or identity['plan'].casefold() != source_identity['plan'].casefold()
+                    or any(product and product.strip().casefold() != claim.competitor.casefold()
+                           for product in (identity['product'], source_identity['product'],
+                                           *question_products))):
+                continue
+            source_witness = finite_decision_witnesses(binding,
+                [dict(id=claim.id, kind='fact', text=original)],
+                premise_version=4).get('upper_bound')
+            if (source_witness
+                    and (source_witness['unit'], source_witness['maximum']) == (unit, maximum)):
+                return dict(source_witness, published_cap_quote=text, source_cap_quote=original,
+                    source_span_binding=claim.source_span_bindings[0].model_dump(mode='json'))
+    return None
+
+
+def finite_decision_witnesses(binding, selected, *, premise_version=2, facts=()):
     """Finite eligibility witnesses, reconstructed from whole published atoms.
 
     They do not replace source/schema or independent semantic review. No model
     witness, reason, unseen fact, or conditional fragment supplies a premise.
     """
+    if premise_version == 5:
+        witnesses = finite_decision_witnesses(binding, selected, premise_version=4)
+        # V5 numeric decisions must be recheckable from real parent facts, even
+        # when their published wording already qualifies through the v4 path.
+        upper = witnesses.get('upper_bound')
+        if not facts or upper and not any(
+                row['id'] == upper['claim_id'] and _verified_cap_span_v5(row, facts)
+                for row in selected):
+            witnesses.pop('upper_bound', None)
+        elif 'upper_bound' not in witnesses:
+            witness = _source_cap_witness_v5(binding, selected, facts)
+            if witness:
+                witnesses['upper_bound'] = witness
+        return witnesses
     question = binding.question_quote
     witnesses = {}
     if re.search(
@@ -513,8 +845,15 @@ def finite_decision_witnesses(binding, selected):
                         _count_clause(text, cap),
                         _count_clause(question, request),
                     )
+                    actions = _count_actions(cap_clause)
+                    bridge = None
+                    if premise_version in {3, 4} and not actions:
+                        bridge = _restated_count_action(
+                            text, cap, question, unit, premise_version=premise_version)
+                        if bridge:
+                            actions = bridge['actions']
                     if (wanted_unit == unit and maximum < required
-                            and _count_actions(cap_clause) == _count_actions(request_clause)):
+                            and actions == _count_actions(request_clause)):
                         witnesses.setdefault(
                             "upper_bound",
                             dict(
@@ -525,6 +864,8 @@ def finite_decision_witnesses(binding, selected):
                                 unit=unit,
                                 maximum=maximum,
                                 required=required,
+                                **({key: value for key, value in bridge.items() if key != 'actions'}
+                                   if bridge else {}),
                             ),
                         )
         if (re.search(r'意味|推出|\b(?:mean|imply|entail)', question, re.I)
@@ -543,7 +884,11 @@ def finite_decision_witnesses(binding, selected):
                         if re.search(pattern, question[implication.end():], re.I)}
             # A stated duty (outside the limited denial of entailment) cannot
             # gain this shortcut from its neighbouring permission clause.
-            remainder = re.sub(r'并?不(?:构成|意味|推出)[^。；;.!?？]*', '', text)
+            denied_quotes = []
+            if premise_version == 4:
+                remainder, denied_quotes = _permission_remainder_v4(text, actions)
+            else:
+                remainder = re.sub(r'并?不(?:构成|意味|推出)[^。；;.!?？]*', '', text)
             if actions and permitted == required == actions and not re.search(
                     r'必须|义务|\b(?:must|required|obligat)', remainder, re.I):
                 if all(re.search(_ACTIONS[action], text, re.I) for action in actions):
@@ -554,14 +899,17 @@ def finite_decision_witnesses(binding, selected):
                             claim_id=claim["id"],
                             permission_quote=text,
                             requested_actions=sorted(actions),
+                            **({'denied_entailment_quotes': denied_quotes}
+                               if premise_version == 4 else {}),
                         ),
                     )
     return witnesses
 
 
-def _negative_supported_v2(binding, selected):
+def _negative_supported_v2(binding, selected, *, premise_version=2, facts=()):
     if binding.relation in {'upper_bound', 'permission_entailment'}:
-        witness = finite_decision_witnesses(binding, selected).get(binding.relation)
+        witness = finite_decision_witnesses(binding, selected,
+            premise_version=premise_version, facts=facts).get(binding.relation)
         return bool(witness), witness
     question = _decision_question(binding.question_quote)
     if binding.relation == 'explicit_negative':
@@ -574,7 +922,8 @@ def _negative_supported_v2(binding, selected):
     ), None
 
 
-def canonical_subquestions_v2(rows, question, claims, parent_claim_ids):
+def canonical_subquestions_v2(rows, question, claims, parent_claim_ids, *,
+                             premise_version=2, facts=()):
     """Keep individually qualified peers; receipt diagnostics bind every change."""
     if not isinstance(rows, list) or not 1 <= len(rows) <= 8:
         raise ValueError('missing subquestion decisions')
@@ -627,9 +976,11 @@ def canonical_subquestions_v2(rows, question, claims, parent_claim_ids):
         binding = AnswerSubquestionBinding(**row, support_digest='0' * 64)
         witness = None
         if valid and row['conclusion'] == 'no':
-            valid, witness = _negative_supported_v2(binding, selected)
+            valid, witness = _negative_supported_v2(
+                binding, selected, premise_version=premise_version, facts=facts)
             if not valid and row['relation'] == 'explicit_negative':
-                candidates = finite_decision_witnesses(binding, selected)
+                candidates = finite_decision_witnesses(
+                    binding, selected, premise_version=premise_version, facts=facts)
                 if len(candidates) == 1:
                     relation, witness = next(iter(candidates.items()))
                     adjustments.append(dict(kind='relation_restored', branch_index=index,
@@ -653,9 +1004,10 @@ def canonical_subquestions_v2(rows, question, claims, parent_claim_ids):
                 claim_ids=ids,
                 evidence_spans=[dict(claim_id=c["id"], quote=c["text"]) for c in selected],
             )
-            valid = not resolution_reasons(
-                local, _decision_question(row["question_quote"]), selected
-            )
+            checks = resolution_reasons(local, _decision_question(row["question_quote"]), selected)
+            valid = not [reason for reason in checks if not (
+                premise_version == 5 and witness and witness['kind'] == 'upper_bound'
+                and reason == 'answer_body_unresolved')]
             valid &= all(re.search(_ACTIONS[action], body, re.I)
                          for action in requested_answer_actions(row['question_quote']))
         if not valid:

@@ -34,10 +34,16 @@ def audit_heading(audit, language):
 
 
 def answer_decision_lines(
-    answer, language, *, claims=(), answer_review_contract="subquestion-premises-v1"
+    answer, language, *, claims=(), answer_review_contract="subquestion-premises-v1", facts=()
 ):
     """Decision wording has one extension point for reviewed subquestion decisions."""
     zh = language.startswith("zh")
+    if answer_review_contract == 'subquestion-premises-v5':
+        from packages.agents.writer.answer_coverage import coverage_resolution_reasons
+
+        if coverage_resolution_reasons(answer, claims, facts=facts, require_subquestions=True,
+                answer_review_contract=answer_review_contract):
+            return []
     if answer.resolution == "clarification":
         return [
             "  需要先澄清问题中的条件。"
@@ -73,7 +79,7 @@ def answer_decision_lines(
         # Display existing decisions only after their exact selected text and
         # premise receipts still match. This check supplies no semantic verdict.
         if not selection_binding_reasons(answer, claims) and not subquestion_binding_reasons(
-            answer, claims, answer_review_contract=answer_review_contract
+            answer, claims, answer_review_contract=answer_review_contract, facts=facts
         ):
             by_id = {claim["id"]: claim for claim in claims}
             for branch in branches:
@@ -85,7 +91,7 @@ def answer_decision_lines(
     return lines
 
 
-def question_coverage_lines(audit, language, *, detail=None):
+def question_coverage_lines(audit, language, *, detail=None, facts=None):
     if not audit.answer_coverage:
         return []
     zh = language.startswith("zh")
@@ -97,15 +103,30 @@ def question_coverage_lines(audit, language, *, detail=None):
         "unverified": "尚未核实",
     }
     supported = {item.claim.id: item.claim for item in audit.claims if item.status == "supported"}
+    if facts is None:
+        snapshot = next((item for item in getattr(detail, 'evidence_snapshots', ())
+                         if item.id == detail.evidence_snapshot_id), None)
+        facts = snapshot.facts if snapshot is not None else ()
+    facts = tuple(fact for fact in facts
+                  if fact.competitor == audit.competitor and fact.dimension == audit.dimension)
     from packages.agents.writer.task_answers import reviewed_task_answer_rows, task_answer_lines
     tasks = reviewed_task_answer_rows(detail, audit) if detail is not None else []
     for answer in audit.answer_coverage:
-        status = names[answer.status] if zh else answer.status
+        qualified = True
+        if audit.answer_review_contract == 'subquestion-premises-v5':
+            from packages.agents.writer.answer_coverage import coverage_resolution_reasons
+
+            qualified = not coverage_resolution_reasons(answer,
+                [claim.model_dump(mode='json') for claim in supported.values()], facts=facts,
+                require_subquestions=True, answer_review_contract=audit.answer_review_contract)
+        status = (names[answer.status] if zh else answer.status) if qualified else (
+            names['unverified'] if zh else 'unverified')
         lines.append(f"- {plain(answer.question)} — {status}")
-        if answer.answer and answer.status in {"answered", "partial"}:
+        if qualified and answer.answer and answer.status in {"answered", "partial"}:
             lines.extend(answer_decision_lines(answer, language,
                 claims=[claim.model_dump(mode="json") for claim in supported.values()],
-                answer_review_contract=audit.answer_review_contract or 'subquestion-premises-v1'))
+                answer_review_contract=audit.answer_review_contract or 'subquestion-premises-v1',
+                facts=facts))
             sources = {
                 sid
                 for claim_id in answer.claim_ids
