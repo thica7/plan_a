@@ -211,6 +211,7 @@ def coverage_resolution_reasons(
     facts=(),
     require_subquestions=False,
     answer_review_contract="subquestion-premises-v1",
+    decision_review=None,
 ):
     """Replay answer guards against the exact published claims, never review reasons."""
     from packages.agents.writer.answer_resolution import resolution_reasons
@@ -226,6 +227,7 @@ def coverage_resolution_reasons(
         claims,
         facts=facts,
         answer_review_contract=answer_review_contract,
+        decision_review=decision_review,
         required=(
             require_subquestions
             and record.status in {"answered", "partial"}
@@ -250,7 +252,7 @@ def coverage_resolution_reasons(
     scope_question = record.question
     if answer_review_contract in {
             'subquestion-premises-v2', 'subquestion-premises-v3',
-            'subquestion-premises-v4', 'subquestion-premises-v5'}:
+            'subquestion-premises-v4', 'subquestion-premises-v5', 'subquestion-premises-v6'}:
         from packages.agents.writer.subquestion_premises import _decision_question
         if record.status == 'partial' and record.subquestion_bindings:
             scope_question = "\n".join(
@@ -274,8 +276,11 @@ def coverage_resolution_reasons(
         and bool(record.subquestion_bindings) and not branch_reasons and all(
             branch.relation == 'upper_bound' and branch.conclusion == 'no'
             for branch in record.subquestion_bindings))
+    proven_task = (answer_review_contract == 'subquestion-premises-v6'
+        and bool(record.decision_credentials) and not branch_reasons)
     reasons.extend(reason for reason in resolution_checks
-                   if not ((proven_deletion or proven_cap) and reason == 'answer_body_unresolved'))
+                   if not ((proven_deletion or proven_cap or proven_task)
+                           and reason == 'answer_body_unresolved'))
     reasons.extend(plan_exclusivity_reasons(record, claims))
     from packages.agents.writer.answer_action_scope import answer_action_scope_reasons
     reasons.extend(answer_action_scope_reasons(record, claims))
@@ -290,7 +295,8 @@ def coverage_resolution_reasons(
 
 
 def is_qualified_partial_clarification(record, claims, *, facts=(), report_md=None,
-                                       answer_review_contract='subquestion-premises-v1'):
+                                       answer_review_contract='subquestion-premises-v1',
+                                       decision_review=None):
     """A reviewed source rule plus complete input clarification is a local delivery.
 
     This never upgrades partial to answered or waives any source/answer guard.
@@ -305,6 +311,7 @@ def is_qualified_partial_clarification(record, claims, *, facts=(), report_md=No
         required_binding_version=record.binding_version,
         facts=facts,
         answer_review_contract=answer_review_contract,
+        decision_review=decision_review,
     ):
         return False
     if record.binding_version == 3 and not record.claim_ids:
@@ -365,6 +372,7 @@ def parse_answer_coverage(
     text, questions, supported_claim_ids, *, claims=(), require_v2=False, required_binding_version=None, facts=(),
     require_subquestions=False, answer_review_contract='subquestion-premises-v1', diagnostics=None,
     question_claim_whitelist=None,
+    decision_review=None,
 ):
     try:
         from packages.agents.writer.subquestion_premises import (
@@ -373,14 +381,17 @@ def parse_answer_coverage(
             CONTRACT_V3,
             CONTRACT_V4,
             CONTRACT_V5,
+            CONTRACT_V6,
         )
         if answer_review_contract not in {
-                CONTRACT, CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5}:
+                CONTRACT, CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5, CONTRACT_V6}:
             raise ValueError('unsupported answer review contract')
         data = json.loads(text)
         if (
             not isinstance(data, dict)
-            or set(data) not in ({"answers"}, {"version", "answers"})
+            or set(data) not in (({"version", "answers", "task_decisions"},)
+                                if answer_review_contract == CONTRACT_V6 else
+                                ({"answers"}, {"version", "answers"}))
             or not isinstance(data["answers"], list)
         ):
             raise ValueError("invalid coverage response")
@@ -428,7 +439,7 @@ def parse_answer_coverage(
                     if data['version'] == 3 and row['resolution'] == 'clarification' and not row['claim_ids']:
                         raise ValueError('empty clarification is server generated only')
                     if (answer_review_contract in {
-                            CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5}
+                            CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5, CONTRACT_V6}
                             and subquestions is not None
                             and row['status'] in {'answered', 'partial'}):
                         from packages.agents.writer.subquestion_premises import (
@@ -442,7 +453,10 @@ def parse_answer_coverage(
                             [claim for claim in claims if claim['id'] in supported_claim_ids
                              and claim['id'] in local_ids], row['claim_ids'],
                             facts=facts,
+                            decision_review=decision_review,
+                            question_id=question['question_id'],
                             premise_version=(
+                                6 if answer_review_contract == CONTRACT_V6 else
                                 5 if answer_review_contract == CONTRACT_V5 else
                                 4 if answer_review_contract == CONTRACT_V4 else
                                 3 if answer_review_contract == CONTRACT_V3 else 2))
@@ -483,6 +497,11 @@ def parse_answer_coverage(
                         answer="\n".join(texts),
                         evidence_spans=[{"claim_id": claim_id, "quote": quote}
                                         for claim_id, quote in zip(row["claim_ids"], texts)],
+                        **({'decision_credentials': tuple(c for c in decision_review.credentials()
+                            if c.question_id == question['question_id']
+                            and c.claim_id in row['claim_ids'])
+                            or None} if answer_review_contract == CONTRACT_V6
+                            and decision_review is not None else {}),
                     )
                     answer, _ = selection_answer(record, claims)
                     record = record.model_copy(update={'answer': answer})
@@ -499,6 +518,7 @@ def parse_answer_coverage(
                     facts=facts,
                     require_subquestions=require_subquestions,
                     answer_review_contract=answer_review_contract,
+                    decision_review=decision_review,
                 )
                 if reasons:
                     raise ValueError("coverage guard rejected: " + ",".join(reasons))
@@ -509,7 +529,8 @@ def parse_answer_coverage(
                         [question], ("Answer coverage response was missing or invalid: " + str(error))[:800]
                     )
                 )
-            if (answer_review_contract in {CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5}
+            if (answer_review_contract in {
+                    CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5, CONTRACT_V6}
                     and diagnostics is not None):
                 import hashlib
 
@@ -692,4 +713,29 @@ SUBQUESTION_V5_REVIEW_SYSTEM = SUBQUESTION_V4_REVIEW_SYSTEM + (
     "Exact immutable fact hash, member path, coordinates and span identity are required. "
     "Unknown source conditions, dates, populations, grouping or exceptions remain unresolved. "
     "Missing originals cannot be replaced by model quotes, metadata or cached witnesses. "
+)
+
+
+# V6 deliberately starts at the common review base, before v3-v5's fact-only
+# cap restriction. Existing systems above remain byte-for-byte legacy inputs.
+SUBQUESTION_V6_REVIEW_SYSTEM = SUBQUESTION_REVIEW_SYSTEM + (
+    " Server subquestion premises v6. Independently audit each server decision_candidates entry "
+    "against its exact task, question, complete request_context, published inference, selected "
+    "source spans and complete parent quote/value/qualifiers in decision_source_context. "
+    "Supported claim review is eligibility only; decide whether this exact requested predicate "
+    "is fulfilled and grounded. A quantity_excess candidate compares a literal source maximum "
+    "with a strictly larger same-unit, same-operation, same-plan and same-role requirement; "
+    "an AND requirement can fail on one necessary component. Do not calculate other-user totals "
+    "or combine OR alternatives. A resource_non_entailment candidate can establish only that "
+    "a known role on A does not determine the role on B under an explicit per-resource rule. "
+    "It cannot establish B's actual permission, runtime denial or billing. Parent originals "
+    "restrict the inference, never supply a hidden published premise. Unknown siblings stay "
+    "unknown; preserve necessary clarifications and all roles, objects, actions, plans, dates, "
+    "exceptions and request partitions. question_task_claims binds every claim to its local task; "
+    "no branch or trailing format instruction may borrow a billing or other task's claim. "
+    "Return the existing version 3 answers/subquestions schema and top-level task_decisions. "
+    "For each candidate approved as a grounded no, return exactly "
+    "{candidate_ref,task_fulfilled:true,"
+    "target_grounding:'supported',conclusion:'no',evidence_refs,scenario_refs}. Copy refs exactly. "
+    "Omit unapproved candidates. Never invent tasks, hashes, witnesses, source refs or scenarios. "
 )

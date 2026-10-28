@@ -23,6 +23,7 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
     uses = {u.id: u for u in record.detail.evidence_consumptions}
     for index, audit in enumerate(record.detail.report_dimension_audits):
         reasons = set()
+        decision_reviews = {}
         use = uses.get(audit.consumption_id)
         if not producer_verified or dependency is None or audit.consumption_id not in dependency.consumption_ids:
             reasons.add("claim_producer_unverified")
@@ -45,7 +46,9 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                     or audit.question_atomic_receipt_digest is not None or atomic_trace):
                 from packages.agents.writer.question_atomic_delivery import replay_atomic_delivery
                 try:
-                    replay_atomic_delivery(service, record.detail, snapshot, use, view, audit=audit)
+                    replay = replay_atomic_delivery(
+                        service, record.detail, snapshot, use, view, audit=audit)
+                    decision_reviews = replay.get('decision_review', {})
                 except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
                     reasons.add("question_atomic_replay_failed")
             published = [c for c in audit.claims if c.status == "supported"]
@@ -86,7 +89,8 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
             def answer_invalid(item, *, required_version=audit.answer_binding_version,
                                answer_facts=view.facts, answer_claims=published_claims,
                                answer_ids=published_ids,
-                               review_contract=audit.answer_review_contract):
+                               review_contract=audit.answer_review_contract,
+                               current_decisions=decision_reviews):
                 if item.resolution == 'insufficient':
                     original = price_answers.get(item.question_id)
                     return (item.status != 'partial' or original is None
@@ -106,6 +110,7 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                             report_md=record.detail.report_md,
                             answer_review_contract=review_contract
                             or "subquestion-premises-v1",
+                            decision_review=current_decisions.get(item.question_id),
                         )
                     )
                 qualified_clarification = required_version in (
@@ -118,6 +123,7 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                     report_md=record.detail.report_md,
                     answer_review_contract=review_contract
                     or "subquestion-premises-v1",
+                    decision_review=current_decisions.get(item.question_id),
                 )
                 return (
                     (item.status != "answered" and not qualified_clarification)
@@ -132,6 +138,7 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                             require_subquestions=review_contract is not None,
                             answer_review_contract=review_contract
                             or "subquestion-premises-v1",
+                            decision_review=current_decisions.get(item.question_id),
                         )
                     )
                 )
@@ -144,8 +151,11 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                     or any(answer_invalid(item) for item in audit.answer_coverage)
                     or questions and not audit.answer_coverage):
                 reasons.add('answer_coverage_incomplete')
-            if not question_coverage_matches(record.detail.report_md, audit, record.detail.output_language,
-                                             audits=record.detail.report_dimension_audits, detail=record.detail):
+            if not question_coverage_matches(
+                record.detail.report_md, audit, record.detail.output_language,
+                audits=record.detail.report_dimension_audits, detail=record.detail,
+                decision_reviews=decision_reviews,
+            ):
                 reasons.add('published_answer_missing_or_changed')
         for reason in sorted(reasons):
             problem = f"主张引用审核失败：{reason}。请重新生成该产品和维度的报告内容。"

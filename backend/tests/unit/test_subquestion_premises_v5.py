@@ -319,8 +319,9 @@ async def test_v5_exact_selected_source_survives_live_parse_render_audit_replay_
         available_facts=view.facts, review_version=3)
     assert len(audited) == 1 and audited[0].status == "supported", audited
     use = next(u for u in record.detail.evidence_consumptions if u.id == use.id)
-    answers, _, _ = await service._dimension_question_coverage(record, packets[0]["questions"],
-        result["compact"], audited, view, use, ())
+    answers, _, _ = await atomic.atomic_answer_coverage(service, record, packets[0]["questions"],
+        result["compact"], [a.claim for a in audited if a.status == 'supported'], view, use, (),
+        answer_review_contract=V5)
     assert (answers[0].status, answers[0].conclusion) == (
         ("answered", "no") if eligible else ("unverified", "unknown")), answers
     audit = ReportDimensionAudit(competitor=view.competitor, dimension=view.dimension,

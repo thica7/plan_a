@@ -16,6 +16,7 @@ CONTRACT_V2 = "subquestion-premises-v2"
 CONTRACT_V3 = "subquestion-premises-v3"
 CONTRACT_V4 = "subquestion-premises-v4"
 CONTRACT_V5 = "subquestion-premises-v5"
+CONTRACT_V6 = "subquestion-premises-v6"
 _RESOURCE_NAME = r"[A-Z](?:[0-9]{1,3})?"
 _RESOURCE_NOUN = r"(?:boards?|看板|白板|vaults?|保险库|folders?|文件夹|workspaces?|工作区|resources?|资源)"
 
@@ -361,9 +362,12 @@ def bind_subquestions(rows, question, claims):
 
 
 def subquestion_binding_reasons(record, claims, *, required=False,
-                               answer_review_contract=CONTRACT, facts=()):
-    if answer_review_contract not in {CONTRACT, CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5}:
+                               answer_review_contract=CONTRACT, facts=(), decision_review=None):
+    if answer_review_contract not in {
+            CONTRACT, CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5, CONTRACT_V6}:
         return ('answer_review_contract_invalid',)
+    if answer_review_contract != CONTRACT_V6 and record.decision_credentials is not None:
+        return ('answer_decision_contract_invalid',)
     bindings = record.subquestion_bindings
     resource_reasons = named_resource_outcome_reasons(record, claims)
     if not bindings:
@@ -372,6 +376,12 @@ def subquestion_binding_reasons(record, claims, *, required=False,
     by_id = {claim["id"]: claim for claim in claims}
     cursor = 0
     outcomes = []
+    if answer_review_contract == CONTRACT_V6:
+        current = tuple(c for c in decision_review.credentials()
+                        if c.question_id == record.question_id and c.claim_id in record.claim_ids
+                        ) if decision_review is not None else ()
+        if (record.decision_credentials or ()) != current:
+            reasons.add('answer_decision_credential_changed')
     for binding in bindings:
         # Contiguous, ordered excerpts preserve the entire original request,
         # including scenario conditions and output requirements. No hidden tail.
@@ -390,17 +400,29 @@ def subquestion_binding_reasons(record, claims, *, required=False,
         if premise_digest(record.question, binding, claims) != binding.support_digest:
             reasons.add("answer_subquestion_binding_changed")
         selected = [by_id[cid] for cid in binding.claim_ids]
+        task_credentials = ()
+        task_target = False
+        if answer_review_contract == CONTRACT_V6 and binding.claim_ids:
+            owned, task_target, task_credentials = (decision_review.branch(
+                record.question_id, binding)
+                if decision_review is not None else (False, False, ()))
+            if not owned:
+                reasons.add('answer_task_claim_scope_mismatch')
+            if task_target and (binding.conclusion != 'no' or not task_credentials):
+                reasons.add('answer_task_decision_unverified')
         if record.status == "answered" and (
             not selected or binding.conclusion == "unknown" or binding.relation == "unresolved"
         ):
             reasons.add("answer_subquestion_premise_missing")
         if binding.conclusion == "no" and not (
-            _negative_supported_v2(binding, selected,
+            (bool(task_credentials) if task_target else _negative_supported_v2(binding, selected,
                 premise_version=(5 if answer_review_contract == CONTRACT_V5 else
+                                 5 if answer_review_contract == CONTRACT_V6 else
                                  4 if answer_review_contract == CONTRACT_V4
                                  else 3 if answer_review_contract == CONTRACT_V3 else 2),
-                facts=facts)[0]
-            if answer_review_contract in {CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5}
+                facts=facts)[0])
+            if answer_review_contract in {
+                CONTRACT_V2, CONTRACT_V3, CONTRACT_V4, CONTRACT_V5, CONTRACT_V6}
             else _negative_supported(binding, selected)
         ):
             reasons.add("answer_subquestion_negative_unproven")
@@ -923,7 +945,7 @@ def _negative_supported_v2(binding, selected, *, premise_version=2, facts=()):
 
 
 def canonical_subquestions_v2(rows, question, claims, parent_claim_ids, *,
-                             premise_version=2, facts=()):
+                             premise_version=2, facts=(), decision_review=None, question_id=None):
     """Keep individually qualified peers; receipt diagnostics bind every change."""
     if not isinstance(rows, list) or not 1 <= len(rows) <= 8:
         raise ValueError('missing subquestion decisions')
@@ -975,12 +997,44 @@ def canonical_subquestions_v2(rows, question, claims, parent_claim_ids, *,
         selected = [by_id[cid] for cid in ids] if valid else []
         binding = AnswerSubquestionBinding(**row, support_digest='0' * 64)
         witness = None
+        task_target, task_credentials = False, ()
+        if valid and premise_version == 6:
+            core = (decision_review.approved_quantity_core(question_id, binding, parent_claim_ids)
+                    if decision_review is not None else ())
+            if core and ids != [core[0].claim_id]:
+                from packages.agents.writer.task_decision_witnesses import (
+                    APPROVED_QUANTITY_CORE_POLICY,
+                )
+
+                retained = [core[0].claim_id]
+                adjustments.append(dict(kind='approved_quantity_core_selected',
+                    policy=APPROVED_QUANTITY_CORE_POLICY, branch_index=index,
+                    original_claim_ids=list(ids), retained_claim_ids=retained,
+                    excluded_claim_ids=[cid for cid in ids if cid not in retained]))
+                row['claim_ids'] = ids = retained
+                selected = [by_id[cid] for cid in ids]
+                binding = AnswerSubquestionBinding(**row, support_digest='0' * 64)
+            owned, task_target, task_credentials = (decision_review.branch(question_id, binding)
+                if decision_review is not None else (False, False, ()))
+            valid = owned
+            if task_target:
+                valid = valid and row['conclusion'] == 'no' and bool(task_credentials)
         if valid and row['conclusion'] == 'no':
-            valid, witness = _negative_supported_v2(
-                binding, selected, premise_version=premise_version, facts=facts)
-            if not valid and row['relation'] == 'explicit_negative':
+            if task_target:
+                valid = bool(task_credentials)
+                if valid:
+                    witness = dict(kind='reviewed_task_decision',
+                                   candidate_refs=[c.candidate_ref for c in task_credentials])
+            else:
+                valid, witness = _negative_supported_v2(
+                    binding, selected,
+                    premise_version=5 if premise_version == 6 else premise_version,
+                    facts=facts)
+            if not valid and not task_target and row['relation'] == 'explicit_negative':
                 candidates = finite_decision_witnesses(
-                    binding, selected, premise_version=premise_version, facts=facts)
+                    binding, selected,
+                    premise_version=5 if premise_version == 6 else premise_version,
+                    facts=facts)
                 if len(candidates) == 1:
                     relation, witness = next(iter(candidates.items()))
                     adjustments.append(dict(kind='relation_restored', branch_index=index,
@@ -1006,7 +1060,8 @@ def canonical_subquestions_v2(rows, question, claims, parent_claim_ids, *,
             )
             checks = resolution_reasons(local, _decision_question(row["question_quote"]), selected)
             valid = not [reason for reason in checks if not (
-                premise_version == 5 and witness and witness['kind'] == 'upper_bound'
+                (premise_version == 5 and witness and witness['kind'] == 'upper_bound'
+                 or premise_version == 6 and task_credentials)
                 and reason == 'answer_body_unresolved')]
             valid &= all(re.search(_ACTIONS[action], body, re.I)
                          for action in requested_answer_actions(row['question_quote']))

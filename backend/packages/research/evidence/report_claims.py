@@ -130,7 +130,8 @@ class ReportDimensionAudit(BaseModel):
     answer_binding_version: Literal[2, 3] | None = None
     answer_review_contract: Literal[
         "subquestion-premises-v1", "subquestion-premises-v2",
-        "subquestion-premises-v3", "subquestion-premises-v4", "subquestion-premises-v5"
+        "subquestion-premises-v3", "subquestion-premises-v4", "subquestion-premises-v5",
+        "subquestion-premises-v6"
     ] | None = None
     claim_review_version: Literal[3] | None = None
     upstream_dependencies: tuple[EvidenceArtifactDependency, ...] | None = None

@@ -200,9 +200,17 @@ def _request_only_clarification(detail, audit, answer, question):
 def _answer_support(detail, snapshot, audit, answer, question):
     if answer.resolution == 'clarification' and not answer.claim_ids:
         return [] if _request_only_clarification(detail, audit, answer, question) else None
+    decision_reviews = None
+    if audit.answer_review_contract == 'subquestion-premises-v6':
+        from packages.agents.writer.question_atomic_delivery import replay_decision_reviews
+
+        try:
+            decision_reviews = replay_decision_reviews(detail, audit)
+        except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
+            return None
     if answer.question != question["question"] or not question_coverage_matches(
         detail.report_md, audit, detail.output_language,
-        audits=detail.report_dimension_audits, detail=detail
+        audits=detail.report_dimension_audits, detail=detail, decision_reviews=decision_reviews,
     ):
         return None
     published = [item.claim for item in audit.claims if item.status == "supported"]
@@ -246,7 +254,8 @@ def _answer_support(detail, snapshot, audit, answer, question):
             or audit.answer_binding_version != 3
             or audit.answer_review_contract
             not in {"subquestion-premises-v1", "subquestion-premises-v2",
-                    "subquestion-premises-v3", "subquestion-premises-v4", "subquestion-premises-v5"}
+                    "subquestion-premises-v3", "subquestion-premises-v4", "subquestion-premises-v5",
+                    "subquestion-premises-v6"}
             or coverage_resolution_reasons(
                 answer,
                 [claim.model_dump(mode="json") for claim in published],
@@ -254,6 +263,7 @@ def _answer_support(detail, snapshot, audit, answer, question):
                 facts=facts,
                 require_subquestions=True,
                 answer_review_contract=audit.answer_review_contract,
+                decision_review=(decision_reviews or {}).get(answer.question_id),
             )
         ):
             return None

@@ -34,15 +34,16 @@ def audit_heading(audit, language):
 
 
 def answer_decision_lines(
-    answer, language, *, claims=(), answer_review_contract="subquestion-premises-v1", facts=()
+    answer, language, *, claims=(), answer_review_contract="subquestion-premises-v1", facts=(),
+    decision_review=None,
 ):
     """Decision wording has one extension point for reviewed subquestion decisions."""
     zh = language.startswith("zh")
-    if answer_review_contract == 'subquestion-premises-v5':
+    if answer_review_contract in {'subquestion-premises-v5', 'subquestion-premises-v6'}:
         from packages.agents.writer.answer_coverage import coverage_resolution_reasons
 
         if coverage_resolution_reasons(answer, claims, facts=facts, require_subquestions=True,
-                answer_review_contract=answer_review_contract):
+                answer_review_contract=answer_review_contract, decision_review=decision_review):
             return []
     if answer.resolution == "clarification":
         return [
@@ -79,7 +80,8 @@ def answer_decision_lines(
         # Display existing decisions only after their exact selected text and
         # premise receipts still match. This check supplies no semantic verdict.
         if not selection_binding_reasons(answer, claims) and not subquestion_binding_reasons(
-            answer, claims, answer_review_contract=answer_review_contract, facts=facts
+            answer, claims, answer_review_contract=answer_review_contract, facts=facts,
+            decision_review=decision_review,
         ):
             by_id = {claim["id"]: claim for claim in claims}
             for branch in branches:
@@ -91,7 +93,7 @@ def answer_decision_lines(
     return lines
 
 
-def question_coverage_lines(audit, language, *, detail=None, facts=None):
+def question_coverage_lines(audit, language, *, detail=None, facts=None, decision_reviews=None):
     if not audit.answer_coverage:
         return []
     zh = language.startswith("zh")
@@ -111,14 +113,23 @@ def question_coverage_lines(audit, language, *, detail=None, facts=None):
                   if fact.competitor == audit.competitor and fact.dimension == audit.dimension)
     from packages.agents.writer.task_answers import reviewed_task_answer_rows, task_answer_lines
     tasks = reviewed_task_answer_rows(detail, audit) if detail is not None else []
+    if audit.answer_review_contract == 'subquestion-premises-v6' and decision_reviews is None:
+        from packages.agents.writer.question_atomic_delivery import replay_decision_reviews
+
+        try:
+            decision_reviews = replay_decision_reviews(detail, audit) if detail is not None else {}
+        except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
+            decision_reviews = {}
     for answer in audit.answer_coverage:
+        decision_review = (decision_reviews or {}).get(answer.question_id)
         qualified = True
-        if audit.answer_review_contract == 'subquestion-premises-v5':
+        if audit.answer_review_contract in {'subquestion-premises-v5', 'subquestion-premises-v6'}:
             from packages.agents.writer.answer_coverage import coverage_resolution_reasons
 
             qualified = not coverage_resolution_reasons(answer,
                 [claim.model_dump(mode='json') for claim in supported.values()], facts=facts,
-                require_subquestions=True, answer_review_contract=audit.answer_review_contract)
+                require_subquestions=True, answer_review_contract=audit.answer_review_contract,
+                decision_review=decision_review)
         status = (names[answer.status] if zh else answer.status) if qualified else (
             names['unverified'] if zh else 'unverified')
         lines.append(f"- {plain(answer.question)} — {status}")
@@ -126,7 +137,7 @@ def question_coverage_lines(audit, language, *, detail=None, facts=None):
             lines.extend(answer_decision_lines(answer, language,
                 claims=[claim.model_dump(mode="json") for claim in supported.values()],
                 answer_review_contract=audit.answer_review_contract or 'subquestion-premises-v1',
-                facts=facts))
+                facts=facts, decision_review=decision_review))
             sources = {
                 sid
                 for claim_id in answer.claim_ids
@@ -145,9 +156,11 @@ def question_coverage_lines(audit, language, *, detail=None, facts=None):
     return [*lines, ""]
 
 
-def question_coverage_matches(report, audit, language, *, audits=(), detail=None):
+def question_coverage_matches(report, audit, language, *, audits=(), detail=None,
+                              decision_reviews=None):
     """Check the complete status/decision/answer block in its own audit section."""
-    expected = question_coverage_lines(audit, language, detail=detail)
+    expected = question_coverage_lines(audit, language, detail=detail,
+                                       decision_reviews=decision_reviews)
     if not expected:
         return True
     lines = report.splitlines()
@@ -169,7 +182,9 @@ def question_coverage_matches(report, audit, language, *, audits=(), detail=None
     # A duplicate intact block elsewhere cannot excuse a changed local block.
     exact = "\n".join(expected).rstrip("\n")
     expected_count = (
-        sum(question_coverage_lines(other, language, detail=detail) == expected for other in audits) or 1
+        sum(question_coverage_lines(other, language, detail=detail,
+                decision_reviews=decision_reviews if other == audit else None) == expected
+            for other in audits) or 1
     )
     return (
         report.count(exact) == expected_count

@@ -4195,6 +4195,42 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * DecisionCredential
+         * @description Transport receipt only; consumers reconstruct its current authority.
+         */
+        DecisionCredential: {
+            /** Candidate Ref */
+            candidate_ref: string;
+            /** Question Id */
+            question_id: string;
+            /** Task Id */
+            task_id: string;
+            /** Claim Id */
+            claim_id: string;
+            /**
+             * Witness Kind
+             * @enum {string}
+             */
+            witness_kind: "quantity_excess" | "resource_non_entailment";
+            /**
+             * Conclusion
+             * @constant
+             */
+            conclusion: "no";
+            /** Evidence Refs */
+            evidence_refs: string[];
+            /** Scenario Refs */
+            scenario_refs: string[];
+            /** Binding Sha256 */
+            binding_sha256: string;
+            /** Answer Span Id */
+            answer_span_id: string;
+            /** Answer Input Sha256 */
+            answer_input_sha256: string;
+            /** Answer Output Sha256 */
+            answer_output_sha256: string;
+        };
         /** DecisionReplayEvent */
         DecisionReplayEvent: {
             /** Id */
@@ -7456,6 +7492,8 @@ export interface components {
              * @default []
              */
             subquestion_bindings: components["schemas"]["AnswerSubquestionBinding"][];
+            /** Decision Credentials */
+            decision_credentials?: components["schemas"]["DecisionCredential"][] | null;
         };
         /** ReportApprovalSignalRequest */
         ReportApprovalSignalRequest: {
@@ -7663,7 +7701,7 @@ export interface components {
             /** Answer Binding Version */
             answer_binding_version?: (2 | 3) | null;
             /** Answer Review Contract */
-            answer_review_contract?: ("subquestion-premises-v1" | "subquestion-premises-v2" | "subquestion-premises-v3" | "subquestion-premises-v4" | "subquestion-premises-v5") | null;
+            answer_review_contract?: ("subquestion-premises-v1" | "subquestion-premises-v2" | "subquestion-premises-v3" | "subquestion-premises-v4" | "subquestion-premises-v5" | "subquestion-premises-v6") | null;
             /** Claim Review Version */
             claim_review_version?: 3 | null;
             /** Upstream Dependencies */

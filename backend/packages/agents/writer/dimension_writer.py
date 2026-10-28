@@ -961,7 +961,7 @@ class DimensionWriterMixin:
             from packages.agents.writer.question_atomic_delivery import atomic_answer_coverage
             coverage, gaps, sizes = await atomic_answer_coverage(
                 self, record, pending, compact, supported, view, use, gaps,
-                answer_review_contract='subquestion-premises-v5')
+                answer_review_contract='subquestion-premises-v6', audited=audited)
         elif pending and supported:
             task_workflow = 'question_task_ledger' in compact
             payload = compact_prompt_json(answer_review_payload(pending, supported, view,
@@ -1272,6 +1272,7 @@ class DimensionWriterMixin:
         await self._ensure_analysis_evidence(record)
         previous, repair_targets = self._dimension_repair_audits(record, repair_issues)
         audits = []
+        decision_reviews = {}
         for dimension in detail.plan.dimensions:
             for product in detail.plan.competitors:
                 prior = previous.get((product, dimension))
@@ -1341,7 +1342,7 @@ class DimensionWriterMixin:
                         task_result = await execute_question_atomic_delivery(
                             self, record, selected, view, use, questions,
                             question_packets, allowed, boundaries, gaps,
-                            answer_review_contract='subquestion-premises-v5')
+                            answer_review_contract='subquestion-premises-v6')
                     else:
                         from packages.agents.writer.task_execution import execute_question_tasks
                         task_result = await execute_question_tasks(
@@ -1706,6 +1707,8 @@ class DimensionWriterMixin:
                     question_atomic_contract=compact.get("question_atomic_contract"),
                     question_atomic_receipt_digest=compact.get("question_atomic_receipt_digest"),
                 )
+                if compact.get('_decision_reviews'):
+                    decision_reviews[use.id] = compact['_decision_reviews']
                 audits.append(audit)
                 self._validate_evidence_use(record, use)
                 self._trace_local_tool(record, agent="writer", subagent=f"{product}/{dimension}",
@@ -1735,7 +1738,8 @@ class DimensionWriterMixin:
                     'gaps': [*assessment.gaps, '缺少可发表的已审核产品观察。' if detail.output_language.startswith('zh') else
                              'Published audited product observations are missing.']})
         report = render_dimension_report(detail, audits, snapshot=snapshot,
-            comparison_assessments=assessments, task_projection_detail=live.detail)
+            comparison_assessments=assessments, task_projection_detail=live.detail,
+            decision_reviews=decision_reviews)
         opportunities = [] if partial_report_mode(detail, snapshot) else self._backfill_product_opportunities_section(detail)
         if opportunities:
             heading = f"## {report_label(detail.output_language, 'confidence_notes')}"
@@ -1845,7 +1849,7 @@ def render_common_capabilities(detail, audits, *, snapshot=None):
 
 
 def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessments=None,
-                            task_projection_detail=None):
+                            task_projection_detail=None, decision_reviews=None):
     from packages.agents.writer.answer_presentation import (
         audit_heading, observation_claims, question_coverage_lines,
     )
@@ -1930,7 +1934,8 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
                 lines.extend(["- 暂无通过主张审核的证据观察。" if zh else "- No observation passed claim review.", ""])
             lines.extend(question_coverage_lines(audit, detail.output_language,
                 detail=task_projection_detail or detail,
-                facts=snapshot.facts if snapshot is not None else None))
+                facts=snapshot.facts if snapshot is not None else None,
+                decision_reviews=(decision_reviews or {}).get(audit.consumption_id)))
             if audit.gaps and not partial:
                 names = {"billing_interval": "付款周期", "market": "地区", "tax_scope": "税费", "seat_type": "席位类型", "context_budget_exceeded": "已采资料超出本段上下文，未全部选入", "no_reviewed_claims": "未取得已审核主张"}
                 names.update({"plan": "套餐", "amount": "报价金额", "currency": "币种", "current_price": "适用价格", "supporting_facts": "可支持主张的原始证据", "claim_review_invalid": "审核响应无效，主张未发布", "claim_review_context_budget_exceeded": "完整审核证据超出容量，主张未发布", "promotional_claim_not_concrete": "套餐宣传未证明具体功能", "operation_object_scope_omitted": "操作对象限定被遗漏，主张未发布"})

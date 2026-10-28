@@ -90,6 +90,7 @@ def answer_response(payload, response, *, relation='direct'):
     if payload.get('answer_review_contract') in {
         'subquestion-premises-v1', 'subquestion-premises-v2',
         'subquestion-premises-v3', 'subquestion-premises-v4', 'subquestion-premises-v5',
+        'subquestion-premises-v6',
     }:
         questions = {q['question_id']: q['question'] for q in payload['questions']}
         for row in response.get('answers', []):
@@ -98,4 +99,6 @@ def answer_response(payload, response, *, relation='direct'):
                     and 'subquestions' not in row):
                 row['subquestions'] = [dict(question_quote=questions[row['question_id']],
                     claim_ids=row['claim_ids'], conclusion=row['conclusion'], relation=relation)]
+    if payload.get('answer_review_contract') == 'subquestion-premises-v6':
+        response.setdefault('task_decisions', [])
     return json.dumps(response)

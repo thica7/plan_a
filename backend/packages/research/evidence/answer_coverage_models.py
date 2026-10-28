@@ -5,6 +5,24 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer
 
 
+class DecisionCredential(BaseModel):
+    """Transport receipt only; consumers reconstruct its current authority."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    candidate_ref: str
+    question_id: str
+    task_id: str
+    claim_id: str
+    witness_kind: Literal["quantity_excess", "resource_non_entailment"]
+    conclusion: Literal["no"]
+    evidence_refs: tuple[str, ...]
+    scenario_refs: tuple[str, ...]
+    binding_sha256: str
+    answer_span_id: str
+    answer_input_sha256: str
+    answer_output_sha256: str
+
+
 class AnswerEvidenceSpan(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -40,6 +58,7 @@ class ReportAnswerCoverage(BaseModel):
     basis_snapshot_id: str | None = Field(default=None, max_length=120)
     binding_version: Literal[2, 3] | None = None
     subquestion_bindings: tuple[AnswerSubquestionBinding, ...] = Field(default=(), max_length=8)
+    decision_credentials: tuple[DecisionCredential, ...] | None = Field(default=None, max_length=8)
 
     @field_validator('binding_version', mode='before')
     @classmethod
@@ -56,4 +75,6 @@ class ReportAnswerCoverage(BaseModel):
                              ("binding_version", None), ("subquestion_bindings", ())):
             if getattr(self, key) == default:
                 result.pop(key, None)
+        if self.decision_credentials is None:
+            result.pop('decision_credentials', None)
         return result

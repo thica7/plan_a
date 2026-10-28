@@ -301,14 +301,16 @@ async def test_atomic_coverage_has_one_independent_review_and_concrete_answer(mo
         return append_response(service, record, kwargs, response)
 
     monkeypatch.setattr(service, "_trace_llm_text", answer_model)
-    rows, gaps, _ = await service._dimension_question_coverage(
+    from packages.agents.writer.question_atomic_delivery import atomic_answer_coverage
+    rows, gaps, _ = await atomic_answer_coverage(service,
         record,
         research_questions(record.detail, view.competitor, view.dimension),
         result["compact"],
-        audited,
+        [item.claim for item in audited if item.status == 'supported'],
         view,
         use,
         result["gaps"],
+        answer_review_contract='subquestion-premises-v1',
     )
     assert len(seen["dimension_question_atomic_answer_review"]) == 1
     assert rows[0].status == "answered", (rows[0].reason, gaps)
@@ -366,7 +368,7 @@ async def test_production_writer_uses_pool_and_binds_atomic_receipt(monkeypatch)
     await service._real_writer_step(record)
     audit = record.detail.report_dimension_audits[0]
     assert audit.question_atomic_contract == "question-atomic-delivery-v1"
-    assert audit.answer_review_contract == "subquestion-premises-v5"
+    assert audit.answer_review_contract == "subquestion-premises-v6"
     assert audit.question_atomic_receipt_digest
     assert audit.answer_coverage[0].status == "answered"
     assert "否" in record.detail.report_md
@@ -1178,8 +1180,9 @@ async def test_live_checkpoint_current_requests_run_despite_nonbinding_future_fo
         review_version=3,
     )
     assert len(audited) == 1 and audited[0].status == "supported"
-    answers, _, _ = await service._dimension_question_coverage(
-        record, packets[0]["questions"], result["compact"], audited, view, use, result["gaps"]
+    answers, _, _ = await atomic.atomic_answer_coverage(service,
+        record, packets[0]["questions"], result["compact"], [a.claim for a in audited], view, use,
+        result["gaps"], answer_review_contract='subquestion-premises-v2',
     )
     assert answers[0].status == "answered" and answers[0].answer == TEXTS[0]
     assert transported == [atomic.GENERATION_NAME, atomic.REVIEW_NAME, atomic.ANSWER_NAME]
