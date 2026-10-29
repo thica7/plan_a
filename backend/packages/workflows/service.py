@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -15,6 +16,14 @@ from packages.identity import (
     compute_workflow_id,
     compute_workflow_idempotency_key,
 )
+from packages.infrastructure.execution_control import (
+    ExecutionConflictError,
+    ExecutionTicket,
+    ExecutionTimeoutError,
+)
+from packages.infrastructure.execution_factory import create_execution_coordinator
+from packages.memory import RunJournal
+from packages.observability import build_run_event
 from packages.schema.api_dto import (
     MonitorStartRequest,
     MonitorStartResponse,
@@ -83,6 +92,10 @@ class TemporalWorkflowService:
         client_factory: TemporalClientFactory | None = None,
     ) -> None:
         self._settings = settings
+        self._execution = create_execution_coordinator(settings)
+        self._journal = RunJournal(self._execution.db_path) if self._execution is not None else None
+        if self._journal is not None:
+            self._journal.require_execution(self._execution)
         self._client_factory = client_factory or _connect_temporal_client
 
     async def start_competitive_intel(
@@ -91,17 +104,73 @@ class TemporalWorkflowService:
     ) -> WorkflowStartResponse:
         workflow_input = competitive_intel_input_from_run_request(request)
         workflow_id = workflow_id_for_request(workflow_input)
-        client = await self._client_factory(self._settings)
-        try:
-            await client.start_workflow(
-                CompetitiveIntelWorkflow.run,
-                workflow_input,
-                id=workflow_id,
-                task_queue=self._settings.temporal_task_queue,
+        ticket, launcher = None, None
+        if self._execution is not None:
+            ticket = await self._execution.admit(
+                run_id_for_idempotency_key(workflow_input.idempotency_key),
+                workflow_input.workspace_id, "pipeline",
             )
-            status = "started"
-        except WorkflowAlreadyStartedError:
-            status = "already_started"
+            if ticket.state == "finished":
+                return WorkflowStartResponse(
+                    workflow_id=workflow_id, run_id=ticket.run_id,
+                    idempotency_key=workflow_input.idempotency_key,
+                    task_queue=self._settings.temporal_task_queue, status="already_started",
+                )
+            if ticket.state not in {"queued", "running"}:
+                self._finish_start_failure(ticket, "Temporal startup admission has ended")
+                if ticket.state == "timedout":
+                    raise ExecutionTimeoutError("Temporal startup admission has expired")
+                raise ExecutionConflictError("Temporal startup admission has ended")
+            launcher = self._execution.try_launcher(ticket)
+            if launcher is None:
+                raise ExecutionConflictError("Temporal startup already has a launcher")
+        rpc_invoked = False
+        try:
+            client = await self._client_factory(self._settings)
+            if ticket is not None:
+                live = await self._execution.admit(
+                    ticket.run_id, ticket.workspace_id, ticket.operation_id,
+                )
+                if live.state == "timedout":
+                    raise ExecutionTimeoutError("Temporal startup admission has expired")
+                if live.state != "queued":
+                    raise ExecutionConflictError("Temporal startup admission is no longer queued")
+            try:
+                if ticket is not None:
+                    # Commit before the first possible remote side effect. A
+                    # process exit after this point must never authorize a replay
+                    # to revoke an admission which Temporal may already consume.
+                    self._record_start_event(ticket, workflow_id, "start_rpc_intent")
+                rpc_invoked = True
+                await client.start_workflow(
+                    CompetitiveIntelWorkflow.run,
+                    workflow_input,
+                    id=workflow_id,
+                    task_queue=self._settings.temporal_task_queue,
+                )
+                status = "started"
+            except WorkflowAlreadyStartedError:
+                status = "already_started"
+            if ticket is not None:
+                self._record_start_event(
+                    ticket, workflow_id, "start_rpc_confirmed", status=status,
+                )
+        except (Exception, asyncio.CancelledError):
+            if launcher is not None:
+                if rpc_invoked or self._has_start_rpc_evidence(ticket):
+                    # An invoked RPC may have succeeded remotely. Neither this
+                    # caller nor a later connection failure may revoke its ticket.
+                    self._record_start_event(
+                        ticket, workflow_id, "uncertain",
+                        phase="start_rpc" if rpc_invoked else "connect_failed_after_prior_rpc",
+                    )
+                else:
+                    self._execution._cancel_launcher_sync(launcher)
+                    self._finish_start_failure(ticket, "Temporal startup failed before start RPC")
+            raise
+        finally:
+            if launcher is not None:
+                launcher.lock.close()
         return WorkflowStartResponse(
             workflow_id=workflow_id,
             run_id=run_id_for_idempotency_key(workflow_input.idempotency_key),
@@ -109,6 +178,42 @@ class TemporalWorkflowService:
             task_queue=self._settings.temporal_task_queue,
             status=status,
         )
+
+    def _finish_start_failure(self, ticket: ExecutionTicket, message: str) -> None:
+        event = build_run_event(
+            event_id=1, run_id=ticket.run_id, event_type="run_failed",
+            agent="runtime", subagent="temporal", message=message, payload={"ticket_id": ticket.id},
+        )
+        self._journal.finish_admission_failure(ticket, event)
+
+    def _has_start_rpc_evidence(self, ticket: ExecutionTicket) -> bool:
+        return any(
+            event.type == "runtime.command"
+            and event.payload.get("outcome") in {
+                "start_rpc_intent", "start_rpc_confirmed", "uncertain",
+            }
+            and event.payload.get("ticket_id") == ticket.id
+            for event in self._journal.load_events(ticket.run_id)
+        )
+
+    def _record_start_event(
+        self, ticket: ExecutionTicket, workflow_id: str, outcome: str, *,
+        phase: str = "", status: str | None = None,
+    ) -> None:
+        messages = {
+            "start_rpc_intent": "Temporal workflow start RPC is about to be issued.",
+            "start_rpc_confirmed": "Temporal workflow start RPC was acknowledged.",
+            "uncertain": "Temporal workflow startup outcome is uncertain; admission preserved.",
+        }
+        payload = {"ticket_id": ticket.id, "workflow_id": workflow_id, "outcome": outcome}
+        if phase:
+            payload["phase"] = phase
+        if status is not None:
+            payload["status"] = status
+        self._journal.append_event(build_run_event(
+            event_id=1, run_id=ticket.run_id, event_type="runtime.command",
+            agent="runtime", subagent="temporal", message=messages[outcome], payload=payload,
+        ), control_event=True)
 
     async def start_report_approval(
         self,

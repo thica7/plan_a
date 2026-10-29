@@ -129,7 +129,26 @@ python scripts/docker_deploy.py --mode persistent --project plan-a-persistent --
 LangGraph 运行支持持久检查点显式恢复，SSE 支持事件游标续传。恢复接口、数据卷、备份及隔离故障验收见
 [部署说明](docs/docker_deployment.md)和[本轮交付记录](docs/optimization/2026-10-16-demo-deployment-delivery.md)。
 本轮本机未运行 Docker；真实容器、Redis Lua/TTL、Postgres、Qdrant HTTP 与 Temporal 的跨机验收仍待执行。
-部署改造的离线完整回归为 **4477 通过、1 跳过**，前端接口生成与生产构建通过；这不代表真实调研报告的内容验收通过。
+此前部署底座的离线完整回归为 **4477 通过、1 跳过**，前端接口生成与生产构建通过；这不代表真实调研报告的内容验收通过。
+
+### 本机并发治理与验收
+
+可选 `EXECUTION_CONTROL_ENABLED=true` 接通实际任务入口的有界排队、背压和同机执行归属；队列满返回 429／`Retry-After`。API／Worker 必须共用同一文件 journal、锁目录和池配置。默认全局运行 2、每工作区 1、等待队列 32／8；生成模型在途总量由 `LLM_MAX_CONCURRENCY` 控制。这些是配置起点，需按负载调优。
+
+普通模型生成、查询改写、原生模型搜索共用 transport 名额；运行预算继续独立执行。公共页和相同 query embedding 有本进程冷并发去重，价格／敏感 URL／强制刷新继续绕过。可选 Redis 缓存使用 owner token 条件发布和释放，真实 Redis 服务仍待部署机验收。
+
+使用已安装后端依赖的 Python，在仓库根目录执行：
+
+```bash
+# 默认只预览，不读取 .env、不创建数据库
+python backend/scripts/verify_local_concurrency.py
+# 显式离线验收：两个真实进程、临时 SQLite、受控模型响应
+python backend/scripts/verify_local_concurrency.py --execute --requests 64 --output data/artifacts/local-concurrency-result.json
+```
+
+该工具测量实际 ASGI／Runtime／RunService 入口及本机锁的行为，不占用现用端口或运行数据库；合成延迟不能视为真实模型、网络服务器或跨容器吞吐。它不验证调研报告语义。详细配置与部署限制见[部署说明](docs/docker_deployment.md#同机执行协调显式启用)；实现与结果见[本机并发治理交付](docs/optimization/2026-10-28-local-concurrency-delivery.md)和[结构化记录](docs/optimization/2026-10-28-local-concurrency-results.json)。
+
+本轮最终后端回归 **8874 通过、1 跳过**。独立 64 请求故障注入的运行／模型／工作区峰值为 **2／2／1**，最终名额归零；真实 Redis、共享容器卷与其他外部服务仍待部署机验收。
 
 ## 实际模型与搜索配置
 

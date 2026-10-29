@@ -18,7 +18,29 @@ docker compose version
 # PowerShell：Copy-Item .env.example .env
 ```
 
-当前只支持单 API / 单运行 Worker，不能通过增加容器副本扩展 SQLite 写入。尚未提供公网 TLS、跨进程任务 lease 和多主部署验收。
+现有 Compose 仍按单 API / 单运行 Worker 配置，容器部署尚未实机验收。新增可选同机执行协调，使用共享 SQLite 和 POSIX 文件锁；本机多进程验证不能替代容器卷、真实 Temporal 和多副本业务存储验收。尚未提供公网 TLS 或跨主机多主方案。
+
+### 同机执行协调（显式启用）
+
+API 与 Worker 必须使用相同开关、journal 路径和池配置，运行数据库及其旁边的锁目录必须位于同一台 POSIX 主机的同一实际文件系统。默认关闭，不自动修改现用 `.env`。以下容量仅为配置起点，并非真实服务容量承诺：
+
+```dotenv
+EXECUTION_CONTROL_ENABLED=true
+EXECUTION_CONTROL_JOURNAL_PATH=runs/run_journal.db
+EXECUTION_GLOBAL_RUNNING_LIMIT=2
+EXECUTION_WORKSPACE_RUNNING_LIMIT=1
+EXECUTION_GLOBAL_QUEUE_LIMIT=32
+EXECUTION_WORKSPACE_QUEUE_LIMIT=8
+EXECUTION_QUEUE_WAIT_SECONDS=60
+LLM_MAX_CONCURRENCY=4
+EXECUTION_MODEL_WAIT_SECONDS=30
+```
+
+本机 API 会直接使用指定 journal；另一台 Linux 部署电脑应统一设置为 `/app/runs/run_journal.db`，并确认 API／Worker 共用现有 `run-data:/app/runs` 卷。不要把同名但不同卷或不同主机上的文件视为共享协调。Windows 可继续使用旧演示入口；开启这项 POSIX 保护时会明确拒绝不支持的平台。
+
+启用或调整配置前，停止本池全部执行进程并备份。已有池配置不一致会拒绝启动；当前没有在线改池容量或自动迁移工具，不能靠删除锁文件或手工修改表绕过校验。排队满返回 429／`Retry-After`；队列过期可见失败；路径、存储或池配置错误明确拒绝。工作区限流、运行准入、模型在途并发和每次运行的 token／费用预算分别执行。
+
+活进程暂停不会被 TTL 强抢，退出后操作系统释放执行锁；新实例可按既有恢复接口显式接管。未知结果的外部请求仍可能已经付费或执行，不能保证 exactly-once。真实容器中的锁、SQLite 共享卷、进程退出恢复与 Redis owner 条件释放仍须在部署机单独验收；本轮不执行 Docker、不增加 Kafka。
 
 ## 2. 启动模式与端口
 

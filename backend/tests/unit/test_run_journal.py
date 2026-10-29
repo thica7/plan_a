@@ -1,5 +1,6 @@
 import sqlite3
 
+import pytest
 from app.events import RunEvent
 from packages.memory import RunJournal
 from packages.schema.api_dto import RunDetail
@@ -140,3 +141,55 @@ def test_run_journal_reconciles_stale_summary_columns_from_detail_json(tmp_path)
     assert summary.status == "completed_with_blockers"
     assert summary.execution_mode == "real"
     assert summary.topic == "Reconcile Run"
+
+
+@pytest.mark.parametrize("column", ["revision", "command_id"])
+def test_concurrent_legacy_journal_migrations_share_one_write_transaction(
+    tmp_path, monkeypatch, column
+):
+    import concurrent.futures
+    import threading
+
+    path = tmp_path / "legacy-migration.db"
+    connect = sqlite3.connect
+    revision = ", revision integer not null default 1" if column == "command_id" else ""
+    with connect(path) as conn:
+        conn.execute(
+            "create table runs (id text primary key, idempotency_key text not null default '', "
+            "workspace_id text not null default 'default-workspace', project_id text, "
+            "topic text not null default '', status text not null default 'queued', "
+            "execution_mode text not null default 'demo', detail_json text not null, "
+            "created_at text not null, updated_at text not null" + revision + ")"
+        )
+        conn.execute(
+            "create table events (run_id text not null, event_id integer not null, "
+            "event_json text not null, created_at text not null, primary key(run_id,event_id))"
+        )
+        conn.execute("create table meta (key text primary key,value text not null)")
+        conn.execute("insert into meta values('run_summary_schema_version','3')")
+    barrier = threading.Barrier(2)
+    transaction_states = []
+    table = "runs" if column == "revision" else "events"
+
+    class MigrationConnection(sqlite3.Connection):
+        def execute(self, sql, *args, **kwargs):
+            if sql.lower().startswith(f"alter table {table} add column {column}"):
+                transaction_states.append(self.in_transaction)
+                if not self.in_transaction:
+                    barrier.wait(timeout=3)
+            return super().execute(sql, *args, **kwargs)
+
+    def migration_connect(*args, **kwargs):
+        return connect(*args, **kwargs, factory=MigrationConnection)
+
+    def open_journal():
+        try:
+            return RunJournal(path)
+        except Exception as exc:
+            return exc
+
+    monkeypatch.setattr(sqlite3, "connect", migration_connect)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: open_journal(), range(2)))
+    assert all(isinstance(result, RunJournal) for result in results), results
+    assert transaction_states == [True]

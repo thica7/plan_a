@@ -1963,7 +1963,12 @@ class CollectorAgentMixin(CollectorKBBridgeMixin):
         async def fetch(url: str):
             if record is not None:
                 return await self._trace_fetch(record, "collector", dimension, url, context)
-            return await fetch_evidence_page(url)
+            fetch_options = {}
+            if detail.evidence_refresh_active:
+                fetch_options["force_refresh"] = True
+            if "pricing" in dimension.split("::", 1)[0].casefold():
+                fetch_options["require_price_content"] = True
+            return await fetch_evidence_page(url, **fetch_options)
 
         result_obj = await run_research_pipeline(
             brief,

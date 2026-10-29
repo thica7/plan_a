@@ -140,6 +140,14 @@ class Settings:
     writer_question_atomic_enabled: bool = False
     graph_max_concurrency: int = 4
     llm_max_concurrency: int = 4
+    execution_control_enabled: bool = False
+    execution_control_journal_path: str = "runs/run_journal.db"
+    execution_global_running_limit: int = 2
+    execution_workspace_running_limit: int = 1
+    execution_global_queue_limit: int = 32
+    execution_workspace_queue_limit: int = 8
+    execution_queue_wait_seconds: float = 60.0
+    execution_model_wait_seconds: float = 30.0
     writer_segment_max_concurrency: int = 3
     writer_max_segments: int = 64
     run_llm_max_calls: int = 160
@@ -308,6 +316,16 @@ def get_settings() -> Settings:
         ),
         graph_max_concurrency=_env_int("GRAPH_MAX_CONCURRENCY", 4, minimum=1, maximum=64),
         llm_max_concurrency=_env_int("LLM_MAX_CONCURRENCY", 4, minimum=1, maximum=64),
+        execution_control_enabled=_env_bool("EXECUTION_CONTROL_ENABLED", False),
+        execution_control_journal_path=os.getenv(
+            "EXECUTION_CONTROL_JOURNAL_PATH", "runs/run_journal.db"
+        ),
+        execution_global_running_limit=int(os.getenv("EXECUTION_GLOBAL_RUNNING_LIMIT", "2")),
+        execution_workspace_running_limit=int(os.getenv("EXECUTION_WORKSPACE_RUNNING_LIMIT", "1")),
+        execution_global_queue_limit=int(os.getenv("EXECUTION_GLOBAL_QUEUE_LIMIT", "32")),
+        execution_workspace_queue_limit=int(os.getenv("EXECUTION_WORKSPACE_QUEUE_LIMIT", "8")),
+        execution_queue_wait_seconds=float(os.getenv("EXECUTION_QUEUE_WAIT_SECONDS", "60")),
+        execution_model_wait_seconds=float(os.getenv("EXECUTION_MODEL_WAIT_SECONDS", "30")),
         writer_segment_max_concurrency=_env_int(
             "WRITER_SEGMENT_MAX_CONCURRENCY", 3, minimum=1, maximum=32,
         ),

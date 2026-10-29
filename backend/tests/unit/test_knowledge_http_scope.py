@@ -605,3 +605,111 @@ async def test_enterprise_kb_sync_uses_trusted_destination_and_keeps_permissions
     assert (await client.post(path, json={})).status_code == 403
     assert (await client.post(path + "/jobs", json={})).status_code == 403
     assert (await client.get(path + "/metrics")).status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode,mmr_lambda", [("sparse", .5), ("dense", 0.)])
+async def test_search_singleflight_overload_has_retryable_http_boundary(
+    scoped_http, monkeypatch, mode, mmr_lambda,
+):
+    import asyncio
+
+    from packages.infrastructure.singleflight import SingleFlight
+
+    client, repo, ids = scoped_http
+    flight = SingleFlight(max_keys=1)
+    entered = asyncio.Event()
+    service_class = knowledge.RetrievalService
+
+    class Provider:
+        model_version = "offline-http-test"
+        dimensions = 2
+
+        async def embed_query(self, query):
+            entered.set()
+            await asyncio.Event().wait()
+
+        def embed_documents(self, texts):
+            return [[1., 0.] for _ in texts]
+
+    provider = Provider()
+    app = client._transport.app
+    app.dependency_overrides[knowledge.get_embedding_provider] = lambda: provider
+
+    def bounded_service(**kwargs):
+        # Only inject a smaller real capacity; retrieval, MMR and HTTP guards run unchanged.
+        service = service_class(**kwargs)
+        service._embedding_flight = flight
+        return service
+
+    monkeypatch.setattr(knowledge, "RetrievalService", bounded_service)
+    held = asyncio.create_task(flight.do("held", lambda: provider.embed_query("held")))
+    await entered.wait()
+    try:
+        response = await client.post("/api/knowledge/search", json={
+            "query": "pricing", "mode": mode, "project_id": "p",
+            "enable_query_rewrite": False, "mmr_lambda": mmr_lambda,
+        })
+        assert response.status_code == 429, response.text
+        assert response.headers["retry-after"] == "1"
+    finally:
+        held.cancel()
+        await asyncio.gather(held, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_search_new_services_share_embedding_but_keep_project_results(
+    scoped_http, monkeypatch,
+):
+    import asyncio
+
+    from packages.knowledge import retrieval
+
+    client, repo, ids = scoped_http
+    release = asyncio.Event()
+
+    class Provider:
+        model_version = "offline-http-shared"
+        dimensions = 2
+        calls = 0
+
+        def status(self):
+            return {"requested_provider": "offline-test", "effective_provider": "offline-test",
+                    "degraded": False,
+                    "model_version": self.model_version, "dimensions": self.dimensions}
+
+        async def embed_query(self, query):
+            self.calls += 1
+            await release.wait()
+            return [1., 0.]
+
+        def embed_documents(self, texts):
+            return [[1., 0.] for _ in texts]
+
+    provider = Provider()
+    client._transport.app.dependency_overrides[knowledge.get_embedding_provider] = lambda: provider
+    projects = ["p", "q"] * 16
+    tasks = [asyncio.create_task(client.post("/api/knowledge/search", json={
+        "query": "pricing", "mode": "sparse", "project_id": project,
+        "enable_query_rewrite": False, "mmr_lambda": .5,
+    })) for project in projects]
+    try:
+        async with asyncio.timeout(3):
+            while True:
+                # Observe the real guard without replacing it. Release once the
+                # whole cold burst has joined, or duplication is already proven.
+                entries = retrieval._QUERY_EMBEDDING_FLIGHT._entries.values()
+                waiters = sum(entry.waiters for entry in entries)
+                if provider.calls > 1 or waiters == 32:
+                    break
+                await asyncio.sleep(.001)
+        release.set()
+        responses = await asyncio.gather(*tasks)
+        assert provider.calls == 1
+        for project, response in zip(projects, responses, strict=True):
+            assert response.status_code == 200, response.text
+            expected = ids["own" if project == "p" else "other"]
+            assert {hit["document_id"] for hit in response.json()["hits"]} == {expected}
+    finally:
+        release.set()
+        await asyncio.gather(*tasks, return_exceptions=True)

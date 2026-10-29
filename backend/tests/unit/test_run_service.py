@@ -13628,7 +13628,11 @@ def test_candidate_evidence_ignores_brand_in_url_query_or_path_only() -> None:
 async def test_real_search_result_fetch_failure_is_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_fetch_page(url: str):  # noqa: ANN202 - test double mirrors async tool shape.
+    async def fake_fetch_page(  # noqa: ANN202 - test double mirrors async tool shape.
+        url: str, *, require_price_content: bool = False, force_refresh: bool = False,
+    ):
+        assert require_price_content is True
+        assert force_refresh is False
         return None
 
     monkeypatch.setattr("packages.agents.collectors.logic.fetch_evidence_page", fake_fetch_page)
@@ -13672,7 +13676,11 @@ async def test_real_search_result_fetch_failure_is_rejected(
 async def test_demo_search_result_can_remain_unverified_raw_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_fetch_page(url: str):  # noqa: ANN202 - test double mirrors async tool shape.
+    async def fake_fetch_page(  # noqa: ANN202 - test double mirrors async tool shape.
+        url: str, *, require_price_content: bool = False, force_refresh: bool = False,
+    ):
+        assert require_price_content is True
+        assert force_refresh is False
         return None
 
     monkeypatch.setattr("packages.agents.collectors.logic.fetch_evidence_page", fake_fetch_page)
@@ -15413,7 +15421,11 @@ async def test_collector_warm_starts_from_rag_kb(monkeypatch: pytest.MonkeyPatch
 async def test_verified_source_uses_dimension_specific_snippet_and_confidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_fetch_page(url: str) -> FetchPageResult:
+    async def fake_fetch_page(
+        url: str, *, require_price_content: bool = False, force_refresh: bool = False,
+    ) -> FetchPageResult:
+        assert require_price_content is True
+        assert force_refresh is False
         return FetchPageResult(
             url=url,
             ok=True,

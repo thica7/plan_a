@@ -13,6 +13,8 @@ from app.governance import ensure_model_policy_allows_execution_mode
 from packages.auth import EnterpriseUserContext
 from packages.config import Settings
 from packages.enterprise import WorkspaceQuotaExceededError
+from packages.identity import new_ui_run_idempotency_key
+from packages.infrastructure.execution_control import ExecutionControlError
 from packages.orchestrator.service import RunService
 from packages.runtime import (
     ApproveReportCommand,
@@ -60,8 +62,15 @@ async def start_competitive_intel_workflow(
 ) -> WorkflowStartResponse:
     ensure_model_policy_allows_execution_mode(request.execution_mode, settings)
     _ensure_workspace_quota(run_service, request.workspace_id)
+    if settings.execution_control_enabled:
+        request = request.model_copy(update={
+            "idempotency_key": request.idempotency_key or new_ui_run_idempotency_key(),
+        })
+        await run_service.create_run(request, runtime_orchestration_backend="temporal")
     try:
         result = await workflow_service.start_competitive_intel(request)
+    except ExecutionControlError:
+        raise
     except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

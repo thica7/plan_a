@@ -1,12 +1,20 @@
 """Reuse captured public documents while preserving their original observation time."""
 
+import asyncio
 import hashlib
+import json
 import math
+import secrets
+import time
+from copy import deepcopy
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
+from packages.infrastructure.singleflight import SingleFlight
+
 CACHE_POLICY = "public-source-v1"
+_SOURCE_FLIGHT = SingleFlight()
 
 
 def _valid_cache_payload(data):
@@ -95,38 +103,100 @@ def _valid_result(result, url):
     )
 
 
-async def cached_fetch(url, fetch, *, options, runtime, ttl_seconds):
+async def _cached_capture(runtime, key, url, ttl_seconds):
     from packages.tools.evidence_fetch import EvidenceFetchResult
 
-    use_cache = _public_cache_url(url) and not options.get("require_price_content")
-    key = runtime.cache_key(CACHE_POLICY, url, options, ttl_seconds) if use_cache else None
-    if key:
-        stored = await runtime.get_json(key)
+    stored = await runtime.get_json(key)
+    try:
+        data = deepcopy(stored["result"])
+        if not _valid_cache_payload(data):
+            raise ValueError("invalid cached capture structure")
+        captured = datetime.fromisoformat(data["captured_at"])
+        data["captured_at"] = captured
+        candidate = EvidenceFetchResult(**data)
+        age = (datetime.now(UTC) - captured).total_seconds()
+        if (
+            stored["policy"] == CACHE_POLICY
+            and captured.tzinfo
+            and 0 <= age <= ttl_seconds
+            and _valid_result(candidate, url)
+        ):
+            return replace(candidate, cache_hit=True)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        pass
+    return None
+
+
+async def cached_fetch(url, fetch, *, options, runtime, ttl_seconds):
+    """Share eligible local work; optional Redis remains a discardable cache."""
+    from packages.tools.evidence_fetch import EvidenceFetchResult
+
+    if (not _public_cache_url(url) or options.get("require_price_content")
+            or options.get("force_refresh")):
+        return await fetch()
+    material = json.dumps([CACHE_POLICY, url, options, ttl_seconds], sort_keys=True)
+    digest = hashlib.sha256(material.encode()).hexdigest()
+    key = runtime.cache_key(CACHE_POLICY, url, options, ttl_seconds) if runtime else None
+
+    async def capture():
+        owner = secrets.token_hex(16)
+        locked = False
+        lock_attempted = False
+        mutex = runtime is not None and hasattr(runtime, "acquire_cache_lock")
         try:
-            data = stored["result"].copy()
-            if not _valid_cache_payload(data):
-                raise ValueError("invalid cached capture structure")
-            captured = datetime.fromisoformat(data["captured_at"])
-            data["captured_at"] = captured
-            candidate = EvidenceFetchResult(**data)
-            age = (datetime.now(UTC) - captured).total_seconds()
-            if (
-                stored["policy"] == CACHE_POLICY
-                and captured.tzinfo
-                and 0 <= age <= ttl_seconds
-                and _valid_result(candidate, url)
-            ):
-                return replace(candidate, cache_hit=True)
-        except (KeyError, TypeError, ValueError, AttributeError):
-            pass
-    result = await fetch()
-    if not isinstance(result, EvidenceFetchResult):
-        return result
-    result = replace(result, captured_at=result.captured_at or datetime.now(UTC), cache_hit=False)
-    if key and _valid_result(result, url):
-        data = asdict(result)
-        data["captured_at"] = result.captured_at.isoformat()
-        await runtime.set_json(
-            key, {"policy": CACHE_POLICY, "result": data}, ttl_seconds=ttl_seconds
-        )
-    return result
+            if key:
+                deadline = time.monotonic() + 1.0
+                while True:
+                    cached = await _cached_capture(runtime, key, url, ttl_seconds)
+                    if cached is not None:
+                        return cached
+                    if not mutex:
+                        break
+                    lock_attempted = True
+                    acquired = await runtime.acquire_cache_lock(key, owner, ttl_ms=30_000)
+                    if acquired is True:
+                        locked = True
+                        break
+                    # Backend failure or contention beyond this short wait degrades
+                    # to a fresh fetch. A non-owner never publishes over an owner.
+                    if acquired is None or time.monotonic() >= deadline:
+                        break
+                    await asyncio.sleep(.01)
+            if locked:
+                cached = await _cached_capture(runtime, key, url, ttl_seconds)
+                if cached is not None:
+                    return cached
+            result = await fetch()
+            if not isinstance(result, EvidenceFetchResult):
+                return result
+            result = replace(result, captured_at=result.captured_at or datetime.now(UTC),
+                             cache_hit=False)
+            if key and _valid_result(result, url):
+                data = asdict(result)
+                data["captured_at"] = result.captured_at.isoformat()
+                payload = {"policy": CACHE_POLICY, "result": data}
+                if locked:
+                    await runtime.publish_cache(key, owner, payload, ttl_seconds=ttl_seconds)
+                elif not mutex:
+                    await runtime.set_json(key, payload, ttl_seconds=ttl_seconds)
+            return result
+        finally:
+            if lock_attempted:
+                # SET may have committed even when its ACK was cancelled/lost.
+                # Token comparison makes cleanup safe for busy or expired leases.
+                cleanup = asyncio.create_task(runtime.release_cache_lock(key, owner))
+                cancelled = False
+                while True:
+                    try:
+                        await asyncio.shield(cleanup)
+                        break
+                    except asyncio.CancelledError:
+                        cancelled = True
+                        if cleanup.done():
+                            break
+                if cancelled:
+                    raise asyncio.CancelledError()
+
+    # Runtime identity isolates independent cache namespaces/configurations while
+    # all Redis-off public requests share one bounded local flight.
+    return await _SOURCE_FLIGHT.do((id(runtime), digest), capture)

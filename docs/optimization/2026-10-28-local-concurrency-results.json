@@ -1,0 +1,303 @@
+{
+  "schema_version": 1,
+  "scope": "same POSIX host; shared SQLite journal and kernel locks; isolated offline acceptance",
+  "verification_date": "2026-10-29",
+  "baseline_commit": "f46684a582d56d49e11b0f914deaf9062f731cf1",
+  "branch": "codex/pastoral-desktop",
+  "default_execution_control_enabled": false,
+  "paid_model_calls": 0,
+  "docker_executed": false,
+  "kafka_added": false,
+  "model_training": false,
+  "overall_status": "local_scope_passed",
+  "final_backend_gate": {
+    "status": "passed",
+    "command": "COMPETISCOPE_LOAD_ENV_FILES=0 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:backend/tests/unit:backend/tests/integration python -m pytest backend/tests -q",
+    "exit_code": 0,
+    "passed": 8874,
+    "skipped": 1,
+    "warnings": 220,
+    "seconds": 322.08,
+    "warning_kind": "existing FastAPI on_event deprecation",
+    "log_sha256": "78f2a9f03eb8856db9f9a3480229508198fa61d7633637958ea729445102f466"
+  },
+  "first_backend_gate": {
+    "passed": 8860,
+    "failed": 14,
+    "skipped": 1,
+    "seconds": 321.19,
+    "failure_resolution": "Only three test fixtures were aligned with explicit execution-control and fetch kwargs; original result assertions retained. Rechecked named modules:406 passed."
+  },
+  "pressure": {
+    "schema_version": 1,
+    "mode": "execute",
+    "seed": 20261028,
+    "passed": true,
+    "external_services": false,
+    "limits": {
+      "running": 2,
+      "workspace_running": 1,
+      "model": 2,
+      "queue": 8,
+      "queue_wait_seconds": 0.5,
+      "create_rate_limit": 10000
+    },
+    "scope": "same POSIX host, same journal file and policy; single local owner",
+    "not_verified": [
+      "Redis service/Lua/TTL/disconnect",
+      "Postgres service",
+      "Qdrant HTTP service",
+      "Temporal service",
+      "cross-container locking",
+      "multiple hosts or external exactly-once",
+      "cross-process cache singleflight",
+      "paid model quality",
+      "whole-chain async legacy persistence/BGE/HTTP"
+    ],
+    "burst": {
+      "requests": 64,
+      "accepted": 10,
+      "rejected": 54,
+      "completed": 2,
+      "expired": 8,
+      "http_429": 54,
+      "retry_after_valid": 54,
+      "running_peak": 2,
+      "model_peak": 2,
+      "workspace_running_peak": 1,
+      "generation_calls": 2,
+      "rewrite_calls": 2,
+      "native_search_calls": 2,
+      "latency_ms": {
+        "create": {
+          "p50": 175.142,
+          "p95": 213.911
+        },
+        "queue": {
+          "p50": 71.86,
+          "p95": 87.998
+        },
+        "end_to_end": {
+          "p50": 601.899,
+          "p95": 1154.608
+        },
+        "completed_end_to_end": {
+          "p50": 1154.44,
+          "p95": 1155.953
+        }
+      },
+      "latency_samples": {
+        "create": 64,
+        "queue": 2,
+        "end_to_end": 10,
+        "completed_end_to_end": 2
+      },
+      "percentile_method": "linear interpolation over sorted samples",
+      "queue_latency_scope": "admitted_at to claimed_at; only started tickets",
+      "end_to_end_latency_scope": "HTTP submission to ticket ended_at (accepted requests)",
+      "fault_injection": {
+        "holder_release_delay_seconds": 0.65,
+        "queue_deadline_seconds": 0.5,
+        "interpretation": "deadline/cleanup fault injection; no SLA claim"
+      },
+      "final": {
+        "queued": 0,
+        "running": 0,
+        "model_active": 0
+      },
+      "process_exitcodes": [
+        0,
+        0
+      ],
+      "pending_tasks": 0,
+      "entries": [
+        "POST /api/runs",
+        "RuntimeCommandService.create_run",
+        "RunService.launch_pipeline/run_pipeline",
+        "SQLiteExecutionCoordinator.run",
+        "DoubaoClient.complete_text",
+        "DefaultQueryRewriter.rewrite",
+        "DeepSeekSearchClient.search"
+      ],
+      "synthetic": "Only graph body/checkpoint placeholder and provider HTTP responses"
+    },
+    "recovery": {
+      "real_langgraph_checkpoint": true,
+      "checkpoint_pending_nodes": [
+        "collector"
+      ],
+      "owner_exitcode": -15,
+      "owner_joined": true,
+      "generation_before": 1,
+      "generation_after": 2,
+      "old_token_rejected": true,
+      "old_token_rejected_while_new_owner_active": true,
+      "planner_completions_before": 1,
+      "planner_completions_after": 1,
+      "terminal_status": "completed",
+      "content_quality_asserted": false,
+      "final": {
+        "queued": 0,
+        "running": 0,
+        "model_active": 0
+      },
+      "synthetic": "demo fixture content; only first owner's inner collector paused",
+      "pending_tasks": 0
+    },
+    "singleflight": {
+      "scope": "single-process",
+      "burst": 32,
+      "fetch_provider_calls": 1,
+      "embedding_provider_calls": 1,
+      "independent_copies": true,
+      "entries": [
+        "fetch_evidence_page",
+        "RetrievalService._embed_query"
+      ],
+      "synthetic": "inner fetch and embedding provider only; Redis disabled",
+      "pending_tasks": 0
+    },
+    "cleanup": {
+      "temporary_directory_removed": true,
+      "all_children_joined": true
+    }
+  },
+  "cross_instance": {
+    "get_and_list": true,
+    "runs_read": 10,
+    "durable_sse_slow_cursor": true,
+    "cursor": 11,
+    "sse_transport": "real stream route body iterator; no socket, no ASGI buffering",
+    "pending_tasks": 0
+  },
+  "cross_instance_sse_event_count": 86,
+  "selected_existing_regressions": {
+    "passed": true,
+    "kind": "executed existing regression tests, separate from new burst",
+    "nodeids": {
+      "duplicate_single_consumer": "backend/tests/unit/test_shared_run_execution.py::test_shared_pipeline_bounds_queue_and_duplicate_graph",
+      "workspace_fifo_and_cross_workspace": "backend/tests/unit/test_shared_run_execution.py::test_shared_services_keep_workspace_fifo_and_allow_other_workspace",
+      "cancel_timeout_startup_failure": "backend/tests/unit/test_shared_run_execution.py::test_admitted_background_failure_releases_ticket_and_finishes_queue",
+      "stale_revision": "backend/tests/unit/test_shared_run_execution.py::test_journal_snapshot_revision_and_compare_and_swap",
+      "released_token": "backend/tests/unit/test_shared_run_execution.py::test_journal_rejects_unfenced_active_and_released_owner",
+      "durable_event_ids": "backend/tests/unit/test_shared_run_execution.py::test_journal_allocates_event_ids_and_never_replaces",
+      "slow_consumer_memory_bound": "backend/tests/unit/test_shared_run_execution.py::test_no_journal_slow_stream_bounds_queue_without_losing_cursor"
+    },
+    "summary": "10 passed in 1.29s"
+  },
+  "reviews": {
+    "task_1": "spec and quality PASS",
+    "task_2": "spec R3 and quality R4 PASS",
+    "task_3": "spec and quality PASS",
+    "task_4": "spec R2 and quality PASS",
+    "task_5": "spec R3 and quality R3 PASS",
+    "final_code_review": "R3 PASS; no new P1/P2; original assertions preserved"
+  },
+  "source_freeze": {
+    "baseline_commit": "f46684a582d56d49e11b0f914deaf9062f731cf1",
+    "created_at_utc": "2026-10-29T02:54:32.881604+00:00",
+    "archive_kind": "baseline commit plus complete changed Python and public example-config files; no user environment or DB",
+    "files": {
+      ".env.example": "c9d0fc7e6b1fb62d6877ba7c8b1fac2692a813bf41a83c2bdfd0854ede247a92",
+      "backend/app/deps.py": "5c0ab40ef5304f262d63b2512f3d1ab472b6b210b6887054481fccac41edff39",
+      "backend/app/main.py": "55ffb451206bbea9b63acb8ed01b0fae555157621e10c8735ccad849fb4e9e43",
+      "backend/app/routers/workflows.py": "45cc45395942ec46897ca8891430a88a174ce420a8ceff6c8033e66b612db0c3",
+      "backend/app/routes/knowledge.py": "444c45c82baac2ec15ac4d8f58f50695e84534694a6ff2819d47d344e9a51ee3",
+      "backend/packages/agents/collectors/logic.py": "2abbdd6b2fe4ae7170cee9dcbb12c12f11618fdd38cb4b84bad58ab4c6ffce2b",
+      "backend/packages/config/settings.py": "de3ceaa2cba5725fbb1159963f8eee5a659f003b68eed387f5f6948ff5971e6f",
+      "backend/packages/infrastructure/execution_control.py": "abb47b845a3e7af6faede7e824d686768f4e78e1a93471b665c6588d3c8255ab",
+      "backend/packages/infrastructure/execution_factory.py": "79015eeebea767c430d3e9687ba8571ce734fd718246fe547b78cdf1914c1353",
+      "backend/packages/infrastructure/redis_runtime.py": "b9569784b35d8c360556261fe11a6fa453c78c9afbcd491917f5ac7dc1cf9ca6",
+      "backend/packages/infrastructure/singleflight.py": "8951aa9d01ac2e71d1c0e526ab26d113750dff2887b1e1e0ad712a2233301b2f",
+      "backend/packages/infrastructure/source_cache.py": "f3dda449be3686731c285eb06cff8de6625c793e7f9de12ea6e6cf2281f912da",
+      "backend/packages/knowledge/retrieval.py": "6d51126f692075351b391274677d5b986dd5dd3e88bc784bcedc18225cf4e9b0",
+      "backend/packages/knowledge/runtime.py": "55c667fdb7e23ef8c6e95d079dadad1851fe09583c069ff7d7b6a74f7ed71bb4",
+      "backend/packages/llm/doubao_client.py": "2b628ab39c72df3244026db5b276b4e85474aea7c2b9ccaf8d51d2c9137f1637",
+      "backend/packages/llm/execution_budget.py": "b61023c29a96d847ca54212d182ffa21a7031d206c8c49fec5e3bb27ebfa8180",
+      "backend/packages/memory/run_journal.py": "d35ef122d2a9102c31dbd7fef6c3f22ea48616202c9b7d976595ee46caf73126",
+      "backend/packages/orchestrator/service.py": "1e8cce1511a4bfba212f97e879ec2b5330a8d42c24d5fc9f3308748ab394d237",
+      "backend/packages/runtime/service.py": "545d3681e56af1193a3ba856feae98135c5145e6a10cf986c9cd92354c1414fa",
+      "backend/packages/search/deepseek_client.py": "d2ea39ec88b58b85a88de1a7aa9ef0496505d9690bf4b96e8dca8cb7c6901eae",
+      "backend/packages/tools/evidence_fetch.py": "0b42f2b8ba4d1d11b92b6ed31169bb0e75edd9c8b3757f8a87aade88b569d2d9",
+      "backend/packages/workflows/activities.py": "1d502a89936e6eb6dd8a57d2642e36c3d859041ac4a5ca6cc6b00029d5b8781b",
+      "backend/packages/workflows/service.py": "8c1b19ce408d55e7ba5c793e9d6e61f271449e606ac7fc152fa1eaf01d61f241",
+      "backend/scripts/local_concurrency_harness.py": "a6cc765b8ca2472388dcc599529cc63863080ccb79b34229f282b2ee6f1b0a52",
+      "backend/scripts/verify_local_concurrency.py": "79cc9481621a92997670c5dfada584fdb85fc5e2f99a0a9011a32e98fa8ae67a",
+      "backend/tests/integration/test_local_concurrency.py": "3ed6949b566421eda61bb0716d6ace2429927671494ff56ce82e725530c99d69",
+      "backend/tests/unit/test_agent_isolation_eval.py": "9696f3066dca5beae1519b79be79e28cb276d1f15db7c8c2fb9ec34d9414e563",
+      "backend/tests/unit/test_evidence_hitl.py": "3473d6f0d5580b441197f76bfb2f1e2c3a3db04db06f93469fdf5d6b03b8f190",
+      "backend/tests/unit/test_execution_control.py": "9883b3b6a5f3915a6acdbf58a9ed1f4e82defc9b14af9465a4445fe72454a710",
+      "backend/tests/unit/test_global_model_concurrency.py": "59746be8123cf102a6ee027f39352d1042bf972348f75472b061bb297d3f6089",
+      "backend/tests/unit/test_knowledge_http_scope.py": "921afe2730da774b0b50aa6b303c12fa4ff6c1eade7432a1e640b787413780a3",
+      "backend/tests/unit/test_retrieval_cache.py": "754ee1fb924d63f0a3fef48aee550d7e12ff22a0086ac12ae8c515165b76c2ea",
+      "backend/tests/unit/test_run_journal.py": "c5d1c0c3c10e58a988a7dee8c2781c1f82f908836438df013b5f296c19ec9d84",
+      "backend/tests/unit/test_run_service.py": "4899f9a406ee80b0469b0ab2591e6931c433186929163186557f503ca363ea77",
+      "backend/tests/unit/test_shared_run_execution.py": "6774b9b30d44cf18af437cc050e28b98fa614c7475eb272aa8aa61f1ae73197b",
+      "backend/tests/unit/test_singleflight.py": "65423e33483d3a7c2773cc39d70d7da6fc6d54ddc3d7aa6bb7b6982f15f2338e",
+      "backend/tests/unit/test_source_cache.py": "8b0a34bf65e76a6179e9ca7fcbe94648312ad63b8b37c85d8c8aca048a3dbded"
+    },
+    "count": 37,
+    "archive": "root-frozen-source-final.zip",
+    "archive_sha256": "b59ebb82106c40366001a5dba7638017ba2ab31378e83ded7050ae73cb0fe9fe"
+  },
+  "integrity": {
+    "verified_at_utc": "2026-10-29T03:01:32.825760+00:00",
+    "frozen_source_count": 37,
+    "source_mismatches": [],
+    "old_original_count": 184,
+    "old_original_mismatches": [],
+    "regression_basetemp_removed": true,
+    "regression_parent_removed": true,
+    "pressure_passed": true
+  },
+  "openapi": {
+    "generated_schema_equal_to_checked_in": true,
+    "tracked_api_files_unchanged": {
+      "frontend/openapi.json": true,
+      "frontend/src/api/openapi.ts": true
+    },
+    "schema_sha256": "c5279349b7b91937ece177873b1f687da9eba91110708efe79b08951c842801d"
+  },
+  "ruff": {
+    "base": "f46684a582d56d49e11b0f914deaf9062f731cf1",
+    "config": "backend/ruff.toml",
+    "baseline_diagnostics": 113,
+    "current_diagnostics": 106,
+    "new_diagnostics": 0
+  },
+  "runtime": {
+    "python": "3.11.15",
+    "os": "Darwin",
+    "architecture": "arm64",
+    "sqlite": "3.53.2",
+    "packages": {
+      "fastapi": "0.141.1",
+      "httpx": "0.28.1",
+      "pytest": "9.1.1",
+      "langgraph": "1.2.12",
+      "langgraph-checkpoint-sqlite": "3.1.1",
+      "qdrant-client": "1.19.1"
+    }
+  },
+  "credential_scan": {
+    "scanned_repository_files": 1572,
+    "env_tracked": false,
+    "findings": [],
+    "passed": true,
+    "scope": "Tracked and non-ignored new repository files; no private .env read; no secret content printed."
+  },
+  "publication": {
+    "target_branch": "codex/pastoral-desktop",
+    "merge_main": false,
+    "create_pr": false,
+    "record": "The Git commit containing this file will identify the delivery revision; after push, verify the remote SHA and record the result in local release evidence."
+  },
+  "interpretation": [
+    "64-request burst deliberately holds running work for0.65s while queue deadline is0.5s. Completed2/expired8 is fault injection, not normal-load success rate or production capacity.",
+    "Queue and successful end-to-end latency each have n=2; all percentile values apply only to this controlled ASGI/MockTransport case.",
+    "Graph checkpoint recovery uses real SQLite and LangGraph with demo content; completed does not assert report semantic quality.",
+    "Whole backend, module, reviewer, and CLI-inner pytest runs overlap and must not be summed.",
+    "Redis fake-command contracts do not verify Redis service/Lua/TTL/disconnect; no cross-host or cross-container availability claim."
+  ],
+  "raw_pressure_sha256": "73ac8f9f0c19b66759d0d2c8813f740a643e0bf55704611a511ce878eacfd262"
+}

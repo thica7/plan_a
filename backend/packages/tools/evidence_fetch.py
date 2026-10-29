@@ -49,6 +49,7 @@ async def fetch_evidence_page(
     require_price_content: bool = False,
     public_document_browser_retry: bool = False,
     deepseek_settings: Settings | None = None,
+    force_refresh: bool = False,
 ) -> EvidenceFetchResult:
     from packages.infrastructure.redis_config import get_redis_runtime, redis_options
 
@@ -65,16 +66,17 @@ async def fetch_evidence_page(
     if (deepseek_settings and deepseek_settings.deepseek_web_api_enabled
             and deepseek_settings.resolved_deepseek_api_key):
         return await _fetch_evidence_page(url, **options, deepseek_settings=deepseek_settings)
-    config = redis_options()
-    if config.cache_enabled:
-        from packages.infrastructure.source_cache import cached_fetch
+    from packages.infrastructure.source_cache import _public_cache_url, cached_fetch
 
-        return await cached_fetch(
-            url, lambda: _fetch_evidence_page(url, **options, deepseek_settings=deepseek_settings),
-            options=options,
-            runtime=get_redis_runtime(), ttl_seconds=config.cache_ttl_seconds,
-        )
-    return await _fetch_evidence_page(url, **options, deepseek_settings=deepseek_settings)
+    if force_refresh or require_price_content or not _public_cache_url(url):
+        return await _fetch_evidence_page(url, **options, deepseek_settings=deepseek_settings)
+    config = redis_options()
+    return await cached_fetch(
+        url, lambda: _fetch_evidence_page(url, **options, deepseek_settings=deepseek_settings),
+        options=options,
+        runtime=get_redis_runtime() if config.cache_enabled else None,
+        ttl_seconds=config.cache_ttl_seconds,
+    )
 
 
 async def _fetch_evidence_page(

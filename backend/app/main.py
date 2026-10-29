@@ -2,6 +2,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.middleware.auth import AuthMiddleware
 from app.middleware.redis_rate_limit import RedisRateLimitMiddleware
@@ -22,6 +23,7 @@ from app.routers import (
     workflows,
 )
 from app.routes import crawl, knowledge
+from packages.infrastructure.execution_control import ExecutionControlError
 
 _CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 
@@ -30,6 +32,13 @@ def create_app() -> FastAPI:
     from packages.config.settings import validate_env_vars
 
     app = FastAPI(title="Competiscope v2 API", version="0.1.0")
+
+    @app.exception_handler(ExecutionControlError)
+    async def execution_control_error(request, exc):
+        return JSONResponse(
+            status_code=exc.status_code, content={"detail": str(exc)},
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        )
 
     @app.on_event("startup")
     async def startup_event():

@@ -460,7 +460,15 @@ Collector 对校验通过的上下文保留完整片段，避免原先的 1000 �
 - `POST /api/runs/{run_id}/recover` 需要 `report:write` 权限；重启不会自动重放真实外部请求。Temporal 的中断重试使用相同图检查点；普通业务失败仍保留失败状态。
 - SSE `Last-Event-ID` 从持久事件日志补读后续事件；Nginx 透传游标并关闭响应缓冲。运行状态、图检查点及产物存于持久数据卷，Redis 不保存业务唯一真值。
 
-当前只支持单 API / 单运行 Worker。中断节点可能重做尚未提交的模型调用，未提供跨进程 lease 或外部调用 exactly-once 保证。离线假模型恢复通过不等于 Temporal/Redis 容器故障验收通过，跨机步骤见 [部署说明](docker_deployment.md)。
+开启 `EXECUTION_CONTROL_ENABLED=true` 后，实际任务入口使用共享 journal 中的有界准入票和同机 POSIX 文件锁。新建、恢复、人工续跑、限定重做与实际 Temporal 活动共用运行名额；定时扫描／监控的控制 workflow 不跨周期占用名额。排队满返回 429 和 `Retry-After`，配置／协调存储错误明确失败。默认关闭保留兼容行为；关闭时不能据此宣称有跨进程保护。
+
+执行写携带 token／generation，空闲控制写使用 revision CAS；读取方不替其他进程修改状态。续跑只向一个后台任务移交所有权；持久事件游标支持另一实例补读。活进程暂停不因心跳超时被强抢，进程退出后可以显式恢复；尚未提交的外部调用仍可能重做，没有外部调用 exactly-once 保证。
+
+各 Agent 共用底层 transport 并发保护：Planner、Collector 的模型语义提取、Analyst、Comparator、Reflector、Writer、最终 QA 和 RAG 查询改写经 `DoubaoClient` 接入；原生模型搜索经 `DeepSeekSearchClient` 接入。重试／备用 provider 也须先取同一全局 slot，再预留本次发送预算；等待取消或超时未发送时归还对应预留，已发请求保守计账。独立 Search／Fetch 工具 API 不占生成模型池，不冒充生成 token。该限制不等于服务商 RPM／TPM 调度。
+
+相同合格公共页和相同 query embedding 的冷并发使用有界 single-flight；每个等待者取得结果副本。embedding 去重跨同进程的 RetrievalService 实例，但检索结果仍按项目／工作区独立、重验 canonical 证据。价格、敏感 URL、强制刷新和独立 DeepSeek Fetch 绕过公共页复用。可选 Redis 互斥使用 owner token 条件发布／释放，故障按缓存 miss；它不保存运行真值。
+
+保护范围限定为同一 POSIX 主机、同一 SQLite 文件和锁目录、相同开关及池配置。企业业务存储和知识库的多实例部署仍需各自的持久服务；本机 file lock 不提供跨主机高可用。真实 Redis／Temporal、容器卷和网络验收见 [部署说明](docker_deployment.md)。本轮入口及验收范围见[本机并发治理设计](optimization/2026-10-28-local-concurrency-design.md)。
 
 ## 5. 人工介入和定向重做
 

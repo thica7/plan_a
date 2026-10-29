@@ -139,6 +139,27 @@ class LLMCallExecution:
             self.reserve()
         self.transport_attempts += 1
 
+    def release_unsent_reservation(self) -> None:
+        """Undo the outer reservation only when a local slot failed before any send."""
+        if self.transport_attempts or not self.pending_attempts:
+            return
+        self.pending_attempts -= 1
+        self.attempts -= 1
+        self.budget.calls -= 1
+        self.budget.repairs -= int(self.is_repair)
+        tokens = self.input_tokens + self.max_output_tokens
+        self.budget.tokens_reserved -= tokens
+        self.budget.cost_reserved_usd = max(
+            0.0, self.budget.cost_reserved_usd
+            - self.budget.cost(self.input_tokens, self.max_output_tokens),
+        )
+        if self.phase in self.budget.delivery_reserves:
+            self.budget.delivery_charged[self.phase] -= tokens
+            self.budget.delivery_calls[self.phase] -= 1
+        self.budget.reservation_settled.set()
+        if self.checkpoint is not None:
+            self.checkpoint()
+
     def settle_attempt(
         self, *, prompt_tokens: int, completion_tokens: int, cache_hit_tokens: int = 0,
     ) -> None:

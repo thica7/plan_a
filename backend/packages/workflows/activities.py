@@ -19,6 +19,7 @@ from packages.identity import (
     compute_notification_id,
     compute_workflow_id,
 )
+from packages.infrastructure.execution_control import ExecutionConflictError, ExecutionControlError
 from packages.orchestrator.service import RunService
 from packages.schema.api_dto import RunCreateRequest, RunDetail
 from packages.schema.enterprise import (
@@ -102,6 +103,7 @@ class CompetitiveIntelActivities:
             raise RuntimeError(f"Run disappeared during pipeline execution: {run_id}")
         if detail.status == "failed":
             raise RuntimeError(f"Run failed during LangGraph activity: {run_id}")
+        _require_settled(detail)
         return _run_state(detail)
 
     @activity.defn(name=LOAD_PROJECTION_ACTIVITY)
@@ -124,6 +126,11 @@ class CompetitiveIntelActivities:
             evidence_count=len(projection.evidence_records),
             claim_count=len(projection.claim_records),
         )
+
+
+def _require_settled(detail: RunDetail) -> None:
+    if detail.status in {"queued", "running"}:
+        raise ExecutionConflictError("Run execution is busy; retry this activity")
 
 
 def _run_state(detail: RunDetail) -> WorkflowRunState:
@@ -188,6 +195,7 @@ class ScheduledScanActivities:
             detail = await self._service.run_pipeline(detail.id)
         if detail is None:
             raise RuntimeError(f"Scheduled scan run disappeared: {idempotency_key}")
+        _require_settled(detail)
         projection = self._service.get_enterprise_projection(detail.id)
         return ScheduledScanProjectResult(
             project_id=target.project_id,
@@ -334,6 +342,9 @@ class MonitorActivities:
                 detail = await self._service.run_pipeline(detail.id)
             if detail is None:
                 raise RuntimeError("Monitor run disappeared during execution.")
+            _require_settled(detail)
+        except ExecutionControlError:
+            raise
         except Exception as exc:  # noqa: BLE001 - monitor failures should become alerts.
             error = str(exc)[:1000]
             self._store.record_monitor_job_run(

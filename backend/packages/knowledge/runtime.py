@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import inspect
 import os
 from typing import Any
@@ -25,6 +26,27 @@ async def call_provider(function: Any, *args: Any) -> Any:
     # Only model computation leaves the event loop. SQLite/Qdrant stay on their owner thread.
     provider = getattr(function, "__self__", None)
     if getattr(provider, "requested_provider", "").startswith("local-"):
-        return await asyncio.to_thread(function, *args)
+        # Shield the executor future: cancelling an await cannot stop a started
+        # Python thread. Keep the caller alive until that computation really exits.
+        context = contextvars.copy_context()
+        worker = asyncio.get_running_loop().run_in_executor(None, context.run, function, *args)
+        cancelled = False
+        while True:
+            try:
+                value = await asyncio.shield(worker)
+                break
+            except asyncio.CancelledError:
+                cancelled = True
+                if worker.done():
+                    break
+            except Exception:
+                if cancelled:
+                    raise asyncio.CancelledError() from None
+                raise
+        if cancelled:
+            if not worker.cancelled():
+                worker.exception()
+            raise asyncio.CancelledError()
+        return value
     value = function(*args)
     return await value if inspect.isawaitable(value) else value

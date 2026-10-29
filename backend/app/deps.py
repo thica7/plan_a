@@ -1,5 +1,6 @@
 import sqlite3
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request
@@ -32,6 +33,9 @@ def get_app_settings() -> Settings:
 
 @lru_cache
 def get_run_journal() -> RunJournal:
+    settings = get_app_settings()
+    if settings.execution_control_enabled:
+        return RunJournal(Path(settings.execution_control_journal_path))
     return RunJournal.from_default_path()
 
 

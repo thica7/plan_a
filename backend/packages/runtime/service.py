@@ -28,6 +28,7 @@ from packages.governance import (
 )
 from packages.hitl import append_hitl_lifecycle, build_hitl_lifecycle_event, hitl_lifecycle_history
 from packages.identity import new_ui_run_idempotency_key, stable_prefixed_id
+from packages.infrastructure.execution_control import ExecutionConflictError, ExecutionControlError
 from packages.memory import PreferenceMemoryStore
 from packages.orchestrator.service import (
     EvidenceRedoLimitError,
@@ -127,7 +128,31 @@ class RuntimeCommandService:
             "temporal_cutover_reason": cutover.reason,
         }
         duplicate = await self._run_service.find_active_duplicate_run(request)
-        if duplicate is not None:
+        restart_temporal_duplicate = bool(
+            duplicate is not None and self._settings.execution_control_enabled
+            and duplicate.status == "queued"
+            and duplicate.runtime_orchestration_backend == "temporal"
+        )
+        if restart_temporal_duplicate:
+            request = request.model_copy(update={"idempotency_key": duplicate.idempotency_key})
+            metadata.update({
+                "active_duplicate_reused": True, "active_duplicate_run_id": duplicate.id,
+            })
+        elif duplicate is not None:
+            duplicate_route = "none"
+            if (
+                self._settings.execution_control_enabled and duplicate.status == "queued"
+                and duplicate.runtime_orchestration_backend == "langgraph"
+            ):
+                duplicate = await self._run_service.create_run(request.model_copy(update={
+                    "idempotency_key": duplicate.idempotency_key,
+                }), runtime_orchestration_backend="langgraph")
+                try:
+                    self._run_service.launch_pipeline(duplicate.id)
+                    duplicate_route = "langgraph"
+                except ExecutionConflictError:
+                    # Another kernel-owned launcher already consumes this ticket.
+                    pass
             return _result(
                 command_id=command_id,
                 command_type="create_run",
@@ -137,7 +162,7 @@ class RuntimeCommandService:
                 workspace_id=duplicate.workspace_id,
                 project_id=duplicate.project_id,
                 run_id=duplicate.id,
-                route="none",
+                route=duplicate_route,
                 payload=duplicate,
                 metadata={
                     **metadata,
@@ -145,9 +170,16 @@ class RuntimeCommandService:
                     "active_duplicate_run_id": duplicate.id,
                 },
             )
-        if cutover.route == "temporal":
+        if cutover.route == "temporal" or restart_temporal_duplicate:
+            if self._settings.execution_control_enabled:
+                # Commit admission and the initial snapshot before contacting Temporal.
+                await self._run_service.create_run(
+                    request, runtime_orchestration_backend="temporal",
+                )
             try:
                 result = await self._workflow_service.start_competitive_intel(request)
+            except ExecutionControlError:
+                raise
             except Exception as exc:  # noqa: BLE001 - command surface explains route failure.
                 raise RuntimeCommandError(
                     503,
@@ -198,7 +230,8 @@ class RuntimeCommandService:
             ) from exc
         except ValueError as exc:
             raise RuntimeCommandError(400, str(exc), command_type="create_run") from exc
-        asyncio.create_task(self._run_service.run_pipeline(detail.id))
+        if detail.status == "queued":
+            self._run_service.launch_pipeline(detail.id)
         return _result(
             command_id=command_id,
             command_type="create_run",
@@ -581,11 +614,8 @@ class RuntimeCommandService:
                 "issue_ids": list(command.issue_ids),
             },
         )
-        asyncio.create_task(
-            self._run_service.run_scoped_redo(
-                command.run_id,
-                preferred_issue_ids=command.issue_ids,
-            )
+        await self._run_service.start_scoped_redo(
+            command.run_id, preferred_issue_ids=command.issue_ids,
         )
         return _result(
             command_id=command_id,
@@ -1267,7 +1297,7 @@ class RuntimeCommandService:
         message: str,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        await self._run_service.emit(
+        await self._run_service.append_control_event(
             run_id,
             "runtime.command",
             "runtime",

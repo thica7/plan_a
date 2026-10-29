@@ -580,6 +580,7 @@ def test_output_cannot_overwrite_source_or_history(source, tmp_path):
 
 @dataclass
 class Settings:
+    execution_control_enabled: bool = False
     llm_provider_name: str = "deepseek"
     ark_model: str = "deepseek-flash"
     ark_base_url: str = "https://api.test/v1"

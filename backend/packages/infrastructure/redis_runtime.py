@@ -22,7 +22,10 @@ JSONValue: TypeAlias = "None | bool | int | float | str | list[JSONValue] | dict
 class RedisClient(Protocol):
     async def get(self, key: str) -> bytes | None: ...
 
-    async def set(self, key: str, value: bytes, *, ex: int) -> object: ...
+    async def set(
+        self, key: str, value: bytes, *, ex: int | None = None,
+        nx: bool = False, px: int | None = None,
+    ) -> object: ...
 
     async def eval(self, script: str, numkeys: int, *args: object) -> object: ...
 
@@ -66,6 +69,23 @@ count = count + 1
 redis.call('HSET', KEYS[1], 'window', window, 'count', count)
 redis.call('PEXPIREAT', KEYS[1], reset_ms)
 return {1, 0, limit - count}
+"""
+
+
+# A stale lease owner can neither delete its successor's lock nor publish over
+# the successor's capture. These scripts require Redis-side atomic execution.
+CACHE_RELEASE_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
+CACHE_PUBLISH_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    redis.call('SET', KEYS[2], ARGV[2], 'EX', ARGV[3])
+    return 1
+end
+return 0
 """
 
 
@@ -226,6 +246,56 @@ class RedisRuntime:
                 return False
             async with asyncio.timeout(self._timeout_seconds):
                 return await self._get_client().set(key, payload, ex=ttl_seconds) is True
+        except Exception:
+            return False
+
+    def _cache_lock_key(self, key: str) -> str:
+        return key.replace(":cache:", ":cache-lock:", 1)
+
+    async def acquire_cache_lock(
+        self, key: str, owner: str, *, ttl_ms: int
+    ) -> bool | None:
+        """Return acquired/busy, or None for a discardable cache backend failure."""
+        if (not self.enabled or not self._valid_cache_key(key)
+                or type(owner) is not str or not owner or len(owner) > 128
+                or not _positive_integer(ttl_ms, 30_000)):
+            return None
+        try:
+            async with asyncio.timeout(self._timeout_seconds):
+                value = await self._get_client().set(
+                    self._cache_lock_key(key), owner.encode(), nx=True, px=ttl_ms
+                )
+            return value is True
+        except Exception:
+            return None
+
+    async def release_cache_lock(self, key: str, owner: str) -> bool:
+        if not self.enabled or not self._valid_cache_key(key):
+            return False
+        try:
+            async with asyncio.timeout(self._timeout_seconds):
+                return await self._get_client().eval(
+                    CACHE_RELEASE_LUA, 1, self._cache_lock_key(key), owner.encode()
+                ) == 1
+        except Exception:
+            return False
+
+    async def publish_cache(
+        self, key: str, owner: str, value: JSONValue, *, ttl_seconds: int
+    ) -> bool:
+        """Publish only while this exact lease still owns the hashed cache key."""
+        if (not self.enabled or not self._valid_cache_key(key)
+                or not _positive_integer(ttl_seconds, self._max_cache_ttl_seconds)):
+            return False
+        try:
+            payload = _json_bytes(value)
+            if len(payload) > self._max_cache_bytes:
+                return False
+            async with asyncio.timeout(self._timeout_seconds):
+                return await self._get_client().eval(
+                    CACHE_PUBLISH_LUA, 2, self._cache_lock_key(key), key,
+                    owner.encode(), payload, ttl_seconds,
+                ) == 1
         except Exception:
             return False
 

@@ -21,6 +21,7 @@ from app.knowledge_access import resolve_knowledge_scope, select_project, stored
 from packages.auth import EnterpriseUserContext, can_access_workspace
 from packages.crawler.models import CrawlRequest, CrawlResult
 from packages.enterprise.store import DEFAULT_WORKSPACE_ID, EnterpriseStore
+from packages.infrastructure.execution_control import ExecutionControlError
 from packages.knowledge.embeddings import (
     EmbeddingProvider,
     get_embedding_provider_from_env,
@@ -536,6 +537,8 @@ async def search_knowledge(
         return await service.retrieve(request)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ExecutionControlError:
+        raise
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

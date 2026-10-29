@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from contextlib import nullcontext
 from contextvars import ContextVar
 from urllib.parse import urlsplit
 
 import httpx
 
 from packages.config import Settings
+from packages.infrastructure.execution_control import ExecutionControlError
+from packages.infrastructure.execution_factory import create_execution_coordinator
 from packages.llm.doubao_client import LLMUsage
 from packages.llm.execution_budget import LLMCallExecution, RunLLMBudget, current_llm_execution
 from packages.search.perplexity_client import SearchFilters, SearchResult, WebSearchError
@@ -19,6 +23,7 @@ SEARCH_INPUT_RESERVE_PER_USE = 16384
 class DeepSeekSearchClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._execution_coordinator = create_execution_coordinator(settings)
         self._usage: ContextVar[LLMUsage | None] = ContextVar(
             f"search-usage-{id(self)}", default=None
         )
@@ -118,17 +123,24 @@ class DeepSeekSearchClient:
             "anthropic-version": "2023-06-01",
         }
         execution = current_llm_execution.get()
-        if execution is not None:
-            execution.reserve_transport()
         # No automatic retry: a timeout can happen after a paid native search.
         try:
-            async with httpx.AsyncClient(
-                timeout=self._settings.llm_timeout_seconds,
-                follow_redirects=False,
-            ) as client:
-                response = await client.post(
-                    DEEPSEEK_SEARCH_ENDPOINT, json=payload, headers=headers
-                )
+            slot = (self._execution_coordinator.model_slot()
+                    if self._execution_coordinator is not None else nullcontext())
+            async with slot:
+                if execution is not None:
+                    execution.reserve_transport()
+                async with httpx.AsyncClient(
+                    timeout=self._settings.llm_timeout_seconds,
+                    follow_redirects=False,
+                ) as client:
+                    response = await client.post(
+                        DEEPSEEK_SEARCH_ENDPOINT, json=payload, headers=headers
+                    )
+        except (ExecutionControlError, asyncio.CancelledError):
+            if execution is not None:
+                execution.release_unsent_reservation()
+            raise
         except httpx.TimeoutException:
             raise WebSearchError("DeepSeek 原生搜索超时") from None
         except httpx.HTTPError:

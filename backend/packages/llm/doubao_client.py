@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
@@ -10,6 +11,8 @@ import httpx
 
 from packages.config import Settings
 from packages.governance import build_model_route_decision
+from packages.infrastructure.execution_control import ExecutionControlError
+from packages.infrastructure.execution_factory import create_execution_coordinator
 from packages.llm.errors import LLMError, LLMExecutionLimitError
 from packages.llm.execution_budget import current_llm_execution
 from packages.llm.json_extract import JsonExtractionError, extract_json_object
@@ -57,6 +60,7 @@ class LLMProviderConfig:
 class DoubaoClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._execution_coordinator = create_execution_coordinator(settings)
         self._last_route_decision: ModelRouteDecision | None = None
         self._usage_context: ContextVar[LLMUsage | None] = ContextVar(
             f"usage-{id(self)}", default=None)
@@ -90,7 +94,7 @@ class DoubaoClient:
                     user=user,
                 )
                 return self._extract_json(content)
-            except LLMExecutionLimitError:
+            except (LLMExecutionLimitError, ExecutionControlError):
                 raise
             except Exception as exc:
                 safe_error = str(exc).replace(provider.api_key, "[REDACTED]")
@@ -170,9 +174,17 @@ class DoubaoClient:
             try:
                 self._response_context.set((provider.name, provider.model, None))
                 execution = current_llm_execution.get()
-                if execution is not None:
-                    execution.reserve_transport()
-                response = await self._post_chat_completion(url, payload, headers)
+                slot = (self._execution_coordinator.model_slot()
+                        if self._execution_coordinator is not None else nullcontext())
+                try:
+                    async with slot:
+                        if execution is not None:
+                            execution.reserve_transport()
+                        response = await self._post_chat_completion(url, payload, headers)
+                except (ExecutionControlError, asyncio.CancelledError):
+                    if execution is not None:
+                        execution.release_unsent_reservation()
+                    raise
                 if response.status_code >= 400:
                     message = (
                         f"LLM request failed with {response.status_code}: "

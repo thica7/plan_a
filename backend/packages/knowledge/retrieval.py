@@ -16,6 +16,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from packages.config import get_settings
+from packages.infrastructure.singleflight import SingleFlight, SingleFlightCapacityError
 from packages.llm import DoubaoClient
 
 from .embeddings import EmbeddingProvider
@@ -33,6 +34,7 @@ RETRIEVAL_PIPELINE_VERSION = "dual-context-v1"
 
 _DEFAULT_CACHE_TTL_SECONDS = 300.0
 _DEFAULT_CACHE_MAXSIZE = 256
+_QUERY_EMBEDDING_FLIGHT = SingleFlight()
 
 
 class RetrievalPreset(BaseModel):
@@ -175,6 +177,10 @@ class _TTLCache:
     def get(self, key: str) -> Any | None:
         now = time.monotonic()
         bucket = int(now / self._ttl_seconds) if self._ttl_seconds > 0 else 0
+        item = self._items.get(key)
+        if item is not None and now - item[0] >= self._ttl_seconds:
+            self.delete(key)
+            return None
         value = self._cached_get(key, bucket)
         if value is None:
             item = self._items.get(key)
@@ -286,6 +292,7 @@ class RetrievalService:
         self._score_threshold = score_threshold
         self._enable_query_fusion = enable_query_fusion
         self._expand_context = expand_context
+        self._embedding_flight = _QUERY_EMBEDDING_FLIGHT
         self._embedding_cache = _TTLCache(maxsize=cache_maxsize, ttl_seconds=cache_ttl)
         self._retrieval_cache = _TTLCache(maxsize=cache_maxsize, ttl_seconds=cache_ttl)
         self._reset_observability_counts()
@@ -554,6 +561,8 @@ class RetrievalService:
                     self._embedding_provider, "requested_provider", ""
                 ).startswith("local-")
                 if local_model_strict() or (request.mode == "dense" and not local_provider):
+                    if isinstance(exc, SingleFlightCapacityError):
+                        raise
                     raise RuntimeError(f"Dense retrieval failed: {exc}") from exc
                 self._dense_error = f"Dense retrieval unavailable: {exc}"
             had_dense_candidates = bool(dense_hits)
@@ -880,13 +889,28 @@ class RetrievalService:
         ))
         cached = self._embedding_cache.get(cache_key)
         if cached is not None:
-            return cached
-        if self._embedding_provider is not None:
-            vector = await call_provider(self._embedding_provider.embed_query, query)
-        else:
-            vector = (await call_provider(self._embed_fn, [query]))[0]
-        self._embedding_cache.set(cache_key, vector)
-        return vector
+            return list(cached)
+
+        async def compute():
+            cached = self._embedding_cache.get(cache_key)
+            if cached is not None:
+                return cached
+            if self._embedding_provider is not None:
+                vector = await call_provider(self._embedding_provider.embed_query, query)
+            else:
+                vector = (await call_provider(self._embed_fn, [query]))[0]
+            # Local model fallback/version changes must not populate the old key.
+            current_key = repr((
+                getattr(self._embedding_provider, "model_version", None),
+                getattr(self._embedding_provider, "dimensions", None), query,
+            ))
+            if current_key == cache_key:
+                self._embedding_cache.set(cache_key, list(vector))
+            return vector
+
+        provider = (self._embedding_provider if self._embedding_provider is not None
+                    else self._embed_fn)
+        return await self._embedding_flight.do((id(provider), cache_key), compute)
 
     async def _embed_texts(self, texts: list[str]) -> list[list[float]]:
         if not texts:

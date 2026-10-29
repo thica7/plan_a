@@ -419,7 +419,11 @@ async def test_evidence_refresh_refetches_existing_url_without_removing_old_sour
 ) -> None:
     fetched_urls: list[str] = []
 
-    async def fetch_page(url: str) -> EvidenceFetchResult:
+    async def fetch_page(
+        url: str, *, require_price_content: bool = False, force_refresh: bool = False,
+    ) -> EvidenceFetchResult:
+        assert require_price_content is True
+        assert force_refresh is True
         fetched_urls.append(url)
         return EvidenceFetchResult(
             url=url,

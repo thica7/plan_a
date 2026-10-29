@@ -2,14 +2,16 @@ import asyncio
 import json
 import re
 import time
+from contextlib import asynccontextmanager
+from contextvars import Context
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
+from app.events import RunEvent
 from langgraph.types import Command, interrupt
 
-from app.events import RunEvent
 from packages.agents import SubagentContext
 from packages.agents.analysts.logic import AnalystAgentMixin
 from packages.agents.collectors.logic import CollectorAgentMixin
@@ -26,7 +28,10 @@ from packages.business_intel import (
     get_scenario_pack,
     validate_project_claims,
 )
-from packages.business_intel.entity_resolver import normalize_competitor_key, trusted_source_candidates
+from packages.business_intel.entity_resolver import (
+    normalize_competitor_key,
+    trusted_source_candidates,
+)
 from packages.business_intel.homepage import verify_homepages
 from packages.business_intel.release_repair import (
     apply_release_gate_warning_report_repair,
@@ -62,6 +67,16 @@ from packages.identity import (
     runtime_prefixed_id,
     stable_prefixed_id,
 )
+from packages.infrastructure.execution_control import (
+    ExecutionConflictError,
+    ExecutionControlError,
+    ExecutionLauncher,
+    ExecutionLease,
+    ExecutionTicket,
+    ExecutionTimeoutError,
+    ExecutionUnavailableError,
+)
+from packages.infrastructure.execution_factory import create_execution_coordinator
 from packages.llm import DoubaoClient
 from packages.llm.execution_budget import RunLLMBudget
 from packages.memory import KBCache, PreferenceMemoryStore, RunJournal
@@ -300,6 +315,8 @@ class RunRecord:
     semantic_extraction_cache: dict[tuple[str, ...], object] = field(default_factory=dict)
     resume_task: asyncio.Task[None] | None = None
     pipeline_task: asyncio.Task[Any] | None = None
+    revision: int = 0
+    execution_lease: ExecutionLease | None = None
 
 
 class RunService(
@@ -328,6 +345,15 @@ class RunService(
     ) -> None:
         self._skill_registry = skill_registry
         self._settings = settings
+        if settings.execution_control_enabled and journal is None:
+            raise ExecutionUnavailableError("Shared execution requires a run journal")
+        self._execution = create_execution_coordinator(
+            settings, journal_path=journal.db_path if journal is not None else None,
+        )
+        if self._execution is not None:
+            journal.require_execution(self._execution)
+        self._execution_tickets: dict[str, ExecutionTicket] = {}
+        self._background_tasks: dict[tuple[str, int], asyncio.Task[Any]] = {}
         self._llm = DoubaoClient(settings)
         self._llm_semaphore = asyncio.Semaphore(max(1, settings.llm_max_concurrency))
         self._search = create_search_client(settings)
@@ -354,6 +380,17 @@ class RunService(
     @property
     def enterprise_store(self) -> EnterpriseStore | None:
         return self._enterprise_store
+
+    def _validate_existing_run_scope(
+        self, detail: RunDetail, request: RunCreateRequest,
+        runtime_orchestration_backend: Literal["langgraph", "temporal"],
+    ) -> None:
+        if detail.workspace_id != request.workspace_id or (
+            request.project_id is not None and detail.project_id != request.project_id
+        ):
+            raise ExecutionConflictError("Idempotent run workspace or project differs")
+        if detail.runtime_orchestration_backend not in {None, runtime_orchestration_backend}:
+            raise ValueError("Existing run owner conflicts with the requested internal route")
 
     async def create_run(
         self,
@@ -406,11 +443,12 @@ class RunService(
             async with self._lock:
                 existing = self._load_run_record(run_id)
             if existing is not None:
-                if existing.detail.runtime_orchestration_backend not in {
-                    None, runtime_orchestration_backend,
-                }:
-                    raise ValueError(
-                        "Existing run owner conflicts with the requested internal route"
+                self._validate_existing_run_scope(
+                    existing.detail, request, runtime_orchestration_backend,
+                )
+                if self._execution is not None and existing.detail.status == "queued":
+                    self._execution_tickets[run_id] = await self._execution.admit(
+                        run_id, existing.detail.workspace_id, "pipeline",
                     )
                 return existing.detail
         auto_redo_warn_enabled = (
@@ -445,10 +483,9 @@ class RunService(
             async with self._lock:
                 duplicate = self._find_active_duplicate_run(duplicate_fingerprint, now)
         if duplicate is not None:
-            if duplicate.detail.runtime_orchestration_backend not in {
-                None, runtime_orchestration_backend,
-            }:
-                raise ValueError("Existing run owner conflicts with the requested internal route")
+            self._validate_existing_run_scope(
+                duplicate.detail, request, runtime_orchestration_backend,
+            )
             return duplicate.detail
 
         homepage_verifications = verify_homepages(competitors)
@@ -557,8 +594,41 @@ class RunService(
             current_node="planner",
         )
         detail.active_run_fingerprint = duplicate_fingerprint
+        if self._execution is not None:
+            ticket = await self._execution.admit(run_id, request.workspace_id, "pipeline")
+            self._execution_tickets[run_id] = ticket
         async with self._lock:
-            self._runs[run_id] = RunRecord(detail=detail)
+            if self._execution is not None:
+                existing = self._journal.load_run_snapshot(run_id)
+                if existing is not None:
+                    self._validate_existing_run_scope(
+                        existing[0], request, runtime_orchestration_backend,
+                    )
+                    return self._upsert_journal_run(existing[0], revision=existing[1]).detail
+                try:
+                    # All initialization is synchronous inside this short transaction.
+                    with self._journal.control_write(run_id, 0, allow_missing=True):
+                        return self._initialize_created_run(detail, request, now)
+                except ExecutionConflictError:
+                    existing = self._journal.load_run_snapshot(run_id)
+                    if existing is None:
+                        self._runs.pop(run_id, None)
+                        raise
+                    self._validate_existing_run_scope(
+                        existing[0], request, runtime_orchestration_backend,
+                    )
+                    return self._upsert_journal_run(existing[0], revision=existing[1]).detail
+                except BaseException:
+                    self._runs.pop(run_id, None)
+                    raise
+            return self._initialize_created_run(detail, request, now)
+
+    def _initialize_created_run(
+        self, detail: RunDetail, request: RunCreateRequest, now: datetime,
+    ) -> RunDetail:
+        run_id, plan = detail.id, detail.plan
+        self._runs[run_id] = RunRecord(detail=detail)
+        self._persist_run(run_id)
         if self._enterprise_store is not None:
             context = self._enterprise_store.start_run(
                 detail,
@@ -578,8 +648,8 @@ class RunService(
                 now=now,
             )
         self._persist_run(run_id)
-        await self.emit(
-            run_id,
+        self._append_run_event_sync(
+            self._runs[run_id],
             "run_created",
             "planner",
             None,
@@ -594,8 +664,8 @@ class RunService(
             },
         )
         if plan.memory_candidate_ids:
-            await self.emit(
-                run_id,
+            self._append_run_event_sync(
+                self._runs[run_id],
                 "memory.recalled",
                 "memory",
                 None,
@@ -621,7 +691,6 @@ class RunService(
             skip_active_duplicate_check=skip_active_duplicate_check,
             runtime_orchestration_backend=runtime_orchestration_backend,
         )
-        self._persist_run(detail.id)
         return detail
 
     async def find_active_duplicate_run(self, request: RunCreateRequest) -> RunDetail | None:
@@ -787,6 +856,16 @@ class RunService(
         record = self._load_run_record(run_id)
         if record is None:
             return None
+        if self._execution is not None:
+            # This whole control path is synchronous: no transaction spans an await.
+            with self._journal.control_write(run_id, record.revision):
+                return self._import_user_research_materials_owned(run_id, request)
+        return self._import_user_research_materials_owned(run_id, request)
+
+    def _import_user_research_materials_owned(
+        self, run_id: str, request: UserResearchImportRequest,
+    ) -> UserResearchImportResult:
+        record = self._runs[run_id]
         detail = record.detail
         sources, bundles, result = build_user_research_import(
             detail,
@@ -908,6 +987,13 @@ class RunService(
 
     def has_pending_interrupt(self, run_id: str) -> bool:
         record = self._runs.get(run_id)
+        if self._active_resume_operation(run_id) is not None:
+            return True
+        if self._execution is not None and record is not None and (
+            record.detail.current_node in {"planner_hitl", "evidence_hitl", "qa_hitl"}
+            and record.detail.status in {"running", "interrupted"}
+        ):
+            return True
         return bool(
             record
             and any(
@@ -918,6 +1004,13 @@ class RunService(
 
     def can_modify_plan_competitors(self, run_id: str) -> bool:
         record = self._runs.get(run_id)
+        if self._active_resume_operation(run_id) is not None:
+            return True
+        if self._execution is not None and record is not None and (
+            record.detail.current_node == "planner_hitl"
+            and record.detail.status in {"running", "interrupted"}
+        ):
+            return True
         pending = record.pending_interrupts.get("planner") if record else None
         return bool(
             record
@@ -1121,7 +1214,71 @@ class RunService(
         slug = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
         return slug[:40] or "item"
 
+    def _active_resume_operation(self, run_id: str) -> str | None:
+        if self._execution is None:
+            return None
+        operation = self._journal.load_active_operation(run_id)
+        return operation if operation and operation.startswith("resume-") else None
+
+    def _is_same_active_resume(self, run_id: str, request: HitlResumeRequest) -> bool:
+        if self._active_resume_operation(run_id) is None:
+            return False
+        for event in reversed(self._journal.load_events(run_id)):
+            if event.agent == "hitl" and event.type == "node_completed" and (
+                event.message.startswith("HITL decision received:")
+            ):
+                if event.payload == request.model_dump(mode="json", exclude_none=True):
+                    return True
+                raise ExecutionConflictError("A different HITL decision is already executing")
+        return False
+
     async def resume(self, run_id: str, request: HitlResumeRequest) -> RunDetail | None:
+        if self._execution is None:
+            return await self._resume_owned(run_id, request)
+        record = self._load_run_record(run_id)
+        if record is None:
+            return None
+        if self._is_same_active_resume(run_id, request):
+            return record.detail
+        if (
+            record.detail.status in {"completed", "completed_with_blockers"}
+            and request.decision != "redo"
+        ):
+            return record.detail
+        operation = stable_prefixed_id(
+            "resume", record.detail.current_node, record.detail.interrupt_thread_id,
+            len(record.detail.revisions), record.detail.evidence_repair_rounds,
+            request.model_dump(mode="json", exclude_none=True), length=32,
+        )
+        ticket = await self._execution.admit(run_id, record.detail.workspace_id, operation)
+        self._execution_tickets[run_id] = ticket
+        if ticket.state != "queued":
+            # A replay observes the original operation; it never starts another graph.
+            return self._load_run_record(run_id).detail
+        try:
+            async with self._execution_guard(run_id, operation):
+                return await self._resume_owned(run_id, request)
+        except ExecutionConflictError:
+            if self._is_same_active_resume(run_id, request):
+                return self._load_run_record(run_id).detail
+            raise
+
+    def _launch_resume(self, record: RunRecord, request: HitlResumeRequest) -> None:
+        coroutine = self._resume_interrupted_graph(record.detail.id, request)
+        try:
+            task = asyncio.create_task(coroutine)
+        except BaseException:
+            coroutine.close()
+            raise
+        record.resume_task = task
+        if self._execution is not None:
+            lease = self._execution.current_lease(record.detail.id)
+            if lease is None:
+                task.cancel()
+                raise ExecutionConflictError("Resume requires its execution owner")
+            lease.handoff(task)
+
+    async def _resume_owned(self, run_id: str, request: HitlResumeRequest) -> RunDetail | None:
         record = self._runs.get(run_id)
         if record is None:
             return None
@@ -1307,11 +1464,11 @@ class RunService(
                     record.pending_interrupts.setdefault(stage, {})["auto_resume"] = (
                         request.model_dump(mode="json", exclude_none=True)
                     )
-                record.resume_task = asyncio.create_task(
-                    self._resume_interrupted_graph(run_id, request)
-                )
+                self._launch_resume(record, request)
             except asyncio.CancelledError:
-                # Once accepted, a disconnected HTTP request must not strand the checkpoint.
+                if self._execution is not None:
+                    raise
+                # Legacy path preserves the pre-coordination cancellation behavior.
                 record.detail.status = "running"
                 record.detail.updated_at = datetime.utcnow()
                 if hitl_actor_id == "system":
@@ -1431,11 +1588,66 @@ class RunService(
             )
         return record.detail
 
+    async def start_scoped_redo(
+        self, run_id: str, *, preferred_issue_ids: list[str] | None = None,
+    ) -> asyncio.Task[Any]:
+        record = self._load_run_record(run_id)
+        operation = stable_prefixed_id(
+            "redo", record.revision, preferred_issue_ids or [], length=32,
+        )
+        launcher = None
+        if self._execution is not None:
+            ticket = await self._execution.admit(run_id, record.detail.workspace_id, operation)
+            self._execution_tickets[run_id] = ticket
+            identity = (run_id, ticket.id)
+            existing = self._background_tasks.get(identity)
+            if existing is not None and not existing.done():
+                return existing
+            launcher = self._execution.try_launcher(ticket)
+            if launcher is None:
+                raise ExecutionConflictError("Admission already has an execution launcher")
+        else:
+            identity = (run_id, 0)
+        coroutine = self.run_scoped_redo(
+            run_id, preferred_issue_ids=preferred_issue_ids,
+            **({"_operation_id": operation, "_launcher": launcher}
+               if self._execution is not None else {}),
+        )
+        try:
+            task = asyncio.create_task(coroutine)
+            if launcher is not None:
+                self._execution.handoff_launcher(launcher, task)
+        except BaseException:
+            coroutine.close()
+            if launcher is not None:
+                self._execution._cancel_launcher_sync(launcher)
+            raise
+        self._background_tasks[identity] = task
+        def done(completed):
+            self._background_tasks.pop(identity, None)
+            if launcher is not None:
+                self._execution._cancel_launcher_sync(launcher)
+            if not completed.cancelled():
+                completed.exception()
+        task.add_done_callback(done)
+        return task
+
     async def run_scoped_redo(
-        self,
-        run_id: str,
-        *,
-        auto_continue: bool = False,
+        self, run_id: str, *, auto_continue: bool = False,
+        preferred_issue_ids: list[str] | None = None, _operation_id: str | None = None,
+        _launcher: ExecutionLauncher | None = None,
+    ) -> None:
+        record = self._runs.get(run_id) or self._load_run_record(run_id)
+        if record is None:
+            return
+        operation = _operation_id or stable_prefixed_id("redo", record.revision,
+                                                        preferred_issue_ids or [], length=32)
+        async with self._execution_guard(run_id, operation, launcher=_launcher):
+            await self._run_scoped_redo_owned(run_id, auto_continue=auto_continue,
+                                              preferred_issue_ids=preferred_issue_ids)
+
+    async def _run_scoped_redo_owned(
+        self, run_id: str, *, auto_continue: bool = False,
         preferred_issue_ids: list[str] | None = None,
     ) -> None:
         record = self._runs.get(run_id)
@@ -1549,6 +1761,8 @@ class RunService(
                 return
 
             await self._finalize_scoped_redo_graph(record)
+        except ExecutionControlError:
+            raise
         except Exception as exc:  # noqa: BLE001 - convert background task failures into run state.
             detail.status = "failed"
             detail.current_node = None
@@ -1568,8 +1782,7 @@ class RunService(
         last_event_id = after_event_id
         if self._journal is not None:
             while True:
-                record = self._load_run_record(run_id)
-                events = record.events if record is not None else self._journal.load_events(run_id)
+                events = self._journal.load_events(run_id, after_event_id=last_event_id)
                 for event in events:
                     if event.id <= last_event_id:
                         continue
@@ -1584,14 +1797,15 @@ class RunService(
             if event.id > last_event_id:
                 last_event_id = event.id
                 yield event
-        queue: asyncio.Queue[RunEvent] = asyncio.Queue()
+        queue: asyncio.Queue[RunEvent] = asyncio.Queue(maxsize=64)
         record.subscribers.append(queue)
         try:
             while True:
-                event = await queue.get()
-                if event.id > last_event_id:
-                    last_event_id = event.id
-                    yield event
+                await queue.get()
+                for event in record.events:
+                    if event.id > last_event_id:
+                        last_event_id = event.id
+                        yield event
         finally:
             record.subscribers.remove(queue)
 
@@ -1621,6 +1835,19 @@ class RunService(
         return snapshot
 
     async def recover_run(self, run_id: str) -> RunDetail | None:
+        if self._execution is None:
+            return await self._recover_run_owned(run_id)
+        record = self._load_run_record(run_id)
+        if record is None:
+            return None
+        operation = f"recover:{record.revision}"
+        async with self._execution_guard(run_id, operation) as lease:
+            detail = await self._recover_run_owned(run_id)
+            if record.pipeline_task is not None:
+                lease.handoff(record.pipeline_task)
+            return detail
+
+    async def _recover_run_owned(self, run_id: str) -> RunDetail | None:
         """Explicitly continue one stopped local run; never approve an interrupt."""
         record = self._load_run_record(run_id)
         if record is None:
@@ -1646,10 +1873,121 @@ class RunService(
         # Reading SQLite yields; another request may have claimed the run.
         if self._pipeline_is_live(record):
             raise ValueError("Run is already executing")
-        record.pipeline_task = asyncio.create_task(self.run_pipeline(run_id))
+        record.pipeline_task = asyncio.create_task(
+            self._run_pipeline_owned(run_id)
+            if self._execution is not None else self.run_pipeline(run_id)
+        )
         return record.detail
 
-    async def run_pipeline(self, run_id: str) -> RunDetail | None:
+    def launch_pipeline(self, run_id: str) -> asyncio.Task[Any]:
+        """Register one bounded background task for an admitted run in this instance."""
+        ticket = self._execution_tickets.get(run_id)
+        if self._execution is not None and ticket is None:
+            raise ExecutionConflictError("Background execution requires an admission ticket")
+        identity = (run_id, ticket.id if ticket else 0)
+        existing = self._background_tasks.get(identity)
+        if existing is not None and not existing.done():
+            return existing
+        launcher = None
+        if self._execution is not None:
+            if ticket.state != "queued":
+                self._finish_admission_failure(ticket, "Execution admission is no longer queued")
+                if ticket.state == "timedout":
+                    raise ExecutionTimeoutError("Execution admission has expired")
+                raise ExecutionConflictError("Execution admission is no longer queued")
+            launcher = self._execution.try_launcher(ticket)
+            if launcher is None:
+                raise ExecutionConflictError("Admission already has an execution launcher")
+        coroutine = self.run_pipeline(run_id, _launcher=launcher)
+        try:
+            task = asyncio.create_task(coroutine)
+            if launcher is not None:
+                self._execution.handoff_launcher(launcher, task)
+        except BaseException:
+            coroutine.close()
+            if launcher is not None:
+                self._execution._cancel_launcher_sync(launcher)
+                self._finish_admission_failure(ticket, "Execution task launch failed")
+            raise
+        self._background_tasks[identity] = task
+        record = self._runs.get(run_id)
+        if record is not None:
+            record.pipeline_task = task
+        def done(completed):
+            if self._background_tasks.get(identity) is completed:
+                self._background_tasks.pop(identity, None)
+            if launcher is not None and self._execution._cancel_launcher_sync(launcher):
+                self._finish_admission_failure(ticket, "Execution task ended before starting")
+            if not completed.cancelled():
+                completed.exception()
+        task.add_done_callback(done)
+        return task
+
+    @asynccontextmanager
+    async def _execution_guard(
+        self, run_id: str, operation_id: str, *, launcher: ExecutionLauncher | None = None,
+    ):
+        if self._execution is None:
+            yield None
+            return
+        lease = self._execution.current_lease(run_id)
+        if lease is not None:
+            # Re-entry is permitted only to the owner task, never a graph child.
+            async with self._execution.run(lease.ticket):
+                yield lease
+            return
+        record = self._load_run_record(run_id)
+        ticket = await self._execution.admit(run_id, record.detail.workspace_id, operation_id)
+        self._execution_tickets[run_id] = ticket
+        async with self._execution.run(ticket, launcher=launcher) as lease:
+            record.execution_lease = lease
+            # Claim first, then refresh one snapshot before mutating it.
+            snapshot = self._journal.load_run_snapshot(run_id)
+            if snapshot is not None and not record.graph_execution_depth:
+                record.detail, record.revision = snapshot
+                record.pending_graph_redo = record.detail.pending_graph_redo
+                record.pending_interrupts.clear()
+                self._hydrate_pending_interrupt_from_detail(record)
+            yield lease
+
+    async def run_pipeline(
+        self, run_id: str, *, _launcher: ExecutionLauncher | None = None,
+    ) -> RunDetail | None:
+        if self._execution is None:
+            return await self._run_pipeline_owned(run_id)
+        record = self._load_run_record(run_id)
+        if record is None:
+            return None
+        if record.detail.status in {"completed", "completed_with_blockers", "interrupted"}:
+            return record.detail
+        operation = "pipeline" if record.detail.status == "queued" else f"recover:{record.revision}"
+        ticket = self._execution_tickets.get(run_id)
+        if ticket is not None:
+            operation = ticket.operation_id
+        try:
+            async with self._execution_guard(run_id, operation, launcher=_launcher):
+                return await self._run_pipeline_owned(run_id)
+        except (ExecutionControlError, asyncio.CancelledError) as exc:
+            ticket = self._execution_tickets.get(run_id)
+            if ticket is not None:
+                self._finish_admission_failure(
+                    ticket, f"Execution admission ended: {type(exc).__name__}",
+                )
+            raise
+
+    def _finish_admission_failure(self, ticket: ExecutionTicket, message: str) -> None:
+        if self._journal is None or self._execution is None:
+            return
+        event = build_run_event(
+            event_id=1, run_id=ticket.run_id, event_type="run_failed",
+            agent="orchestrator", subagent=None, message=message, payload={},
+        )
+        snapshot = self._journal.finish_admission_failure(ticket, event)
+        record = self._runs.get(ticket.run_id)
+        if snapshot is not None and record is not None:
+            record.detail, record.revision = snapshot
+
+    async def _run_pipeline_owned(self, run_id: str) -> RunDetail | None:
         record = self._runs.get(run_id) or self._load_run_record(run_id)
         if record is None:
             return None
@@ -1681,6 +2019,8 @@ class RunService(
                 await self._run_real_pipeline(run_id, resume_from_checkpoint=recovering)
             else:
                 await self._run_demo_graph_pipeline(run_id, resume_from_checkpoint=recovering)
+        except ExecutionControlError:
+            raise
         except Exception as exc:  # noqa: BLE001 - convert background task failures into run state.
             record.detail.status = "failed"
             record.detail.current_node = None
@@ -1772,6 +2112,8 @@ class RunService(
                 await self._finalize_demo_pipeline(record)
             else:
                 await self._finalize_real_pipeline(record)
+        except ExecutionControlError:
+            raise
         except Exception as exc:  # noqa: BLE001 - background resume failures must surface in run state.
             record.detail.status = "failed"
             record.detail.current_node = None
@@ -2543,9 +2885,10 @@ class RunService(
             if not pending or current.detail.status != "interrupted":
                 return
             if not self._pending_interrupt_matches_current_node(current, stage, pending):
-                current.pending_interrupts.pop(stage, None)
+                if self._execution is None:
+                    current.pending_interrupts.pop(stage, None)
                 return
-            await self.emit(
+            await self.append_control_event(
                 run_id,
                 "node_completed",
                 "hitl",
@@ -2561,10 +2904,14 @@ class RunService(
                 ),
             )
 
-        task = asyncio.create_task(auto_accept_after_timeout())
+        # A timer is a new control request, not a child execution retaining the
+        # graph's lease after the human-wait slot has been released.
+        task = asyncio.create_task(auto_accept_after_timeout(), context=Context())
         record.hitl_timeout_tasks[stage] = task
 
         def cleanup(completed: asyncio.Task[None]) -> None:
+            if not completed.cancelled():
+                completed.exception()
             current = self._runs.get(run_id)
             if current is not None and current.hitl_timeout_tasks.get(stage) is completed:
                 current.hitl_timeout_tasks.pop(stage, None)
@@ -2832,57 +3179,45 @@ class RunService(
         return event
 
     async def emit(
-        self,
-        run_id: str,
-        event_type: str,
-        agent: str | None,
-        subagent: str | None,
-        message: str,
-        payload: dict | None = None,
+        self, run_id: str, event_type: str, agent: str | None, subagent: str | None,
+        message: str, payload: dict | None = None,
     ) -> None:
-        record = self._runs[run_id]
-        event = build_run_event(
-            event_id=len(record.events) + 1,
-            run_id=run_id,
-            event_type=event_type,
-            agent=agent,
-            subagent=subagent,
-            message=message,
-            payload=payload or {},
+        self._append_run_event_sync(
+            self._runs[run_id], event_type, agent, subagent, message, payload,
         )
-        record.events.append(event)
-        self._persist_run(run_id)
-        if self._journal is not None:
-            self._journal.append_event(event)
-        for queue in list(record.subscribers):
-            await queue.put(event)
+
+    async def append_control_event(
+        self, run_id: str, event_type: str, agent: str | None, subagent: str | None,
+        message: str, payload: dict | None = None,
+    ) -> None:
+        record = self._load_run_record(run_id)
+        if record is None:
+            raise ValueError("Run not found")
+        self._append_run_event_sync(record, event_type, agent, subagent, message, payload,
+                                    control_event=True)
 
     def _append_run_event_sync(
-        self,
-        record: RunRecord,
-        event_type: str,
-        agent: str | None,
-        subagent: str | None,
-        message: str,
-        payload: dict[str, Any] | None = None,
+        self, record: RunRecord, event_type: str, agent: str | None, subagent: str | None,
+        message: str, payload: dict[str, Any] | None = None, *, control_event: bool = False,
     ) -> RunEvent:
-        # Synchronous accounting paths cannot await emit(); keep persistence,
-        # journaling, and active subscriber delivery aligned with emit().
         event = build_run_event(
-            event_id=len(record.events) + 1,
-            run_id=record.detail.id,
-            event_type=event_type,
-            agent=agent,
-            subagent=subagent,
-            message=message,
-            payload=payload or {},
+            event_id=(record.events[-1].id + 1) if record.events else 1,
+            run_id=record.detail.id, event_type=event_type, agent=agent,
+            subagent=subagent, message=message, payload=payload or {},
         )
-        record.events.append(event)
-        self._persist_run(record.detail.id)
+        if not control_event:
+            self._persist_run(record.detail.id)
         if self._journal is not None:
-            self._journal.append_event(event)
+            event = self._journal.append_event(
+                event, **({} if control_event else self._journal_write_args(record)),
+                control_event=control_event,
+                command_id=(payload or {}).get("command_id") if control_event else None,
+            )
+        if not record.events or event.id > record.events[-1].id:
+            record.events.append(event)
         for queue in list(record.subscribers):
-            queue.put_nowait(event)
+            if not queue.full():
+                queue.put_nowait(event)
         return event
 
     def _append_agent_message(
@@ -4117,48 +4452,41 @@ class RunService(
     def _hydrate_runs(self) -> None:
         if self._journal is None:
             return
-        for detail in self._journal.load_runs():
-            self._restore_report_projections(detail)
-            record = RunRecord(
-                detail=detail,
-                events=self._journal.load_events(detail.id),
-                pending_graph_redo=detail.pending_graph_redo,
-            )
-            self._hydrate_pending_interrupt_from_detail(record)
-            self._runs[detail.id] = record
+        for summary in self._journal.load_run_summaries():
+            self._load_run_record(summary.id)
 
     def _refresh_runs_from_journal(self) -> None:
         if self._journal is None:
             return
-        for detail in self._journal.load_runs():
-            self._upsert_journal_run(detail)
+        for summary in self._journal.load_run_summaries():
+            self._load_run_record(summary.id)
 
     def _load_run_record(self, run_id: str) -> RunRecord | None:
         record = self._runs.get(run_id)
         if self._journal is None:
             return record
-        detail = self._journal.load_run(run_id)
-        if detail is None:
+        snapshot = self._journal.load_run_snapshot(run_id)
+        if snapshot is None:
             return record
-        return self._upsert_journal_run(detail)
+        return self._upsert_journal_run(snapshot[0], revision=snapshot[1])
 
-    def _upsert_journal_run(self, detail: RunDetail) -> RunRecord:
+    def _upsert_journal_run(self, detail: RunDetail, *, revision: int = 0) -> RunRecord:
         self._restore_report_projections(detail)
         events = self._journal.load_events(detail.id) if self._journal is not None else []
         record = self._runs.get(detail.id)
         if record is None:
-            record = RunRecord(
-                detail=detail,
-                events=events,
-                pending_graph_redo=detail.pending_graph_redo,
-            )
+            record = RunRecord(detail=detail, events=events, revision=revision,
+                               pending_graph_redo=detail.pending_graph_redo)
             self._runs[detail.id] = record
             self._hydrate_pending_interrupt_from_detail(record)
             return record
-        if self._pipeline_is_live(record):
+        if self._pipeline_is_live(record) or (
+            record.execution_lease is not None and not record.execution_lease._released
+        ):
             record.events = events
             return record
         record.detail = detail
+        record.revision = revision
         record.events = events
         if record.pending_graph_redo is None:
             record.pending_graph_redo = detail.pending_graph_redo
@@ -4197,6 +4525,8 @@ class RunService(
         }
 
     def _repair_inconsistent_hitl_status(self, record: RunRecord) -> None:
+        if self._execution is not None and self._execution.current_lease(record.detail.id) is None:
+            return
         detail = record.detail
         if detail.status != "running":
             return
@@ -4208,14 +4538,23 @@ class RunService(
         detail.updated_at = datetime.utcnow()
         self._persist_run(detail.id)
 
+    def _journal_write_args(self, record: RunRecord) -> dict[str, Any]:
+        if self._execution is None:
+            return {}
+        lease = self._execution.current_lease(record.detail.id)
+        if lease is not None:
+            return {"token": lease.token, "generation": lease.generation}
+        return {"expected_revision": record.revision}
+
     def _persist_run(self, run_id: str) -> None:
         if self._journal is None:
             return
         record = self._runs.get(run_id)
         if record is not None:
             record.detail.pending_graph_redo = record.pending_graph_redo
-            self._journal.save_run(
+            record.revision = self._journal.save_run(
                 record.detail, projections=self._journal_report_projections(record.detail),
+                **self._journal_write_args(record),
             )
 
     async def _record_revision(
@@ -4642,6 +4981,8 @@ class RunService(
         if context is not None:
             context.add_tool_call("fetch_page", url)
         fetch_options = {} if allow_advanced else {"allow_advanced": False}
+        if record.detail.evidence_refresh_active:
+            fetch_options["force_refresh"] = True
         if agent == "collector" and subagent and "pricing" in subagent.split("::", 1)[0].casefold():
             fetch_options["require_price_content"] = True
         if agent == "collector" and any(
