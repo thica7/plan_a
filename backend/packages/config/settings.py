@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from functools import lru_cache
@@ -85,6 +86,35 @@ def _env_float(name: str, default: float, *, minimum: float, maximum: float) -> 
     except ValueError:
         return default
     return max(minimum, min(maximum, value))
+
+
+def _task_center_env_settings() -> dict:
+    raw_enabled = os.getenv("TASK_CENTER_ENABLED", "false").strip().lower()
+    if raw_enabled not in {"0", "false", "no", "off", "1", "true", "yes", "on"}:
+        raise ValueError("invalid TASK_CENTER_ENABLED")
+    if raw_enabled in {"0", "false", "no", "off"}:
+        return {"task_center_enabled": False}
+    values: dict = {
+        "task_center_enabled": True,
+        "task_center_database_url": os.getenv("TASK_CENTER_DATABASE_URL", "").strip(),
+    }
+    for name, default, conversion in (
+        ("POOL_MIN_SIZE", 1, int),
+        ("POOL_MAX_SIZE", 8, int),
+        ("POOL_MAX_WAITING", 128, int),
+        ("POOL_TIMEOUT_SECONDS", 5, float),
+        ("STATEMENT_TIMEOUT_MS", 3000, int),
+        ("LOCK_TIMEOUT_MS", 1000, int),
+        ("DISPATCH_LEASE_SECONDS", 30, float),
+        ("DISPATCH_MAX_ATTEMPTS", 3, int),
+        ("DISPATCH_RETRY_SECONDS", 1, float),
+    ):
+        env_name = f"TASK_CENTER_{name}"
+        try:
+            values[env_name.lower()] = conversion(os.getenv(env_name, str(default)))
+        except (ValueError, OverflowError):
+            raise ValueError(f"invalid {env_name}") from None
+    return values
 
 
 @dataclass(frozen=True)
@@ -189,6 +219,37 @@ class Settings:
     evalops_release_limit: int = 30
     create_run_rate_limit_per_window: int = 5
     create_run_rate_limit_window_seconds: float = 60.0
+    enterprise_pool_max_size: int = 4
+    enterprise_pool_timeout_seconds: float = 5.0
+    enterprise_statement_timeout_ms: int = 3000
+    enterprise_lock_timeout_ms: int = 1000
+    task_center_enabled: bool = False
+    task_center_database_url: str = ""
+    task_center_pool_min_size: int = 1
+    task_center_pool_max_size: int = 8
+    task_center_pool_max_waiting: int = 128
+    task_center_pool_timeout_seconds: float = 5.0
+    task_center_statement_timeout_ms: int = 3000
+    task_center_lock_timeout_ms: int = 1000
+    task_center_dispatch_lease_seconds: float = 30.0
+    task_center_dispatch_max_attempts: int = 3
+    task_center_dispatch_retry_seconds: float = 1.0
+
+    def __post_init__(self) -> None:
+        if not self.task_center_enabled:
+            return
+        if not self.task_center_database_url.strip():
+            raise ValueError("TASK_CENTER_DATABASE_URL is required when enabled")
+        for name in (
+            "pool_min_size", "pool_max_size", "pool_max_waiting", "pool_timeout_seconds",
+            "statement_timeout_ms", "lock_timeout_ms", "dispatch_lease_seconds",
+            "dispatch_max_attempts", "dispatch_retry_seconds",
+        ):
+            value = getattr(self, f"task_center_{name}")
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"invalid TASK_CENTER_{name.upper()}")
+        if self.task_center_pool_min_size > self.task_center_pool_max_size:
+            raise ValueError("TASK_CENTER_POOL_MIN_SIZE must not exceed TASK_CENTER_POOL_MAX_SIZE")
 
     @property
     def has_llm_credentials(self) -> bool:
@@ -236,6 +297,7 @@ def get_settings() -> Settings:
     if enterprise_backend == "postgres" and not enterprise_database_url:
         enterprise_database_url = DEFAULT_ENTERPRISE_DATABASE_URL
     return Settings(
+        **_task_center_env_settings(),
         demo_mode=_env_bool("DEMO_MODE", True),
         ark_api_key=os.getenv("ARK_API_KEY") or None,
         ark_model=os.getenv("ARK_MODEL") or None,
@@ -376,6 +438,16 @@ def get_settings() -> Settings:
         otel_export_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT") or None,
         enterprise_store_backend=enterprise_backend,
         enterprise_database_url=enterprise_database_url,
+        enterprise_pool_max_size=_env_int("ENTERPRISE_POOL_MAX_SIZE", 4, minimum=1, maximum=64),
+        enterprise_pool_timeout_seconds=_env_float(
+            "ENTERPRISE_POOL_TIMEOUT_SECONDS", 5, minimum=0.05, maximum=60
+        ),
+        enterprise_statement_timeout_ms=_env_int(
+            "ENTERPRISE_STATEMENT_TIMEOUT_MS", 3000, minimum=1, maximum=300000
+        ),
+        enterprise_lock_timeout_ms=_env_int(
+            "ENTERPRISE_LOCK_TIMEOUT_MS", 1000, minimum=1, maximum=300000
+        ),
         run_orchestration_backend=cast(
             Literal["langgraph", "temporal"],
             _env_choice(

@@ -4,15 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.deps import (
     get_app_settings,
+    get_enterprise_store,
     get_enterprise_user_context,
     get_run_service,
     get_runtime_command_service,
     get_temporal_workflow_service,
 )
 from app.governance import ensure_model_policy_allows_execution_mode
-from packages.auth import EnterpriseUserContext
+from packages.auth import EnterpriseUserContext, can_access_workspace
 from packages.config import Settings
-from packages.enterprise import WorkspaceQuotaExceededError
+from packages.enterprise import EnterpriseStore, WorkspaceQuotaExceededError
 from packages.identity import new_ui_run_idempotency_key
 from packages.infrastructure.execution_control import ExecutionControlError
 from packages.orchestrator.service import RunService
@@ -36,6 +37,7 @@ from packages.schema.api_dto import (
     WorkflowStartResponse,
     WorkflowStateResponse,
 )
+from packages.task_center.errors import TaskCenterError
 from packages.workflows.service import TemporalWorkflowService
 
 router = APIRouter()
@@ -47,6 +49,7 @@ TemporalWorkflowServiceDep = Annotated[
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 RuntimeCommandServiceDep = Annotated[RuntimeCommandService, Depends(get_runtime_command_service)]
 EnterpriseUserDep = Annotated[EnterpriseUserContext, Depends(get_enterprise_user_context)]
+EnterpriseStoreDep = Annotated[EnterpriseStore, Depends(get_enterprise_store)]
 
 
 @router.post(
@@ -59,8 +62,24 @@ async def start_competitive_intel_workflow(
     workflow_service: TemporalWorkflowServiceDep,
     run_service: RunServiceDep,
     settings: SettingsDep,
+    user: EnterpriseUserDep,
+    store: EnterpriseStoreDep,
 ) -> WorkflowStartResponse:
+    _require_creation_scope(
+        store, user, request.workspace_id, [request.project_id] if request.project_id else [],
+    )
     ensure_model_policy_allows_execution_mode(request.execution_mode, settings)
+    if settings.task_center_enabled:
+        try:
+            return await workflow_service.start_competitive_intel(request, actor=user)
+        except WorkspaceQuotaExceededError as exc:
+            raise HTTPException(
+                status_code=429, detail=exc.decision.model_dump(mode="json"),
+            ) from exc
+        except TaskCenterError as exc:
+            raise HTTPException(
+                status_code=getattr(exc, "status_code", 503), detail=str(exc),
+            ) from exc
     _ensure_workspace_quota(run_service, request.workspace_id)
     if settings.execution_control_enabled:
         request = request.model_copy(update={
@@ -71,6 +90,8 @@ async def start_competitive_intel_workflow(
         result = await workflow_service.start_competitive_intel(request)
     except ExecutionControlError:
         raise
+    except TaskCenterError as exc:
+        raise HTTPException(status_code=getattr(exc, "status_code", 503), detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -129,6 +150,8 @@ async def get_workflow_state(
 ) -> WorkflowStateResponse:
     try:
         return await service.get_workflow_state(workflow_id)
+    except TaskCenterError as exc:
+        raise HTTPException(status_code=getattr(exc, "status_code", 503), detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -145,10 +168,16 @@ async def start_scheduled_scan_workflow(
     request: ScheduledScanStartRequest,
     service: TemporalWorkflowServiceDep,
     settings: SettingsDep,
+    user: EnterpriseUserDep,
+    store: EnterpriseStoreDep,
 ) -> ScheduledScanStartResponse:
+    _require_creation_scope(store, user, request.workspace_id, request.project_ids)
+    request = request.model_copy(update={"requested_by": user.user_id})
     ensure_model_policy_allows_execution_mode(request.execution_mode, settings)
     try:
         return await service.start_scheduled_scan(request)
+    except TaskCenterError as exc:
+        raise HTTPException(status_code=getattr(exc, "status_code", 503), detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -165,10 +194,16 @@ async def start_monitor_workflow(
     request: MonitorStartRequest,
     service: TemporalWorkflowServiceDep,
     settings: SettingsDep,
+    user: EnterpriseUserDep,
+    store: EnterpriseStoreDep,
 ) -> MonitorStartResponse:
+    _require_creation_scope(store, user, request.workspace_id, [request.project_id])
+    request = request.model_copy(update={"requested_by": user.user_id})
     ensure_model_policy_allows_execution_mode(request.execution_mode, settings)
     try:
         return await service.start_monitor(request)
+    except TaskCenterError as exc:
+        raise HTTPException(status_code=getattr(exc, "status_code", 503), detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - surface Temporal availability as HTTP 503.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -240,3 +275,16 @@ async def reject_report_approval_workflow(
 
 def _raise_runtime_command_error(error: RuntimeCommandError) -> None:
     raise HTTPException(status_code=error.status_code, detail=error.detail)
+
+
+def _require_creation_scope(store, user, workspace_id, project_ids):
+    if not can_access_workspace(user, workspace_id, "project:write"):
+        raise HTTPException(status_code=403, detail="Insufficient workspace permission")
+    if not any(item.id == workspace_id for item in store.list_workspaces()):
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    for project_id in project_ids:
+        project = store.get_project(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if project.workspace_id != workspace_id:
+            raise HTTPException(status_code=403, detail="Project is outside workspace scope")

@@ -119,6 +119,33 @@ class RuntimeCommandService:
             execution_mode=_resolved_execution_mode(request, self._settings),
         )
         self._ensure_model_policy_allows_execution_mode(request.execution_mode)
+        if self._settings.task_center_enabled:
+            from packages.task_center.errors import TaskCenterError
+            cutover = decide_temporal_cutover(self._settings, request)
+            try:
+                delivered = await self._run_service.submission_bridge.execute(
+                    request, actor=actor, intent="runtime", backend=cutover.route,
+                    workflow_service=self._workflow_service,
+                )
+            except WorkspaceQuotaExceededError as exc:
+                raise RuntimeCommandError(
+                    429, exc.decision.model_dump(mode="json"), command_type="create_run",
+                ) from exc
+            except TaskCenterError as exc:
+                raise RuntimeCommandError(
+                    getattr(exc, "status_code", 503), str(exc), command_type="create_run",
+                ) from exc
+            payload = delivered.payload
+            return _result(
+                command_id=command_id, command_type="create_run",
+                status="accepted" if delivered.backend == "temporal" else "succeeded",
+                resource_type="run",
+                resource_id=payload.run_id if delivered.backend == "temporal" else payload.id,
+                workspace_id=request.workspace_id, project_id=request.project_id,
+                run_id=payload.run_id if delivered.backend == "temporal" else payload.id,
+                route=delivered.backend, payload=payload,
+                metadata={"runtime_policy_decision": runtime_policy.model_dump(mode="json")},
+            )
         self._ensure_workspace_quota(request.workspace_id)
         cutover = decide_temporal_cutover(self._settings, request)
         metadata = {
@@ -602,6 +629,8 @@ class RuntimeCommandService:
                 "No eligible QA findings or redo limit reached.",
                 command_type="request_redo",
             )
+        if self._settings.task_center_enabled:
+            self._run_service.ensure_task_center_execution()
         command_id = _command_id("request_redo", actor, command.run_id)
         await self._emit_run_command(
             command_id=command_id,
@@ -1099,21 +1128,7 @@ class RuntimeCommandService:
         self._store.record_memory_feedback_audit(feedback, candidates, actor_id=actor.user_id)
 
     def _ensure_model_policy_allows_execution_mode(self, execution_mode: str) -> None:
-        if execution_mode != "real":
-            return
-        report = build_model_policy_report(self._settings)
-        if report.real_execution_allowed:
-            return
-        raise RuntimeCommandError(
-            400,
-            {
-                "message": model_policy_block_message(report),
-                "policy_version": report.policy_version,
-                "blocking_finding_ids": report.blocking_finding_ids,
-                "status": report.status,
-            },
-            command_type="create_run",
-        )
+        ensure_model_execution_allowed(self._settings, execution_mode)
 
     def _ensure_workspace_quota(self, workspace_id: str) -> None:
         try:
@@ -1317,6 +1332,24 @@ def _with_run_idempotency_key(request: RunCreateRequest) -> RunCreateRequest:
     if request.idempotency_key:
         return request
     return request.model_copy(update={"idempotency_key": new_ui_run_idempotency_key()})
+
+
+def ensure_model_execution_allowed(settings: Settings, execution_mode: str) -> None:
+    if execution_mode != "real":
+        return
+    report = build_model_policy_report(settings)
+    if report.real_execution_allowed:
+        return
+    raise RuntimeCommandError(
+        400,
+        {
+            "message": model_policy_block_message(report),
+            "policy_version": report.policy_version,
+            "blocking_finding_ids": report.blocking_finding_ids,
+            "status": report.status,
+        },
+        command_type="create_run",
+    )
 
 
 def _resolved_execution_mode(request: RunCreateRequest, settings: Settings) -> str:

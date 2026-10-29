@@ -90,8 +90,18 @@ class TemporalWorkflowService:
         settings: Settings,
         *,
         client_factory: TemporalClientFactory | None = None,
+        run_service=None,
+        enterprise_store=None,
+        journal=None,
+        submission_service=None,
     ) -> None:
         self._settings = settings
+        self._run_service = run_service
+        from packages.task_center.bridge import SubmissionBridge
+        self.submission_bridge = SubmissionBridge(
+            settings, store=enterprise_store, journal=journal, run_service=run_service,
+            task_service=submission_service,
+        )
         self._execution = create_execution_coordinator(settings)
         self._journal = RunJournal(self._execution.db_path) if self._execution is not None else None
         if self._journal is not None:
@@ -101,7 +111,13 @@ class TemporalWorkflowService:
     async def start_competitive_intel(
         self,
         request: RunCreateRequest,
+        *, actor=None,
     ) -> WorkflowStartResponse:
+        if self.submission_bridge.enabled and not await self.submission_bridge.verified(request):
+            result = await self.submission_bridge.execute(
+                request, actor=actor, intent="temporal", backend="temporal", workflow_service=self,
+            )
+            return result.payload
         workflow_input = competitive_intel_input_from_run_request(request)
         workflow_id = workflow_id_for_request(workflow_input)
         ticket, launcher = None, None

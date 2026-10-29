@@ -78,7 +78,13 @@ def get_enterprise_store() -> EnterpriseStore:
             raise RuntimeError(
                 "ENTERPRISE_DATABASE_URL is required when enterprise store is postgres."
             )
-        return EnterprisePostgresStore(settings.enterprise_database_url)
+        return EnterprisePostgresStore(
+            settings.enterprise_database_url, auto_migrate=not settings.task_center_enabled,
+            pool_max_size=settings.enterprise_pool_max_size,
+            pool_timeout_seconds=settings.enterprise_pool_timeout_seconds,
+            statement_timeout_ms=settings.enterprise_statement_timeout_ms,
+            lock_timeout_ms=settings.enterprise_lock_timeout_ms,
+        )
     if settings.enterprise_store_backend == "memory":
         return EnterpriseMemoryStore()
     raise RuntimeError(f"Unknown enterprise store backend: {settings.enterprise_store_backend}")
@@ -179,7 +185,13 @@ def get_run_service(
 
 @lru_cache
 def get_temporal_workflow_service() -> TemporalWorkflowService:
-    return TemporalWorkflowService(get_app_settings())
+    if not get_app_settings().task_center_enabled:
+        return TemporalWorkflowService(get_app_settings())
+    run_service = get_run_service()
+    return TemporalWorkflowService(
+        get_app_settings(), run_service=run_service, enterprise_store=run_service.enterprise_store,
+        journal=run_service._journal,
+    )
 
 
 def get_runtime_command_service(
@@ -210,3 +222,39 @@ def require_run_access(
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_access_workspace(user, summary.workspace_id, action):
         raise HTTPException(status_code=403, detail="Insufficient workspace permission")
+
+
+async def get_task_center_service(
+    settings: Annotated[Settings, Depends(get_app_settings)],
+    store: Annotated[EnterpriseStore, Depends(get_enterprise_store)],
+):
+    if not settings.task_center_enabled:
+        return None
+    from packages.task_center.factory import get_task_service
+    return get_task_service(settings, store=store, journal=get_run_journal())
+
+
+def require_task_center_enabled(settings: Annotated[Settings, Depends(get_app_settings)]):
+    from packages.task_center.errors import TaskCenterDisabled
+    if not settings.task_center_enabled:
+        raise TaskCenterDisabled("task center is disabled")
+
+
+async def get_submission_service(
+    enabled: Annotated[None, Depends(require_task_center_enabled)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+    store: Annotated[EnterpriseStore, Depends(get_enterprise_store)],
+    journal: Annotated[RunJournal, Depends(get_run_journal)],
+):
+    from packages.task_center.factory import get_task_service
+    service = get_task_service(settings, store=store, journal=journal)
+    await service.open()
+    return service
+
+
+async def close_run_services():
+    """Cancel and join owned Graph/HITL tasks before closing their storage."""
+    services = list(_RUN_SERVICE_CACHE.values())
+    _RUN_SERVICE_CACHE.clear()
+    for service in services:
+        await service.aclose()

@@ -16,6 +16,7 @@ dependencies = [
     "pypdf>=6.0.0,<7.0.0",
     "pydantic-ai-slim[openai]==1.106.0",
     "psycopg[binary]>=3.2.0",
+    "psycopg-pool>=3.2.0,<4.0.0",
     "pyyaml>=6.0.1",
     "qdrant-client>=1.9.0",
     "sse-starlette>=2.1.0",
@@ -60,3 +61,4 @@ include = ["app*", "packages*"]
 [tool.setuptools.package-data]
 "packages.business_intel" = ["*.yaml"]
 "packages.skills" = ["*.yaml"]
+"packages.task_center" = ["migrations/*.sql"]

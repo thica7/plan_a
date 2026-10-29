@@ -1,6 +1,8 @@
 import os
 
 from fastapi import FastAPI
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -19,6 +21,7 @@ from app.routers import (
     runtime,
     skills,
     stream,
+    task_submissions,
     trace,
     workflows,
 )
@@ -33,6 +36,27 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="Competiscope v2 API", version="0.1.0")
 
+    from packages.task_center.errors import TaskCenterError
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request, exc):
+        path = request.url.path
+        if path.startswith("/api/task-submissions") or (
+            path.startswith("/api/workspaces/") and path.endswith("/quota-ledger")
+        ):
+            return JSONResponse(status_code=422, content={
+                "detail": "Invalid task center request", "code": "invalid_task_center_request",
+                "errors": [{"loc": list(error["loc"]), "type": error["type"]}
+                           for error in exc.errors()],
+            })
+        return await request_validation_exception_handler(request, exc)
+
+    @app.exception_handler(TaskCenterError)
+    async def task_center_error(request, exc):
+        code = getattr(exc, "status_code", 503)
+        return JSONResponse(status_code=code, content={"detail": str(exc), "code": exc.code},
+                            headers={"Retry-After": "1"} if code == 503 else None)
+
     @app.exception_handler(ExecutionControlError)
     async def execution_control_error(request, exc):
         return JSONResponse(
@@ -43,9 +67,31 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def startup_event():
         validate_env_vars()
+        from app import deps
+        settings = deps.get_app_settings()
+        if settings.task_center_enabled:
+            import asyncio
+
+            from packages.task_center.factory import get_task_service
+            store = await asyncio.to_thread(deps.get_enterprise_store)
+            journal = await asyncio.to_thread(deps.get_run_journal)
+            service = get_task_service(settings, store=store, journal=journal)
+            await service.open()
 
     async def shutdown_event():
+        import asyncio
+
+        from app import deps
         from packages.infrastructure.redis_config import get_redis_runtime
+        from packages.task_center.factory import close_task_services, stop_task_services
+        await stop_task_services()
+        await deps.close_run_services()
+        await close_task_services()
+        if deps.get_enterprise_store.cache_info().currsize:
+            store = deps.get_enterprise_store()
+            if hasattr(store, "close"):
+                await asyncio.to_thread(store.close)
+            deps.get_enterprise_store.cache_clear()
 
         if get_redis_runtime.cache_info().currsize:
             await get_redis_runtime().aclose()
@@ -62,6 +108,7 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(RedisRateLimitMiddleware)
     app.add_middleware(AuthMiddleware)
+    app.include_router(task_submissions.router, prefix="/api", tags=["task-submissions"])
     app.include_router(runs.router, prefix="/api", tags=["runs"])
     app.include_router(stream.router, prefix="/api", tags=["stream"])
     app.include_router(hitl.router, prefix="/api", tags=["hitl"])

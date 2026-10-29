@@ -1,6 +1,6 @@
 # 本机与内网演示部署
 
-本轮按用户要求不在开发电脑上执行 Docker。以下容器命令供另一台部署电脑使用；代码单测、假 Redis 与假模型测试不能代替这些实机验收。
+2026-10-30 交付继续按用户要求不在开发电脑上执行 Docker。以下容器命令供另一台部署电脑使用；代码单测、假 Redis 与假模型测试不能代替这些实机验收。提交中心已在本机原生 PostgreSQL 15.18 验证，其容器接线和启用步骤见第 7 节。
 
 ## 1. 部署电脑准备
 
@@ -90,7 +90,7 @@ Compose 依赖镜像使用明确版本标签；应用构建基镜像仍有 Pytho
 | `qdrant_data` | 知识库向量索引 |
 | Redis | 可丢弃缓存和短时限流计数；不作任务真值或备份来源 |
 
-普通停止保留 volume；清理时不要使用 `down -v`。迁移不支持直接复制运行中 SQLite 文件。Postgres schema 由现有企业存储初始化；升级前先备份并在隔离项目恢复检查。
+普通停止保留 volume；清理时不要使用 `down -v`。迁移不支持直接复制运行中 SQLite 文件。关闭提交中心时，旧企业存储保留原初始化行为；开启提交中心时企业存储不自动迁移，旧 enterprise schema 与必要授权须先由管理进程准备，再显式迁移提交中心。升级前先备份并在隔离项目恢复检查。
 
 LangGraph 任务中断后，持有 `report:write` 权限的主体可调用 `POST /api/runs/{run_id}/recover`。接口校验已持久执行归属、运行/失败状态、原 checkpoint、当前真实模型策略和重复执行。人工等待保持等待，已完成、未知归属及限定重做不使用普通恢复；重启不会自动重放真实付费调用。SSE 客户端用最后收到的事件 ID 作为 `Last-Event-ID` 补读。
 
@@ -157,6 +157,79 @@ API 与 Worker 使用同一 Compose 配置和 volume：`QDRANT_URL=http://qdrant
 `KB_EMBEDDING_PROVIDER`、`KB_RERANKER_PROVIDER` 与模型配置继承 `.env`；`hash` 仅用于确定性离线测试。切换真实 embedding 模型时使用新 collection/version 并重建，不能混写向量。当前 backend 镜像未安装本地 BGE/精排 extras、未打包模型权重；需另行构建含 `bge-m3` / `reranker` extras 和模型目录挂载的镜像，或使用已配置的 HTTP provider，再验收实际语义检索。
 
 旧 KB 文档保持 `pending`，按文档调用 `POST /api/knowledge/documents/{document_id}/reindex`，用 `GET /api/knowledge/providers` 核对 provider 与降级原因。项目 evidence 的 Postgres 向量表另用 `POST /api/enterprise/evidence/reindex?workspace_id=<workspace-id>` 重建。索引可用不代表报告前提归属与引用绑定已合格。
+
+## 7. PostgreSQL 提交中心（第一期）
+
+本节为另一台部署电脑的操作步骤，开发电脑未执行。`TASK_CENTER_ENABLED=false` 默认关闭；启用后数据库不可用、schema 漂移、owner 权限或池配置错误都明确失败，不回退到内存额度。HTTP 只检查提交中心迁移版本和权限，不执行其 DDL。
+
+### 迁移 owner 与应用角色分开
+
+1. 停止本池全部旧 writer／API／Worker／Relay，备份 PostgreSQL、run journal、图检查点和产物，确认项目外也没有旧路径写入。首次月桶从真实 `journal.load_run_summaries()` 导入历史次数；导入期间继续写旧 journal 会漏计。备份与恢复检查完成后才切换。
+2. 管理员在目标数据库建立独立的迁移 owner，以及既有登录应用角色（例如 `task_center_app`）：应用角色须为 `NOSUPERUSER NOBYPASSRLS`，不拥有提交中心 schema，不直接或间接继承 owner。CLI `--app-role` 只授权已有角色，不建角色、数据库或密码。旧 enterprise schema（含部署组合所需 pgvector）与企业 DML 权限须由管理员先准备；本机未验证完整 PostgreSQL 17／pgvector 组合。
+3. 在独立管理终端通过密钥管理设施注入 `TASK_CENTER_MIGRATION_DATABASE_URL`，仅迁移 CLI 使用。它不能保存在 API／Worker／Relay 的环境或 `env_file`。应用的 `TASK_CENTER_DATABASE_URL` 必须指向受限 app 角色；应用若使用 PostgreSQL 企业存储，`ENTERPRISE_DATABASE_URL` 也须是具有必要 DML 权限的受限应用连接。不要把普通 app 角色授为 owner 的成员。
+4. 在装好后端依赖的仓库根目录先预览，再显式执行；命令不传 DSN 字面量：
+
+```bash
+COMPETISCOPE_LOAD_ENV_FILES=0 PYTHONPATH=backend \
+  .venv/bin/python backend/scripts/migrate_task_center.py
+# 仅在独立管理终端已安全注入 owner 连接后执行
+COMPETISCOPE_LOAD_ENV_FILES=0 PYTHONPATH=backend \
+  .venv/bin/python backend/scripts/migrate_task_center.py --execute --app-role task_center_app
+unset TASK_CENTER_MIGRATION_DATABASE_URL
+```
+
+预览不连接数据库、不读取连接秘密；`--execute` 才迁移并授予必要 DML。应用权限检查会拒绝 owner／superuser／bypass-RLS 和 schema DDL 权限。PowerShell 使用独立管理进程并在结束时清除对应环境变量。
+
+### 应用配置与 Relay
+
+在独立应用环境中注入受限 DSN，并为 API／Worker／Relay 使用一致的 journal、工作目录和 POSIX 共享卷。下面仅列非秘密参数；当前演示先采用 LangGraph，真实模型、Temporal 另行验收：
+
+```dotenv
+TASK_CENTER_ENABLED=true
+COMPETISCOPE_LOAD_ENV_FILES=0
+TASK_CENTER_POOL_MIN_SIZE=1
+TASK_CENTER_POOL_MAX_SIZE=8
+TASK_CENTER_POOL_MAX_WAITING=128
+TASK_CENTER_POOL_TIMEOUT_SECONDS=5
+TASK_CENTER_STATEMENT_TIMEOUT_MS=3000
+TASK_CENTER_LOCK_TIMEOUT_MS=1000
+TASK_CENTER_DISPATCH_LEASE_SECONDS=30
+TASK_CENTER_DISPATCH_MAX_ATTEMPTS=3
+TASK_CENTER_DISPATCH_RETRY_SECONDS=1
+ENTERPRISE_POOL_MAX_SIZE=4
+ENTERPRISE_POOL_TIMEOUT_SECONDS=5
+EXECUTION_CONTROL_ENABLED=true
+EXECUTION_CONTROL_JOURNAL_PATH=runs/run_journal.db
+RUN_ORCHESTRATION_BACKEND=langgraph
+TEMPORAL_TRAFFIC_PERCENT=0
+DEMO_MODE=true
+```
+
+关闭 env-file 自动加载时，需要的配置必须由进程环境或容器环境注入。容器中 journal 使用同一 `/app/runs/run_journal.db`；图检查点默认位于相同工作目录的 `runs/graph_checkpoints.db`。API、Worker、Relay 的同名目录必须挂载同一个实际 `run-data` 卷；副本还须共享可信企业元数据。Memory 企业元数据仅用于本次隔离演示，不能当跨进程生产共享元数据。
+
+迁移完成后启动 API，再用相同应用环境启动独立 Relay；API 的新提交接口只持久化意图，不代替后台 Relay。原有入口可在其受控调用中领取当前单，但不能依赖这一路径清空新接口的 Outbox。
+
+```bash
+# 从仓库根目录运行；先预览，不构造运行依赖
+PYTHONPATH=backend .venv/bin/python backend/scripts/run_submission_relay.py
+PYTHONPATH=backend .venv/bin/python backend/scripts/run_submission_relay.py --execute --concurrency 4
+```
+
+当前 `backend/Dockerfile` 未复制 `backend/scripts`，现有 Compose 也未定义 Relay 服务。部署者须先通过镜像构建或只读挂载提供脚本，增加 Relay 服务／进程，并使其继承相同应用配置与共享卷。现有 Compose 的 `env_file: .env` 和企业 DSN 拼接仍可能把 PostgreSQL 管理凭据带进应用；启用前须用独立应用环境文件替代该继承，并显式覆盖企业应用 DSN。仅新增一个 `env_file` 可能仍合并旧文件，必须核对最终应用环境中 owner 秘密确已移除；不要把完整配置输出回传或入库。本期未修改或实测这些容器接线，不能只改开关便声称可用。
+
+先以 demo 创建提交单、读取状态及账本，确认 Relay 派发及 run journal／检查点关联，再演练取消、幂等重放、数据库断连与恢复。`dispatched` 不表示报告完成，`/api/readyz` 成功也不表示 Relay 已消费或报告合格。旧 `client_request_sha=NULL` 数据不能推测已经丢失的原始 `auto` 请求，应使用已存请求载荷或原单 ID；详见[交付记录](optimization/2026-10-29-task-center-delivery.md)。
+
+### 连接预算、额度及停机
+
+异步提交池每进程默认上限 8、等待队列 128，池等待 5 秒、statement 3000ms、lock 1000ms；同步企业池每进程默认上限 4。总预算为各 API／Worker／Relay 的提交池加企业池，再加管理／观测连接；metadata 有界 offload 默认 4 槽，不是额外 4 个独立数据库连接。不要把每进程默认值当全机上限。
+
+本次原生实测覆盖的是另一组配置：2 API×4＋2 Relay×4＋controller×4＝20，临时租户池 1 在 Relay 启动前关闭，PostgreSQL `max_connections=32`；Memory 元数据未启用企业 SQL 池。实测 API 池等待 1 秒、lock 700ms、statement 1500ms。生产应为同步企业池、真实 Temporal 数据库及管理连接另留预算，不能直接照搬 20 连接。具体机型、总内存和 CPU 容量未完整采集。
+
+次数按 UTC 月桶计量，0 是真零额度，`monitor` 超额继续但审计。首次月桶导入真实历史 journal，排除提交中心已有 expected run ID 并仅导入一次；策略以 PostgreSQL 为准，Memory 重启不覆盖。额度 PATCH 在行锁内合并；PG 提交后 metadata 镜像失败会明确返回“任务次数策略已生效、metadata 同步失败”，排查时先读取当前策略，不要误当回滚。跨月取消返还原月份，已有发送意图／unknown 不退款；人工 retry 使用原 reserve 与业务身份。
+
+正常停机顺序为停止入口接收、等待 Graph／Relay 与 metadata 工作、排空借用事务，最后关闭 driver 池；取消 metadata await 也要 join 正在运行的线程。让进程有完成清理的时间。恢复时核对租约 generation／token 与原业务身份；外部副作用属于至少一次投递，未知网络结果可能已付费或执行，不承诺 exactly-once。实际 Graph 仍受同机 SQLite／POSIX 执行归属约束，不能把 PostgreSQL 提交持久化当跨主机完整运行能力。
+
+本机验收和复跑工具见[第一期交付记录](optimization/2026-10-29-task-center-delivery.md)及[脱敏结果](optimization/2026-10-29-task-center-results.json)。Docker、真实 Temporal／Redis、PostgreSQL 17 完整 pgvector 企业投影、跨主机均未验；不增加 Kafka，不训练模型。
 
 ## 本地开发启停（Windows / Mac / Linux）
 

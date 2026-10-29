@@ -127,8 +127,8 @@ python scripts/docker_deploy.py --mode persistent --project plan-a-persistent --
 默认入口为 `http://127.0.0.1:8080`；内网访问需显式 `--lan` 且配置 API 鉴权。
 可选 Redis 已接入公共网页缓存和共享限流；缓存保留原采集时间，失败按 miss 处理，限流服务不可用返回 503。
 LangGraph 运行支持持久检查点显式恢复，SSE 支持事件游标续传。恢复接口、数据卷、备份及隔离故障验收见
-[部署说明](docs/docker_deployment.md)和[本轮交付记录](docs/optimization/2026-10-16-demo-deployment-delivery.md)。
-本轮本机未运行 Docker；真实容器、Redis Lua/TTL、Postgres、Qdrant HTTP 与 Temporal 的跨机验收仍待执行。
+[部署说明](docs/docker_deployment.md)和[2026-10-16 部署交付记录](docs/optimization/2026-10-16-demo-deployment-delivery.md)。
+2026-10-16 部署交付未在本机运行 Docker；真实容器、Redis Lua/TTL、PostgreSQL 17／pgvector、Qdrant HTTP 与 Temporal 的跨机验收仍待执行。2026-10-30 的原生 PostgreSQL 15.18 提交中心验收见下节。
 此前部署底座的离线完整回归为 **4477 通过、1 跳过**，前端接口生成与生产构建通过；这不代表真实调研报告的内容验收通过。
 
 ### 本机并发治理与验收
@@ -148,7 +148,19 @@ python backend/scripts/verify_local_concurrency.py --execute --requests 64 --out
 
 该工具测量实际 ASGI／Runtime／RunService 入口及本机锁的行为，不占用现用端口或运行数据库；合成延迟不能视为真实模型、网络服务器或跨容器吞吐。它不验证调研报告语义。详细配置与部署限制见[部署说明](docs/docker_deployment.md#同机执行协调显式启用)；实现与结果见[本机并发治理交付](docs/optimization/2026-10-28-local-concurrency-delivery.md)和[结构化记录](docs/optimization/2026-10-28-local-concurrency-results.json)。
 
-本轮最终后端回归 **8874 通过、1 跳过**。独立 64 请求故障注入的运行／模型／工作区峰值为 **2／2／1**，最终名额归零；真实 Redis、共享容器卷与其他外部服务仍待部署机验收。
+2026-10-28 历史回归为 **8874 通过、1 跳过**。该轮独立 64 请求故障注入的运行／模型／工作区峰值为 **2／2／1**，最终名额归零；真实 Redis、共享容器卷与其他外部服务仍待部署机验收。
+
+### PostgreSQL 提交中心（第一期，显式启用）
+
+`TASK_CENTER_ENABLED=false` 为默认值。启用后，PostgreSQL 用一个短事务保存提交单、一次任务次数预占和 Outbox；Relay 在事务外派发到现有 RunService／LangGraph 或 Temporal。现有 Runtime、RunService、Temporal 启动及三类 Activity 的实际创建入口统一准入，同一工作区幂等键重放保持原业务身份，余额为 0 也不会再扣一次。`dispatched` 只表示派发已确认，运行状态由 `run_status` 另行观测，不能据此判断报告完成或质量合格。
+
+六个接口为 `POST/GET /api/task-submissions`、`GET /api/task-submissions/{id}`、`POST /api/task-submissions/{id}/cancel`、`POST /api/task-submissions/{id}/retry-dispatch`、`GET /api/workspaces/{id}/quota-ledger`。未发送的 pending 单可取消并释放原 UTC 月的预占一次；已有发送意图或未知结果保留预占。人工重试沿用原单、原 reserve 与业务 ID，新 epoch 默认最多尝试 3 次。这里的额度单位是**任务次数**，模型 token／费用预算继续独立执行，不是实际模型账单。
+
+2026-10-30 冻结后独立验收：全后端 **9071 通过、1 跳过**（525.11 秒，250 条 warning）；唯一跳过是另需专用连接的旧企业 RLS smoke，提交中心真实 PostgreSQL 测试已运行。实际配置 Ruff 对照基线 4023→4023，新增 0；标准 OpenAPI／TypeScript 重新生成字节一致，前端生产构建通过。
+
+本机 macOS arm64、原生 PostgreSQL 15.18、2 API＋2 Relay 的真实 socket HTTP 单轮突发 10／50／100 请求全部返回 202，提交吞吐分别为 **134.93／150.53／84.42 请求每秒**，P95 为 **65.17／281.803／1041.83 毫秒**。这是 Memory 企业元数据下的提交接口观测，不能外推稳态 SLA、完整 LLM 运行耗时或跨主机容量。受控接收器证明幂等边界；另一次真实 `TaskCenterService.dispatch → RunService → LangGraph` demo 验证了 19 个检查点与 29 个事件，未调用外部模型。
+
+启用前须停旧 writer、备份、由独立 owner 管理终端执行迁移并为既有受限 app 角色授权，再启动共享本机 journal／检查点的 API 与 Relay。HTTP 不执行提交中心 DDL，也不携带 owner 凭据。当前 Docker 镜像缺脚本、Compose 未含 Relay，部署机须补接线后验收；本机未执行 Docker。配置、历史额度导入、连接预算、兼容限制和复跑命令见[部署说明](docs/docker_deployment.md#7-postgresql-提交中心第一期)与[交付记录](docs/optimization/2026-10-29-task-center-delivery.md)，可审计指标与源码哈希见[脱敏结果](docs/optimization/2026-10-29-task-center-results.json)。历史报告语义仍未整体达标，Writer 实验开关保持 0；没有训练模型。
 
 ## 实际模型与搜索配置
 
@@ -222,7 +234,9 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.p
 
 ## 验证与交付边界
 
-本轮[已审核任务结论交付复验](docs/optimization/2026-10-28-reviewed-task-decisions-delivery.md)：**5/8题通过，22分支16通过／3部分／3失败；文字完整1/4，文本与证据完整0/4，整体仍未达标**。ANSWER前提v6、紧凑候选投影和显式数量核心策略已接实验实际入口。Bitwarden的collections否定经真实独立审核、签发、最终附着和正文发表各1次；旧记录不自动升级，未知与混合任务不走此策略。功能段人数强化、Trello角色／计费、Cloudflare CPU和1Password报价仍有缺口。
+最新工程门禁为上文 2026-10-30 提交中心验收。以下报告语义与调用数字均属于各自历史轮次，保留原始失败和未合格结论。
+
+2026-10-28 历史[已审核任务结论交付复验](docs/optimization/2026-10-28-reviewed-task-decisions-delivery.md)：**5/8题通过，22分支16通过／3部分／3失败；文字完整1/4，文本与证据完整0/4，整体仍未达标**。ANSWER前提v6、紧凑候选投影和显式数量核心策略已接实验实际入口。Bitwarden的collections否定经真实独立审核、签发、最终附着和正文发表各1次；旧记录不自动升级，未知与混合任务不走此策略。功能段人数强化、Trello角色／计费、Cloudflare CPU和1Password报价仍有缺口。
 
 完整后端**8729通过／1跳过**；15份变更Python的Ruff新增0（原有542→539）。标准API导出与类型编译首轮通过，后两轮生成文件哈希相同。最终四家92次调用／319980已知tokens／未知0；QA28项均送达有效，最终26项finding含11个blocker。19条唯一可见主张17完整支持、10单谓词，含2条仅由子问题行渲染的独立场景结论；凭证和标签不能代替正文验收。[三轮原样报告及结构化结果](docs/optimization/2026-10-28-reviewed-task-decisions-results.json)保留全部失败。默认实验开关仍0，未训练，未验新抓取／盲测／全Graph／生产稠密RAG，不作因果或降本宣称。
 

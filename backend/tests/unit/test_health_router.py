@@ -194,6 +194,9 @@ def test_health_marks_misconfigured_postgres_enterprise_store_as_error() -> None
 
 def test_health_pings_configured_postgres_enterprise_store(monkeypatch) -> None:
     class FakePostgresStore:
+        def close(self):
+            pass
+
         def __init__(self, database_url: str, *, auto_migrate: bool) -> None:
             assert database_url == "postgresql://user:pass@db:5432/app"
             assert auto_migrate is False
@@ -220,6 +223,9 @@ def test_health_pings_configured_postgres_enterprise_store(monkeypatch) -> None:
 
 def test_health_marks_unreachable_postgres_enterprise_store_as_error(monkeypatch) -> None:
     class FakePostgresStore:
+        def close(self):
+            pass
+
         def __init__(self, database_url: str, *, auto_migrate: bool) -> None:
             pass
 

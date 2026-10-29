@@ -1,5 +1,7 @@
 import sys
+import threading
 import types
+from contextlib import contextmanager
 from datetime import datetime
 from importlib.util import find_spec
 from pathlib import Path
@@ -107,7 +109,9 @@ def test_settings_load_env_files_when_enabled(monkeypatch, tmp_path: Path) -> No
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv(ENV_FILE_LOADING_FLAG, "1")
     monkeypatch.delenv("LLM_TIMEOUT_SECONDS", raising=False)
-    (tmp_path / ".env").write_text("LLM_TIMEOUT_SECONDS=12\n", encoding="utf-8")
+    env_file = tmp_path / "fake.env"
+    env_file.write_text("LLM_TIMEOUT_SECONDS=12\n", encoding="utf-8")
+    monkeypatch.setattr("packages.config.settings._env_file_candidates", lambda: [env_file])
     get_settings.cache_clear()
 
     settings = get_settings()
@@ -217,7 +221,7 @@ def test_postgres_store_sets_service_role_rls_context_on_connections() -> None:
     fake_conn = _FakePostgresConnection()
     store = object.__new__(EnterprisePostgresStore)
     store.database_url = "postgresql://user:pass@localhost:5432/db"
-    store._connect_driver = lambda *args, **kwargs: fake_conn  # noqa: ARG005
+    _inject_pool(store, fake_conn)
     store._dict_row = object()
 
     with store._service_connection() as conn:
@@ -233,7 +237,7 @@ def test_postgres_store_can_open_tenant_scoped_rls_connection() -> None:
     fake_conn = _FakePostgresConnection()
     store = object.__new__(EnterprisePostgresStore)
     store.database_url = "postgresql://user:pass@localhost:5432/db"
-    store._connect_driver = lambda *args, **kwargs: fake_conn  # noqa: ARG005
+    _inject_pool(store, fake_conn)
     store._dict_row = object()
 
     with store._tenant_connection("workspace-a") as conn:
@@ -401,3 +405,20 @@ class _FakeWorkspaceUsageCursor:
 
     def fetchone(self) -> dict[str, Any] | None:
         return self._next_row
+
+
+def _inject_pool(store, conn):
+    class FakePool:
+        def wait(self, **kwargs):
+            pass
+        @contextmanager
+        def connection(self, **kwargs):
+            with conn:
+                yield conn
+    store._pool = FakePool()
+    store._pool_condition = threading.Condition()
+    store._pool_borrowers = 0
+    store._pool_closed = False
+    store._pool_timeout = 1
+    store._statement_timeout = 3000
+    store._lock_timeout = 1000

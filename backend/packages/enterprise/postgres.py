@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -81,11 +82,14 @@ _MIGRATED_DATABASE_URLS: set[str] = set()
 class EnterprisePostgresStore:
     """Postgres-backed enterprise repository for Workspace/Project/Evidence projections."""
 
-    def __init__(self, database_url: str, *, auto_migrate: bool = True) -> None:
+    def __init__(
+        self, database_url: str, *, auto_migrate: bool = True, pool_max_size: int = 4,
+        pool_timeout_seconds: float = 5, statement_timeout_ms: int = 3000,
+        lock_timeout_ms: int = 1000,
+    ) -> None:
         if not database_url:
             raise ValueError("ENTERPRISE_DATABASE_URL is required for postgres enterprise store.")
         try:
-            from psycopg import connect
             from psycopg.rows import dict_row
             from psycopg.types.json import Jsonb
         except ImportError as exc:
@@ -94,7 +98,18 @@ class EnterprisePostgresStore:
                 "Install backend dependencies with `pip install -e .`."
             ) from exc
         self.database_url = database_url
-        self._connect_driver = connect
+        if (type(pool_max_size) is not int or not 1 <= pool_max_size <= 64
+                or not all(math.isfinite(v) and v > 0 for v in
+                           (pool_timeout_seconds, statement_timeout_ms, lock_timeout_ms))):
+            raise ValueError("invalid enterprise connection pool settings")
+        self._pool = None
+        self._pool_max_size = pool_max_size
+        self._pool_timeout = pool_timeout_seconds
+        self._statement_timeout = statement_timeout_ms
+        self._lock_timeout = lock_timeout_ms
+        self._pool_condition = threading.Condition()
+        self._pool_borrowers = 0
+        self._pool_closed = False
         self._dict_row = dict_row
         self._jsonb = Jsonb
         if auto_migrate:
@@ -108,13 +123,90 @@ class EnterprisePostgresStore:
         workspace_id: str | None = None,
         **kwargs: Any,
     ) -> Iterator[Any]:
-        with self._connect_driver(*args, **kwargs) as conn:
-            self._apply_rls_context(
-                conn,
-                workspace_id=workspace_id,
-                service_role=service_role,
-            )
-            yield conn
+        import psycopg
+        from psycopg_pool import PoolClosed, PoolTimeout, TooManyRequests
+
+        from packages.task_center.errors import (
+            TaskCenterPoolBusy,
+            TaskCenterStorageError,
+            TaskCenterUnavailable,
+        )
+
+        with self._pool_condition:
+            if self._pool_closed:
+                raise TaskCenterUnavailable("enterprise pool is closed")
+            self._pool_borrowers += 1
+        try:
+            try:
+                self.open()
+            except ValueError:
+                from packages.task_center.errors import TaskCenterConfigurationError
+                raise TaskCenterConfigurationError(
+                    "invalid enterprise database configuration"
+                ) from None
+            with self._pool.connection(timeout=self._pool_timeout) as conn:
+                self._apply_rls_context(conn, workspace_id=workspace_id, service_role=service_role)
+                conn.execute(
+                    "SELECT set_config('statement_timeout',%s,true),"
+                    "set_config('lock_timeout',%s,true)",
+                    (str(self._statement_timeout), str(self._lock_timeout)),
+                )
+                yield conn
+        except (PoolTimeout, TooManyRequests):
+            raise TaskCenterPoolBusy("enterprise connection pool is busy") from None
+        except PoolClosed:
+            raise TaskCenterUnavailable("enterprise pool is closed") from None
+        except psycopg.Error as exc:
+            raise TaskCenterStorageError(sqlstate=exc.sqlstate) from None
+        finally:
+            with self._pool_condition:
+                self._pool_borrowers -= 1
+                self._pool_condition.notify_all()
+
+    def open(self) -> None:
+        """Lazy and bounded: constructing a read-only store never performs IO."""
+        import psycopg
+        from psycopg_pool import ConnectionPool
+
+        from packages.task_center.connection_logging import protected_connection_logging
+        from packages.task_center.errors import TaskCenterUnavailable
+
+        class RedactedConnection(psycopg.Connection):
+            @classmethod
+            def connect(cls, *args, **kwargs):
+                try:
+                    with protected_connection_logging():
+                        return super().connect(*args, **kwargs)
+                except psycopg.Error:
+                    raise psycopg.OperationalError("enterprise connection failed") from None
+
+        with self._pool_condition:
+            if self._pool_closed and not self._pool_borrowers:
+                raise TaskCenterUnavailable("enterprise pool is closed")
+            if self._pool is None:
+                self._pool = ConnectionPool(
+                    self.database_url, connection_class=RedactedConnection,
+                    kwargs={"row_factory": self._dict_row,
+                            "connect_timeout": max(1, math.ceil(self._pool_timeout)),
+                            "application_name": "enterprise-store"},
+                    min_size=1, max_size=self._pool_max_size, max_waiting=128,
+                    timeout=self._pool_timeout, reconnect_timeout=self._pool_timeout,
+                    open=False, name="enterprise-store",
+                )
+                self._pool.open(wait=False)
+                self._pool.wait(timeout=self._pool_timeout)
+
+    def pool_stats(self) -> dict:
+        return self._pool.get_stats() if self._pool is not None else {}
+
+    def close(self) -> None:
+        with self._pool_condition:
+            self._pool_closed = True
+            while self._pool_borrowers:
+                self._pool_condition.wait()
+            if self._pool is not None:
+                self._pool.close(timeout=self._pool_timeout)
+                self._pool = None
 
     @contextmanager
     def _service_connection(self) -> Iterator[Any]:

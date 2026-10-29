@@ -4,6 +4,92 @@
  */
 
 export interface paths {
+    "/api/task-submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Submissions */
+        get: operations["list_submissions_api_task_submissions_get"];
+        put?: never;
+        /** Create Submission */
+        post: operations["create_submission_api_task_submissions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-submissions/{submission_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Submission */
+        get: operations["get_submission_api_task_submissions__submission_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-submissions/{submission_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Submission */
+        post: operations["cancel_submission_api_task_submissions__submission_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-submissions/{submission_id}/retry-dispatch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Submission */
+        post: operations["retry_submission_api_task_submissions__submission_id__retry_dispatch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/quota-ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Quota Ledger */
+        get: operations["quota_ledger_api_workspaces__workspace_id__quota_ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs": {
         parameters: {
             query?: never;
@@ -7225,6 +7311,68 @@ export interface components {
              */
             info_count: number;
         };
+        /** QuotaLedgerEntry */
+        QuotaLedgerEntry: {
+            /** Id */
+            id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Submission Id */
+            submission_id: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "reserve" | "release";
+            /** Amount */
+            amount: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** QuotaLedgerPage */
+        QuotaLedgerPage: {
+            /** Items */
+            items: components["schemas"]["QuotaLedgerEntry"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            snapshot: components["schemas"]["QuotaSnapshot"];
+        };
+        /** QuotaSnapshot */
+        QuotaSnapshot: {
+            /** Workspace Id */
+            workspace_id: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
+            /** Limit */
+            limit: number;
+            /**
+             * Enforcement
+             * @enum {string}
+             */
+            enforcement: "block" | "monitor";
+            /** Imported Count */
+            imported_count: number;
+            /** Reserved Count */
+            reserved_count: number;
+            /** Available */
+            available: number;
+        };
         /** RawSource */
         RawSource: {
             /** Id */
@@ -9631,6 +9779,62 @@ export interface components {
             /** Warnings */
             warnings?: string[];
         };
+        /** SubmissionCreateRequest */
+        SubmissionCreateRequest: {
+            request: components["schemas"]["RunCreateRequest"];
+            /** Idempotency Key */
+            idempotency_key: string;
+        };
+        /** SubmissionPage */
+        SubmissionPage: {
+            /** Items */
+            items: components["schemas"]["SubmissionView"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** SubmissionView */
+        SubmissionView: {
+            /** Id */
+            id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Project Id */
+            project_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "dispatching" | "dispatched" | "cancelled" | "dispatch_failed";
+            /** Expected Run Id */
+            expected_run_id: string;
+            /** Run Id */
+            run_id: string | null;
+            /** Workflow Id */
+            workflow_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /** Dispatch Attempt Count */
+            dispatch_attempt_count: number;
+            /** Last Error Code */
+            last_error_code: string | null;
+            /** Run Status */
+            run_status?: string | null;
+            /** Run Status Observed At */
+            run_status_observed_at?: string | null;
+        };
         /** SurveyEvidenceBundle */
         SurveyEvidenceBundle: {
             /** Topic */
@@ -10574,6 +10778,231 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_submissions_api_task_submissions_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+                status?: ("pending" | "dispatching" | "dispatched" | "cancelled" | "dispatch_failed") | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmissionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_submission_api_task_submissions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmissionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_submission_api_task_submissions__submission_id__get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_submission_api_task_submissions__submission_id__cancel_post: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_submission_api_task_submissions__submission_id__retry_dispatch_post: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmissionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quota_ledger_api_workspaces__workspace_id__quota_ledger_get: {
+        parameters: {
+            query?: {
+                period_start?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotaLedgerPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_runs_api_runs_get: {
         parameters: {
             query?: never;
@@ -15548,7 +15977,11 @@ export interface operations {
     start_competitive_intel_workflow_api_workflows_competitive_intel_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -15612,7 +16045,11 @@ export interface operations {
     start_scheduled_scan_workflow_api_workflows_scheduled_scan_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -15645,7 +16082,11 @@ export interface operations {
     start_monitor_workflow_api_workflows_monitor_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-User-Id"?: string | null;
+                "X-User-Role"?: string | null;
+                "X-Workspace-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

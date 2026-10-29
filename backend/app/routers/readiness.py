@@ -61,6 +61,18 @@ async def probe_dependencies(settings, journal):
     except Exception:
         enterprise_ok = False
     checks.append({"name": "enterprise_store", "status": "ok" if enterprise_ok else "error"})
+    if settings.task_center_enabled:
+        try:
+            from app.deps import get_enterprise_store
+            from packages.task_center.factory import get_task_service
+            store = await asyncio.to_thread(get_enterprise_store)
+            service = get_task_service(settings, store=store, journal=journal)
+            await service.open()
+            await service.repository.database.ready()
+            task_center_ok = True
+        except Exception:
+            task_center_ok = False
+        checks.append({"name": "task_center", "status": "ok" if task_center_ok else "error"})
     if not settings.demo_mode:
         checks.append(
             {

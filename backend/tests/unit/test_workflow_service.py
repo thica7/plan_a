@@ -34,7 +34,7 @@ from packages.schema.api_dto import (
     WorkflowStartResponse,
     WorkflowStateResponse,
 )
-from packages.schema.enterprise import ProjectRecord, ReportVersionRecord
+from packages.schema.enterprise import ProjectRecord, ReportVersionRecord, WorkspaceRecord
 from packages.skills.registry import SkillRegistry
 from packages.workflows.competitive_intel import CompetitiveIntelWorkflow
 from packages.workflows.monitor import MonitorWorkflow
@@ -395,6 +395,7 @@ def test_workflow_router_returns_accepted_start_response() -> None:
     app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
     run_service = _memory_run_service()
     app.dependency_overrides[get_run_service] = lambda: run_service
+    app.dependency_overrides[get_enterprise_store] = lambda: run_service.enterprise_store
     client = TestClient(app)
 
     response = client.post(
@@ -775,6 +776,7 @@ def test_workflow_router_blocks_real_run_when_model_policy_denies() -> None:
     app.dependency_overrides[get_app_settings] = lambda: settings
     app.dependency_overrides[get_temporal_workflow_service] = lambda: fake_service
     app.dependency_overrides[get_run_service] = lambda: _memory_run_service(settings)
+    app.dependency_overrides[get_enterprise_store] = lambda: EnterpriseMemoryStore()
     client = TestClient(app)
 
     response = client.post(
@@ -976,7 +978,14 @@ def test_workflow_router_exposes_scheduled_scan_start() -> None:
                 status="started",
             )
 
+    store = EnterpriseMemoryStore()
+    store.workspaces["workspace-a"] = WorkspaceRecord(id="workspace-a", name="Workflow test")
+    store.upsert_project(ProjectRecord(
+        id="project-1", workspace_id="workspace-a", name="Workflow project",
+        topic="Workflow test", topic_normalized="workflow test",
+    ))
     app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
     app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
     client = TestClient(app)
 
@@ -1017,7 +1026,14 @@ def test_workflow_router_exposes_monitor_start() -> None:
                 status="started",
             )
 
+    store = EnterpriseMemoryStore()
+    store.workspaces["workspace-a"] = WorkspaceRecord(id="workspace-a", name="Workflow test")
+    store.upsert_project(ProjectRecord(
+        id="project-1", workspace_id="workspace-a", name="Workflow project",
+        topic="Workflow test", topic_normalized="workflow test",
+    ))
     app = create_app()
+    app.dependency_overrides[get_enterprise_store] = lambda: store
     app.dependency_overrides[get_temporal_workflow_service] = lambda: FakeWorkflowService()
     client = TestClient(app)
 
@@ -1058,6 +1074,7 @@ def test_workflow_router_returns_503_when_temporal_is_unavailable() -> None:
     app.dependency_overrides[get_temporal_workflow_service] = lambda: FailingWorkflowService()
     run_service = _memory_run_service()
     app.dependency_overrides[get_run_service] = lambda: run_service
+    app.dependency_overrides[get_enterprise_store] = lambda: run_service.enterprise_store
     client = TestClient(app)
 
     response = client.post(

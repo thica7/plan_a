@@ -2,9 +2,32 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
+## 2026-10-30：提交中心与 Agent 的入口关系
+
+第一期提交中心默认关闭（`TASK_CENTER_ENABLED=false`）。显式启用后，入口为：
+
+```text
+POST /api/task-submissions → PostgreSQL：提交单＋任务次数预占＋Outbox 原子提交
+→ Relay 短事务领取／租约 → 事务外 TaskCenterService.dispatch
+→ RunService／LangGraph，或 Temporal → 已验证身份的 Activity → 原 Agent 图
+→ 同机 durable run journal／图检查点／事件 → 独立观测 run_status
+```
+
+Runtime、RunService 直接创建、Temporal 启动、CompetitiveIntel／ScheduledScan／Monitor Activity 的实际创建共六类旧入口，都走同一 PostgreSQL 准入；同一业务单重放只预占一次。定时控制工作流本身不占未来周期额度，实际新周期创建时才预占。服务端私有派发身份重新验证，不能通过外部请求字段绕过。各 LLM Agent 继续消费图内资料与预算，不为每个 Agent 分配 PostgreSQL 连接。
+
+提交状态仅为 `pending / dispatching / dispatched / cancelled / dispatch_failed`；`dispatched` 表示派发被确认。`run_status` 及其观测时间来自现有 journal，可能为空，运行完成与报告语义合格继续分别判断。次数额度与旧 token／费用预算独立；取消仅释放未曾有发送意图的 pending 单，人工重试保留原业务身份与预占。
+
+本机冻结后的完整后端回归为 **9071 通过、1 跳过**（525.11 秒、250 条 warning）；唯一跳过为需专用连接的旧企业 RLS smoke。原生 PostgreSQL 15.18／真实 socket HTTP／2 API＋2 Relay 的验收及独立 25 项原始 SQL/SQLite/哈希/退出检查通过。受控接收器的幂等测试与真实 `TaskCenterService.dispatch → RunService → LangGraph` demo 分开取证，后者有 19 个检查点、29 个事件，外部模型调用为 0。
+
+实际 Graph 仍依赖同机共享 SQLite、POSIX execution control 和 durable journal；新提交 SQL 使用异步池，旧 Graph、hydrate、stream 中仍有同步 SQL。尚未验真实 Temporal／Redis／Docker、PostgreSQL 17 完整 pgvector 企业组合或跨主机，不据此宣称所有 Agent 的语义质量合格。迁移、状态、兼容与复跑边界见[提交中心交付](optimization/2026-10-29-task-center-delivery.md)和[部署步骤](docker_deployment.md#7-postgresql-提交中心第一期)。
+
+## 历史报告语义复验（截至 2026-10-28）
+
+下列测试数字与模型调用属于各自历史轮次，不是 2026-10-30 提交中心回归的数字。报告语义仍未整体达标，Writer 实验开关仍为 0，未训练模型。
+
 **预算口径：** 下文历史复验中的24次调用／80000 token是当时的诊断配置，不是生产配置默认值。实际运行受部署设置、研究模式和已持久化额度约束；代码中 `run_llm_max_calls` 默认160，`run_llm_max_tokens=0` 表示不单设全局token上限，费用及其他限制仍适用。每轮验收须另列实际配置，不能把不同预算的结果称为同条件对照。
 
-本轮[已审核任务结论交付复验](optimization/2026-10-28-reviewed-task-decisions-delivery.md)：**5/8题通过，22分支16通过／3部分／3失败；文字完整1/4，文本与证据完整0/4，整体仍未达标**。ANSWER前提v6、紧凑候选投影和显式数量核心策略已接实验实际入口。Bitwarden的collections否定经真实独立审核、签发、最终附着和正文发表各1次；旧记录不自动升级，未知与混合任务不走此策略。功能段人数强化、Trello角色／计费、Cloudflare CPU和1Password报价仍有缺口。
+2026-10-28 历史[已审核任务结论交付复验](optimization/2026-10-28-reviewed-task-decisions-delivery.md)：**5/8题通过，22分支16通过／3部分／3失败；文字完整1/4，文本与证据完整0/4，整体仍未达标**。ANSWER前提v6、紧凑候选投影和显式数量核心策略已接实验实际入口。Bitwarden的collections否定经真实独立审核、签发、最终附着和正文发表各1次；旧记录不自动升级，未知与混合任务不走此策略。功能段人数强化、Trello角色／计费、Cloudflare CPU和1Password报价仍有缺口。
 
 完整后端**8729通过／1跳过**；15份变更Python的Ruff新增0（原有542→539）。标准API导出与类型编译首轮通过，后两轮生成文件哈希相同。最终四家92次调用／319980已知tokens／未知0；QA28项均送达有效，最终26项finding含11个blocker。19条唯一可见主张17完整支持、10单谓词，含2条仅由子问题行渲染的独立场景结论；凭证和标签不能代替正文验收。[三轮原样报告及结构化结果](optimization/2026-10-28-reviewed-task-decisions-results.json)保留全部失败。默认实验开关仍0，未训练，未验新抓取／盲测／全Graph／生产稠密RAG，不作因果或降本宣称。
 

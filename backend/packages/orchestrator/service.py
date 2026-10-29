@@ -342,7 +342,13 @@ class RunService(
         trace_store: TraceStore | None = None,
         graph_checkpointer: GraphCheckpointer | None = None,
         enterprise_store: EnterpriseStore | None = None,
+        submission_service=None,
     ) -> None:
+        from packages.task_center.bridge import SubmissionBridge
+        self.submission_bridge = SubmissionBridge(
+            settings, store=enterprise_store, journal=journal,
+            run_service=self, task_service=submission_service,
+        )
         self._skill_registry = skill_registry
         self._settings = settings
         if settings.execution_control_enabled and journal is None:
@@ -377,6 +383,22 @@ class RunService(
         self._lock = asyncio.Lock()
         self._hydrate_runs()
 
+    async def aclose(self):
+        tasks = set(self._background_tasks.values())
+        for record in self._runs.values():
+            tasks.update(record.hitl_timeout_tasks.values())
+            tasks.update(
+                task for task in (record.pipeline_task, record.resume_task) if task is not None
+            )
+        tasks.discard(asyncio.current_task())
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        if self._graph_checkpointer is not None:
+            await self._graph_checkpointer.aclose()
+
     @property
     def enterprise_store(self) -> EnterpriseStore | None:
         return self._enterprise_store
@@ -399,7 +421,21 @@ class RunService(
         skip_active_duplicate_check: bool = False,
         runtime_orchestration_backend: Literal["langgraph", "temporal"] = "langgraph",
     ) -> RunDetail:
-        self._ensure_workspace_quota_allows_run(request.workspace_id)
+        reserved = False
+        if self.submission_bridge.enabled:
+            reserved = await self.submission_bridge.verified(request)
+            if not reserved:
+                result = await self.submission_bridge.execute(
+                    request, intent="create_only", backend=runtime_orchestration_backend,
+                )
+                return result.payload
+        if self._settings.task_center_enabled:
+            await self.submission_bridge.service().metadata.run(
+                self._ensure_workspace_quota_allows_run, request.workspace_id, reserved=reserved,
+            )
+        else:
+            self._ensure_workspace_quota_allows_run(request.workspace_id, reserved=reserved)
+        skip_active_duplicate_check = skip_active_duplicate_check or reserved
         execution_mode = self._resolve_execution_mode(request.execution_mode)
         competitors = self._normalize_competitor_names(request.competitors)
         manual_competitors = bool(competitors)
@@ -598,30 +634,42 @@ class RunService(
             ticket = await self._execution.admit(run_id, request.workspace_id, "pipeline")
             self._execution_tickets[run_id] = ticket
         async with self._lock:
-            if self._execution is not None:
+            if self._settings.task_center_enabled:
+                # Open/use/close the SQLite control transaction within one worker.
+                # TC requires a durable journal: stream_events polls it and never
+                # registers in-memory subscriber queues during initialization.
+                return await self.submission_bridge.service().metadata.run(
+                    self._initialize_created_run_controlled, detail, request, now,
+                )
+            return self._initialize_created_run_controlled(detail, request, now)
+
+    def _initialize_created_run_controlled(self, detail, request, now):
+        run_id = detail.id
+        runtime_orchestration_backend = detail.runtime_orchestration_backend
+        if self._execution is not None:
+            existing = self._journal.load_run_snapshot(run_id)
+            if existing is not None:
+                self._validate_existing_run_scope(
+                    existing[0], request, runtime_orchestration_backend,
+                )
+                return self._upsert_journal_run(existing[0], revision=existing[1]).detail
+            try:
+                # All initialization is synchronous inside this short transaction.
+                with self._journal.control_write(run_id, 0, allow_missing=True):
+                    return self._initialize_created_run(detail, request, now)
+            except ExecutionConflictError:
                 existing = self._journal.load_run_snapshot(run_id)
-                if existing is not None:
-                    self._validate_existing_run_scope(
-                        existing[0], request, runtime_orchestration_backend,
-                    )
-                    return self._upsert_journal_run(existing[0], revision=existing[1]).detail
-                try:
-                    # All initialization is synchronous inside this short transaction.
-                    with self._journal.control_write(run_id, 0, allow_missing=True):
-                        return self._initialize_created_run(detail, request, now)
-                except ExecutionConflictError:
-                    existing = self._journal.load_run_snapshot(run_id)
-                    if existing is None:
-                        self._runs.pop(run_id, None)
-                        raise
-                    self._validate_existing_run_scope(
-                        existing[0], request, runtime_orchestration_backend,
-                    )
-                    return self._upsert_journal_run(existing[0], revision=existing[1]).detail
-                except BaseException:
+                if existing is None:
                     self._runs.pop(run_id, None)
                     raise
-            return self._initialize_created_run(detail, request, now)
+                self._validate_existing_run_scope(
+                    existing[0], request, runtime_orchestration_backend,
+                )
+                return self._upsert_journal_run(existing[0], revision=existing[1]).detail
+            except BaseException:
+                self._runs.pop(run_id, None)
+                raise
+        return self._initialize_created_run(detail, request, now)
 
     def _initialize_created_run(
         self, detail: RunDetail, request: RunCreateRequest, now: datetime,
@@ -760,6 +808,11 @@ class RunService(
         async with self._lock:
             duplicate = self._find_active_duplicate_run(fingerprint, datetime.utcnow())
         return duplicate.detail if duplicate is not None else None
+
+    def ensure_task_center_execution(self) -> None:
+        """Check actual-start configuration without reserving another task."""
+        if self.submission_bridge.enabled:
+            self.submission_bridge.service().require_execution(self)
 
     def ensure_workspace_quota_allows_run(self, workspace_id: str) -> None:
         self._ensure_workspace_quota_allows_run(workspace_id)
@@ -1233,6 +1286,7 @@ class RunService(
         return False
 
     async def resume(self, run_id: str, request: HitlResumeRequest) -> RunDetail | None:
+        self.ensure_task_center_execution()
         if self._execution is None:
             return await self._resume_owned(run_id, request)
         record = self._load_run_record(run_id)
@@ -1266,7 +1320,9 @@ class RunService(
     def _launch_resume(self, record: RunRecord, request: HitlResumeRequest) -> None:
         coroutine = self._resume_interrupted_graph(record.detail.id, request)
         try:
-            task = asyncio.create_task(coroutine)
+            from packages.task_center.bridge import execution_context
+            task = (asyncio.create_task(coroutine, context=execution_context())
+                    if self._settings.task_center_enabled else asyncio.create_task(coroutine))
         except BaseException:
             coroutine.close()
             raise
@@ -1591,6 +1647,7 @@ class RunService(
     async def start_scoped_redo(
         self, run_id: str, *, preferred_issue_ids: list[str] | None = None,
     ) -> asyncio.Task[Any]:
+        self.ensure_task_center_execution()
         record = self._load_run_record(run_id)
         operation = stable_prefixed_id(
             "redo", record.revision, preferred_issue_ids or [], length=32,
@@ -1614,7 +1671,9 @@ class RunService(
                if self._execution is not None else {}),
         )
         try:
-            task = asyncio.create_task(coroutine)
+            from packages.task_center.bridge import execution_context
+            task = (asyncio.create_task(coroutine, context=execution_context())
+                    if self._settings.task_center_enabled else asyncio.create_task(coroutine))
             if launcher is not None:
                 self._execution.handoff_launcher(launcher, task)
         except BaseException:
@@ -1637,6 +1696,7 @@ class RunService(
         preferred_issue_ids: list[str] | None = None, _operation_id: str | None = None,
         _launcher: ExecutionLauncher | None = None,
     ) -> None:
+        self.ensure_task_center_execution()
         record = self._runs.get(run_id) or self._load_run_record(run_id)
         if record is None:
             return
@@ -1835,6 +1895,7 @@ class RunService(
         return snapshot
 
     async def recover_run(self, run_id: str) -> RunDetail | None:
+        self.ensure_task_center_execution()
         if self._execution is None:
             return await self._recover_run_owned(run_id)
         record = self._load_run_record(run_id)
@@ -1881,6 +1942,7 @@ class RunService(
 
     def launch_pipeline(self, run_id: str) -> asyncio.Task[Any]:
         """Register one bounded background task for an admitted run in this instance."""
+        self.ensure_task_center_execution()
         ticket = self._execution_tickets.get(run_id)
         if self._execution is not None and ticket is None:
             raise ExecutionConflictError("Background execution requires an admission ticket")
@@ -1900,7 +1962,9 @@ class RunService(
                 raise ExecutionConflictError("Admission already has an execution launcher")
         coroutine = self.run_pipeline(run_id, _launcher=launcher)
         try:
-            task = asyncio.create_task(coroutine)
+            from packages.task_center.bridge import execution_context
+            task = (asyncio.create_task(coroutine, context=execution_context())
+                    if self._settings.task_center_enabled else asyncio.create_task(coroutine))
             if launcher is not None:
                 self._execution.handoff_launcher(launcher, task)
         except BaseException:
@@ -1927,6 +1991,7 @@ class RunService(
     async def _execution_guard(
         self, run_id: str, operation_id: str, *, launcher: ExecutionLauncher | None = None,
     ):
+        self.ensure_task_center_execution()
         if self._execution is None:
             yield None
             return
@@ -1953,6 +2018,7 @@ class RunService(
     async def run_pipeline(
         self, run_id: str, *, _launcher: ExecutionLauncher | None = None,
     ) -> RunDetail | None:
+        self.ensure_task_center_execution()
         if self._execution is None:
             return await self._run_pipeline_owned(run_id)
         record = self._load_run_record(run_id)
@@ -4233,10 +4299,20 @@ class RunService(
             return f"{base_message} Release gate blocked the report for review."
         return base_message
 
-    def _ensure_workspace_quota_allows_run(self, workspace_id: str) -> None:
+    def _ensure_workspace_quota_allows_run(
+        self, workspace_id: str, *, reserved: bool = False,
+    ) -> None:
         if self._enterprise_store is None:
             return
         decision = self._enterprise_store.check_workspace_quota(workspace_id)
+        if reserved:
+            from packages.enterprise.usage import build_quota_decision
+            usage = decision.usage.model_copy(update={"run_usage_ratio": 0.0})
+            ratios = (usage.token_usage_ratio, usage.cost_usage_ratio)
+            usage.status = (
+                "exceeded" if max(ratios) >= 1 else "warn" if max(ratios) >= 0.8 else "ok"
+            )
+            decision = build_quota_decision(usage, decision.enforcement)
         if not decision.allowed:
             raise WorkspaceQuotaExceededError(decision)
 

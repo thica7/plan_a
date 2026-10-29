@@ -69,7 +69,7 @@ class CompetitiveIntelActivities:
 
     @activity.defn(name=CREATE_RUN_ACTIVITY)
     async def create_run(self, request: CompetitiveIntelWorkflowInput) -> WorkflowRunState:
-        detail = await self._service.create_run(
+        detail = await self._service.submission_bridge.create_activity(
             RunCreateRequest(
                 workspace_id=request.workspace_id,
                 project_id=request.project_id,
@@ -88,7 +88,6 @@ class CompetitiveIntelActivities:
                 hitl_enabled=request.hitl_enabled,
                 output_language=request.output_language,
             ),
-            runtime_orchestration_backend="temporal",
         )
         return _run_state(detail)
 
@@ -177,7 +176,7 @@ class ScheduledScanActivities:
             target.project_id,
             scan_input.scan_started_at,
         )
-        detail = await self._service.create_run(
+        detail = await self._service.submission_bridge.create_activity(
             RunCreateRequest(
                 workspace_id=target.workspace_id,
                 project_id=target.project_id,
@@ -189,7 +188,6 @@ class ScheduledScanActivities:
                 scenario_id=target.scenario_id,
                 execution_mode=request.execution_mode,
             ),
-            runtime_orchestration_backend="temporal",
         )
         if detail.status not in {"completed", "completed_with_blockers", "interrupted", "failed"}:
             detail = await self._service.run_pipeline(detail.id)
@@ -314,7 +312,7 @@ class MonitorActivities:
         if project.competitor_layer in {"L1", "L2", "L3"}:
             layer = cast(Literal["L1", "L2", "L3"], project.competitor_layer)
         try:
-            detail = await self._service.create_run(
+            detail = await self._service.submission_bridge.create_monitor_activity(
                 RunCreateRequest(
                     workspace_id=project.workspace_id,
                     project_id=project.id,
@@ -331,8 +329,7 @@ class MonitorActivities:
                     scenario_id=project.scenario_id,
                     execution_mode=request.execution_mode,
                 ),
-                runtime_orchestration_backend="temporal",
-            )
+                )
             if detail.status not in {
                 "completed",
                 "completed_with_blockers",

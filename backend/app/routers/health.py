@@ -219,10 +219,11 @@ def _enterprise_store_check(settings: Settings) -> HealthCheck:
                 detail="ENTERPRISE_DATABASE_URL is required",
             )
         try:
-            detail = EnterprisePostgresStore(
-                settings.enterprise_database_url,
-                auto_migrate=False,
-            ).ping()
+            store = EnterprisePostgresStore(settings.enterprise_database_url, auto_migrate=False)
+            try:
+                detail = store.ping()
+            finally:
+                store.close()
         except Exception:
             return HealthCheck(
                 name="enterprise_store",

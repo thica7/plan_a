@@ -23,6 +23,7 @@ from app.deps import (
     get_preference_memory,
     get_run_service,
     get_runtime_command_service,
+    get_task_center_service,
 )
 from app.knowledge_access import resolve_knowledge_scope
 from packages.agents import AgentExecutionRequest, AgentExecutionResult
@@ -289,20 +290,46 @@ def get_workspace_retention_report(
 
 
 @router.patch("/enterprise/workspaces/{workspace_id}/quota", response_model=WorkspaceRecord)
-def update_workspace_quota(
+async def update_workspace_quota(
     workspace_id: str,
     request: WorkspaceQuotaUpdateRequest,
     store: EnterpriseStoreDep,
     user: EnterpriseUserDep,
+    settings: SettingsDep,
+    task_service: Annotated[object, Depends(get_task_center_service)],
 ) -> WorkspaceRecord:
     _require_workspace_access(user, workspace_id, "workspace:write")
-    workspace = store.update_workspace_quota(
-        workspace_id,
-        request,
-        actor_id=user.user_id,
-    )
+    snapshot = None
+    if settings.task_center_enabled:
+        from packages.task_center.errors import TaskCenterError
+        try:
+            snapshot = await task_service.update_policy(workspace_id, request, actor=user)
+        except TaskCenterError as exc:
+            raise HTTPException(
+                status_code=getattr(exc, "status_code", 503), detail=str(exc),
+            ) from exc
+    try:
+        if settings.task_center_enabled:
+            workspace = await task_service.metadata.run(
+                store.update_workspace_quota, workspace_id, request, actor_id=user.user_id,
+            )
+        else:
+            workspace = store.update_workspace_quota(
+                workspace_id, request, actor_id=user.user_id,
+            )
+    except Exception as exc:
+        if snapshot is not None:
+            raise HTTPException(
+                status_code=503,
+                detail="Task-count policy committed; metadata synchronization failed",
+            ) from exc
+        raise
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
+    if snapshot is not None:
+        workspace = workspace.model_copy(update={
+            "monthly_run_quota": snapshot.limit, "quota_enforcement": snapshot.enforcement,
+        })
     return workspace
 
 
