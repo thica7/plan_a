@@ -463,14 +463,18 @@ def claim_operations(text):
     return tuple(sorted(actions))
 
 
-def current_feature_binding_reasons(claim):
+def current_feature_binding_reasons(claim, *, authority_rule=False):
     """Replay the current feature transport gate, independent of semantic verdicts."""
     if claim.dimension != 'feature' or claim.operation_binding is not None:
         return ()
     if not claim.source_span_bindings:
         return ('source_span_binding_required',)
     if claim_operations(claim.text):
-        return ('operation_binding_required',)
+        from packages.agents.writer.complete_predicates import authority_source_rule
+
+        if (not authority_rule or claim.kind != 'fact' or not authority_source_rule(
+                claim.text, [span.quote for span in claim.source_span_bindings])):
+            return ('operation_binding_required',)
     return ()
 
 
@@ -501,7 +505,8 @@ def claim_review_reasons(claim, review):
     return reasons
 
 
-def audit_report_claims(claims, reviews, view, boundaries, *, available_facts=None, review_version=None):
+def audit_report_claims(claims, reviews, view, boundaries, *, available_facts=None,
+                        review_version=None, authority_claim_ids=()):
     parsed = [ClaimReview.model_validate(r) for r in reviews]
     counts = Counter(r.claim_id for r in parsed)
     claim_counts = Counter(c.id for c in claims)
@@ -510,7 +515,8 @@ def audit_report_claims(claims, reviews, view, boundaries, *, available_facts=No
     for claim in claims:
         rules = list(claim_rule_reasons(claim, view, boundaries, available_facts=available_facts))
         if review_version == 3:
-            rules.extend(current_feature_binding_reasons(claim))
+            rules.extend(current_feature_binding_reasons(
+                claim, authority_rule=claim.id in authority_claim_ids))
             rules.extend(independent_operation_reasons(claim))
             from packages.research.evidence.claim_semantics import claim_semantic_reasons
             rules.extend(claim_semantic_reasons(claim, view.facts))

@@ -15806,6 +15806,7 @@
               "resource_scope",
               "permission_entailment",
               "destructive_effect",
+              "classification_non_entailment",
               "unresolved"
             ],
             "title": "Relation"

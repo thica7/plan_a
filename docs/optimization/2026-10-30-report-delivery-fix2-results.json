@@ -1,0 +1,277 @@
+{
+  "status": "partially_deliverable_experiment_not_production_ready",
+  "round": "fix2_final",
+  "artifact_directory": "data/artifacts/report-delivery-repair-fix2-2026-10-30",
+  "base_commit": "5af8302d01f990ebb35b20019d884d234168a12b",
+  "production_code_sha256": "0acc9cf0b3fc431e627568589e3122984b1e1f4c01aa3772916752d8e53ec819",
+  "content": {
+    "original_questions": {
+      "total": 8,
+      "pass": 6,
+      "fail": 1,
+      "partial": 1
+    },
+    "required_branches": {
+      "total": 22,
+      "text_coverage": {
+        "full": 16,
+        "none": 6
+      },
+      "selected_support": {
+        "full": 13,
+        "none": 6,
+        "request-only": 3
+      }
+    },
+    "reports": {
+      "total": 4,
+      "text_deliverable": 2,
+      "text_plus_evidence_deliverable": 1,
+      "all_claims_atomic_deliverable": 0,
+      "strict_system_qa_deliverable": 0
+    },
+    "visible_claims": {
+      "draft_texts": 14,
+      "independent_visible_scenario_conclusions": 2,
+      "total": 16,
+      "support": {
+        "full": 13,
+        "partial": 3
+      },
+      "atomic": 9,
+      "sensitivity_without_extra_scenario": {
+        "total": 14,
+        "support": {
+          "full": 11,
+          "partial": 3
+        },
+        "atomic": 8
+      },
+      "historical_quote_accuracy_comparison_allowed": false
+    },
+    "systemQA": {
+      "reports_with_blockers": 4,
+      "blocker_count": 9
+    }
+  },
+  "runtime": {
+    "products": [
+      {
+        "product": "trello",
+        "transports": 21,
+        "by_agent": {
+          "planner": 1,
+          "collector": 2,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 4,
+          "qa": 11
+        },
+        "qa_planned": 8,
+        "qa_valid": 8,
+        "qa_unsent": 0,
+        "qa_timeout": 0,
+        "output_length": 0,
+        "source_unchanged": true,
+        "network_guard_blocks": []
+      },
+      {
+        "product": "cloudflare",
+        "transports": 19,
+        "by_agent": {
+          "planner": 1,
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 3,
+          "qa": 9
+        },
+        "qa_planned": 6,
+        "qa_valid": 6,
+        "qa_unsent": 0,
+        "qa_timeout": 0,
+        "output_length": 0,
+        "source_unchanged": true,
+        "network_guard_blocks": []
+      },
+      {
+        "product": "bitwarden",
+        "transports": 18,
+        "by_agent": {
+          "planner": 1,
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 2,
+          "qa": 9
+        },
+        "qa_planned": 7,
+        "qa_valid": 7,
+        "qa_unsent": 0,
+        "qa_timeout": 0,
+        "output_length": 0,
+        "source_unchanged": true,
+        "network_guard_blocks": []
+      },
+      {
+        "product": "1password",
+        "transports": 15,
+        "by_agent": {
+          "planner": 1,
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 2,
+          "qa": 6
+        },
+        "qa_planned": 7,
+        "qa_valid": 7,
+        "qa_unsent": 0,
+        "qa_timeout": 0,
+        "output_length": 0,
+        "source_unchanged": true,
+        "network_guard_blocks": []
+      }
+    ],
+    "total_transports": 73,
+    "known_tokens": 256007,
+    "unknown_usage_spans": 0,
+    "provider_bill_usd": null,
+    "weighted_model_revision": null,
+    "configured_alias": "deepseek-flash",
+    "quality_success_asserted": false
+  },
+  "engineering": {
+    "backend_passed": 9244,
+    "backend_skipped": 1,
+    "backend_warnings": 250,
+    "backend_seconds": 447.8,
+    "frontend_passed": 340,
+    "frontend_build": true,
+    "api_export_byte_identical": true,
+    "ruff_files": 15,
+    "ruff_baseline_findings": 550,
+    "ruff_current_findings": 541,
+    "ruff_added": 0,
+    "related_tests": 729,
+    "spec_regressions_and_archived_probes": 731,
+    "quality_consumer_regressions": 342
+  },
+  "quantity_aggregation": {
+    "new_policy_observed": true,
+    "new_policy_name": "reviewed_quantity_conjunction-v1",
+    "live_raw_model_answer": "answered/direct/no",
+    "live_projection": "qualified collections No retained; two other selected claims excluded",
+    "live_partial_to_no_branch_observed": false,
+    "partial_to_no_validation": "offline new producer preserves archived raw response; not a fresh model result",
+    "old_transports_not_upgraded": true
+  },
+  "prior_round": "2026-10-30-report-delivery-fix1-results.json",
+  "product_api_usage_this_turn": {
+    "model_transports": 160,
+    "known_tokens": 565000,
+    "unknown_usage_spans": 0,
+    "provider_bill_usd": null,
+    "read_only_inventory_requests": 1
+  },
+  "public_reports": [
+    {
+      "product": "trello",
+      "path": "docs/optimization/reports/2026-10-30-delivery-fix2/trello.md",
+      "sha256": "6edd0b3ab33f380c7af683eb2e7ea442170ead425359d43406bf96a646596e61"
+    },
+    {
+      "product": "cloudflare",
+      "path": "docs/optimization/reports/2026-10-30-delivery-fix2/cloudflare.md",
+      "sha256": "2bb95d5b51adc4e69d43d1ea6927ddddb6c5888016feeb970de52090689df606"
+    },
+    {
+      "product": "bitwarden",
+      "path": "docs/optimization/reports/2026-10-30-delivery-fix2/bitwarden.md",
+      "sha256": "1d48aa354e60b2cda35a6ae4c1871e2d258acdd04d7af747b51b58724a3613bf"
+    },
+    {
+      "product": "1password",
+      "path": "docs/optimization/reports/2026-10-30-delivery-fix2/1password.md",
+      "sha256": "94c75d6364c3d93449125b298812b7bc5155f1d411e987d61755c809a8c2bc24"
+    }
+  ],
+  "official_sources": [
+    {
+      "product": "Trello",
+      "url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/",
+      "captured_at": "2026-10-21T16:28:37.284567+00:00",
+      "body_sha256": "806d94462e118657aee2b9395c973065484c01bdaca6c524412b50dedc041487"
+    },
+    {
+      "product": "Cloudflare",
+      "url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+      "captured_at": "2026-10-21T16:25:51.945259+00:00",
+      "body_sha256": "f3919b3168f9f50328d5943b6f6d925875aef16b3da61426a87e96613370d18c"
+    },
+    {
+      "product": "Cloudflare",
+      "url": "https://developers.cloudflare.com/workers/platform/pricing/",
+      "captured_at": "2026-10-21T16:25:53.092262+00:00",
+      "body_sha256": "7aa0cef31024a8c272407b8247fe142aa7ec057839e4d06f771191dbaa13279e"
+    },
+    {
+      "product": "Bitwarden",
+      "url": "https://bitwarden.com/help/remove-users/",
+      "captured_at": "2026-10-21T16:22:24.225288+00:00",
+      "body_sha256": "ae37ddf97d929053cb232af7ac3d4eeda7a0b009f8ed8446ffcf728227011d03"
+    },
+    {
+      "product": "Bitwarden",
+      "url": "https://bitwarden.com/help/password-manager-plans/",
+      "captured_at": "2026-10-21T16:22:25.503094+00:00",
+      "body_sha256": "9d5c2b73c45ecd8a1c51145497c6189ae1548f482cfbe4fff7fcf9d880871492"
+    },
+    {
+      "product": "Bitwarden",
+      "url": "https://bitwarden.com/help/delete-member-accounts/",
+      "captured_at": "2026-10-21T16:22:32.986850+00:00",
+      "body_sha256": "f25720e0912c9984b88ff7464416e9fd3d7b845e6f544d531ad5c1bd0540fdc5"
+    },
+    {
+      "product": "1Password",
+      "url": "https://support.1password.com/guests/",
+      "captured_at": "2026-10-21T16:23:54.147190+00:00",
+      "body_sha256": "e300c33d33098185fe12f8d699500b09d3cf6e06b40c71764f88cf84928d8aa6"
+    },
+    {
+      "product": "1Password",
+      "url": "https://1password.com/pricing",
+      "captured_at": "2026-10-21T16:24:01.553020+00:00",
+      "body_sha256": "30622647dcfa866ee339a6bdd534a517aa5d375e05aece8b1ea0e594a42132c5"
+    }
+  ],
+  "remaining": [
+    "Trello second question evidence window and operation binding",
+    "Cloudflare compound amount assertion and invocation exception citation gaps",
+    "1Password selected-source role assumption, question/body status inconsistency and absent quote evidence",
+    "QA comparison blocker and canonical-scope semantic variability"
+  ],
+  "limits": [
+    "fixed 2026-10-21 pages; not fresh discovery/fetch or full Graph E2E",
+    "deepseek-flash alias; weight revision unknown",
+    "independent review agent with pre-reviewed rubric; no new human signoff",
+    "claim denominators differ between rounds; no accuracy-rate comparison",
+    "experimental Writer flags default off",
+    "no Docker or training"
+  ],
+  "evidence_sha256": {
+    "independent-content-audit.json": "5b9ef2d6ddcaceba3e2c9597439785a325c7585bf489faffca91b4ad5956c948",
+    "independent-content-verification.json": "94b2ff0b0756b4b34df4a620f3ade5d0d614605ef8ec1c4c501dc8d3f9d73d91",
+    "root-runtime-verification.json": "e0459a2f9eee0d86845225f34bc9af093ec0c69cca32e3b58a9297d6708114f3",
+    "root-source-immutability.json": "f8c31c28188c2fe040ed7f3d10f4cf3ab1bbbff17b83e90a5118f6a6a2104408",
+    "root-quantity-aggregation-observed.json": "a041584880f7e2215af87d4c496653e383d2fb5cd056a37d1d3444b298fa0d84",
+    "full-backend-source-final-verification.json": "0482890bfcb8d1450f396a2cdefab788130213a9898a56d1007c0bf8f65ccdf7",
+    "root-api-verification.json": "9ddcf20e7715b0653cc301dce12f89fa19e496c851d8cc9880e984cac259fc7e",
+    "root-ruff-verification.json": "2b24e8679d6a7dd27be504dd1843d50e8f5e8aeba71d97ce5b95c63852b507e8"
+  }
+}

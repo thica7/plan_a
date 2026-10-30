@@ -522,7 +522,81 @@ def _published_cpu_claims(question, product, views, as_of, claims):
     return tuple(sorted(result, key=lambda claim: (len(claim.text), claim.id))[:1])
 
 
-def _incomplete_quote_answer(question, snapshot, market, as_of, context, views, claims):
+def _quote_rule_scope_matches(context, selected, parents):
+    """Task ownership cannot make another named plan or usage model applicable."""
+    for fact in selected:
+        if _unknown_billing_scope(fact.quote):
+            return False
+        names = _billing_names(fact.quote)
+        for axis, values in names.items():
+            expected = context.get(axis)
+            if values and (not expected or {v.casefold() for v in values} != {expected.casefold()}):
+                return False
+            qualifier = fact.qualifiers.get(axis)
+            if qualifier is not None and (not isinstance(qualifier, str) or not expected
+                    or qualifier.casefold() != expected.casefold()):
+                return False
+        if fact.qualifiers.get('table_context'):
+            from packages.research.extraction.billing_rules import _cells
+
+            parent = parents[fact.id]
+            source_text = '\n'.join(dict.fromkeys(value for _, value in _source_strings(parent)))
+            row = _cells(fact.quote)
+            if (not row or not context.get('usage_model')
+                    or row[0].casefold() != context['usage_model'].casefold()
+                    or not _matching_billing_applicability(source_text, context)):
+                return False
+    return True
+
+
+def _bound_request_billing_scope(detail, question, product, originals):
+    """Inherit only explicit scope from the existing unique canonical parent binding."""
+    from packages.research.question_scope import question_request_context, request_context_questions
+
+    bound = question_request_context(detail, product, 'feature', [question])
+    expanded = request_context_questions(bound, [question])[0]
+    if expanded == question:
+        return {}
+    parsed = _request(detail, expanded, product, source_facts=originals)
+    return {axis: parsed[2][axis] for axis in _BILLING_SCOPE_LABELS
+            if parsed is not None and axis in parsed[2]}
+
+
+def _published_quote_rules(product, views, as_of, claims, allowed_ids, context):
+    """Copy complete reviewed billing/procurement facts; never calculate a price."""
+    observed_at = datetime.combine(as_of, time.max, tzinfo=UTC)
+    signal = re.compile(r'\b(?:bill(?:ed|ing|able)?|allowance|rates?|fees?|costs?|pricing|'
+                        r'purchas\w*|sold|quot\w*)\b|计费|收费|购买|报价|计价|额度', re.I)
+    result = []
+    for claim in claims:
+        if (claim.id not in allowed_ids or claim.competitor != product
+                or claim.kind != 'fact' or not claim.source_span_bindings):
+            continue
+        view = next((v for v in views if v.dimension == claim.dimension), None)
+        if view is None:
+            continue
+        sources = {s.id for s in view.sources if s.role == 'source'
+                   and s.material_level in {'full_source', 'kb_document'}
+                   and not _qualification(s, observed_at)}
+        if not set(claim.source_ids) <= sources:
+            continue
+        selected, reasons = projected_source_facts(claim, view.facts)
+        parents = {fact.id: fact for fact in view.facts if fact.id in claim.fact_ids}
+        boundary = SimpleNamespace(allowed_fact_ids=view.fact_ids,
+            requirement=SimpleNamespace(intent='facts'), missing_fields=())
+        if (reasons or not signal.search(claim.text)
+                or not any(signal.search(f.quote) for f in selected)
+                or not _quote_rule_scope_matches(context, selected, parents)
+                or claim_rule_reasons(claim, view, [boundary], available_facts=view.facts)):
+            continue
+        # Retain complete atoms within the answer's existing prose limit.
+        if len(' '.join(c.text for c in [*result, claim])) <= 650 and len(result) < 8:
+            result.append(claim)
+    return tuple(result)
+
+
+def _incomplete_quote_answer(question, snapshot, market, as_of, context, views, claims,
+                             *, delivery_policy=None, question_claim_ids=()):
     """Missing request inputs are distinct from absent evidence or a market price."""
     labels = {
         "market": "适用市场／地区", "currency": "报价币种", "plan": "具体产品组合与套餐",
@@ -561,33 +635,98 @@ def _incomplete_quote_answer(question, snapshot, market, as_of, context, views, 
     if 'tax_scope' in context:
         known.append('含税' if context['tax_scope'] == 'tax_included' else '不含税')
     known_text = '已给请求条件：' + '、'.join(known) + '。' if known else ''
-    cpu_claims = (
+    known_claims = (
         _published_cpu_claims(question['question'], views[0].competitor, views, as_of, claims)
         if 'cpu_usage' in missing else ()
     )
-    cpu_text = ' '.join(claim.text for claim in cpu_claims)
+    if delivery_policy:
+        known_claims = _published_quote_rules(
+            views[0].competitor, views, as_of, claims, question_claim_ids, context)
+    known_rules = ' '.join(claim.text for claim in known_claims)
     return {
         "question_id": question["question_id"], "question": question["question"],
         "status": "partial", "resolution": "insufficient", "conclusion": "unknown",
-        "answer": known_text + cpu_text
+        "answer": known_text + known_rules
                   + f"本次请求及已准入资料不足以核实准确的{'完整账单' if is_bill else '当前报价'}。"
                   + f"请先确认：{fields}；补齐适用的定价资料和输入后，再核验截至 {as_of.isoformat()} 的适用金额。",
-        "claim_ids": tuple(claim.id for claim in cpu_claims),
+        "claim_ids": tuple(claim.id for claim in known_claims),
         "evidence_spans": tuple(
-            {'claim_id': claim.id, 'quote': claim.text} for claim in cpu_claims
+            {'claim_id': claim.id, 'quote': claim.text} for claim in known_claims
         ),
         "missing_fields": tuple(sorted(missing)),
-        "reason": f"server_missing_quote_inputs;as_of={as_of.isoformat()}",
+        "reason": f"server_missing_quote_inputs;as_of={as_of.isoformat()}"
+                  + (f';delivery_policy={delivery_policy}' if delivery_policy else ''),
         "basis_snapshot_id": snapshot.id,
     }
 
 
+def verified_missing_price_answer(detail, snapshot, answer, product, *, claims=()):
+    """Authenticate this finite limitation using the same reconstruction for render and QA."""
+    from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
+
+    if snapshot is None or answer.resolution != 'insufficient' or not answer.missing_fields:
+        return False
+    try:
+        from packages.agents.writer.complete_predicates import DELIVERY_POLICY
+        policy = (DELIVERY_POLICY
+                  if answer.reason.endswith(';delivery_policy=' + DELIVERY_POLICY) else None)
+        original = server_missing_price_answers(detail, snapshot, [{
+            'question_id': answer.question_id, 'question': answer.question,
+        }], product, claims=claims, delivery_policy=policy).get(answer.question_id)
+        return original is not None and answer == ReportAnswerCoverage(**original)
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return False
+
+
+def _published_question_claim_whitelist(detail, snapshot, product):
+    """Read the exact task ownership bound by the published producer receipt.
+
+    Producer transport authentication remains with the existing replay. This
+    local join cannot create ownership for another question, source or audit.
+    """
+    import hashlib
+    import json
+
+    result = {}
+    for audit in detail.report_dimension_audits:
+        if audit.competitor != product or not audit.question_atomic_receipt_digest:
+            continue
+        matches = []
+        for span in detail.trace_spans:
+            if span.name != 'question_atomic_delivery':
+                continue
+            try:
+                receipt = json.loads(span.full_output)
+            except (ValueError, TypeError):
+                continue
+            if (receipt.get('consumption_id') == audit.consumption_id
+                    and receipt.get('snapshot_id') == snapshot.id
+                    and receipt.get('delivery_policy') == 'complete-predicates-v1'
+                    and hashlib.sha256(canonical_json(receipt).encode()).hexdigest()
+                        == audit.question_atomic_receipt_digest):
+                matches.append(receipt)
+        if len(matches) != 1:
+            continue
+        for plan in matches[0].get('question_answer_plans', ()):
+            qid = plan['question_id']
+            if qid in result:
+                result[qid] = set()  # Ambiguous producers never merge ownership.
+            else:
+                result[qid] = set(plan['claim_ids'])
+    return result
+
+
 def server_missing_price_answers(detail, snapshot, questions, product, *,
-                                 claims: Sequence[ReportClaim] = ()) -> dict[str, dict]:
+                                 claims: Sequence[ReportClaim] = (), delivery_policy=None,
+                                 question_claim_whitelist=None) -> dict[str, dict]:
     """Resolve admitted-snapshot quote gaps, without asserting market-wide absence."""
     if any(not isinstance(claim, ReportClaim) for claim in claims):
         raise TypeError('published billing claims must be ReportClaim objects')
+    from packages.agents.writer.complete_predicates import checked_delivery_policy
+    checked_delivery_policy({'delivery_policy': delivery_policy})
     _validate_snapshot(detail, snapshot, product)
+    if delivery_policy and question_claim_whitelist is None:
+        question_claim_whitelist = _published_question_claim_whitelist(detail, snapshot, product)
     if any(
         gap.reason == "context_budget_exceeded" and gap.competitor in (None, product)
         for gap in snapshot.gaps
@@ -608,8 +747,14 @@ def server_missing_price_answers(detail, snapshot, questions, product, *,
                      if fact.field == 'evidence_terms' and fact.status == 'supported'
                      and fact.source_id in eligible_sources]
         context.update(_source_matched_request_scope(question['question'], originals))
+        if delivery_policy:
+            for axis, value in _bound_request_billing_scope(
+                    detail, question, product, originals).items():
+                context.setdefault(axis, value)
         incomplete = _incomplete_quote_answer(
-            question, snapshot, market, as_of, context, views, claims
+            question, snapshot, market, as_of, context, views, claims,
+            delivery_policy=delivery_policy,
+            question_claim_ids=(question_claim_whitelist or {}).get(question['question_id'], ()),
         )
         if incomplete is not None:
             result[question["question_id"]] = incomplete
@@ -643,18 +788,25 @@ def server_missing_price_answers(detail, snapshot, questions, product, *,
         )
         if "tax_scope" in context:
             scope += "、" + ("含税" if context["tax_scope"] == "tax_included" else "不含税")
+        known_claims = (_published_quote_rules(product, views, as_of, claims,
+            (question_claim_whitelist or {}).get(question['question_id'], ()), context)
+            if delivery_policy else ())
+        known_rules = ' '.join(claim.text for claim in known_claims)
         result[question["question_id"]] = {
             "question_id": question["question_id"],
             "question": question["question"],
             "status": "partial",
             "resolution": "insufficient",
             "conclusion": "unknown",
-            "answer": f"本次已准入资料不足以核实截至 {as_of.isoformat()}、{scope}的当前报价，"
+            "answer": known_rules
+            + f"本次已准入资料不足以核实截至 {as_of.isoformat()}、{scope}的当前报价，"
             "因此无法给出该口径的准确金额。请提供适用的当前单价、计费单位与税费依据后，再核验金额。",
-            "claim_ids": (),
-            "evidence_spans": (),
+            "claim_ids": tuple(claim.id for claim in known_claims),
+            "evidence_spans": tuple({'claim_id': claim.id, 'quote': claim.text}
+                                    for claim in known_claims),
             "missing_fields": tuple(sorted(missing)),
-            "reason": f"server_missing_current_price;as_of={as_of.isoformat()};scope={scope}",
+            "reason": f"server_missing_current_price;as_of={as_of.isoformat()};scope={scope}"
+                      + (f';delivery_policy={delivery_policy}' if delivery_policy else ''),
             "basis_snapshot_id": snapshot.id,
         }
     return result

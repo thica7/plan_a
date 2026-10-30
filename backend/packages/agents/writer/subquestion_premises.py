@@ -400,6 +400,9 @@ def subquestion_binding_reasons(record, claims, *, required=False,
         if premise_digest(record.question, binding, claims) != binding.support_digest:
             reasons.add("answer_subquestion_binding_changed")
         selected = [by_id[cid] for cid in binding.claim_ids]
+        if (binding.relation == 'classification_non_entailment'
+                and answer_review_contract != CONTRACT_V6):
+            reasons.add('answer_classification_policy_unverified')
         task_credentials = ()
         task_target = False
         if answer_review_contract == CONTRACT_V6 and binding.claim_ids:
@@ -929,6 +932,10 @@ def finite_decision_witnesses(binding, selected, *, premise_version=2, facts=())
 
 
 def _negative_supported_v2(binding, selected, *, premise_version=2, facts=()):
+    if binding.relation == 'classification_non_entailment':
+        from packages.agents.writer.complete_predicates import classification_non_entailment
+        valid = classification_non_entailment(binding, selected)
+        return valid, {'kind': 'classification_non_entailment'} if valid else None
     if binding.relation in {'upper_bound', 'permission_entailment'}:
         witness = finite_decision_witnesses(binding, selected,
             premise_version=premise_version, facts=facts).get(binding.relation)

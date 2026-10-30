@@ -31,6 +31,7 @@ from packages.research.question_scope import narrow_request_context
 
 WitnessKind = Literal["quantity_excess", "resource_non_entailment"]
 APPROVED_QUANTITY_CORE_POLICY = 'approved_quantity_core-v1'
+REVIEWED_QUANTITY_CONJUNCTION_POLICY = 'reviewed_quantity_conjunction-v1'
 
 
 @dataclass(frozen=True)
@@ -93,7 +94,8 @@ def decision_selection_policy(payload):
     if 'decision_selection_policy' not in payload:
         return None
     policy = payload['decision_selection_policy']
-    if type(policy) is not str or policy != APPROVED_QUANTITY_CORE_POLICY:
+    if type(policy) is not str or policy not in {
+            APPROVED_QUANTITY_CORE_POLICY, REVIEWED_QUANTITY_CONJUNCTION_POLICY}:
         raise ValueError('Decision selection policy unknown')
     return policy
 
@@ -705,6 +707,107 @@ class DecisionReview:
     def credentials(self):
         return issue_decision_credentials(self.context, self.answer_dispatch)
 
+    def quantity_conjunction_projection(self, question_id, parent):
+        """Server projection from one reviewed failing conjunct, never a model rewrite."""
+        from packages.agents.writer.answer_action_scope import requested_answer_actions
+        from packages.agents.writer.complete_predicates import checked_delivery_policy
+        from packages.agents.writer.question_allocation import _request_units
+        from packages.agents.writer.question_atomic_delivery import GENERATION_NAME
+        from packages.agents.writer.subquestion_premises import _COUNT, _UNITS, _counts
+        from packages.research.evidence.report_claims import claim_operations
+        from packages.research.evidence.source_exceptions import _missing_question_inputs
+
+        try:
+            span, payload = _transport(self.context, self.answer_dispatch)
+            if (decision_selection_policy(payload) != REVIEWED_QUANTITY_CONJUNCTION_POLICY
+                    or decision_selection_policy(self.context.compact)
+                    != REVIEWED_QUANTITY_CONJUNCTION_POLICY
+                    or not checked_delivery_policy(payload)
+                    or not checked_delivery_policy(self.context.compact)):
+                return None
+            original, = [row for row in _unique_json(span.full_output)['answers']
+                         if row['question_id'] == question_id]
+            question, = [q['question'] for q in self.context.questions
+                         if q['question_id'] == question_id]
+            if (original != parent or set(parent) != {
+                    'question_id', 'status', 'resolution', 'conclusion', 'claim_ids',
+                    'missing_fields', 'reason', 'subquestions'}
+                    or parent['missing_fields'] != [] or _missing_question_inputs(question)
+                    or (parent['status'], parent['resolution'], parent['conclusion']) not in {
+                        ('partial', 'clarification', 'depends'),
+                        ('partial', 'conditional', 'depends'), ('answered', 'direct', 'no')}
+                    or len(_request_units(question)) != 1
+                    or requested_answer_actions(question)
+                    or set(claim_operations(question)) - {'share'}
+                    or re.search(r'或|要么|任选|任一|分别|逐项|各自|如果|若|只有|仅当|除非|否则'
+                        r'|\b(?:or|either|any|alternatively|each|separately|independently|'
+                        r'respectively|if|when|unless|provided|until)\b', question, re.I)):
+                return None
+            branch, = parent['subquestions']
+            ids = parent['claim_ids']
+            if (set(branch) != {'question_quote', 'claim_ids', 'conclusion', 'relation'}
+                    or branch['question_quote'] != question or branch['claim_ids'] != ids
+                    or branch['conclusion'] != parent['conclusion']
+                    or branch['relation'] != 'upper_bound'
+                    or not ids or len(ids) != len(set(ids))):
+                return None
+            _, by_claim, _ = _rebuild(self.context)
+            supported = {row.claim.id for row in self.context.audited_claims
+                         if row.status == 'supported'}
+            if (not set(ids) <= supported or any(cid not in by_claim
+                    or by_claim[cid]['question_id'] != question_id for cid in ids)):
+                return None
+            tasks = {}
+            for dispatch in self.context.compact['dispatches']:
+                if dispatch['name'] == GENERATION_NAME:
+                    _, generated = _transport(self.context, dispatch)
+                    for task in generated['generation_tasks']:
+                        if task['question_id'] == question_id:
+                            tasks.setdefault(task['task_id'], _task_identity(task))
+            if (len(tasks) != 2 or {t.get('request_property') for t in tasks.values()}
+                    != {'people_limit', 'container_limit'}):
+                return None
+            requested, positions = {}, []
+            for task in tasks.values():
+                counts = _counts(task['question_quote'])
+                if (task['focus'] != 'source_rule' or task['state'] != 'planned'
+                        or task.get('resource') is not None or len(counts) != 1):
+                    return None
+                unit, numbers = next(iter(counts.items()))
+                fragment = task['question_quote']
+                if (len(numbers) != 1 or numbers[0] < 1
+                        or (task['request_property'] == 'people_limit') != (unit == 'people')
+                        or re.fullmatch(rf'\s*{_COUNT}\s*{_UNITS[unit]}\s*', fragment, re.I) is None
+                        or question.count(fragment) != 1):
+                    return None
+                requested[unit] = numbers
+                start = question.index(fragment)
+                positions.append((start, start + len(fragment)))
+            positions.sort()
+            bridge = question[positions[0][1]:positions[1][0]].strip()
+            if (_counts(question) != requested or re.fullmatch(
+                    r'用|使用|利用|在|和|与|及|以及|并(?:且)?(?:用|使用)?|、|and|using|in|with',
+                    bridge, re.I) is None):
+                return None
+            credentials = {c.claim_id: c for c in self.credentials()
+                           if c.question_id == question_id and c.witness_kind == 'quantity_excess'
+                           and c.conclusion == 'no'}
+            credential = next((credentials[cid] for cid in ids if cid in credentials), None)
+            if credential is None:
+                return None
+            retained = [credential.claim_id]
+            projected = dict(parent, status='answered', resolution='direct', conclusion='no',
+                claim_ids=retained,
+                subquestions=[dict(branch, claim_ids=retained, conclusion='no')])
+            adjustment = dict(kind='quantity_conjunction_aggregated',
+                policy=REVIEWED_QUANTITY_CONJUNCTION_POLICY, original_answer=original,
+                retained_claim_ids=retained,
+                excluded_claim_ids=[cid for cid in ids if cid not in retained],
+                candidate_refs=[credential.candidate_ref])
+            return projected, adjustment
+        except (ValueError, KeyError, TypeError, AttributeError, IndexError):
+            return None
+
     def approved_quantity_core(self, question_id, binding, parent_claim_ids):
         """Project one original approved core only for a complete joint quantity no."""
         from packages.agents.writer.question_allocation import _request_units
@@ -780,6 +883,20 @@ class DecisionReview:
             if any(task['question_id'] != question_id
                    or task['question_quote'] not in binding.question_quote for task in selected):
                 return False, False, ()
+            if binding.relation == 'classification_non_entailment':
+                from packages.agents.writer.complete_predicates import (
+                    checked_delivery_policy,
+                    classification_non_entailment,
+                )
+                _, payload = _transport(self.context, self.answer_dispatch)
+                published = {row.claim.id: row.claim.model_dump(mode='json')
+                             for row in self.context.audited_claims if row.status == 'supported'}
+                valid = (checked_delivery_policy(self.context.compact)
+                    and checked_delivery_policy(payload)
+                    and all(task['focus'] in {'source_rule', 'billing_inputs'} for task in selected)
+                    and classification_non_entailment(binding,
+                        [published[cid] for cid in binding.claim_ids]))
+                return bool(valid), False, ()
             target = any(task.get('request_property') in {'people_limit', 'container_limit'}
                          or re.search(r'自动|确定|决定|\b(?:automatically|determine|entail)\b',
                                       task['question_quote'], re.I)

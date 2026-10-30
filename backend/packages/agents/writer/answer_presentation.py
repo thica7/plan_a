@@ -70,8 +70,19 @@ def answer_decision_lines(
             "not_applicable": "Conclusion: not applicable",
         }
     )
-    lines = ["  " + decisions[answer.conclusion]]
     branches = answer.subquestion_bindings
+    from packages.agents.writer.complete_predicates import authority_question
+
+    def decision_text(question, conclusion, ids):
+        if (conclusion == 'yes' and authority_question(question) and decision_review is not None
+                and decision_review.context.compact.get('delivery_policy')
+                    == 'complete-predicates-v1'):
+            selected = [plain(c['text']) for c in claims if c['id'] in ids]
+            if selected:
+                return ('结论：' if zh else 'Conclusion: ') + ' '.join(selected)
+        return decisions[conclusion]
+
+    lines = ['  ' + decision_text(answer.question, answer.conclusion, answer.claim_ids)]
     if (len(branches) > 1 or answer.status == "partial" and any(
             branch.conclusion == "unknown" for branch in branches)):
         from packages.agents.writer.answer_coverage import selection_binding_reasons
@@ -88,8 +99,9 @@ def answer_decision_lines(
                 sources = {sid for cid in branch.claim_ids
                            for sid in by_id[cid].get("source_ids", ())}
                 citations = "".join(f"[source:{sid}]" for sid in sorted(sources))
+                decision = decision_text(branch.question_quote, branch.conclusion, branch.claim_ids)
                 lines.append((f"  - {plain(branch.question_quote)} — "
-                              f"{decisions[branch.conclusion]} {citations}").rstrip())
+                              f"{decision} {citations}").rstrip())
     return lines
 
 
@@ -105,9 +117,9 @@ def question_coverage_lines(audit, language, *, detail=None, facts=None, decisio
         "unverified": "尚未核实",
     }
     supported = {item.claim.id: item.claim for item in audit.claims if item.status == "supported"}
+    snapshot = next((item for item in getattr(detail, 'evidence_snapshots', ())
+                     if item.id == detail.evidence_snapshot_id), None)
     if facts is None:
-        snapshot = next((item for item in getattr(detail, 'evidence_snapshots', ())
-                         if item.id == detail.evidence_snapshot_id), None)
         facts = snapshot.facts if snapshot is not None else ()
     facts = tuple(fact for fact in facts
                   if fact.competitor == audit.competitor and fact.dimension == audit.dimension)
@@ -125,11 +137,19 @@ def question_coverage_lines(audit, language, *, detail=None, facts=None, decisio
         qualified = True
         if audit.answer_review_contract in {'subquestion-premises-v5', 'subquestion-premises-v6'}:
             from packages.agents.writer.answer_coverage import coverage_resolution_reasons
+            from packages.agents.writer.complete_predicates import DELIVERY_POLICY
+            from packages.agents.writer.price_answers import verified_missing_price_answer
 
-            qualified = not coverage_resolution_reasons(answer,
-                [claim.model_dump(mode='json') for claim in supported.values()], facts=facts,
-                require_subquestions=True, answer_review_contract=audit.answer_review_contract,
-                decision_review=decision_review)
+            if (answer.resolution == 'insufficient'
+                    and answer.reason.endswith(';delivery_policy=' + DELIVERY_POLICY)):
+                qualified = verified_missing_price_answer(
+                    detail, snapshot, answer, audit.competitor,
+                    claims=tuple(supported.values()))
+            else:
+                qualified = not coverage_resolution_reasons(answer,
+                    [claim.model_dump(mode='json') for claim in supported.values()], facts=facts,
+                    require_subquestions=True, answer_review_contract=audit.answer_review_contract,
+                    decision_review=decision_review)
         status = (names[answer.status] if zh else answer.status) if qualified else (
             names['unverified'] if zh else 'unverified')
         lines.append(f"- {plain(answer.question)} — {status}")

@@ -71,7 +71,8 @@ def parse_claim_reviews(text, allowed_ids=None):
     return [review for review in parsed if review.claim_id not in invalid_ids], bool(invalid_ids)
 
 
-def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, source_facts=(), span_candidates=None):
+def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, source_facts=(),
+                       span_candidates=None, authority_rule_texts=()):
     """Reject an invalid candidate locally, retaining later independently bound rows."""
     payload = parse_json(text)
     if (not isinstance(payload, dict) or set(payload) != {'claims'}
@@ -88,11 +89,16 @@ def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, sourc
         try:
             claim = ClaimDraft.model_validate(row)
             values = claim.model_dump(exclude={'observation_id', 'source_span_ids'})
+            from packages.agents.writer.complete_predicates import authority_source_rule
+            authority_rule = (claim.kind == 'fact' and claim.text in authority_rule_texts
+                and authority_source_rule(claim.text, [
+                    (span_candidates or {}).get(sid, {}).get('quote', '')
+                    for sid in claim.source_span_ids]))
             from packages.research.evidence.source_spans import source_span_candidates
             bound_spans = []
             if (claim.observation_id is None and claim.operation_binding is None
                     and any(item['fact_id'] in claim.fact_ids for item in candidates.values())
-                    and claim_operations(claim.text)):
+                    and claim_operations(claim.text) and not authority_rule):
                 gaps.add('operation_binding_required')
                 continue
             for span_id in claim.source_span_ids:
@@ -141,7 +147,7 @@ def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, sourc
             elif claim.operation_binding is not None:
                 if candidates.get(claim.operation_binding.observation_id) != claim.operation_binding.model_dump(mode='json'):
                     raise ValueError('Operation binding was not a sent candidate')
-            elif bound_spans and claim_operations(claim.text):
+            elif bound_spans and claim_operations(claim.text) and not authority_rule:
                 gaps.add('operation_binding_required')
                 continue
             elif (any(item['fact_id'] in claim.fact_ids for item in candidates.values())
@@ -157,7 +163,8 @@ def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, sourc
                     and claim_operations(claim.text)):
                 gaps.add('operation_binding_required')
                 continue
-            binding_reasons = current_feature_binding_reasons(published) if span_candidates is not None else ()
+            binding_reasons = current_feature_binding_reasons(
+                published, authority_rule=authority_rule) if span_candidates is not None else ()
             if binding_reasons:
                 gaps.update(binding_reasons)
                 continue
@@ -945,23 +952,33 @@ class DimensionWriterMixin:
         snapshot = self._current_evidence_snapshot(live)
         supported = [item.claim for item in audited if item.status == 'supported']
         price_answers = server_missing_price_answers(live.detail, snapshot, questions, view.competitor,
-            claims=supported)
+            claims=supported, delivery_policy=compact.get('delivery_policy'),
+            question_claim_whitelist={p['question_id']: set(p['claim_ids'])
+                for p in compact.get('question_answer_plans', ())})
         from packages.agents.writer.request_clarification import has_lifecycle_rule, server_clarification_answer
         published = [claim.model_dump(mode='json') for claim in supported]
         clarification_candidates = {q['question_id']: answer for q in questions
             if q['question_id'] not in price_answers and (answer := server_clarification_answer(q)) is not None}
         clarification_answers = {q['question_id']: clarification_candidates[q['question_id']] for q in questions
             if q['question_id'] in clarification_candidates and not has_lifecycle_rule(q['question'], published)}
-        pending = [q for q in questions if q['question_id'] not in price_answers
+        pending = [q for q in questions if (q['question_id'] not in price_answers
+                   or compact.get('delivery_policy') == 'complete-predicates-v1')
                    and q['question_id'] not in clarification_answers]
         coverage = unverified_coverage(pending, 'No supported answer claims are available.')
         sizes = []
         if (pending and supported
                 and compact.get('question_atomic_contract') == 'question-atomic-delivery-v1'):
             from packages.agents.writer.question_atomic_delivery import atomic_answer_coverage
+            from packages.agents.writer.task_decision_witnesses import (
+                APPROVED_QUANTITY_CORE_POLICY,
+                REVIEWED_QUANTITY_CONJUNCTION_POLICY,
+            )
             coverage, gaps, sizes = await atomic_answer_coverage(
                 self, record, pending, compact, supported, view, use, gaps,
-                answer_review_contract='subquestion-premises-v6', audited=audited)
+                answer_review_contract='subquestion-premises-v6', audited=audited,
+                decision_selection_policy=(REVIEWED_QUANTITY_CONJUNCTION_POLICY
+                    if compact.get('delivery_policy') == 'complete-predicates-v1'
+                    else APPROVED_QUANTITY_CORE_POLICY))
         elif pending and supported:
             task_workflow = 'question_task_ledger' in compact
             payload = compact_prompt_json(answer_review_payload(pending, supported, view,
@@ -1342,7 +1359,8 @@ class DimensionWriterMixin:
                         task_result = await execute_question_atomic_delivery(
                             self, record, selected, view, use, questions,
                             question_packets, allowed, boundaries, gaps,
-                            answer_review_contract='subquestion-premises-v6')
+                            answer_review_contract='subquestion-premises-v6',
+                            delivery_policy='complete-predicates-v1')
                     else:
                         from packages.agents.writer.task_execution import execute_question_tasks
                         task_result = await execute_question_tasks(
@@ -1671,7 +1689,9 @@ class DimensionWriterMixin:
                         upstream_dependencies = tuple(dict.fromkeys(
                             (*(prior.upstream_dependencies or ()), *upstream_dependencies)))
                 audited = audit_report_claims(claims, reviews, view, boundaries,
-                    available_facts=discovery_facts if allowed else view.facts, review_version=3 if questions else None)
+                    available_facts=discovery_facts if allowed else view.facts,
+                    review_version=3 if questions else None,
+                    authority_claim_ids=(task_result or {}).get('authority_claim_ids', ()))
                 coverage, gaps, coverage_sizes = await self._dimension_question_coverage(
                     record, questions, compact, audited, view, use, gaps,
                 )

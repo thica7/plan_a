@@ -425,6 +425,13 @@ def parse_answer_coverage(
                 } <= set(row) or {"question", "basis_snapshot_id", "binding_version"} & set(row):
                     raise ValueError("missing or duplicate coverage")
                 if selection:
+                    if (data['version'] == 3 and answer_review_contract == CONTRACT_V6
+                            and decision_review is not None):
+                        projection = decision_review.quantity_conjunction_projection(
+                            question['question_id'], row)
+                        if projection is not None:
+                            row, adjustment = projection
+                            diagnostic['adjustments'].append(adjustment)
                     subquestions = row.get("subquestions")
                     row = {k: v for k, v in row.items() if k != "subquestions"}
                     if subquestions is not None and data["version"] != 3:
@@ -460,6 +467,7 @@ def parse_answer_coverage(
                                 5 if answer_review_contract == CONTRACT_V5 else
                                 4 if answer_review_contract == CONTRACT_V4 else
                                 3 if answer_review_contract == CONTRACT_V3 else 2))
+                        checks['adjustments'] = [*diagnostic['adjustments'], *checks['adjustments']]
                         diagnostic.update(checks)
                         retained = {cid for branch in subquestions for cid in branch['claim_ids']}
                         row = dict(

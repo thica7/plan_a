@@ -15,9 +15,8 @@ from packages.agents.writer.answer_presentation import (
     question_coverage_lines,
     question_coverage_matches,
 )
-from packages.agents.writer.price_answers import server_missing_price_answers
+from packages.agents.writer.price_answers import verified_missing_price_answer
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
-from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
 from packages.research.evidence.snapshot_models import canonical_json
 from packages.research.evidence.source_spans import projected_source_facts
 from packages.research.question_scope import question_request_context, research_questions
@@ -239,13 +238,8 @@ def _answer_support(detail, snapshot, audit, answer, question):
         else:
             return None
     if answer.resolution == "insufficient":
-        original = server_missing_price_answers(
-            detail, snapshot, [question], audit.competitor, claims=tuple(published)
-        ).get(answer.question_id)
-        if (
-            original is None
-            or answer != ReportAnswerCoverage(**original)
-            or not answer.missing_fields
+        if not verified_missing_price_answer(
+            detail, snapshot, answer, audit.competitor, claims=tuple(published)
         ):
             return None
     else:

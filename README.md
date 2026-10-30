@@ -61,6 +61,12 @@ flowchart TD
 
 实验最终QA从实际报告问题启动，不依赖Reflector成功。QA9由服务器区分当前完整canonical子问与历史finding：父题仅补共享题设，兄弟不新增当前输出任务；历史仍完整审核。必要澄清可认可交付，但产品事实继续partial。父题按全部真实绑定子问汇总交付与事实状态，一个子问通过不代表父题完成。完整可读输入上限14000 UTF-8 bytes，SYSTEM3844B／输出1600／fresh请求保护19702；已有checkpoint额度与费用不重置。每个执行窗口最多六批，每finding累计两次尝试；合法keep不重试，超时保留待审。超窗不截断，reason超过800字符不暗改。真实SYSTEM、完整输入输出、目标与范围共同绑定缓存，旧QA5–8身份与窗口保持。机制验证不能代替正文交付，实验默认仍关闭。
 
+## 最新真实报告复验（2026-10-30）
+
+默认关闭的逐题Writer实验已接入完整谓词／角色规则、可见报价缺项、同题同套餐绑定及有凭证的纯AND数量否定聚合。四家固定快照真实回放最终 **6/8题通过；文字交付2/4、文本＋证据交付1/4（Bitwarden）；严格系统QA仍0/4**。Trello第二题、Cloudflare额外断言／例外、1Password状态与报价来源仍待修，不能称生产合格。
+
+后端9244通过／1跳过，前端340通过、构建和标准类型核对通过，变更Python新增Ruff0。最终轮73次调用／256007已知token；源码冻结和426份旧原件不变。测试是2026-10-21固定页面的七生产阶段回放，新抓取／全Graph／生产语义RAG另待验；未训练、未执行Docker。见[交付及下一步](docs/optimization/2026-10-30-report-delivery-repair.md)、[最终结果](docs/optimization/2026-10-30-report-delivery-fix2-results.json)、[保留的首轮失败](docs/optimization/2026-10-30-report-delivery-fix1-results.json)。
+
 ## 研究模式
 
 | 设置 | 选项 | 作用 |

@@ -31,8 +31,15 @@ from packages.agents.writer.atomic_question_projection import (
 from packages.agents.writer.atomic_question_projection import (
     checked_generation_projection_version as checked_legacy_generation_projection_version,
 )
+from packages.agents.writer.complete_predicates import (
+    authority_question,
+    authority_task_claim_ids,
+    checked_delivery_policy,
+    unsupported_numeric_restriction,
+)
 from packages.agents.writer.task_decision_witnesses import (
     APPROVED_QUANTITY_CORE_POLICY,
+    REVIEWED_QUANTITY_CONJUNCTION_POLICY,
 )
 from packages.agents.writer.task_decision_witnesses import (
     decision_selection_policy as checked_decision_selection_policy,
@@ -82,7 +89,37 @@ def checked_generation_projection_version(value):
 
 
 def atomic_system(name, language, *, review_projection_version=2, generation_projection_version=2,
-                  answer_review_contract='subquestion-premises-v1'):
+                  answer_review_contract='subquestion-premises-v1', delivery_policy=None):
+    if delivery_policy is not None:
+        checked_delivery_policy({'delivery_policy': delivery_policy})
+        return atomic_system(name, language, review_projection_version=review_projection_version,
+            generation_projection_version=generation_projection_version,
+            answer_review_contract=answer_review_contract) + (
+            ' Complete task predicates policy v1. '
+            'For who/authority questions select the complete existing-member status-change '
+            'rule, including EVERY authorized role, not a generic rule for adding new members. '
+            'A closed role list is one predicate; preserve every actor and only when sourced. '
+            'For billing publish independently sourced known components and procurement scope '
+            '(integrated versus separately purchased products), even when the exact total is '
+            'unavailable. Inspect complete CPU allowance/rate rows and conditions separately '
+            'from request fees. Never invent a sales/contact path absent selected source support. '
+            'A classification containing billable AND non-billable alternatives establishes '
+            'that the role label ALONE cannot determine billing; it does not determine the '
+            'person’s actual category. Preserve that finite conclusion instead of unknown '
+            'merely because actual membership is unspecified. '
+            'For who questions, name the complete role list in the answer, never just yes. '
+            'Review EVERY predicate and modal in the entire claim. A descriptive count such as '
+            'sharing with another user or both users is not an explicit maximum. Do not add '
+            'only/at most or derive a total maximum without that same-unit sourced restriction. '
+            'A supported clause cannot excuse another unsupported clause; reject the whole atom '
+            'if any independent assertion or strengthened modal lacks selected support. '
+        ) + (
+            'For that label-alone billing question, use relation=classification_non_entailment '
+            'with conclusion=no only when the selected complete published classification '
+            'and its exact source explicitly include both billable and non-billable alternatives. '
+            'This relation neither determines actual membership nor proves an actual price. '
+            if name == ANSWER_NAME else ''
+        )
     from packages.agents.writer.answer_coverage import (
         SUBQUESTION_REVIEW_SYSTEM,
         SUBQUESTION_V2_REVIEW_SYSTEM,
@@ -208,13 +245,14 @@ def atomic_system(name, language, *, review_projection_version=2, generation_pro
     raise ValueError("Atomic phase changed")
 
 
-def answer_contract_from_system(system, language):
+def answer_contract_from_system(system, language, *, delivery_policy=None):
     """Actual complete transport SYSTEM selects semantics, never a local flag."""
     for contract in (
             'subquestion-premises-v1', 'subquestion-premises-v2',
             'subquestion-premises-v3', 'subquestion-premises-v4', 'subquestion-premises-v5',
             'subquestion-premises-v6'):
-        if system == atomic_system(ANSWER_NAME, language, answer_review_contract=contract):
+        if system == atomic_system(ANSWER_NAME, language, answer_review_contract=contract,
+                                  delivery_policy=delivery_policy):
             return contract
     raise ValueError('Atomic answer SYSTEM unverified')
 
@@ -288,8 +326,13 @@ def handoff_context(service, record, view, questions, use):
 
 def atomic_question_context(
     service, record, view, packets, question, allowed, use, *, generation_projection_version=2,
-    generation_repair=None,
+    generation_repair=None, delivery_policy=None,
 ):
+    if delivery_policy is not None:
+        checked_delivery_policy({'delivery_policy': delivery_policy})
+        return dict(atomic_question_context(service, record, view, packets, question, allowed, use,
+            generation_projection_version=generation_projection_version,
+            generation_repair=generation_repair), delivery_policy=delivery_policy)
     version = checked_generation_projection_version(generation_projection_version)
     if generation_repair is not None and version != 5:
         raise ValueError("Atomic repair requires generation v5")
@@ -484,10 +527,18 @@ def parse_atomic_generation(response, payload, view, use, *, _forecast=False):
     span_candidates = dispatched_span_candidates(payload, view.facts, sent)
     support_refs = _support_ref_catalog(payload, view.facts, sent)
 
-    def strict_parse(text):
+    policy = checked_delivery_policy(payload)
+    authority_texts = set()
+
+    def strict_parse(text, *, task=None, atom_text=None):
+        local_authority = (authority_texts if task is None else {atom_text}
+            if (policy and task['focus'] == 'source_rule'
+                and authority_question(task['question_quote']))
+            else set())
         return parse_question_claim_plans(
             text, payload["questions"], candidates, sent, use.id,
             source_facts=view.facts, span_candidates=span_candidates, support_refs=support_refs,
+            authority_rule_texts=local_authority,
         )
 
     def identity(claim):
@@ -502,6 +553,7 @@ def parse_atomic_generation(response, payload, view, use, *, _forecast=False):
             "retained_claims", ())} if version == 5 and "generation_repair" in payload else set())
         selected, task_counts = [], {}
         for binding in task_bindings:
+            task = tasks[binding['task_id']]
             if binding["atom"]["text"].strip() in retained_texts:
                 task_gaps.add("retained_claim_duplicate")
                 by_task[binding["task_id"]].update(
@@ -512,7 +564,7 @@ def parse_atomic_generation(response, payload, view, use, *, _forecast=False):
                     question_id=binding["question_id"],
                     missing_fields=payload["question_plan_missing_fields"][0]["missing_fields"],
                     atoms=[binding["atom"]],
-                )]))
+                )])), task=task, atom_text=binding['atom']['text'],
             )
             task_gaps.update(invalid)
             outcome = by_task[binding["task_id"]]
@@ -527,6 +579,9 @@ def parse_atomic_generation(response, payload, view, use, *, _forecast=False):
                 outcome["deferred_atom_count"] = outcome.get("deferred_atom_count", 0) + 1
                 continue
             task_counts[binding["task_id"]] = count + 1
+            if (policy and task['focus'] == 'source_rule'
+                    and authority_question(task['question_quote'])):
+                authority_texts.add(binding['atom']['text'])
             selected.append(dict(binding, identity=identity(probe[0])))
         cleaned = parse_json(response)
         for plan in cleaned["question_plans"]:
@@ -641,6 +696,10 @@ def parse_atomic_reviews(response, claims, *, payload=None, review_projection_ve
         if len(rows) != 1:
             continue
         if version >= 2:
+            if (checked_delivery_policy(payload) and rows[0].get('verdict') == 'supported'
+                    and unsupported_numeric_restriction(payload['claims'][0]['text'],
+                        payload['claims'][0].get('support_quotes', []))):
+                continue
             if rows[0].get("verdict") == "supported" and incomplete_review_restrictions(payload):
                 continue
             row = witnessed_review_row(
@@ -694,7 +753,8 @@ def generation_repair_context(payload, plan, claims, reviews, dispatches, view, 
 
     current = [c for c in claims if c.id in plan["claim_ids"]]
     audited = audit_report_claims(current, reviews, view, boundaries,
-                                 available_facts=view.facts, review_version=3)
+        available_facts=view.facts, review_version=3,
+        authority_claim_ids=authority_task_claim_ids(payload, current, [plan]))
     kept = {row.claim.id for row in audited if row.status == "supported"}
     reviewed = {cid for d in dispatches if d["name"] == REVIEW_NAME for cid in d["claim_ids"]}
     omitted = set(plan.get("omitted_review_claim_ids", ()))
@@ -783,6 +843,10 @@ def save_atomic_receipt(service, record, compact, view, use, packets):
             'subquestion-premises-v2', 'subquestion-premises-v3',
             'subquestion-premises-v4', 'subquestion-premises-v5', 'subquestion-premises-v6'}:
         receipt['answer_review_contract'] = compact['answer_review_contract']
+    if checked_delivery_policy(compact):
+        receipt['delivery_policy'] = compact['delivery_policy']
+    if compact.get('decision_selection_policy') == REVIEWED_QUANTITY_CONJUNCTION_POLICY:
+        receipt['decision_selection_policy'] = REVIEWED_QUANTITY_CONJUNCTION_POLICY
     live = service._evidence_live_record(record)
     existing = [
         s
@@ -928,7 +992,7 @@ def _current_request_preflight(
 async def execute_question_atomic_delivery(
     service, record, selected, view, use, questions, packets, allowed, boundaries, gaps,
     *, review_projection_version=3, generation_projection_version=5,
-    answer_review_contract='subquestion-premises-v1',
+    answer_review_contract='subquestion-premises-v1', delivery_policy=None,
 ):
     from packages.agents.writer.dimension_writer import (
         _support_ref_catalog,
@@ -938,6 +1002,7 @@ async def execute_question_atomic_delivery(
     from packages.research.evidence.report_claims import claim_rule_reasons
 
     scope = f"{view.competitor}/{view.dimension}"
+    checked_delivery_policy({'delivery_policy': delivery_policy})
     review_projection_version = checked_review_projection_version(review_projection_version)
     generation_projection_version = checked_generation_projection_version(
         generation_projection_version
@@ -948,13 +1013,15 @@ async def execute_question_atomic_delivery(
         GENERATION_NAME, record.detail.output_language,
         review_projection_version=review_projection_version,
         generation_projection_version=generation_projection_version,
+        delivery_policy=delivery_policy,
     )
     review_system = atomic_system(
         REVIEW_NAME, record.detail.output_language,
         review_projection_version=review_projection_version,
+        delivery_policy=delivery_policy,
     )
     answer_system = atomic_system(ANSWER_NAME, record.detail.output_language,
-                                  answer_review_contract=answer_review_contract)
+        answer_review_contract=answer_review_contract, delivery_policy=delivery_policy)
     claims, reviews, sizes, sent_ids, dependencies = [], [], [], set(), ()
     compact = dict(
         question_atomic_contract=CONTRACT,
@@ -964,6 +1031,8 @@ async def execute_question_atomic_delivery(
         dispatches=[],
         evidence_view=dict(facts=[]),
     )
+    if delivery_policy is not None:
+        compact['delivery_policy'] = delivery_policy
     if answer_review_contract == 'subquestion-premises-v6':
         compact['_decision_expected_inputs'] = {}
         compact.update(consumption_id=use.id, snapshot_id=view.snapshot_id)
@@ -999,6 +1068,7 @@ async def execute_question_atomic_delivery(
             service, record, view, packets, question, allowed, use,
             generation_projection_version=generation_projection_version,
             generation_repair=repair,
+            delivery_policy=delivery_policy,
         )
         validate_atomic_handoff(service, record, payload, view)
         prompt = compact_prompt_json(payload)
@@ -1123,6 +1193,8 @@ async def execute_question_atomic_delivery(
         )
         candidate_count = len(anticipated)
         metadata = handoff_context(service, record, view, [question], use)
+        if delivery_policy is not None:
+            metadata['delivery_policy'] = delivery_policy
         # A complete source supports a conservative sizing shadow. Its text is
         # never published or reused as a real generation/review credential.
         if anticipated:
@@ -1278,6 +1350,8 @@ async def execute_question_atomic_delivery(
                          attempt=attempt)
         )
         claims.extend(current)
+        compact.setdefault('_authority_claim_ids', set()).update(
+            authority_task_claim_ids(actual, current, parsed_plans) if current else ())
         valid = [
             c
             for c in current
@@ -1416,6 +1490,7 @@ async def execute_question_atomic_delivery(
         gaps=gaps,
         sent_fact_ids=sent_ids,
         upstream_dependencies=dependencies,
+        authority_claim_ids=compact.get('_authority_claim_ids', set()),
     )
 
 
@@ -1428,6 +1503,10 @@ def atomic_answer_payload(service, record, questions, supported, view, use, comp
         checked_decision_selection_policy({'decision_selection_policy': decision_selection_policy})
         if answer_review_contract != 'subquestion-premises-v6':
             raise ValueError('Decision selection policy requires v6')
+        if (decision_selection_policy == REVIEWED_QUANTITY_CONJUNCTION_POLICY
+                and (checked_decision_selection_policy(compact) != decision_selection_policy
+                     or not checked_delivery_policy(compact))):
+            raise ValueError('Quantity conjunction requires explicit producer selection')
     local = {p["question_id"]: set(p["claim_ids"]) for p in compact["question_answer_plans"]}
     qids = {q["question_id"] for q in questions}
     allowed_ids = set().union(*(local[qid] for qid in qids))
@@ -1442,6 +1521,8 @@ def atomic_answer_payload(service, record, questions, supported, view, use, comp
         questions, claims, view, additional_fact_ids=sent_ids, compact_semantics=True
     )
     payload.update(handoff_context(service, record, view, questions, use))
+    if checked_delivery_policy(compact):
+        payload['delivery_policy'] = compact['delivery_policy']
     payload["answer_review_contract"] = answer_review_contract
     payload["question_claim_whitelist"] = [
         dict(
@@ -1518,16 +1599,20 @@ def atomic_decision_context(service, record, view, use, compact):
 
 
 async def atomic_answer_coverage(service, record, questions, compact, supported, view, use, gaps, *,
-                                  answer_review_contract='subquestion-premises-v1', audited=()):
+                                  answer_review_contract='subquestion-premises-v1', audited=(),
+                                  decision_selection_policy=APPROVED_QUANTITY_CORE_POLICY):
     from packages.agents.qa.question_context import _observations
     from packages.agents.writer.answer_coverage import parse_answer_coverage, unverified_coverage
     from packages.agents.writer.dimension_writer import compact_prompt_json
 
     system = atomic_system(
-        ANSWER_NAME, record.detail.output_language, answer_review_contract=answer_review_contract
+        ANSWER_NAME, record.detail.output_language, answer_review_contract=answer_review_contract,
+        delivery_policy=checked_delivery_policy(compact),
     )
     if answer_review_contract == 'subquestion-premises-v6':
         compact['_decision_audited'] = tuple(audited)
+        if decision_selection_policy == REVIEWED_QUANTITY_CONJUNCTION_POLICY:
+            compact['decision_selection_policy'] = decision_selection_policy
     answers = {
         row.question_id: row
         for row in unverified_coverage(questions, "Answer semantic review was not completed.")
@@ -1538,7 +1623,7 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
             service, record, [*current, question], supported, view, use, compact,
             answer_review_contract=answer_review_contract,
             decision_candidate_projection_version=2,
-            decision_selection_policy=(APPROVED_QUANTITY_CORE_POLICY
+            decision_selection_policy=(decision_selection_policy
                 if answer_review_contract == 'subquestion-premises-v6' else None),
         )
         if len(("\nJSON:\n" + compact_prompt_json(candidate)).encode()) <= min(
@@ -1553,7 +1638,7 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
             service, record, [question], supported, view, use, compact,
             answer_review_contract=answer_review_contract,
             decision_candidate_projection_version=2,
-            decision_selection_policy=(APPROVED_QUANTITY_CORE_POLICY
+            decision_selection_policy=(decision_selection_policy
                 if answer_review_contract == 'subquestion-premises-v6' else None),
         )
         if len(("\nJSON:\n" + compact_prompt_json(candidate)).encode()) <= min(
@@ -1568,7 +1653,7 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
         payload = atomic_answer_payload(service, record, window, supported, view, use, compact,
                                        answer_review_contract=answer_review_contract,
                                        decision_candidate_projection_version=2,
-                                       decision_selection_policy=(APPROVED_QUANTITY_CORE_POLICY
+                                       decision_selection_policy=(decision_selection_policy
                                            if answer_review_contract == 'subquestion-premises-v6'
                                            else None))
         validate_atomic_handoff(service, record, payload, view)
@@ -1615,7 +1700,8 @@ async def atomic_answer_coverage(service, record, questions, compact, supported,
         allowed = {c["id"] for c in payload["claims"]}
         full_claims = [c.model_dump(mode="json") for c in supported if c.id in allowed]
         contract = answer_contract_from_system(
-            span.full_input.partition("\nJSON:\n")[0].rstrip("\n"), record.detail.output_language
+            span.full_input.partition("\nJSON:\n")[0].rstrip("\n"), record.detail.output_language,
+            delivery_policy=checked_delivery_policy(compact),
         )
         diagnostics = []
         dispatch = dispatch_row(span, question_ids=[q['question_id'] for q in window],
@@ -1697,6 +1783,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
         raise ValueError("Atomic selection changed")
     scope = f"{view.competitor}/{view.dimension}"
     receipt = _observations(detail, "question_atomic_delivery", use.id, scope=scope)
+    delivery_policy = checked_delivery_policy(receipt)
     review_projection_version = checked_review_projection_version(
         receipt.get("review_projection_version", 1)
     )
@@ -1750,6 +1837,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
         raise ValueError("Atomic question plan scope changed")
     planned = {r["question_id"]: r for r in plan_rows}
     actual_plans, reviewed_claim_ids = {}, set()
+    authority_ids = set()
     initial_payloads, initial_plans, merged_plans, claim_attempts = {}, {}, {}, {}
     repaired_qids, validated_dispatches = set(), []
     answer_contract = None
@@ -1786,7 +1874,8 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
         system, separator, raw = span.full_input.partition("\nJSON:\n")
         contract = 'subquestion-premises-v1'
         if span.name == ANSWER_NAME:
-            contract = answer_contract_from_system(system.rstrip('\n'), detail.output_language)
+            contract = answer_contract_from_system(system.rstrip('\n'), detail.output_language,
+                                                  delivery_policy=delivery_policy)
             if answer_contract is not None and answer_contract != contract:
                 raise ValueError('Atomic answer contracts mixed')
             answer_contract = contract
@@ -1805,6 +1894,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 review_projection_version=review_projection_version,
                 generation_projection_version=generation_projection_version,
                 answer_review_contract=contract,
+                delivery_policy=delivery_policy,
             )
             or len(("\nJSON:\n" + raw).encode()) > min(14000, use.max_bytes)
         ):
@@ -1838,6 +1928,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 service, record, view, packets, known_questions[qid], allowed, use,
                 generation_projection_version=generation_projection_version,
                 generation_repair=repair,
+                delivery_policy=delivery_policy,
             )
             if generation_projection_version >= 2:
                 validated_review_payload(raw, expected)
@@ -1846,6 +1937,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
             expected_inputs[span.id] = (system.rstrip('\n'), expected)
             try:
                 current, _, plans = parse_atomic_generation(span.full_output, payload, view, use)
+                authority_ids.update(authority_task_claim_ids(payload, current, plans))
             except (ValueError, TypeError, AttributeError):
                 from packages.research.evidence.source_exceptions import _missing_question_inputs
 
@@ -1913,7 +2005,8 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 view,
                 payload["questions"],
                 [actual_plans[ids[0]]],
-                handoff_context(service, record, view, payload["questions"], use),
+                dict(handoff_context(service, record, view, payload["questions"], use),
+                     **({'delivery_policy': delivery_policy} if delivery_policy else {})),
                 review_projection_version=review_projection_version,
             )
             if review_projection_version >= 2:
@@ -1942,6 +2035,12 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
         elif span.name == ANSWER_NAME:
             if dispatch["attempt"] != 0:
                 raise ValueError("Atomic answer attempt changed")
+            selected_policy = checked_decision_selection_policy(payload)
+            if ((selected_policy == REVIEWED_QUANTITY_CONJUNCTION_POLICY
+                    or receipt.get('decision_selection_policy')
+                    == REVIEWED_QUANTITY_CONJUNCTION_POLICY)
+                    and selected_policy != checked_decision_selection_policy(receipt)):
+                raise ValueError('Atomic quantity selection policy changed')
             audited = audit_report_claims(
                 [c for _, c in generated.values()],
                 reviews,
@@ -1949,6 +2048,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
                 boundaries,
                 available_facts=view.facts,
                 review_version=3,
+                authority_claim_ids=authority_ids,
             )
             supported = [r.claim for r in audited if r.status == "supported"]
             compact = dict(receipt, question_answer_plans=plan_rows,
@@ -2038,6 +2138,12 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
             ):
                 raise ValueError("Atomic published claim differs from actual delivery")
         for answer in audit.answer_coverage:
+            if answer.resolution == 'insufficient':
+                from packages.agents.writer.price_answers import verified_missing_price_answer
+                if not verified_missing_price_answer(detail, snapshot, answer, view.competitor,
+                        claims=tuple(row.claim for row in published)):
+                    raise ValueError('Atomic price limitation changed')
+                continue
             if answer.claim_ids and answer != answers.get(answer.question_id):
                 raise ValueError("Atomic published answer differs from actual review")
     return dict(
@@ -2048,6 +2154,7 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
         sent_fact_ids=set(sent),
         answers=answers,
         receipt=receipt,
+        authority_claim_ids=authority_ids,
         **({'decision_review': decision_reviews} if answer_contract == 'subquestion-premises-v6'
            else {}),
     )

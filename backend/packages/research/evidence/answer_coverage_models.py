@@ -38,7 +38,9 @@ class AnswerSubquestionBinding(BaseModel):
     claim_ids: tuple[str, ...] = Field(default=(), max_length=8)
     conclusion: Literal["yes", "no", "depends", "unknown", "not_applicable"]
     relation: Literal["direct", "explicit_negative", "upper_bound", "resource_scope",
-                      "permission_entailment", "destructive_effect", "unresolved"]
+                      "permission_entailment", "destructive_effect",
+                      "classification_non_entailment",
+                      "unresolved"]
     support_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 

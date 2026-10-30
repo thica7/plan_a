@@ -2752,7 +2752,7 @@ export interface components {
              * Relation
              * @enum {string}
              */
-            relation: "direct" | "explicit_negative" | "upper_bound" | "resource_scope" | "permission_entailment" | "destructive_effect" | "unresolved";
+            relation: "direct" | "explicit_negative" | "upper_bound" | "resource_scope" | "permission_entailment" | "destructive_effect" | "classification_non_entailment" | "unresolved";
             /** Support Digest */
             support_digest: string;
         };

@@ -7,10 +7,10 @@ from packages.knowledge.models import KnowledgeScope
 from packages.knowledge.repository import KnowledgeRepository
 from packages.orchestrator.answer_context import audit_answer_boundaries, report_answer_claim_cards
 from packages.orchestrator.scoping import build_redo_scope
+from packages.research.evidence.report_claims import audit_report_claims
 from packages.research.evidence.snapshot import _document_problem
 from packages.research.evidence.snapshot_models import canonical_json
 from packages.research.evidence.views import select_evidence_view
-from packages.research.evidence.report_claims import audit_report_claims
 from packages.schema.decision_brief import safe_decision_brief_text
 from packages.schema.models import QCIssue
 from packages.sources import source_tokens
@@ -24,6 +24,7 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
     for index, audit in enumerate(record.detail.report_dimension_audits):
         reasons = set()
         decision_reviews = {}
+        authority_ids = set()
         use = uses.get(audit.consumption_id)
         if not producer_verified or dependency is None or audit.consumption_id not in dependency.consumption_ids:
             reasons.add("claim_producer_unverified")
@@ -49,17 +50,21 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                     replay = replay_atomic_delivery(
                         service, record.detail, snapshot, use, view, audit=audit)
                     decision_reviews = replay.get('decision_review', {})
+                    authority_ids = replay.get('authority_claim_ids', set())
                 except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
                     reasons.add("question_atomic_replay_failed")
             published = [c for c in audit.claims if c.status == "supported"]
             from packages.agents.writer.question_retrieval import _eligible_facts
             discovery = _eligible_facts(snapshot, audit.competitor, audit.dimension) if audit.dimension == 'feature' else view.facts
             replayed = audit_report_claims([c.claim for c in published], [c.review for c in published if c.review],
-                view, boundaries, available_facts=discovery, review_version=audit.claim_review_version)
+                view, boundaries, available_facts=discovery,
+                review_version=audit.claim_review_version,
+                authority_claim_ids=authority_ids)
             if any(c.status != "supported" for c in replayed):
                 reasons.add("claim_review_replay_failed")
             from packages.agents.writer.answer_presentation import (
-                observation_claims, question_coverage_matches,
+                observation_claims,
+                question_coverage_matches,
             )
             for item in observation_claims(record.detail, audit):
                 clause = safe_decision_brief_text(item.claim.text) + " " + "".join(f"[source:{sid}]" for sid in item.claim.source_ids)
@@ -68,7 +73,9 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
             if any(size > use.max_bytes for size in audit.review_context_bytes):
                 reasons.add("claim_review_context_exceeded")
             from packages.agents.writer.answer_coverage import (
-                coverage_resolution_reasons, is_qualified_partial_clarification, research_questions,
+                coverage_resolution_reasons,
+                is_qualified_partial_clarification,
+                research_questions,
             )
             questions = research_questions(record.detail, audit.competitor, audit.dimension)
             expected = {item['question_id']: item['question'] for item in questions}
@@ -77,11 +84,7 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                 reasons.add('answer_coverage_scope_changed')
             published_ids = {item.claim.id for item in published}
             published_claims = [item.claim.model_dump(mode='json') for item in published]
-            from packages.agents.writer.price_answers import server_missing_price_answers
-            from packages.research.evidence.answer_coverage_models import ReportAnswerCoverage
-            price_answers = server_missing_price_answers(
-                record.detail, snapshot, questions, audit.competitor,
-                claims=tuple(item.claim for item in published))
+            from packages.agents.writer.price_answers import verified_missing_price_answer
             from packages.agents.writer.request_clarification import server_clarification_answer
             clarification_answers = {q['question_id']: server_clarification_answer(q) for q in questions}
             if audit.answer_binding_version == 3 and audit.claim_review_version != 3:
@@ -90,11 +93,11 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                                answer_facts=view.facts, answer_claims=published_claims,
                                answer_ids=published_ids,
                                review_contract=audit.answer_review_contract,
-                               current_decisions=decision_reviews):
+                               current_decisions=decision_reviews, price_product=audit.competitor,
+                               price_claims=tuple(row.claim for row in published)):
                 if item.resolution == 'insufficient':
-                    original = price_answers.get(item.question_id)
-                    return (item.status != 'partial' or original is None
-                            or item != ReportAnswerCoverage(**original))
+                    return not verified_missing_price_answer(record.detail, snapshot,
+                        item, price_product, claims=price_claims)
                 if item.binding_version in (2, 3) and item.binding_version != required_version:
                     return True
                 if item.binding_version == 3 and item.resolution == 'clarification' and not item.claim_ids:

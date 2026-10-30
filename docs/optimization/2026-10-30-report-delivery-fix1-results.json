@@ -1,0 +1,117 @@
+{
+  "status": "not_deliverable",
+  "round": "fix1",
+  "artifact_directory": "data/artifacts/report-delivery-repair-fix1-2026-10-30",
+  "base_commit": "5af8302d01f990ebb35b20019d884d234168a12b",
+  "production_code_sha256": "7d3fd3d9d2e28ce25b7df437587ef988dd5c395cbeb03b16a9014d65e39c3f2c",
+  "content": {
+    "original_questions": {
+      "total": 8,
+      "pass": 4,
+      "partial": 3,
+      "fail": 1
+    },
+    "required_branches": {
+      "total": 22,
+      "text_coverage": {
+        "full": 16,
+        "partial": 3,
+        "none": 3
+      },
+      "selected_support": {
+        "full": 12,
+        "none": 5,
+        "request-only": 5
+      }
+    },
+    "reports": {
+      "total": 4,
+      "text_deliverable": 0,
+      "text_plus_evidence_deliverable": 0,
+      "all_claims_atomic_deliverable": 0,
+      "strict_system_qa_deliverable": 0
+    },
+    "visible_claims": {
+      "draft_texts": 11,
+      "independent_visible_scenario_conclusions": 1,
+      "total": 12,
+      "support": {
+        "full": 11,
+        "partial": 1
+      },
+      "atomic": 5,
+      "sensitivity_without_extra_scenario": {
+        "total": 11,
+        "support": {
+          "full": 10,
+          "partial": 1
+        },
+        "atomic": 5
+      },
+      "historical_quote_accuracy_comparison_allowed": false
+    },
+    "systemQA": {
+      "reports_with_blockers": 4,
+      "blocker_count": 14
+    }
+  },
+  "runtime": {
+    "transports": 87,
+    "known_tokens": 308993,
+    "unknown_usage_spans": 0,
+    "provider_bill_usd": null,
+    "configured_alias": "deepseek-flash",
+    "verified_weights": null,
+    "qa_planned": 29,
+    "qa_sent": 29,
+    "qa_valid": 29,
+    "qa_unsent": 0,
+    "qa_timeout": 0
+  },
+  "engineering": {
+    "backend_passed": 9215,
+    "backend_skipped": 1,
+    "backend_warnings": 250,
+    "frontend_passed": 340,
+    "frontend_build": true,
+    "ruff_added": 0,
+    "related_tests": 503
+  },
+  "audit_method": "independent review agent reads final report and exact selected support against pre-reviewed rubric; no new human signoff",
+  "public_reports": [
+    {
+      "product": "trello",
+      "path": "docs/optimization/reports/2026-10-30-delivery-fix1/trello.md",
+      "sha256": "2addc5dd2b965ad14d3239f04f4f9f303a8b7922ee12bbe6c13721de6dc2efae"
+    },
+    {
+      "product": "cloudflare",
+      "path": "docs/optimization/reports/2026-10-30-delivery-fix1/cloudflare.md",
+      "sha256": "66bc25850b3f4258ec0c6b3e2051cba48aa087c93445d70971eeabb0a36c8152"
+    },
+    {
+      "product": "bitwarden",
+      "path": "docs/optimization/reports/2026-10-30-delivery-fix1/bitwarden.md",
+      "sha256": "c2fd9a2cd94e92fb6127ef793439647a92300be0d9d12ca10f39a5da44472e4b"
+    },
+    {
+      "product": "1password",
+      "path": "docs/optimization/reports/2026-10-30-delivery-fix1/1password.md",
+      "sha256": "5877c8aedd602e4ceff605c173d6bf9040dcff37763a19856a087043831e8686"
+    }
+  ],
+  "limits": [
+    "Fixed 2026-10-21 captures; no fresh discovery/fetch; not full Graph E2E",
+    "Counts and QA labels do not establish semantic delivery",
+    "Historical visible-claim denominators differ; no direct accuracy-rate comparison",
+    "Experimental Writer flags remain disabled by default",
+    "No Docker execution or model training"
+  ],
+  "evidence_sha256": {
+    "independent-content-audit.json": "0f58b7d582cac1a8c33607d8016437c12daedee60cfb2b9fd08a647ef627a136",
+    "independent-content-verification.json": "f3ba8c7bec77aed4f4452af88e2230f8b6cb35990b587fbb39f2523035becb91",
+    "root-runtime-verification.json": "58ee4fe66aec4be1c3d5663f8c1dc88f0246fb75d30e6a49bf837bf02a1b25a4",
+    "root-source-immutability.json": "77f7b49a9c154ea0d0054195d70a42eb76b1fb5a94fca6bac6a721d2ebb5dac5",
+    "full-backend-source-final-verification.json": "94b587b27114fb356824e0fce71877255f8c6a5bfd5e74f92fe2a363280d9f02"
+  }
+}
