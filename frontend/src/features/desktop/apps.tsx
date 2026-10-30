@@ -1,4 +1,5 @@
 import { Route, Routes } from 'react-router-dom';
+import { Submissions } from '../../pages/Submissions';
 import { NewRun } from '../../pages/NewRun';
 import { RunDetail } from '../../pages/RunDetail';
 import { HistoryPage } from '../../pages/History';
@@ -12,6 +13,7 @@ import { translate, type Locale } from '../../stores/i18n';
 
 export const desktopApps = [
   { href: '/', title: '研究任务', icon: 'research', subtitle: '从问题开始研究' },
+  { href: '/submissions', title: '提交中心', icon: 'tasks', translationKey: 'submissions', subtitle: '提交、派发与研究次数' },
   { href: '/history', title: '任务管理器', icon: 'tasks', subtitle: '任务进度与历史' },
   { href: '/knowledge', title: '知识库', icon: 'book', subtitle: '可复用的知识文档' },
   { href: '/files', title: '证据文件', icon: 'folder', subtitle: '来源、文件与引用' },
@@ -23,17 +25,19 @@ export const desktopApps = [
   { href: '/settings', title: '系统设置', icon: 'settings', subtitle: '主题、语言与状态' },
 ];
 export function localizedDesktopApps(locale: Locale) {
-  return desktopApps.map(app => ({ ...app, title: translate(`desktop.app.${app.icon}.title`, locale), subtitle: translate(`desktop.app.${app.icon}.subtitle`, locale) }));
+  return desktopApps.map(app => ({ ...app, title: translate(`desktop.app.${app.translationKey ?? app.icon}.title`, locale), subtitle: translate(`desktop.app.${app.translationKey ?? app.icon}.subtitle`, locale) }));
 }
 export function appForHref(href: string, locale: Locale = 'zh-CN') {
   const path = new URL(href, 'https://desktop.local').pathname;
   const apps = localizedDesktopApps(locale);
+  if (path === '/submissions' || path.startsWith('/submissions/')) return apps.find(app => app.href === '/submissions')!;
   if (path.startsWith('/runs/')) return { ...apps[0], title: `${translate('desktop.analysis', locale)} · ${path.slice(6).slice(0, 16)}` };
   return apps.find(a => a.href === path) ?? { ...apps[0], title: translate('desktop.workbench', locale) };
 }
 export function BusinessRoutes() {
   return <Routes>
     <Route path="/" element={<NewRun />} /><Route path="/runs/:runId" element={<RunDetail />} />
+    <Route path="/submissions" element={<Submissions />} /><Route path="/submissions/:submissionId" element={<Submissions />} />
     <Route path="/history" element={<HistoryPage />} /><Route path="/knowledge" element={<KnowledgePage />} />
     <Route path="/search" element={<SearchPage />} /><Route path="/crawl" element={<CrawlPage />} />
     <Route path="/settings" element={<DesktopSettings />} /><Route path="/files" element={<FilesApp />} />

@@ -9107,6 +9107,11 @@ export interface components {
         /** RuntimeConfig */
         RuntimeConfig: {
             /**
+             * Task Center Enabled
+             * @default false
+             */
+            task_center_enabled: boolean;
+            /**
              * Default Execution Mode
              * @enum {string}
              */

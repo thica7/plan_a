@@ -1,0 +1,443 @@
+{
+  "schema_version": 1,
+  "validation_date": "2026-10-30",
+  "scope": "P0 private native persistent demo workbench; no real model semantic acceptance",
+  "status": "native_and_engineering_verified_prepublication_snapshot",
+  "baseline_commit": "b744fa0e1db4857df99668ae333687eb2e636a55",
+  "design_plan_commit": "f6eefbe8e52c86d300647e2fe701774c9becef35",
+  "branch": "codex/pastoral-desktop",
+  "git_publication": "Not asserted by this document; inspect containing Git history and actual remote verification.",
+  "implemented": [
+    "Private PostgreSQL 15 workspace with full enterprise schema and existing submission-center migrations",
+    "Preview-by-default init/start/status/stop CLI with process identity checks and retained data",
+    "Controlled demo child environment and shared profile-local journal/checkpoints",
+    "Pixel desktop submission list/detail, UTC monthly quota snapshot and reserve/release pagination",
+    "Strict runtime capability routing, stable same-payload retry key and no error fallback to legacy creation",
+    "Visibility-aware serial polling, cancellation/retry server refresh and stale-response rejection",
+    "Real native API/Relay/demo-Graph persistence and fault acceptance utility",
+    "Additive enterprise completed_with_blockers CHECK migration through explicit management path"
+  ],
+  "runtime": {
+    "platform_tested": "macOS arm64",
+    "postgres": "15.18 (Homebrew)",
+    "pgvector": "0.8.7",
+    "enterprise_public_table_count": 19,
+    "task_center_migration_count": 3,
+    "global_task_center_default": false,
+    "profile_task_center_enabled": true,
+    "execution_mode": "demo",
+    "orchestration": "langgraph",
+    "global_running_limit": 2,
+    "workspace_running_limit": 1,
+    "profile_default": "runs/local-workspace",
+    "backend_url": "http://127.0.0.1:8010",
+    "frontend_url": "http://127.0.0.1:5180",
+    "submission_path": "/submissions",
+    "all_actions_preview_by_default": true,
+    "status_also_requires_execute": true,
+    "stop_preserves_data": true,
+    "destroy_action": false,
+    "old_data_auto_import": false,
+    "machine_boot_auto_start": false,
+    "all_data_in_postgres_claimed": false,
+    "storage": {
+      "postgres": [
+        "enterprise projects/runs/report versions",
+        "submissions/outbox/task-count quota"
+      ],
+      "sqlite": [
+        "run_journal.db",
+        "graph_checkpoints.db",
+        "knowledge.db",
+        "kb_cache.db",
+        "traces.db",
+        "preference_memory.db"
+      ],
+      "files": [
+        "artifacts",
+        "vite-cache",
+        "private runtime records and logs"
+      ]
+    }
+  },
+  "isolation": {
+    "postgres_listen_addresses": "",
+    "postgres_transport": "private Unix socket only",
+    "socket_location_pattern_macos": "/private/tmp/pwpg-{uid}-{rootHash20}",
+    "http_bind": "127.0.0.1",
+    "local_socket_auth": "trust",
+    "trust_boundary": "same operating-system user; loopback demo with API auth disabled",
+    "private_directory_mode": "0700",
+    "private_record_mode": "0600",
+    "app_role": "plan_a_workspace_app",
+    "app_superuser": false,
+    "app_bypass_rls": false,
+    "app_inherit": false,
+    "app_owner_membership": false,
+    "app_ddl_or_truncate": false,
+    "management_connection_in_app_environment": false,
+    "final_controlled_children_load_root_or_frontend_env_files": false,
+    "provider_keys_inherited": false,
+    "redis_temporal_qdrant_http_inherited": false,
+    "whole_session_never_read_env_claimed": false,
+    "vite_guard": "dev-null envDir plus explicit loadEnv guard; actual Vite core Node checks"
+  },
+  "native_acceptance": {
+    "status": "passed",
+    "real_postgres_app_api_relay_demo_graph": true,
+    "enterprise_report_api_matches_postgres": true,
+    "api_relay_restart_preserves_identity": true,
+    "postgres_full_stack_restart_snapshot_equal": true,
+    "same_key_requests": 20,
+    "same_key_submission_count": 1,
+    "same_key_reserve_count": 1,
+    "last_quota_competition": {
+      "accepted": 1,
+      "http_429": 9
+    },
+    "cancel_release_once": true,
+    "pending_without_relay_resumes_original_submission": true,
+    "database_down_http_status": 503,
+    "original_database_down_key_recovered": true,
+    "recovered_replays_http_202": 2,
+    "recovered_replays_same_submission_and_one_reserve": true,
+    "original_fault_submission_completed_and_survived_restart": true,
+    "recovery_observation": {
+      "readyz_dependencies_200_before_all_posts_recovered": true,
+      "stale_pool_post_503_count": 3,
+      "observed_seconds_until_202_approximately": 0.65,
+      "bounded_same_key_retry_used": true,
+      "immediate_all_requests_success_or_sla_claimed": false
+    },
+    "cleanup": {
+      "spawned_before_registry_recorded": true,
+      "old_new_service_exit_identity_separate": true,
+      "normal_exit_proof_required_for_success": true,
+      "abnormal_exit_failure_sticky": true,
+      "active_or_unknown_owner_not_signalled": true,
+      "successful_fixture_removed_only_after_proven_shutdown": true,
+      "failed_diagnostics_retained": true,
+      "user_profile_used_as_deletable_fixture": false
+    }
+  },
+  "browser_acceptance": {
+    "status": "passed",
+    "new_submission_via_ui": true,
+    "mode": "quick/ai/demo",
+    "separate_dispatch_and_run_status": true,
+    "opened_actual_run_report": true,
+    "normal_full_stack_stop_and_independent_cli_start": true,
+    "old_processes_and_postgres_physically_exited": true,
+    "browser_reload_original_report": true,
+    "before_after_snapshot_equal": true,
+    "report_versions": 1,
+    "reserve_entries": 1,
+    "event_count": 35,
+    "checkpoint_count": 19,
+    "desktop_maximize_minimize_taskbar_restore": true,
+    "narrow_and_desktop_viewports": true,
+    "services_left_running_for_local_use": true,
+    "real_model_or_content_quality_verified": false
+  },
+  "enterprise_status_migration": {
+    "new_file": "backend/db/postgres/002_run_delivery_status.sql",
+    "original_001_unchanged": true,
+    "initial_failure_sqlstate": "23514",
+    "management_migration_order": [
+      "001",
+      "002"
+    ],
+    "same_transaction_and_advisory_lock": true,
+    "added_state": "completed_with_blockers",
+    "original_five_states_retained": true,
+    "invalid_state_rejected": true,
+    "restricted_app_read_write_verified": true,
+    "old_database_upgrade_and_repeat_migration_preserve_data": true,
+    "api_automatic_ddl": false,
+    "qa_or_publication_rule_changed": false,
+    "real_model_blocked_graph_verified": false
+  },
+  "engineering_gates": {
+    "backend": {
+      "status": "passed",
+      "first_run": {
+        "passed": 9174,
+        "failed": 1,
+        "skipped": 1,
+        "warnings": 250,
+        "pytest_seconds": 430.26,
+        "exit_code": 1,
+        "skip_test": "backend/tests/integration/test_postgres_rls_smoke.py:12",
+        "skip_reason": "Legacy smoke requires ENTERPRISE_RLS_SMOKE_DATABASE_URL"
+      },
+      "private_native_pg_rls_a_b_a_verified": true,
+      "passed": 9175,
+      "failed": 0,
+      "skipped": 1,
+      "warnings": 250,
+      "pytest_seconds": 429.15,
+      "driver_seconds": 431.555,
+      "exit_code": 0,
+      "skip_test": "backend/tests/integration/test_postgres_rls_smoke.py:12",
+      "skip_reason": "Legacy smoke requires ENTERPRISE_RLS_SMOKE_DATABASE_URL"
+    },
+    "frontend": {
+      "status": "passed",
+      "files": 58,
+      "tests": 340,
+      "exit_code": 0
+    },
+    "vite_node_guard": {
+      "status": "passed",
+      "tests": 8,
+      "exit_code": 0
+    },
+    "standard_openapi_typescript_regeneration": {
+      "status": "passed",
+      "tools": [
+        "backend/scripts/export_openapi.py",
+        "openapi-typescript"
+      ],
+      "method": "temporary outputs and byte comparison with protected source files",
+      "exit_codes": [
+        0,
+        0
+      ],
+      "json_byte_identical": true,
+      "typescript_byte_identical": true,
+      "protected_source_rewritten": false,
+      "root_make_sync_openapi_executed": false
+    },
+    "production_build": {
+      "status": "passed",
+      "command": "pnpm --dir frontend build",
+      "exit_code": 0,
+      "vite_version": "5.4.21",
+      "modules": 1996,
+      "duration_seconds": 7.301
+    },
+    "ruff": {
+      "status": "passed_introduced_zero",
+      "scope": [
+        "backend",
+        "scripts/workbench_runtime.py"
+      ],
+      "raw_command_exit_code": 1,
+      "baseline_count": 4023,
+      "current_count": 4023,
+      "introduced": 0,
+      "removed": 0,
+      "comparison": "Counter(path, code, message, exact source line)",
+      "whole_repository_clean_claimed": false,
+      "source_phase": "includes final test module cache isolation fix",
+      "includes_final_test_isolation_fix": true
+    },
+    "interaction_audit": {
+      "whole_repository_errors": 4,
+      "whole_repository_warnings": 89,
+      "legacy_source": "DimensionEvidencePanel",
+      "task3_changed_scope_errors": 0,
+      "task3_changed_scope_warnings": 0,
+      "whole_repository_pass_claimed": false
+    },
+    "pre_release_secret_scan": {
+      "status": "passed",
+      "scope": "tracked files plus non-ignored new source/document candidates at the pre-release snapshot",
+      "candidate_files": 1634,
+      "findings": 0,
+      "private_env_and_runtime_directories_excluded": true,
+      "final_staged_content_verified_by_this_scan": false
+    },
+    "final_staged_check": {
+      "scope": "actual staged content after document freeze",
+      "execution": "root verifies exact scope and secrets before commit",
+      "status": "not_asserted_by_this_prepublication_snapshot",
+      "verification_record": "data/artifacts/persistent-workbench-2026-10-30/final-git-verification.json",
+      "verification_record_availability": "local_only_gitignored",
+      "publication_authority": "actual containing Git history and remote verification"
+    }
+  },
+  "failure_preservation": {
+    "initial_frontend_exit_code": 1,
+    "initial_frontend_business_tests_passed": 340,
+    "cause": "Vitest collected a Node:test-only suite",
+    "fix": "Byte-identical rename from .test.mjs to .check.mjs; Node suite run separately",
+    "node_assertions_sha256": "9bed469f208ce59a665f2f4acf6887cd14fd0952c4ae89fe90e17952ae308390",
+    "assertions_removed_or_vitest_exclude_changed": false,
+    "first_failures_retained": true,
+    "backend_first_failure": {
+      "cause": "test module import-cache isolation",
+      "production_relay_failure": false,
+      "fix": "Patch both sys.modules and parent scripts package attribute in the test",
+      "production_code_changed_for_this_fix": false,
+      "original_assertion_count": 77,
+      "original_assertions_retained": true,
+      "related_tests_passed": 50,
+      "reverse_order_tests_passed": 2,
+      "restore_probe_passed": true,
+      "fresh_spec_and_quality_review": "PASS/APPROVE",
+      "final_full_backend_rerun": {
+        "status": "passed",
+        "passed": 9175,
+        "skipped": 1,
+        "exit_code": 0
+      }
+    }
+  },
+  "review": {
+    "task1_to_4_spec_and_quality": "passed",
+    "test_cache_isolation_fresh_spec_and_quality": "PASS/APPROVE",
+    "task5_document_spec": "Subsequent independent review of frozen documents; recorded in final handoff",
+    "final_overall_quality": "Subsequent independent review; recorded in final handoff"
+  },
+  "historical_report_semantics": {
+    "date": "2026-10-28",
+    "text_complete_reports": "1/4",
+    "text_and_evidence_complete_reports": "0/4",
+    "overall": "not_qualified",
+    "original_delivery_preserved": true,
+    "upgraded_by_demo_or_engineering_tests": false
+  },
+  "not_verified": [
+    "real-model complete Graph including blocked-state execution and report semantic quality",
+    "new real fetching and production semantic RAG",
+    "Docker full Relay/scripts/management-secret isolation wiring and PostgreSQL 17 enterprise combination",
+    "Windows native runtime",
+    "real Temporal and Redis",
+    "cross-host execution or migration",
+    "backup restore drill, cross-path restore and logical migration",
+    "machine reboot auto-start, power loss or forced-kill recovery",
+    "high concurrency capacity or steady-state/recovery SLA"
+  ],
+  "no_kafka_added": true,
+  "no_model_training": true,
+  "evidence_policy": {
+    "summary_only": true,
+    "raw_directory": "data/artifacts/persistent-workbench-2026-10-30",
+    "availability": "local_only_gitignored",
+    "raw_diagnostics_or_screenshots_uploaded_to_git": false,
+    "public_readme_embeds_raw_ignored_assets": false
+  },
+  "evidence": {
+    "pgvector_smoke": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/pgvector-result.json",
+      "sha256": "d5f191d9d7f5ae9561f18d8c0b0495c0e201a901f77c8777c8d281f71390ddc1",
+      "availability": "local_only_gitignored"
+    },
+    "native_acceptance": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/impl-task4-run-yx74mm4h/result.json",
+      "sha256": "2ef65223c2f53181157e8ee035ac656e21402ba099e76cf8ce9f5362018b75e1",
+      "availability": "local_only_gitignored"
+    },
+    "cleanup_quality_verification": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/review-task4-quality-fix2-verification-summary.json",
+      "sha256": "9fbb089c8b562faec0f60e55881fc7483331d2e6f1a0a7b69d253c6cd26f5289",
+      "availability": "local_only_gitignored"
+    },
+    "root_browser": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-browser-ui.json",
+      "sha256": "eeb932eca0252a003d2743e6d3c79b1a3202637cee277dd05ee9b063c63449b9",
+      "availability": "local_only_gitignored"
+    },
+    "root_before_restart": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-persistent-proof-before.json",
+      "sha256": "ac041f887d740ba0b671b19cab6dc9a76ea088b4561f45e6f188d0a44733d68e",
+      "availability": "local_only_gitignored"
+    },
+    "root_after_restart": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-persistent-proof-after.json",
+      "sha256": "e1ad31c47ba753672894a1a56aff71baf9a25dcd4bd6c0ed486fbac663543107",
+      "availability": "local_only_gitignored"
+    },
+    "root_physical_stop": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-persistent-stop-proof.json",
+      "sha256": "3fa05239718622cab094a84ac74bebaa1f62f7f85ed899b04e7403fd780ac538",
+      "availability": "local_only_gitignored"
+    },
+    "root_frontend": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-frontend-full-fix1-result.json",
+      "sha256": "1f171bf18159261219cf35bc30e8c64fcc6ba3e91f6b481b14835fb811730a93",
+      "availability": "local_only_gitignored"
+    },
+    "root_frontend_first_failure": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-frontend-full-first-result.json",
+      "sha256": "585af9823aa710809cfb300cc15be421d7917a3cb67db0023895bb304846d872",
+      "availability": "local_only_gitignored"
+    },
+    "node_guard_unchanged_bytes": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-node-guard-rename-proof.json",
+      "sha256": "f89cd7ff96756a5a5031577bbbbc44ea27937b211c8063d50bcfdc2026de6527",
+      "availability": "local_only_gitignored"
+    },
+    "root_ruff": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-ruff-final-result.json",
+      "sha256": "c76d36b28dccf1bff97bbf7e8f7f34967c0cf68b98c579d33dd5d67e4200e648",
+      "availability": "local_only_gitignored"
+    },
+    "final_task4_source_freeze": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/impl-task4-fix2-freeze.json",
+      "sha256": "9f715a72e1fa2f331bfed71557ee13d29e786d700f140c98ef631312203f4407",
+      "availability": "local_only_gitignored"
+    },
+    "final_task4_quality_report": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/review-task4-quality-fix2-report.md",
+      "sha256": "b0f2dcd48fd4431dcc5c3ce434e63066751c7c4e0aee561d93f75dfe27da3416",
+      "availability": "local_only_gitignored"
+    },
+    "root_backend_first_run": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-backend-full-result.json",
+      "sha256": "0ef12af00537190dab0e3400aaec9eb01999fec7fc6a6e22f36c78d57136b4f5",
+      "availability": "local_only_gitignored"
+    },
+    "root_openapi": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-openapi-result.json",
+      "sha256": "ee03a0ba1cae3cf4bb4299988165ef959c09c5fa67eb33fa05ebc20623c48fca",
+      "availability": "local_only_gitignored"
+    },
+    "root_build": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-build-result.json",
+      "sha256": "5ffa612a98807855cebd2f33928d0ec31d98494607e0e0eec539593c52278ac4",
+      "availability": "local_only_gitignored"
+    },
+    "test_isolation_freeze": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/impl-test-isolation-freeze.json",
+      "sha256": "8257f25f7fd7b3ab8dfb7f558435cbc67e21d296e77935195e9313fdf6b11091",
+      "availability": "local_only_gitignored"
+    },
+    "test_isolation_spec": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/review-test-isolation-spec-report.md",
+      "sha256": "7e8585d1cd6816e1284acd9b40676d742cf1ac533aa2c42d50169a4b68c6b2a0",
+      "availability": "local_only_gitignored"
+    },
+    "test_isolation_quality": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/review-test-isolation-quality-report.md",
+      "sha256": "203512ee5fc33388ae4232bbcafca03387c7adad3fecabf95cafa27047ea16c6",
+      "availability": "local_only_gitignored"
+    },
+    "root_ruff_final_fix1": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-ruff-final-fix1-result.json",
+      "sha256": "e0834d171bac3ecbdfd72507c824f218cf9e1cb67b08c9987e8173e7e3576865",
+      "availability": "local_only_gitignored"
+    },
+    "root_pre_release_secret_scan": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-secret-scan-result.json",
+      "sha256": "39ac5db2b5d59c64fab496505368bafa31f60f45aaaefd9379dc602539cf0113",
+      "availability": "local_only_gitignored"
+    },
+    "root_backend_final": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-backend-full-fix1-result.json",
+      "sha256": "c8d5bbe3151c91fc227768d7f96be4ca7843649454b56ef3273b93e0e1446bde",
+      "availability": "local_only_gitignored"
+    },
+    "root_backend_final_raw": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-backend-full-fix1.log",
+      "sha256": "305c45af5362b01f9cdc2cb1b7f438da9f0a295daef925d3ec4b675b97849275",
+      "availability": "local_only_gitignored"
+    },
+    "root_backend_first_raw": {
+      "path": "data/artifacts/persistent-workbench-2026-10-30/root-backend-full.log",
+      "sha256": "b58d9eb08bb1daca2116a96147ca29f1366245f35bbba2f4ee39859a0bcd9eb6",
+      "availability": "local_only_gitignored"
+    }
+  }
+}

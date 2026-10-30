@@ -1,0 +1,27 @@
+.submissions-page { color: var(--ink, #354438); }
+.submission-toolbar, .submission-section-header, .submission-pagination, .submission-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.submission-toolbar { margin: 20px 0; padding: 14px; border: 2px solid #b6cba1; border-radius: 6px; background: #f7f8df; }
+.submissions-page label { display: grid; gap: 6px; font-weight: 600; }
+.submissions-page input, .submissions-page select { min-width: 170px; padding: 8px 10px; color: inherit; background: #fffef4; border: 1px solid #b5bf9d; border-radius: 4px; }
+.submissions-page button, .submissions-page a { border-radius: 4px; }
+.submissions-page button { padding: 8px 12px; color: #334c36; border: 1px solid #a5bd87; background: #edf2d1; cursor: pointer; }
+.submissions-page button:disabled { cursor: default; opacity: .65; }
+.submission-columns { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, 1fr); gap: 20px; align-items: start; }
+.submission-panel { padding: 20px; min-width: 0; background: #fffef2; border: 2px solid #c8d3ac; box-shadow: 3px 3px 0 #a7ba902e; }
+.submission-section-header { justify-content: space-between; margin-bottom: 18px; }
+.submission-section-header h2 { font-size: 18px; margin: 0; }
+.submission-notice { padding: 10px 12px; background: #f5f2d7; border-left: 3px solid #b1be82; line-height: 1.6; }
+.submission-list, .submission-ledger { list-style: none; padding: 0; margin: 18px 0; }
+.submission-list li { padding: 14px 0; border-bottom: 1px solid #dce3ca; }
+.submission-list li > div { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.submission-list p, .submission-ledger time { font-size: 12px; color: #67745d; }
+.submission-state { display: inline-block; padding: 4px 8px; background: #e6efd7; color: #40633f; border: 1px solid #bdcf9e; border-radius: 4px; font-size: 12px; }
+.submission-state-dispatch_failed { color: #8b493b; background: #f5e1cd; border-color: #dcb8a0; }
+.submission-state-cancelled { color: #6d7467; background: #eceee1; }
+.submission-facts > div { display: grid; grid-template-columns: 130px minmax(0, 1fr); padding: 9px 0; border-bottom: 1px solid #e5e8d6; }
+.submission-facts dt { color: #67745d; }.submission-facts dd { margin: 0; overflow-wrap: anywhere; }
+.submission-quota-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.submission-quota-grid > div { padding: 12px; border: 1px solid #d9e1c3; background: #f4f7e7; }.submission-quota-grid dd { font-size: 25px; margin: 6px 0 0; font-weight: 700; }
+.submission-ledger li { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; border-bottom: 1px solid #e5e8d6; font-size: 12px; }.submission-ledger time { width: 100%; }.submission-ledger code { overflow-wrap: anywhere; }
+.submission-pagination { margin-top: 18px; }.submissions-page .action-disabled-reason { font-size: 11px; color: #6b755f; }
+@media (max-width: 900px) { .submission-columns { grid-template-columns: minmax(0, 1fr); } }

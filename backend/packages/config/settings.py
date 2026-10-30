@@ -172,6 +172,10 @@ class Settings:
     llm_max_concurrency: int = 4
     execution_control_enabled: bool = False
     execution_control_journal_path: str = "runs/run_journal.db"
+    graph_checkpoint_path: str = "runs/graph_checkpoints.db"
+    kb_cache_path: str = "runs/kb_cache.db"
+    trace_db_path: str = "runs/traces.db"
+    preference_memory_path: str = "runs/preference_memory.db"
     execution_global_running_limit: int = 2
     execution_workspace_running_limit: int = 1
     execution_global_queue_limit: int = 32
@@ -382,6 +386,10 @@ def get_settings() -> Settings:
         execution_control_journal_path=os.getenv(
             "EXECUTION_CONTROL_JOURNAL_PATH", "runs/run_journal.db"
         ),
+        graph_checkpoint_path=os.getenv("GRAPH_CHECKPOINT_PATH", "runs/graph_checkpoints.db"),
+        kb_cache_path=os.getenv("KB_CACHE_PATH", "runs/kb_cache.db"),
+        trace_db_path=os.getenv("TRACE_DB_PATH", "runs/traces.db"),
+        preference_memory_path=os.getenv("PREFERENCE_MEMORY_PATH", "runs/preference_memory.db"),
         execution_global_running_limit=int(os.getenv("EXECUTION_GLOBAL_RUNNING_LIMIT", "2")),
         execution_workspace_running_limit=int(os.getenv("EXECUTION_WORKSPACE_RUNNING_LIMIT", "1")),
         execution_global_queue_limit=int(os.getenv("EXECUTION_GLOBAL_QUEUE_LIMIT", "32")),

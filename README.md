@@ -99,6 +99,32 @@ pnpm --dir frontend dev --host 127.0.0.1 --port 5173 --strictPort
 
 打开 [本地桌面](http://127.0.0.1:5173)。演示 API 不启动 Postgres、Temporal 或 Qdrant，演示报告不用于证明真实调研准确率。各终端用 Ctrl+C 停止。
 
+### 本机持久化工作台（2026-10-30 P0）
+
+需要保留新建项目、报告、提交和额度时，使用独立的原生 PostgreSQL 工作区。已在 macOS arm64、PostgreSQL **15.18 + pgvector 0.8.7** 验证完整企业 schema、受限应用角色及真实 API → Relay → LangGraph demo；项目／报告与提交／额度均落 PostgreSQL，执行日志、检查点和知识库存储仍使用工作区内 SQLite。旧演示数据不会自动导入。
+
+先安装与 PostgreSQL 15 匹配的 `initdb`、`pg_ctl`、`postgres`、`pg_config` 和 pgvector，并将对应工具目录加入 `PATH`；启动器只检查依赖。安装前述 Python／前端依赖后，在仓库根目录执行：
+
+```bash
+WORKBENCH_PYTHON=.venv/bin/python
+# 本次隔离 worktree 已有依赖的解释器为 ../plan_a/.venv/bin/python；
+# 在该 worktree 复用依赖时，把上一行改为 WORKBENCH_PYTHON=../plan_a/.venv/bin/python。
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py init
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py init --execute
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py start --execute
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py status --execute
+# 使用完毕后停止，保留全部工作区数据
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py stop --execute
+```
+
+四个 action 默认均为零执行预览，`status` 也须加 `--execute` 才实际检查。默认工作区 `runs/local-workspace`，可用 `--workspace-dir` 指定独立目录；端口可用 `--backend-port`／`--frontend-port` 明确选择。打开[持久化桌面](http://127.0.0.1:5180)或[提交中心](http://127.0.0.1:5180/submissions)，API 为 `http://127.0.0.1:8010`。端口冲突会拒绝启动；重复 start 复用同配置的已验证进程。机器重启后需手动执行 start，没有系统开机自启。
+
+此入口固定为 demo、LangGraph、任务中心开启及全局运行 2／工作区 1；受控子环境关闭根／前端 env 文件加载，不继承模型凭据或 owner DSN。全局 `TASK_CENTER_ENABLED` 默认仍为 false。提交中心区分派发与运行状态，只在实际关联 run 后打开原分析详情；任务次数账本独立于模型 token／费用预算。
+
+API／前端仅绑定 loopback，PG 仅私有 Unix socket；同一系统用户属于信任边界，不能据此开放内网。停止后备份整个 profile，包含 PG、SQLite 和产物，并保留私有权限；当前未验证跨路径／跨机恢复，不能直接把 PG data 目录搬到另一台 Docker 使用。完整步骤见[部署说明第 8 节](docs/docker_deployment.md#8-原生-postgresql-本机持久化工作台p0)。
+
+已实际从浏览器创建演示提交、打开报告，全栈正常停启后重新加载原报告，PG／journal／事件／检查点快照一致。本轮独立全后端 **9175 通过、1 跳过**，全前端 **340 通过**，Vite 环境隔离 8 项通过；标准工具临时生成逐字节一致、生产构建通过，实际 Ruff 存量 4023／新增 0。首失败、修复、预发布扫描及完整边界见[本轮交付](docs/optimization/2026-10-30-persistent-workbench-delivery.md)和[脱敏结果](docs/optimization/2026-10-30-persistent-workbench-results.json)；提交前另核对实际暂存范围与扫描，发布以 Git 历史为准。报告内容质量、真实模型、生产语义 RAG、Docker、Temporal、Redis、跨主机及高并发容量均不由本轮 demo 证明；历史真实报告 0/4 结论保留，没有训练模型。
+
 ### 完整开发服务
 
 需要 Docker，配置 `.env` 后执行：
@@ -234,7 +260,7 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/eval_independent_retrieval.p
 
 ## 验证与交付边界
 
-最新工程门禁为上文 2026-10-30 提交中心验收。以下报告语义与调用数字均属于各自历史轮次，保留原始失败和未合格结论。
+本机持久化 P0 的工程与实机状态见上文及[本轮交付](docs/optimization/2026-10-30-persistent-workbench-delivery.md)；上一期 2026-10-30 提交中心门禁数字仍按原轮次保留。以下报告语义与调用数字均属于各自历史轮次，保留原始失败和未合格结论。
 
 2026-10-28 历史[已审核任务结论交付复验](docs/optimization/2026-10-28-reviewed-task-decisions-delivery.md)：**5/8题通过，22分支16通过／3部分／3失败；文字完整1/4，文本与证据完整0/4，整体仍未达标**。ANSWER前提v6、紧凑候选投影和显式数量核心策略已接实验实际入口。Bitwarden的collections否定经真实独立审核、签发、最终附着和正文发表各1次；旧记录不自动升级，未知与混合任务不走此策略。功能段人数强化、Trello角色／计费、Cloudflare CPU和1Password报价仍有缺口。
 

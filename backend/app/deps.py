@@ -41,25 +41,25 @@ def get_run_journal() -> RunJournal:
 
 @lru_cache
 def get_kb_cache() -> KBCache:
-    return KBCache.from_default_path()
+    return KBCache(Path(get_app_settings().kb_cache_path))
 
 
 @lru_cache
 def get_preference_memory() -> PreferenceMemoryStore:
     try:
-        return PreferenceMemoryStore.from_default_path()
+        return PreferenceMemoryStore(Path(get_app_settings().preference_memory_path))
     except (OSError, sqlite3.Error):
         return PreferenceMemoryStore.in_memory()
 
 
 @lru_cache
 def get_trace_store() -> TraceStore:
-    return TraceStore.from_default_path()
+    return TraceStore(Path(get_app_settings().trace_db_path))
 
 
 @lru_cache
 def get_graph_checkpointer() -> GraphCheckpointer:
-    return GraphCheckpointer.from_default_path()
+    return GraphCheckpointer(Path(get_app_settings().graph_checkpoint_path))
 
 
 @lru_cache

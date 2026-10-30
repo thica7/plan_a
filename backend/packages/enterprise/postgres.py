@@ -244,13 +244,14 @@ class EnterprisePostgresStore:
         )
 
     def migrate(self) -> None:
-        script = _schema_path().read_text(encoding="utf-8")
+        scripts = (_schema_path(), _schema_path().with_name("002_run_delivery_status.sql"))
         with self._service_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT pg_advisory_lock(%s, %s)", (816873309, 20260619))
                 try:
-                    for statement in _split_sql(script):
-                        cur.execute(statement)
+                    for script in scripts:
+                        for statement in _split_sql(script.read_text(encoding="utf-8")):
+                            cur.execute(statement)
                     self._copy_legacy_claim_records(cur)
                 finally:
                     cur.execute("SELECT pg_advisory_unlock(%s, %s)", (816873309, 20260619))

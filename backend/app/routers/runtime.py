@@ -23,6 +23,7 @@ def get_runtime(settings: SettingsDep) -> RuntimeConfig:
         and bool(settings.pydantic_ai_model_name)
     )
     return RuntimeConfig(
+        task_center_enabled=settings.task_center_enabled,
         default_execution_mode=settings.default_execution_mode,
         run_orchestration_backend=settings.run_orchestration_backend,
         demo_mode=settings.demo_mode,

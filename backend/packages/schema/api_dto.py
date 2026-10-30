@@ -394,6 +394,7 @@ class TelemetryRuntimeContract(BaseModel):
 class RuntimeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    task_center_enabled: bool = False
     default_execution_mode: Literal["demo", "real"]
     run_orchestration_backend: Literal["langgraph", "temporal"]
     demo_mode: bool

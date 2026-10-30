@@ -1,5 +1,9 @@
 import type { components } from "./openapi";
 export type { components, operations, paths } from "./openapi";
+export type SubmissionCreateRequest = components["schemas"]["SubmissionCreateRequest"];
+export type SubmissionView = components["schemas"]["SubmissionView"];
+export type SubmissionPage = components["schemas"]["SubmissionPage"];
+export type QuotaLedgerPage = components["schemas"]["QuotaLedgerPage"];
 
 export type RunStatus =
   | "queued"
@@ -1248,6 +1252,7 @@ export interface SkillSpec {
 }
 
 export interface RuntimeConfig {
+  task_center_enabled?: boolean;
   default_execution_mode: "demo" | "real";
   run_orchestration_backend: "langgraph" | "temporal";
   demo_mode: boolean;

@@ -1,6 +1,6 @@
 # 本机与内网演示部署
 
-2026-10-30 交付继续按用户要求不在开发电脑上执行 Docker。以下容器命令供另一台部署电脑使用；代码单测、假 Redis 与假模型测试不能代替这些实机验收。提交中心已在本机原生 PostgreSQL 15.18 验证，其容器接线和启用步骤见第 7 节。
+2026-10-30 交付继续按用户要求不在开发电脑上执行 Docker。以下容器命令供另一台部署电脑使用；代码单测、假 Redis 与假模型测试不能代替这些实机验收。第一期提交中心容器接线见第 7 节；本轮完整企业 PostgreSQL 15.18＋pgvector 0.8.7 的原生本机持久化工作台见第 8 节，两者的验收范围分别记录。
 
 ## 1. 部署电脑准备
 
@@ -180,6 +180,8 @@ unset TASK_CENTER_MIGRATION_DATABASE_URL
 
 预览不连接数据库、不读取连接秘密；`--execute` 才迁移并授予必要 DML。应用权限检查会拒绝 owner／superuser／bypass-RLS 和 schema DDL 权限。PowerShell 使用独立管理进程并在结束时清除对应环境变量。
 
+完整企业 PostgreSQL 部署还须包含新增的 `backend/db/postgres/002_run_delivery_status.sql`，由管理员通过企业存储的 `EnterprisePostgresStore.migrate()` 管理路径顺序应用 001＋002；提交中心迁移 CLI 不代替企业迁移。002 只扩展 run CHECK 以接纳 `completed_with_blockers`，不改变 QA／发布规则。应用 HTTP 不自动执行 DDL。本轮已验原生 PG15 的升级／重复迁移与受限 app 状态读写，尚未验 PG17 容器及真实模型 blocked Graph。
+
 ### 应用配置与 Relay
 
 在独立应用环境中注入受限 DSN，并为 API／Worker／Relay 使用一致的 journal、工作目录和 POSIX 共享卷。下面仅列非秘密参数；当前演示先采用 LangGraph，真实模型、Temporal 另行验收：
@@ -230,6 +232,73 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/run_submission_relay.py --ex
 正常停机顺序为停止入口接收、等待 Graph／Relay 与 metadata 工作、排空借用事务，最后关闭 driver 池；取消 metadata await 也要 join 正在运行的线程。让进程有完成清理的时间。恢复时核对租约 generation／token 与原业务身份；外部副作用属于至少一次投递，未知网络结果可能已付费或执行，不承诺 exactly-once。实际 Graph 仍受同机 SQLite／POSIX 执行归属约束，不能把 PostgreSQL 提交持久化当跨主机完整运行能力。
 
 本机验收和复跑工具见[第一期交付记录](optimization/2026-10-29-task-center-delivery.md)及[脱敏结果](optimization/2026-10-29-task-center-results.json)。Docker、真实 Temporal／Redis、PostgreSQL 17 完整 pgvector 企业投影、跨主机均未验；不增加 Kafka，不训练模型。
+
+## 8. 原生 PostgreSQL 本机持久化工作台（P0）
+
+这是独立于上述 Compose 的原生本机入口。2026-10-30 实测环境为 macOS arm64、PostgreSQL **15.18（Homebrew）＋pgvector 0.8.7**，完整企业 public 19 表与提交中心三份迁移。启动器目前要求 PG15 工具及其兼容扩展；不会安装软件。先安装 Python 3.11+ 后端依赖、Node.js／pnpm 前端依赖，并把包含 `initdb`、`pg_ctl`、`postgres`、`pg_config` 的 PG15 工具目录加入 `PATH`。pgvector 必须为该 PG15 构建，不能把另一主版本的扩展安装视为已满足依赖。此入口使用 POSIX 进程／权限机制，未验 Windows。
+
+### 初始化、启动、状态和停止
+
+从仓库根目录执行，所有 action 默认只预览，不创建目录／进程／数据库连接：
+
+```bash
+WORKBENCH_PYTHON=.venv/bin/python
+# 本次隔离 worktree 的可用解释器是 ../plan_a/.venv/bin/python；
+# 在该 worktree 复用依赖时设 WORKBENCH_PYTHON=../plan_a/.venv/bin/python。
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py init
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py start
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py status
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py stop
+# 真正执行，首次先 init，再 start
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py init --execute
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py start --execute
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py status --execute
+"$WORKBENCH_PYTHON" scripts/workbench_runtime.py stop --execute
+```
+
+默认 profile 为 `runs/local-workspace`；用 `--workspace-dir PATH` 选择独立目录，切勿指向旧业务目录。API 默认 `http://127.0.0.1:8010`，前端为 `http://127.0.0.1:5180`，提交中心位于 `/submissions`。可用 `--backend-port 8011 --frontend-port 5181` 选择端口，首次启动时明确传入，并在后续操作使用同一组参数。start 依次等待 PG、API readyz、Relay 真实就绪后启动 Vite；重复 start 复用同配置进程，冲突端口不会被自动杀掉。进程归属核 PID、UTC 创建时间、实际 argv、代码路径及 profile；身份不明时拒绝发信号。
+
+机器重启后手动执行 start；本轮未安装 launchd／systemd 或其他开机自启。stop 先关闭本工作区服务，再停 PG，保留数据，没有 destroy 命令；退出失败或归属未知时保留诊断与依赖，先排查再重试，勿删除 marker、锁或手工改 PID。
+
+### 信任边界与存储
+
+PG 的 `listen_addresses` 为空，仅使用工作区派生的私有短 Unix socket；macOS 实测目录形如 `/private/tmp/pwpg-{uid}-{rootHash20}`。profile 根／PG data 与 socket 目录为 0700，私有记录为 0600。初始化 CLI 使用管理角色，应用角色 `plan_a_workspace_app` 为 NOSUPERUSER／NOBYPASSRLS／NOINHERIT，不具 owner 成员关系、DDL 或 TRUNCATE 权限。Unix socket 使用本地 trust；同一系统用户属于信任边界。API／前端只绑定 loopback，演示关闭 API 鉴权，不能把它作为内网或公网部署配置。
+
+启动器为子进程构造受控环境，关闭根／frontend env 文件加载，不继承 provider key、owner DSN、Redis、Temporal、Qdrant HTTP；固定 `DEMO_MODE=true`、LangGraph、任务中心和同机执行控制。全局运行上限 2／工作区 1 是本轮本机配置，不是容量承诺。全局任务中心默认 false，旧入口与原 `.env` 不改。
+
+| profile 内路径 | 内容 |
+| --- | --- |
+| `postgres/data` | 企业项目／run／报告版本、提交／Outbox／额度及 schema |
+| `run_journal.db`、`graph_checkpoints.db` | API／Relay 共用的运行、事件与图检查点 |
+| `knowledge.db`、`kb_cache.db` | 现有知识库与缓存 SQLite |
+| `traces.db`、`preference_memory.db` | 追踪及偏好 SQLite |
+| `artifacts/`、`vite-cache/` | 报告等文件产物、前端缓存 |
+| `runtime/`、`postgres/` 下的私有记录／日志 | 归属、配置与诊断，勿公开上传 |
+
+旧 Memory 演示及其他 profile 的数据不会自动迁入。此 profile 没有使用 Qdrant HTTP 或真实语义模型；不能把完整企业 PG schema 可用视为所有知识库／执行数据已迁 PG，或生产 RAG 已验收。
+
+### 停机备份与恢复限制
+
+备份前在页面确认当前任务状态，停止本 profile 的 API／Relay／前端及 PG，并以 `status --execute` 确认退出；也须确认没有其他进程直写此 profile。随后以私有目录完整备份 `runs/local-workspace`，包含 PG data、全部 SQLite、产物和归属记录，保留文件权限。不要只复制运行中的 SQLite／PG 文件，不要只备份提交表；备份含业务资料，应留在本机私有位置，勿进 Git。
+
+本轮验证的是正常 stop／start 保留原路径数据，未完成备份恢复演练。归属标记含系统 UID、规范绝对路径和代码身份，不能承诺把备份移动到新路径或另一台机器后直接 start。原路径恢复也须在全停、保留当前副本并校验权限／版本后隔离验证；跨机应另行设计并验证 PostgreSQL 逻辑导出／导入及配套 SQLite／产物还原。不能直接把本机 PG15 data 目录拷入另一台 Docker／PG17 当迁移方案。
+
+### 独立复跑与已验范围
+
+以下验收器默认预览；`--execute` 仅自行分配随机私有临时 profile 和 loopback 端口，拒绝任意外部 DSN 或用户目录目标：
+
+```bash
+COMPETISCOPE_LOAD_ENV_FILES=0 PYTHONDONTWRITEBYTECODE=1 \
+  "$WORKBENCH_PYTHON" backend/scripts/verify_persistent_workbench.py
+COMPETISCOPE_LOAD_ENV_FILES=0 PYTHONDONTWRITEBYTECODE=1 \
+  "$WORKBENCH_PYTHON" backend/scripts/verify_persistent_workbench.py --execute
+```
+
+已验真实 PG／app pool／API／Relay／demo Graph、提交与一次 reserve 的绑定、API／Relay 重启及 PG 整栈重启、同键 20 请求一单、最后额度竞争、取消只释放一次、无 Relay 时 pending 及恢复、断库 503 和原故障 key 恢复完成。恢复探针实际观察到 readyz 双依赖 200 后旧连接池仍短暂 POST 503，随后有界同键重试得到相同单；不承诺就绪后每个请求立即成功或恢复 SLA。成功临时 fixture 仅在所有自有进程正常退出证据齐全后删除；失败保留私有诊断。
+
+浏览器已实际创建演示提交并打开原报告，正常全栈停启后重载原报告，提交／project／run／报告版本、一次 reserve、35 个事件和 19 个检查点快照一致。本轮独立全后端 9175 通过／1 跳过，全前端 340 项、Vite 隔离 8 项、标准工具临时生成比较及构建通过，Ruff 存量 4023／新增 0；首失败、修复及预发布扫描范围详见[本轮交付](optimization/2026-10-30-persistent-workbench-delivery.md)和[脱敏结果](optimization/2026-10-30-persistent-workbench-results.json)。提交前另核实际暂存范围与扫描，发布以 Git 历史为准。原始日志及截图只保存在 Git 忽略的本机 `data/artifacts/persistent-workbench-2026-10-30/`，公开文档不把它们当可下载资产。
+
+Docker 完整 Relay／脚本／owner 环境隔离接线仍需按第 7 节补齐；本轮未执行容器、真实模型／Temporal／Redis、生产语义 RAG、跨主机或高并发容量验收。报告内容未重新验收，历史真实报告 0/4 结论不变；不增加 Kafka，不训练模型。
 
 ## 本地开发启停（Windows / Mac / Linux）
 

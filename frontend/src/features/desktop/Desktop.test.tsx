@@ -119,3 +119,18 @@ it('restores the source router when programmatic navigation collides with an exi
   expect(within(source).getByText('/history')).toBeInTheDocument();
   expect(window.location.pathname + window.location.search + window.location.hash).toBe('/runs/a?view=quality#issue');
 });
+
+it("opens the submission center and localizes it separately from task manager", async () => {
+  render(<Desktop />);
+  await userEvent.click(screen.getByRole('button', { name: '提交中心' }));
+  expect(useDesktopStore.getState().windows.some(w => w.href === '/submissions')).toBe(true);
+  act(() => useI18n.getState().setLocale('en-US'));
+  expect(screen.getByRole('button', { name: 'Minimize Submission center' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Task manager' })).toBeInTheDocument();
+});
+
+it("assigns submission detail links to the submission application", async () => {
+  const { appForHref } = await import('./apps');
+  expect(appForHref('/submissions/s-1?workspace_id=other').href).toBe('/submissions');
+  expect(appForHref('/submissions/s-1', 'en-US').title).toBe('Submission center');
+});

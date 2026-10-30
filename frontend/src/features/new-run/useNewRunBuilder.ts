@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { createRun, getRuntime, getWorkspaceQuotaDecision, listScenarioPacks, listSkills } from "../../api/client";
+import { createSubmission, submissionErrorKey } from "../../api/submissions";
+import { workspaceIdForSearch, workspaceSearch } from "../../api/workspaceScope";
 import type {
   RunCreateRequest,
   RuntimeConfig,
@@ -16,7 +18,6 @@ import {
   scenarioCompetitorPreset,
 } from "./dimensions";
 import {
-  defaultWorkspaceId,
   depthBudgets,
   dynamicScenarioId,
   type CollaborationMode,
@@ -40,6 +41,7 @@ function approximateCasefold(value: string): string {
 
 export function useNewRunBuilder() {
   const navigate = useNavigate();
+  const workspaceId = workspaceIdForSearch(useLocation().search);
   const { t } = useTranslation();
   const [topic, setTopic] = useState("");
   const [targetName, setTargetName] = useState("");
@@ -68,6 +70,7 @@ export function useNewRunBuilder() {
   const [isSubmitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitInFlightRef = useRef(false);
+  const submissionIntentRef = useRef<{ body: string; key: string } | null>(null);
 
   useEffect(() => {
     getRuntime()
@@ -76,7 +79,7 @@ export function useNewRunBuilder() {
         setExecutionMode(config.default_execution_mode);
         setAutoRedoWarn(config.auto_redo_warn_enabled);
       })
-      .catch((err: Error) => setError(err.message));
+      .catch(() => setError(t('submissions.runtimeUnknown')));
 
     listSkills()
       .then((items) => {
@@ -94,10 +97,16 @@ export function useNewRunBuilder() {
       .then(setScenarioPacks)
       .catch((err: Error) => setError(err.message));
 
-    getWorkspaceQuotaDecision(defaultWorkspaceId)
-      .then(setQuotaDecision)
-      .catch(() => setQuotaDecision(null));
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    setQuotaDecision(null);
+    getWorkspaceQuotaDecision(workspaceId)
+      .then(decision => { if (!disposed) setQuotaDecision(decision); })
+      .catch(() => { if (!disposed) setQuotaDecision(null); });
+    return () => { disposed = true; };
+  }, [workspaceId]);
 
   const competitorList = useMemo(() => {
     if (competitorMode === "auto") {
@@ -123,7 +132,8 @@ export function useNewRunBuilder() {
     () => lockedDimensionsForScenario(selectedScenario),
     [selectedScenario],
   );
-  const runBlockedByQuota = quotaDecision?.allowed === false;
+  // The durable endpoint owns its reservation balance, including idempotent replay.
+  const runBlockedByQuota = runtime?.task_center_enabled !== true && quotaDecision?.allowed === false;
   const manualScopeError = useMemo(() => {
     if (competitorMode !== "manual" || !targetName.trim()) return null;
     const budget = depthBudgets[researchDepth];
@@ -211,7 +221,11 @@ export function useNewRunBuilder() {
       setError(t('newRun.invalidTarget'));
       return;
     }
-    if (competitorMode === "auto" && !runtime?.has_web_search_key) {
+    if (!runtime) {
+      setError(t('submissions.runtimeUnknown'));
+      return;
+    }
+    if (competitorMode === "auto" && executionMode === "real" && !runtime?.has_web_search_key) {
       setError(t('run.disabled.discoverySearch'));
       return;
     }
@@ -228,8 +242,8 @@ export function useNewRunBuilder() {
     setSubmitting(true);
     setError(null);
     try {
-      const payload: RunCreateRequest = {
-        idempotency_key: newRunIdempotencyKey(),
+      const payload = {
+        workspace_id: workspaceId,
         topic: topic.trim() || `研究${productName}的同类竞品和替代方案`,
         target_product: {
           name: productName,
@@ -254,11 +268,24 @@ export function useNewRunBuilder() {
         },
         auto_redo_warn_enabled: collaborationMode === "ai" && autoRedoWarn,
         hitl_enabled: collaborationMode === "assisted",
-      };
-      const run = await createRun(payload);
-      navigate(`/runs/${"id" in run ? run.id : run.run_id}`);
+      } satisfies RunCreateRequest;
+      if (runtime?.task_center_enabled === true) {
+        const request = payload;
+        const body = JSON.stringify(request);
+        if (submissionIntentRef.current?.body !== body) {
+          submissionIntentRef.current = { body, key: newRunIdempotencyKey() };
+        }
+        const key = submissionIntentRef.current.key;
+        const submission = await createSubmission({ request: { ...request, idempotency_key: key }, idempotency_key: key });
+        navigate(`/submissions/${encodeURIComponent(submission.id)}${workspaceSearch(submission.workspace_id?.trim() || workspaceId)}`);
+      } else {
+        const run = await createRun({ ...payload, idempotency_key: newRunIdempotencyKey() });
+        navigate(`/runs/${"id" in run ? run.id : run.run_id}`);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('newRun.createFailed'));
+      setError(runtime?.task_center_enabled === true
+        ? t(submissionErrorKey(err))
+        : err instanceof Error ? err.message : t('newRun.createFailed'));
     } finally {
       submitInFlightRef.current = false;
       setSubmitting(false);

@@ -108,6 +108,7 @@ export function RunReadinessRail({
           </span>
         </div>
 
+        {executionMode === "demo" ? <p className="submission-notice">{t('submissions.demo')}</p> : null}
         <div className="readiness-checklist" aria-label={t('run.readiness.checklist')}>
           <ReadinessItem icon={<ShieldCheck size={15} />} ok={Boolean(quotaDecision?.allowed ?? true)} title={t('run.workspace')}>
             {quotaDecision?.allowed === false ? <SystemMessage message={quotaDecision.reason} /> : t('run.acmeCorp')}
@@ -227,15 +228,17 @@ export function RunReadinessRail({
             kind: 'submit',
             description: 'submits the new run builder form'
           }}
-          disabled={Boolean(manualScopeError) || targetName.trim().length < 2 || selected.length === 0 || runBlockedByQuota || (competitorMode === "auto" && !searchReady)}
+          disabled={!runtime || Boolean(manualScopeError) || targetName.trim().length < 2 || selected.length === 0 || runBlockedByQuota || (competitorMode === "auto" && executionMode === "real" && !searchReady)}
           disabledReason={
-            runBlockedByQuota
+            !runtime
+              ? t('submissions.runtimeUnknown')
+              : runBlockedByQuota
               ? runtimeDiagnostic(quotaDecision?.reason || t('run.disabled.quota'), locale)
               : manualScopeError
                 ? t('run.disabled.scope')
               : targetName.trim().length < 2
                 ? t('run.disabled.targetProduct')
-              : competitorMode === "auto" && !searchReady
+              : competitorMode === "auto" && executionMode === "real" && !searchReady
                 ? t('run.disabled.discoverySearch')
               : selected.length === 0
                 ? t('run.disabled.dimensions')

@@ -3,6 +3,7 @@ import { appForHref } from './apps';
 import { PixelIcon } from './PixelIcon';
 import { resourceKey, useDesktopStore, type DesktopWindowState } from './windowStore';
 import { useTranslation } from '../../stores/i18n';
+import { WindowVisibilityContext } from './windowVisibility';
 
 export function DesktopWindow({ state, index, children }: { state: DesktopWindowState; index: number; children: ReactNode }) {
   const { focus, minimize, maximize, close, move, activeId } = useDesktopStore();
@@ -46,7 +47,7 @@ export function DesktopWindow({ state, index, children }: { state: DesktopWindow
       <button type="button" data-action-id="desktop.window.focus" data-action-audit="local" className="window-title" aria-label={window.innerWidth > 760 ? t('desktop.moveWindow').replace('{title}', app.title) : app.title} onKeyDown={moveByKey} onClick={() => focus(state.id)}><PixelIcon name={app.icon} /><span>{app.title}</span></button>
       <div className="window-controls"><button type="button" data-action-id="desktop.window.minimize" data-action-audit="local" aria-label={`${t('desktop.minimize')} ${app.title}`} onClick={() => minimize(state.id)}>—</button><button type="button" data-action-id="desktop.window.maximize" data-action-audit="local" className="window-maximize" aria-label={`${state.maximized ? t('desktop.restore') : t('desktop.maximize')} ${app.title}`} onClick={() => maximize(state.id)}>□</button><button type="button" data-action-id="desktop.window.close" data-action-audit="local" aria-label={`${t('common.close')} ${app.title}`} onClick={() => close(state.id)}>×</button></div>
     </header>
-    <div className="window-content">{children}</div>
+    <div className="window-content"><WindowVisibilityContext.Provider value={!state.minimized}>{children}</WindowVisibilityContext.Provider></div>
     <button type="button" data-action-id="desktop.window.resize" data-action-audit="local" className="resize-grip" aria-label={`${t('desktop.resize')} ${app.title}`} onPointerDown={e => start(e, true)} onPointerMove={drag} onPointerUp={() => { gesture.current = null; }} onPointerCancel={() => { gesture.current = null; }} onKeyDown={e => { if (e.key.startsWith('Arrow')) { e.preventDefault(); move(state.id, { width: Math.max(320, state.bounds.width + (e.key === 'ArrowLeft' ? -16 : e.key === 'ArrowRight' ? 16 : 0)), height: Math.max(250, state.bounds.height + (e.key === 'ArrowUp' ? -16 : e.key === 'ArrowDown' ? 16 : 0)) }); } }}>◢</button>
   </section>;
 }

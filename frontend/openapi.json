@@ -30976,6 +30976,11 @@
       },
       "RuntimeConfig": {
         "properties": {
+          "task_center_enabled": {
+            "type": "boolean",
+            "title": "Task Center Enabled",
+            "default": false
+          },
           "default_execution_mode": {
             "type": "string",
             "enum": [

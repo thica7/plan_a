@@ -6,7 +6,10 @@ import { useNewRunBuilder } from "./useNewRunBuilder";
 
 const mocks = vi.hoisted(() => ({
   createRun: vi.fn(),
+  getRuntime: vi.fn(),
+  getQuota: vi.fn(),
   navigate: vi.fn(),
+  location: { search: "" },
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -14,12 +17,13 @@ vi.mock("react-router-dom", async () => {
   return {
     ...actual,
     useNavigate: () => mocks.navigate,
+    useLocation: () => mocks.location,
   };
 });
 
 vi.mock("../../api/client", () => ({
   createRun: mocks.createRun,
-  getRuntime: vi.fn().mockResolvedValue({
+  getRuntime: mocks.getRuntime.mockResolvedValue({
     default_execution_mode: "demo",
     demo_mode: true,
     auto_redo_warn_enabled: false,
@@ -27,10 +31,15 @@ vi.mock("../../api/client", () => ({
     llm_provider: "mock",
     has_web_search_key: true,
   }),
-  getWorkspaceQuotaDecision: vi.fn().mockResolvedValue({ allowed: true, reason: "" }),
+  getWorkspaceQuotaDecision: mocks.getQuota.mockResolvedValue({ allowed: true, reason: "" }),
   listScenarioPacks: vi.fn().mockResolvedValue([]),
   listSkills: vi.fn().mockResolvedValue([{ name: "pricing" }]),
 }));
+
+beforeEach(() => {
+  mocks.location.search = "";
+  localStorage.removeItem("competiscope.workspaceId");
+});
 
 function wrapper({ children }: { children: ReactNode }) {
   return (
@@ -274,5 +283,168 @@ describe("useNewRunBuilder output language", () => {
     });
     await act(async () => { await result.current.submitRun(); });
     expect(mocks.createRun).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("durable submission routing and replay", () => {
+  beforeEach(() => {
+    mocks.navigate.mockReset();
+    mocks.createRun.mockReset().mockResolvedValue({ id: "legacy" });
+    mocks.getRuntime.mockResolvedValue({ task_center_enabled: true, default_execution_mode: "demo", has_web_search_key: false });
+    mocks.getQuota.mockResolvedValue({ allowed: true });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "submission-1" }), { status: 202 })));
+  });
+
+  async function builder() {
+    const hook = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(hook.result.current.runtime).not.toBeNull());
+    act(() => hook.result.current.setTargetName("示例产品"));
+    return hook;
+  }
+
+  it("uses durable submission in demo without search credentials", async () => {
+    const { result } = await builder();
+    await act(async () => { await result.current.submitRun(); });
+    expect(fetch).toHaveBeenCalledWith("/api/task-submissions", expect.objectContaining({ method: "POST", credentials: "same-origin" }));
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith("/submissions/submission-1?workspace_id=default-workspace");
+  });
+
+  it.each([false, undefined])("keeps the legacy path for flag %s", async flag => {
+    mocks.getRuntime.mockResolvedValue({ task_center_enabled: flag, default_execution_mode: "demo", has_web_search_key: true });
+    const { result } = await builder();
+    await act(async () => { await result.current.submitRun(); });
+    expect(mocks.createRun).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith("/runs/legacy");
+  });
+
+  it("does not fall back after an uncertain result and replays the same normalized intent at zero old quota", async () => {
+    mocks.getQuota.mockResolvedValue({ allowed: false, reason: "quota denied" });
+    vi.mocked(fetch).mockRejectedValue(new TypeError("Failed to fetch"));
+    const { result } = await builder();
+    await act(async () => { await result.current.submitRun(); });
+    act(() => result.current.setTargetName("  示例产品  "));
+    await act(async () => { await result.current.submitRun(); });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const bodies = vi.mocked(fetch).mock.calls.map(([, init]) => JSON.parse(String(init?.body)));
+    expect(bodies[0].idempotency_key).toBe(bodies[1].idempotency_key);
+    expect(bodies[0].request.idempotency_key).toBe(bodies[0].idempotency_key);
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(result.current.error).toMatch(/连接|刷新|重试/);
+    expect(result.current.error).not.toContain("Failed to fetch");
+    act(() => result.current.setTargetName("新的产品"));
+    await act(async () => { await result.current.submitRun(); });
+    const changed = JSON.parse(String(vi.mocked(fetch).mock.calls[2][1]?.body));
+    expect(changed.idempotency_key).not.toBe(bodies[0].idempotency_key);
+  });
+
+  it("keeps the successful intent key when navigation has not completed and suppresses rapid double submit", async () => {
+    let resolve!: (r: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+    const { result } = await builder();
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.submitRun(); void result.current.submitRun(); });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await act(async () => { resolve(new Response(JSON.stringify({ id: "submission-1" }), { status: 202 })); await pending; });
+    await act(async () => { await result.current.submitRun(); });
+    const calls = vi.mocked(fetch).mock.calls;
+    expect(JSON.parse(String(calls[0][1]?.body)).idempotency_key).toBe(JSON.parse(String(calls[1][1]?.body)).idempotency_key);
+  });
+
+  it("still blocks automatic discovery in real mode without search", async () => {
+    const { result } = await builder();
+    act(() => result.current.setExecutionMode("real"));
+    await act(async () => { await result.current.submitRun(); });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mocks.createRun).not.toHaveBeenCalled();
+    expect(result.current.error).toMatch(/搜索/);
+  });
+});
+
+it('does not choose a delivery route before runtime capability is known or after its request fails', async () => {
+  mocks.createRun.mockClear();
+  mocks.getQuota.mockResolvedValue({ allowed: true });
+  let rejectRuntime!: (e: Error) => void;
+  mocks.getRuntime.mockImplementationOnce(() => new Promise((_, reject) => { rejectRuntime = reject; }));
+  const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+  act(() => result.current.setTargetName('能力未知的产品'));
+  await act(async () => { await result.current.submitRun(); });
+  expect(mocks.createRun).not.toHaveBeenCalled();
+  await act(async () => { rejectRuntime(new Error('<html>offline</html>')); });
+  await act(async () => { await result.current.submitRun(); });
+  expect(mocks.createRun).not.toHaveBeenCalled();
+  expect(result.current.error).toMatch(/配置|连接|刷新/);
+  expect(result.current.error).not.toContain('<html>');
+});
+
+
+describe("workspace continuity", () => {
+  beforeEach(() => {
+    mocks.navigate.mockReset();
+    mocks.createRun.mockReset().mockResolvedValue({ id: "legacy" });
+    mocks.getQuota.mockClear().mockResolvedValue({ allowed: true });
+    mocks.getRuntime.mockResolvedValue({ task_center_enabled: true, default_execution_mode: "demo", has_web_search_key: false });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((_path, init) => Promise.resolve(new Response(JSON.stringify({
+      id: "scoped-submission", workspace_id: JSON.parse(String(init?.body)).request.workspace_id,
+    }), { status: 202 }))));
+  });
+
+  it.each([
+    { search: "?workspace_id=url-space", identity: "identity-space", expected: "url-space" },
+    { search: "", identity: "identity-space", expected: "identity-space" },
+    { search: "", identity: "", expected: "default-workspace" },
+  ])("uses $expected for quota, payload and detail navigation", async ({ search, identity, expected }) => {
+    mocks.location.search = search;
+    if (identity) localStorage.setItem("competiscope.workspaceId", identity);
+    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime).not.toBeNull());
+    act(() => result.current.setTargetName("工作空间测试产品"));
+    await act(async () => { await result.current.submitRun(); });
+    expect(mocks.getQuota).toHaveBeenCalledWith(expected);
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(body.request.workspace_id).toBe(expected);
+    expect(mocks.navigate).toHaveBeenCalledWith(`/submissions/scoped-submission?workspace_id=${expected}`);
+  });
+
+  it("uses the confirmed submission workspace for successful detail navigation", async () => {
+    mocks.location.search = "?workspace_id=request-space";
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ id: "scoped-submission", workspace_id: "confirmed-space" }), { status: 202 }));
+    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime).not.toBeNull());
+    act(() => result.current.setTargetName("服务确认空间"));
+    await act(async () => { await result.current.submitRun(); });
+    expect(mocks.navigate).toHaveBeenCalledWith('/submissions/scoped-submission?workspace_id=confirmed-space');
+  });
+
+  it("changes intent keys and quota scope when workspace changes without remounting the form", async () => {
+    mocks.location.search = "?workspace_id=space-a";
+    vi.mocked(fetch).mockRejectedValue(new TypeError("unknown outcome"));
+    const { result, rerender } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime).not.toBeNull());
+    act(() => result.current.setTargetName("相同研究问题"));
+    await act(async () => { await result.current.submitRun(); });
+    mocks.location.search = "?workspace_id=space-b";
+    rerender();
+    await waitFor(() => expect(mocks.getQuota).toHaveBeenCalledWith("space-b"));
+    await act(async () => { await result.current.submitRun(); });
+    const requests = vi.mocked(fetch).mock.calls.map(([, init]) => JSON.parse(String(init?.body)));
+    expect(requests[0].request.workspace_id).toBe("space-a");
+    expect(requests[1].request.workspace_id).toBe("space-b");
+    expect(requests[1].idempotency_key).not.toBe(requests[0].idempotency_key);
+  });
+
+  it("keeps the legacy delivery path while respecting its explicit workspace", async () => {
+    mocks.location.search = "?workspace_id=legacy-space";
+    mocks.getRuntime.mockResolvedValue({ task_center_enabled: false, default_execution_mode: "demo", has_web_search_key: false });
+    const { result } = renderHook(() => useNewRunBuilder(), { wrapper });
+    await waitFor(() => expect(result.current.runtime).not.toBeNull());
+    act(() => result.current.setTargetName("旧路径研究问题"));
+    await act(async () => { await result.current.submitRun(); });
+    expect(mocks.getQuota).toHaveBeenCalledWith("legacy-space");
+    expect(mocks.createRun).toHaveBeenCalledWith(expect.objectContaining({ workspace_id: "legacy-space" }));
+    expect(mocks.navigate).toHaveBeenCalledWith("/runs/legacy");
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

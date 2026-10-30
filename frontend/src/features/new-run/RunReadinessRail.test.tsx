@@ -113,3 +113,14 @@ describe("RunReadinessRail", () => {
     expect(screen.getByText(/请求 9 个切片/)).toBeInTheDocument();
   });
 });
+
+it("allows demo auto-discovery with simulated material and no search key", () => {
+  renderRail({ competitorMode: "auto", executionMode: "demo", runtime: { ...runtime, has_web_search_key: false } });
+  expect(screen.getByRole("button", { name: /开始运行/i })).toBeEnabled();
+  expect(screen.getByText(/演示资料/)).toBeInTheDocument();
+});
+
+it('does not enable demo submission until runtime capability has loaded', () => {
+  renderRail({ competitorMode: 'auto', executionMode: 'demo', runtime: null });
+  expect(screen.getByRole('button', { name: /开始运行/i })).toBeDisabled();
+});

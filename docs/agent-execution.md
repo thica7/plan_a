@@ -2,6 +2,29 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
+## 2026-10-30：本机持久化工作台 P0
+
+新入口 `scripts/workbench_runtime.py` 在独立 profile 内启动原生 PostgreSQL → API readyz → Relay ready → Vite。默认 `runs/local-workspace`、API 8010、前端 5180；四个 action（init／start／status／stop）均须 `--execute` 才执行。完整命令与停机备份见[部署说明第 8 节](docker_deployment.md#8-原生-postgresql-本机持久化工作台p0)。
+
+```text
+像素桌面／submissions → runtime.task_center_enabled 严格为 true → 六个提交／额度接口
+→ 私有 PostgreSQL：企业项目、run、报告版本＋提交单、reserve、Outbox
+→ Relay → 现有 RunService／LangGraph demo
+→ 同 profile SQLite journal／事件／检查点 → 原分析详情与报告
+```
+
+全局任务中心默认仍关闭。关闭或旧 runtime 缺字段时沿用旧创建入口；未知 capability 或新接口失败不会回退创建第二单。业务载荷不变的未知结果重试复用原幂等键，修改载荷换键。工作区从 URL、身份到默认值贯穿入口、预检、请求和详情，不能用页面筛选冒充服务端隔离。
+
+提交中心分别显示派发状态与 `run_status`，只有实际 `run_id` 才提供原分析详情入口；pending 的合法取消和 dispatch_failed 的重试均由服务器最终裁定。额度采用所选 UTC 月的服务器整月快照，并独立分页 reserve／release 流水；动作后重读，不在前端本地加减。串行约 4 秒轮询在文档隐藏、窗口最小化及卸载时停止，过期响应丢弃；错误需手动恢复，恢复时保留月份与筛选。
+
+本机实测 PostgreSQL **15.18 + pgvector 0.8.7**，完整 public 19 表与提交中心三份迁移；应用角色无 superuser／bypass-RLS／owner 继承／DDL／TRUNCATE。PG 不监听 TCP，API／前端只绑定 loopback，同一系统用户为信任边界。受控子环境不加载根／前端 env 文件，不继承 provider key、管理 DSN、Redis、Temporal 或 Qdrant HTTP；固定 demo、LangGraph、全局运行 2／工作区 1。知识库／执行存储仍为 SQLite，hash／sparse 开发配置不证明真实语义 RAG。
+
+真实 API → Relay → demo Graph 与完整企业 PG 报告投影、独立 CLI 重启和浏览器重载已取证；本轮浏览器演示的原报告有 1 版、1 次 reserve、35 个事件和 19 个检查点，全栈停启后快照一致。断库返回 503，恢复后沿用原故障请求的幂等键完成；readyz 双依赖 200 后仍实际观察到旧连接池短暂 POST 503，再经有界同键重试恢复，不能把 readyz 视为所有请求立即成功。
+
+完整企业迁移新增 `backend/db/postgres/002_run_delivery_status.sql`，通过既有管理迁移事务和 advisory lock 顺序执行 001＋002，允许 `completed_with_blockers`，原五状态及非法状态拒绝规则保留。受限应用可读写该状态，旧库升级／重复迁移保留数据；不修改 QA／发布规则、不把阻断改成 completed，也未验完整真实模型的 blocked Graph。
+
+本轮独立全后端 **9175 通过、1 跳过、250 条 warning**（429.15 秒，退出 0）；跳过为未配置外部连接的旧企业 RLS smoke，本轮私有原生 PG 的 RLS A→B→A 隔离已验。全前端 340 项、Vite core 隔离 8 项、标准工具临时生成逐字节比较及构建通过；Ruff 4023 项存量／新增 0。首轮测试模块缓存隔离失败、窄修和完整复验见[本轮交付](optimization/2026-10-30-persistent-workbench-delivery.md)及[脱敏结果](optimization/2026-10-30-persistent-workbench-results.json)，提交前另核实际暂存范围与扫描。旧数据不自动迁入；机器重启需手动 start。容器接线、真实模型／Temporal／Redis、跨主机和高并发容量仍未验；下面旧报告 0/4 及其日期、调用数字不变。
+
 ## 2026-10-30：提交中心与 Agent 的入口关系
 
 第一期提交中心默认关闭（`TASK_CENTER_ENABLED=false`）。显式启用后，入口为：
