@@ -194,6 +194,17 @@ def test_readable_choices_preserve_the_actual_operation_identity_and_complete_so
 
 
 def append_response(service, record, kwargs, response, *, attempts=1):
+    metadata = {"llm_transport_attempts": attempts}
+    if kwargs.get("response_format"):
+        from packages.agents.writer.task_answer_outcomes import transport_identity
+
+        metadata.update(
+            response_format=kwargs["response_format"],
+            response_contract=kwargs["response_contract"], llm_provider="deepseek",
+            response_transport_identity=transport_identity(
+                kwargs["system"], kwargs["user"], kwargs["response_contract"]
+            ),
+        )
     service._append_trace_span(
         service._evidence_live_record(record),
         kind="llm",
@@ -204,7 +215,7 @@ def append_response(service, record, kwargs, response, *, attempts=1):
         started=time.perf_counter(),
         input_text=kwargs["system"] + "\n\n" + kwargs["user"],
         output_text=response or "",
-        metadata={"llm_transport_attempts": attempts},
+        metadata=metadata,
     )
     return response
 

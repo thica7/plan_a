@@ -1,0 +1,529 @@
+{
+  "status": "regression_not_deliverable",
+  "round": "selected_task_atoms_v1",
+  "artifact_directory": "data/artifacts/writer-task-delivery-2026-10-31",
+  "base_commit": "129d9e4cc91e336125454a987031d52d6eff4b26",
+  "production_code_sha256": "f4164b48e5d3897040a081eb07ec9335d84528262c1da1a50b81ec053e1a1285",
+  "original_questions": {
+    "denominator": 8,
+    "counts": {
+      "partial": 4,
+      "pass": 2,
+      "fail": 2
+    },
+    "necessary_branch_denominator": 22,
+    "branch_text_coverage_counts": {
+      "none": 11,
+      "full": 10,
+      "partial": 1
+    },
+    "complete_branches_with_appropriate_support": 10,
+    "request_only_complete_branch_count": 4,
+    "fully_supported_published_product_branch_count": 6
+  },
+  "report_delivery_summary": {
+    "text_deliverable": {
+      "passed": 0,
+      "denominator": 4
+    },
+    "text_plus_evidence_deliverable": {
+      "passed": 0,
+      "denominator": 4
+    },
+    "all_claims_atomic_deliverable": {
+      "passed": 0,
+      "denominator": 4
+    },
+    "strict_system_qa_deliverable": {
+      "passed": 0,
+      "denominator": 4
+    }
+  },
+  "visible_claim_summary": {
+    "unique_formal_product_claim_denominator": 6,
+    "support_counts": {
+      "full": 6
+    },
+    "atomic_count": 4,
+    "non_atomic_count": 2,
+    "atomic_ratio": "4/6",
+    "unpublished_audit_claim_count": 4,
+    "deduplication": "发现区与问答区同文去重；CF正式场景否定另计一个有限推论。"
+  },
+  "reports": [
+    {
+      "product": "Trello",
+      "text_deliverable": false,
+      "text_plus_evidence_deliverable": false,
+      "all_claims_atomic_deliverable": false,
+      "strict_system_qa_deliverable": false,
+      "published_claim_count": 3,
+      "published_claim_support_counts": {
+        "full": 3
+      },
+      "atomic_claim_count": 2,
+      "atomic_ratio": "2/3",
+      "system_blocker_count": 6,
+      "system_blocker_ids": [
+        "qa-claim-801721b790e93d32e637",
+        "qa-claim-4dbc0a14a47215af06cb",
+        "final-question-question-659854eaa5bf118b8901",
+        "final-question-question-00e2382d7575b5384c9a",
+        "final-question-question-1305198ad16f108bf375",
+        "final-question-question-a5be8c7a210d770f2ea7"
+      ],
+      "reason": "两原题均partial；正文缺6个必要分支。已发表3条主张均选中全文支持，但导出句含定义+动作。",
+      "artifacts": {
+        "report": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-trello-verified/execution/report.md",
+          "sha256": "f48b2996d15cf192775e1937c6b0629818ec8e91be674b0cca79126a0f3b4880"
+        },
+        "run": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-trello-verified/execution/run.exact.json",
+          "sha256": "a8a696c60e4ed40c66f78351b7f3131883606abdb65e1d68635c0de5244e0232"
+        },
+        "snapshot": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-trello-verified/execution/snapshot.exact.json",
+          "sha256": "d386d0fa0db66764ccbe5656301d4d1b0f99dd8c462d9e92eff60372591d6cc5"
+        },
+        "trace": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-trello-verified/execution/trace.exact.json",
+          "sha256": "ff0b87f2afea5e45f73986825fa69d76977656f5915fbdf94693d5a97651749a"
+        },
+        "source_urls": [
+          {
+            "id": "raw-source-033d8ca615035ad47a36",
+            "url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/",
+            "source_fetched_at": "2026-10-21T16:28:37.284567Z"
+          }
+        ],
+        "production_code_sha256_before": "f4164b48e5d3897040a081eb07ec9335d84528262c1da1a50b81ec053e1a1285",
+        "production_code_sha256_after": "f4164b48e5d3897040a081eb07ec9335d84528262c1da1a50b81ec053e1a1285"
+      }
+    },
+    {
+      "product": "Cloudflare",
+      "text_deliverable": false,
+      "text_plus_evidence_deliverable": false,
+      "all_claims_atomic_deliverable": false,
+      "strict_system_qa_deliverable": false,
+      "published_claim_count": 3,
+      "published_claim_support_counts": {
+        "full": 3
+      },
+      "atomic_claim_count": 2,
+      "atomic_ratio": "2/3",
+      "system_blocker_count": 2,
+      "system_blocker_ids": [
+        "qa-claim-30d2c1e2db04c1c51c38",
+        "final-question-question-dd9aeefb8be2a32bc5bf"
+      ],
+      "reason": "权限题pass，账单题partial；CPU输入已问，独立CPU计费事实未交付。已发表3条唯一产品规则/结论均完整支持；purge+read句非原子。",
+      "artifacts": {
+        "report": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-cloudflare-verified/execution/report.md",
+          "sha256": "48b219589b615f36f3ca8f5f0e7a0e2598a13e26cbeb2d9ba8fc021750fb01bd"
+        },
+        "run": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-cloudflare-verified/execution/run.exact.json",
+          "sha256": "b8cfa00df9b802b16beea505093011d4727acb98b37276017fbdb4f8c1e48e44"
+        },
+        "snapshot": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-cloudflare-verified/execution/snapshot.exact.json",
+          "sha256": "25520dee53a4e06d519743bee6111dc1985d9d481db4585ca8efb67c4b2ca70c"
+        },
+        "trace": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-cloudflare-verified/execution/trace.exact.json",
+          "sha256": "501f96b7e12acb8f3a4fed41fd39b7651e5046f7177eb23364c268f4f5461f4a"
+        },
+        "source_urls": [
+          {
+            "id": "raw-source-52ba7b31b51e937245c1",
+            "url": "https://developers.cloudflare.com/workers/platform/pricing/",
+            "source_fetched_at": "2026-10-21T16:25:53.092262Z"
+          },
+          {
+            "id": "raw-source-c71a5d8161af6e06ae53",
+            "url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+            "source_fetched_at": "2026-10-21T16:25:51.945259Z"
+          }
+        ],
+        "production_code_sha256_before": "f4164b48e5d3897040a081eb07ec9335d84528262c1da1a50b81ec053e1a1285",
+        "production_code_sha256_after": "f4164b48e5d3897040a081eb07ec9335d84528262c1da1a50b81ec053e1a1285"
+      }
+    },
+    {
+      "product": "Bitwarden",
+      "text_deliverable": false,
+      "text_plus_evidence_deliverable": false,
+      "all_claims_atomic_deliverable": false,
+      "strict_system_qa_deliverable": false,
+      "published_claim_count": 0,
+      "published_claim_support_counts": {},
+      "atomic_claim_count": 0,
+      "atomic_ratio": "not_applicable_0_claims",
+      "system_blocker_count": 3,
+      "system_blocker_ids": [
+        "qa-claim-d1afa0f4a68d00eb9e66",
+        "final-question-question-cb40c90e4d944bf23275",
+        "final-question-question-63762e09ae5d8faa1071"
+      ],
+      "reason": "免费组织核心题fail；离职题通过必要双澄清。0条正式产品主张不能冒充证据覆盖或原子成功。",
+      "artifacts": {
+        "report": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-bitwarden-verified/execution/report.md",
+          "sha256": "c2fd9a2cd94e92fb6127ef793439647a92300be0d9d12ca10f39a5da44472e4b"
+        },
+        "run": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-bitwarden-verified/execution/run.exact.json",
+          "sha256": "6866671a583ec5cf9106d5c27333f52dbfb1ff444ba730bf90c6c4bb7a110396"
+        },
+        "snapshot": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-bitwarden-verified/execution/snapshot.exact.json",
+          "sha256": "956e775c9b2bb4becdbb4966474c85f359511903c8eed1b87d5505bc2b1b22f4"
+        },
+        "trace": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-bitwarden-verified/execution/trace.exact.json",
+          "sha256": "1a91ccb3d0989b814b13a405eae3ebdfca4005ecd928609b5f8eb898cd6c2c51"
+        },
+        "source_urls": [
+          {
+            "id": "raw-source-113cbfda74a5c2bc8f6e",
+            "url": "https://bitwarden.com/help/remove-users/",
+            "source_fetched_at": "2026-10-21T16:22:24.225288Z"
+          },
+          {
+            "id": "raw-source-476cdfef80ec06d6a285",
+            "url": "https://bitwarden.com/help/password-manager-plans/",
+            "source_fetched_at": "2026-10-21T16:22:25.503094Z"
+          },
+          {
+            "id": "raw-source-70aef72eac936826d54c",
+            "url": "https://bitwarden.com/help/delete-member-accounts/",
+            "source_fetched_at": "2026-10-21T16:22:32.986850Z"
+          }
+        ],
+        "production_code_sha256_before": "f4164b48e5d3897040a081eb07ec9335d84528262c1da1a50b81ec053e1a1285",
+        "production_code_sha256_after": "f4164b48e5d3897040a081eb07ec9335d84528262c1da1a50b81ec053e1a1285"
+      }
+    },
+    {
+      "product": "1Password",
+      "text_deliverable": false,
+      "text_plus_evidence_deliverable": false,
+      "all_claims_atomic_deliverable": false,
+      "strict_system_qa_deliverable": false,
+      "published_claim_count": 0,
+      "published_claim_support_counts": {},
+      "atomic_claim_count": 0,
+      "atomic_ratio": "not_applicable_0_claims",
+      "system_blocker_count": 5,
+      "system_blocker_ids": [
+        "qa-claim-5280fbc3ed32771e0fac",
+        "qc-issue-57ba691baf00bfe6",
+        "qc-issue-d4c34ac181235e58",
+        "final-question-question-60a7010e0c7ca2ae7058",
+        "final-question-question-26d795d67d79bd12e05d"
+      ],
+      "reason": "访客题fail，报价题partial；无Private/双vault正式结论，也无有证公开报价性质与官方下一步。0条正式产品主张不能冒充交付。",
+      "artifacts": {
+        "report": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-1password-verified/execution/report.md",
+          "sha256": "c970f7cadd824517db755dbee939d9bfe64214353a5f74800f9170d84ac7338a"
+        },
+        "run": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-1password-verified/execution/run.exact.json",
+          "sha256": "2a358a1a74a8a1bd7ece21fb8caf38af0ce7a8af2546ddb1d2a08424962bb734"
+        },
+        "snapshot": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-1password-verified/execution/snapshot.exact.json",
+          "sha256": "16a7fd4b4e0643873851790f31487a24c6da5c2e518ef8b4b1aa951a66ea75e4"
+        },
+        "trace": {
+          "path": "data/artifacts/writer-task-delivery-2026-10-31/live-1password-verified/execution/trace.exact.json",
+          "sha256": "8f9c69803664874cd68e231e42df18eb234a9245bf4ec2061ab07db252309669"
+        },
+        "source_urls": [
+          {
+            "id": "raw-source-9ea4b68f00a9a2851e78",
+            "url": "https://support.1password.com/guests/",
+            "source_fetched_at": "2026-10-21T16:23:54.147190Z"
+          }
+        ],
+        "production_code_sha256_before": "f4164b48e5d3897040a081eb07ec9335d84528262c1da1a50b81ec053e1a1285",
+        "production_code_sha256_after": "f4164b48e5d3897040a081eb07ec9335d84528262c1da1a50b81ec053e1a1285"
+      }
+    }
+  ],
+  "runtime": {
+    "products": [
+      {
+        "product": "trello",
+        "run_sha256": "a8a696c60e4ed40c66f78351b7f3131883606abdb65e1d68635c0de5244e0232",
+        "exact_witness": true,
+        "report_sha256": "f48b2996d15cf192775e1937c6b0629818ec8e91be674b0cca79126a0f3b4880",
+        "transport_attempts": 44,
+        "llm_spans": 44,
+        "by_agent": {
+          "planner": 1,
+          "collector": 2,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 29,
+          "qa": 9
+        },
+        "known_tokens": 123119,
+        "unknown_usage_spans": 0,
+        "timeout_attempts": 0,
+        "output_length_spans": 0,
+        "qa_protocol": "independent_questions_v9",
+        "qa_planned": 8,
+        "qa_sent": 8,
+        "qa_valid": 8,
+        "qa_unsent": 0,
+        "qa_timeout": 0,
+        "qa_batches": 5,
+        "qa_resumable": 0,
+        "qa_passed_question_ids": [],
+        "qa_blockers": 6,
+        "answer_review_contracts": {
+          "subquestion-premises-v1": 1
+        },
+        "actual_answer_calls": 0,
+        "actual_candidate_projection_versions": {},
+        "actual_decision_selection_policies": {},
+        "actual_candidate_counts": [],
+        "observed_decision_credentials": 0,
+        "decision_witness_kinds": {},
+        "credential_count_is_not_semantic_acceptance": true,
+        "observed_answers": [
+          {
+            "question_id": "question-659854eaa5bf118b8901",
+            "status": "unverified"
+          },
+          {
+            "question_id": "question-00e2382d7575b5384c9a",
+            "status": "unverified"
+          },
+          {
+            "question_id": "question-1305198ad16f108bf375",
+            "status": "unverified"
+          },
+          {
+            "question_id": "question-a5be8c7a210d770f2ea7",
+            "status": "unverified"
+          }
+        ]
+      },
+      {
+        "product": "cloudflare",
+        "run_sha256": "b8cfa00df9b802b16beea505093011d4727acb98b37276017fbdb4f8c1e48e44",
+        "exact_witness": true,
+        "report_sha256": "48b219589b615f36f3ca8f5f0e7a0e2598a13e26cbeb2d9ba8fc021750fb01bd",
+        "transport_attempts": 23,
+        "llm_spans": 23,
+        "by_agent": {
+          "planner": 1,
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 10,
+          "qa": 6
+        },
+        "known_tokens": 67478,
+        "unknown_usage_spans": 0,
+        "timeout_attempts": 0,
+        "output_length_spans": 0,
+        "qa_protocol": "independent_questions_v9",
+        "qa_planned": 5,
+        "qa_sent": 5,
+        "qa_valid": 5,
+        "qa_unsent": 0,
+        "qa_timeout": 0,
+        "qa_batches": 3,
+        "qa_resumable": 0,
+        "qa_passed_question_ids": [
+          "question-1b7471af0d3dcf4af91c"
+        ],
+        "qa_blockers": 2,
+        "answer_review_contracts": {
+          "subquestion-premises-v6": 1
+        },
+        "actual_answer_calls": 1,
+        "actual_candidate_projection_versions": {
+          "2": 1
+        },
+        "actual_decision_selection_policies": {
+          "reviewed_quantity_conjunction-v1": 1
+        },
+        "actual_candidate_counts": [
+          0
+        ],
+        "observed_decision_credentials": 0,
+        "decision_witness_kinds": {},
+        "credential_count_is_not_semantic_acceptance": true,
+        "observed_answers": [
+          {
+            "question_id": "question-1b7471af0d3dcf4af91c",
+            "status": "answered"
+          },
+          {
+            "question_id": "question-dd9aeefb8be2a32bc5bf",
+            "status": "partial"
+          }
+        ]
+      },
+      {
+        "product": "bitwarden",
+        "run_sha256": "6866671a583ec5cf9106d5c27333f52dbfb1ff444ba730bf90c6c4bb7a110396",
+        "exact_witness": true,
+        "report_sha256": "c2fd9a2cd94e92fb6127ef793439647a92300be0d9d12ca10f39a5da44472e4b",
+        "transport_attempts": 18,
+        "llm_spans": 18,
+        "by_agent": {
+          "planner": 1,
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 6,
+          "qa": 5
+        },
+        "known_tokens": 54618,
+        "unknown_usage_spans": 0,
+        "timeout_attempts": 0,
+        "output_length_spans": 0,
+        "qa_protocol": "independent_questions_v9",
+        "qa_planned": 7,
+        "qa_sent": 7,
+        "qa_valid": 7,
+        "qa_unsent": 0,
+        "qa_timeout": 0,
+        "qa_batches": 3,
+        "qa_resumable": 0,
+        "qa_passed_question_ids": [],
+        "qa_blockers": 3,
+        "answer_review_contracts": {
+          "subquestion-premises-v6": 1
+        },
+        "actual_answer_calls": 1,
+        "actual_candidate_projection_versions": {
+          "2": 1
+        },
+        "actual_decision_selection_policies": {
+          "reviewed_quantity_conjunction-v1": 1
+        },
+        "actual_candidate_counts": [
+          0
+        ],
+        "observed_decision_credentials": 0,
+        "decision_witness_kinds": {},
+        "credential_count_is_not_semantic_acceptance": true,
+        "observed_answers": [
+          {
+            "question_id": "question-cb40c90e4d944bf23275",
+            "status": "unverified"
+          },
+          {
+            "question_id": "question-63762e09ae5d8faa1071",
+            "status": "partial"
+          }
+        ]
+      },
+      {
+        "product": "1password",
+        "run_sha256": "2a358a1a74a8a1bd7ece21fb8caf38af0ce7a8af2546ddb1d2a08424962bb734",
+        "exact_witness": true,
+        "report_sha256": "c970f7cadd824517db755dbee939d9bfe64214353a5f74800f9170d84ac7338a",
+        "transport_attempts": 22,
+        "llm_spans": 22,
+        "by_agent": {
+          "planner": 1,
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 10,
+          "qa": 5
+        },
+        "known_tokens": 59503,
+        "unknown_usage_spans": 0,
+        "timeout_attempts": 0,
+        "output_length_spans": 0,
+        "qa_protocol": "independent_questions_v9",
+        "qa_planned": 7,
+        "qa_sent": 7,
+        "qa_valid": 7,
+        "qa_unsent": 0,
+        "qa_timeout": 0,
+        "qa_batches": 3,
+        "qa_resumable": 0,
+        "qa_passed_question_ids": [],
+        "qa_blockers": 5,
+        "answer_review_contracts": {
+          "subquestion-premises-v1": 1
+        },
+        "actual_answer_calls": 0,
+        "actual_candidate_projection_versions": {},
+        "actual_decision_selection_policies": {},
+        "actual_candidate_counts": [],
+        "observed_decision_credentials": 0,
+        "decision_witness_kinds": {},
+        "credential_count_is_not_semantic_acceptance": true,
+        "observed_answers": [
+          {
+            "question_id": "question-60a7010e0c7ca2ae7058",
+            "status": "unverified"
+          },
+          {
+            "question_id": "question-26d795d67d79bd12e05d",
+            "status": "partial"
+          }
+        ]
+      }
+    ],
+    "transports": 107,
+    "known_tokens": 304718,
+    "unknown_usage_spans": 0
+  },
+  "original_report_copies": [
+    {
+      "product": "trello",
+      "original": "data/artifacts/writer-task-delivery-2026-10-31/live-trello-verified/execution/report.md",
+      "public_copy": "docs/optimization/reports/2026-10-31-task-local-v1/trello.md",
+      "sha256": "f48b2996d15cf192775e1937c6b0629818ec8e91be674b0cca79126a0f3b4880"
+    },
+    {
+      "product": "cloudflare",
+      "original": "data/artifacts/writer-task-delivery-2026-10-31/live-cloudflare-verified/execution/report.md",
+      "public_copy": "docs/optimization/reports/2026-10-31-task-local-v1/cloudflare.md",
+      "sha256": "48b219589b615f36f3ca8f5f0e7a0e2598a13e26cbeb2d9ba8fc021750fb01bd"
+    },
+    {
+      "product": "bitwarden",
+      "original": "data/artifacts/writer-task-delivery-2026-10-31/live-bitwarden-verified/execution/report.md",
+      "public_copy": "docs/optimization/reports/2026-10-31-task-local-v1/bitwarden.md",
+      "sha256": "c2fd9a2cd94e92fb6127ef793439647a92300be0d9d12ca10f39a5da44472e4b"
+    },
+    {
+      "product": "1password",
+      "original": "data/artifacts/writer-task-delivery-2026-10-31/live-1password-verified/execution/report.md",
+      "public_copy": "docs/optimization/reports/2026-10-31-task-local-v1/1password.md",
+      "sha256": "c970f7cadd824517db755dbee939d9bfe64214353a5f74800f9170d84ac7338a"
+    }
+  ],
+  "fixed_snapshot": true,
+  "fresh_web_capture": false,
+  "full_graph_e2e": false,
+  "unseen_samples": false,
+  "training": false,
+  "docker": false,
+  "limits": [
+    "本轮仅既有暴露的8题回归；没有新增human签署或盲样本，不报告泛化准确率。",
+    "2026-10-21固定官方页面回放；不是本轮实时网页采集，也不称fresh-web E2E。",
+    "原始报告、run、snapshot与trace均未修改；没有修复或润色被审报告。",
+    "1Password本轮生产snapshot仅含guests官方文档，未选出公开定价证据；不得从记忆补价格或销售路径。"
+  ]
+}

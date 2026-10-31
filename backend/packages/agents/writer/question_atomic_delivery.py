@@ -691,13 +691,22 @@ def parse_atomic_reviews(response, claims, *, payload=None, review_projection_ve
         ):
             return []
     reviews = []
+    from packages.agents.writer.selected_task_delivery import (
+        checked_policy,
+        numeric_restriction_reasons,
+    )
+
+    task_policy = checked_policy(payload.get('task_execution_policy')) if payload else None
+    numeric_guard = (
+        numeric_restriction_reasons if task_policy else unsupported_numeric_restriction
+    )
     for claim in claims:
         rows = [r for r in raw["reviews"] if isinstance(r, dict) and r.get("claim_id") == claim.id]
         if len(rows) != 1:
             continue
         if version >= 2:
             if (checked_delivery_policy(payload) and rows[0].get('verdict') == 'supported'
-                    and unsupported_numeric_restriction(payload['claims'][0]['text'],
+                    and numeric_guard(payload['claims'][0]['text'],
                         payload['claims'][0].get('support_quotes', []))):
                 continue
             if rows[0].get("verdict") == "supported" and incomplete_review_restrictions(payload):
@@ -841,10 +850,17 @@ def save_atomic_receipt(service, record, compact, view, use, packets):
         )
     if compact.get('answer_review_contract') in {
             'subquestion-premises-v2', 'subquestion-premises-v3',
-            'subquestion-premises-v4', 'subquestion-premises-v5', 'subquestion-premises-v6'}:
+            'subquestion-premises-v4', 'subquestion-premises-v5', 'subquestion-premises-v6',
+            'task-outcomes-v1'}:
         receipt['answer_review_contract'] = compact['answer_review_contract']
+    if compact.get('task_execution_policy') == 'selected-task-atoms-v3':
+        receipt['task_outcome_contract'] = 'task-outcomes-v1'
+        receipt['task_answer_results'] = compact.get('task_answer_results', {})
     if checked_delivery_policy(compact):
         receipt['delivery_policy'] = compact['delivery_policy']
+    from packages.agents.writer.selected_task_delivery import checked_policy
+    if checked_policy(compact.get('task_execution_policy')):
+        receipt['task_execution_policy'] = compact['task_execution_policy']
     if compact.get('decision_selection_policy') == REVIEWED_QUANTITY_CONJUNCTION_POLICY:
         receipt['decision_selection_policy'] = REVIEWED_QUANTITY_CONJUNCTION_POLICY
     live = service._evidence_live_record(record)
@@ -993,7 +1009,15 @@ async def execute_question_atomic_delivery(
     service, record, selected, view, use, questions, packets, allowed, boundaries, gaps,
     *, review_projection_version=3, generation_projection_version=5,
     answer_review_contract='subquestion-premises-v1', delivery_policy=None,
+    task_execution_policy=None,
 ):
+    from packages.agents.writer.selected_task_delivery import checked_policy, execute
+    if checked_policy(task_execution_policy):
+        if generation_projection_version != 5 or review_projection_version != 3:
+            raise ValueError('Task execution policy requires GEN5 and REVIEW3')
+        return await execute(service, record, selected, view, use, questions, packets, allowed,
+            boundaries, gaps, answer_review_contract=answer_review_contract,
+            execution_policy=task_execution_policy)
     from packages.agents.writer.dimension_writer import (
         _support_ref_catalog,
         compact_prompt_json,
@@ -1523,6 +1547,15 @@ def atomic_answer_payload(service, record, questions, supported, view, use, comp
     payload.update(handoff_context(service, record, view, questions, use))
     if checked_delivery_policy(compact):
         payload['delivery_policy'] = compact['delivery_policy']
+    from packages.agents.writer.selected_task_delivery import POLICY_V2, checked_policy
+    if checked_policy(compact.get('task_execution_policy')):
+        payload['task_execution_policy'] = compact['task_execution_policy']
+        if compact['task_execution_policy'] != POLICY_V2:
+            payload['task_answer_candidates'] = [dict(question_id=plan['question_id'],
+                task_id=row['task_id'], claim_ids=[cid for cid in row.get('claim_ids', ())
+                    if cid in {c.id for c in claims}], status='requires_answer_review')
+                for plan in compact['question_answer_plans'] if plan['question_id'] in qids
+                for row in plan['task_results']]
     payload["answer_review_contract"] = answer_review_contract
     payload["question_claim_whitelist"] = [
         dict(
@@ -1783,6 +1816,9 @@ def replay_atomic_delivery(service, detail, snapshot, use, view, *, audit=None):
         raise ValueError("Atomic selection changed")
     scope = f"{view.competitor}/{view.dimension}"
     receipt = _observations(detail, "question_atomic_delivery", use.id, scope=scope)
+    from packages.agents.writer.selected_task_delivery import checked_policy, replay
+    if checked_policy(receipt.get('task_execution_policy')):
+        return replay(service, detail, snapshot, use, view, packets, receipt, audit=audit)
     delivery_policy = checked_delivery_policy(receipt)
     review_projection_version = checked_review_projection_version(
         receipt.get("review_projection_version", 1)
@@ -2167,7 +2203,7 @@ def replay_decision_reviews(detail, audit):
     Its local consumption updates are confined to this copy; suppress only its
     diagnostic recording and persistence, neither of which grants authority.
     """
-    if audit.answer_review_contract != 'subquestion-premises-v6':
+    if audit.answer_review_contract not in {'subquestion-premises-v6', 'task-outcomes-v1'}:
         return {}
     from packages.orchestrator.service import RunService
     from packages.research.evidence.views import select_evidence_view

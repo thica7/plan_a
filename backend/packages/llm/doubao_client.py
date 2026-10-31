@@ -66,6 +66,8 @@ class DoubaoClient:
             f"usage-{id(self)}", default=None)
         self._response_context: ContextVar[tuple[str, str, str | None] | None] = ContextVar(
             f"response-{id(self)}", default=None)
+        self._raw_response_context: ContextVar[str | None] = ContextVar(
+            f"raw-response-{id(self)}", default=None)
 
     async def complete_json(
         self,
@@ -102,9 +104,12 @@ class DoubaoClient:
                 self._usage_context.set(None)
         raise LLMError("LLM JSON request failed for all providers: " + " | ".join(errors))
 
-    async def complete_text(self, *, system: str, user: str) -> str:
+    async def complete_text(self, *, system: str, user: str, response_format=None) -> str:
         self._response_context.set(None)
         self._usage_context.set(None)
+        self._raw_response_context.set(None)
+        if response_format not in {None, "json_object"}:
+            raise LLMError("Unsupported response format")
         providers = self._provider_configs()
         if not providers:
             raise LLMError(self._route_error_message())
@@ -113,10 +118,13 @@ class DoubaoClient:
         last_error: LLMError | None = None
         for provider in providers:
             try:
+                if response_format and provider.name != "deepseek":
+                    raise LLMError("Provider does not support the requested native JSON mode")
                 return await self._complete_text_with_provider(
                     provider,
                     system=system,
                     user=user,
+                    **({"response_format": response_format} if response_format else {}),
                 )
             except LLMExecutionLimitError:
                 raise
@@ -139,6 +147,7 @@ class DoubaoClient:
         *,
         system: str,
         user: str,
+        response_format=None,
     ) -> str:
         payload = {
             "model": provider.model,
@@ -148,6 +157,8 @@ class DoubaoClient:
             ],
             "temperature": self._settings.llm_temperature,
         }
+        if response_format:
+            payload["response_format"] = {"type": response_format}
         self._usage_context.set(None)
         self._response_context.set(None)
         output_limit = self._settings.llm_max_output_tokens
@@ -193,7 +204,15 @@ class DoubaoClient:
                     if response.status_code not in _RETRYABLE_STATUS_CODES:
                         raise LLMError(message)
                     raise _RetryableLLMError(message)
-                return self._parse_text_response(response, provider)
+                content = self._parse_text_response(response, provider)
+                if response_format:
+                    try:
+                        from packages.llm.json_extract import strict_json_object
+
+                        strict_json_object(content)
+                    except ValueError as exc:
+                        raise LLMError("Native JSON response is not one strict object") from exc
+                return content
             except _RetryableLLMError as exc:
                 if attempt + 1 >= attempts:
                     raise LLMError(
@@ -252,6 +271,8 @@ class DoubaoClient:
         finish_reason = choice.get("finish_reason") if isinstance(choice, dict) else None
         finish_reason = str(finish_reason) if finish_reason is not None else None
         self._response_context.set((provider.name, provider.model, finish_reason))
+        if isinstance(content, str):
+            self._raw_response_context.set(content)
         if finish_reason == "length":
             raise _RetryableLLMError(
                 "LLM response stopped because the output length limit was reached."
@@ -259,6 +280,9 @@ class DoubaoClient:
         if not isinstance(content, str) or not content.strip():
             raise _RetryableLLMError("LLM returned empty content.")
         return content
+
+    def last_raw_response(self):
+        return self._raw_response_context.get()
 
     def consume_last_usage(self) -> LLMUsage | None:
         usage = self._usage_context.get()

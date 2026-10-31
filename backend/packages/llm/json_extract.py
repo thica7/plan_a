@@ -9,6 +9,22 @@ class JsonExtractionError(ValueError):
     pass
 
 
+def strict_json_object(content: str) -> dict[str, Any]:
+    """New explicit protocols accept exactly one object, with unique members."""
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise JsonExtractionError("Duplicate JSON member")
+            result[key] = value
+        return result
+
+    result = json.loads(content, object_pairs_hook=unique)
+    if not isinstance(result, dict):
+        raise JsonExtractionError("JSON root must be an object")
+    return result
+
+
 def extract_json_object(content: str) -> dict[str, Any]:
     stripped = content.strip()
     if stripped.startswith("{") and stripped.endswith("}"):

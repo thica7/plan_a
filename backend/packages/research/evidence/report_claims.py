@@ -131,7 +131,7 @@ class ReportDimensionAudit(BaseModel):
     answer_review_contract: Literal[
         "subquestion-premises-v1", "subquestion-premises-v2",
         "subquestion-premises-v3", "subquestion-premises-v4", "subquestion-premises-v5",
-        "subquestion-premises-v6"
+        "subquestion-premises-v6", "task-outcomes-v1"
     ] | None = None
     claim_review_version: Literal[3] | None = None
     upstream_dependencies: tuple[EvidenceArtifactDependency, ...] | None = None
@@ -506,7 +506,7 @@ def claim_review_reasons(claim, review):
 
 
 def audit_report_claims(claims, reviews, view, boundaries, *, available_facts=None,
-                        review_version=None, authority_claim_ids=()):
+                        review_version=None, authority_claim_ids=(), capability_claim_ids=()):
     parsed = [ClaimReview.model_validate(r) for r in reviews]
     counts = Counter(r.claim_id for r in parsed)
     claim_counts = Counter(c.id for c in claims)
@@ -520,6 +520,12 @@ def audit_report_claims(claims, reviews, view, boundaries, *, available_facts=No
             rules.extend(independent_operation_reasons(claim))
             from packages.research.evidence.claim_semantics import claim_semantic_reasons
             rules.extend(claim_semantic_reasons(claim, view.facts))
+            if claim.id in capability_claim_ids:
+                # V3 producer/replay supplies these only after authenticated
+                # whole-clause atomic REVIEW of a quarantined role capability.
+                # All source, condition and semantic reasons remain effective.
+                rules = [r for r in rules if r not in {
+                    'operation_binding_required', 'feature_claim_multiple_observations'}]
         review = by_id.get(claim.id)
         if review is not None:
             operation_review = review

@@ -41,7 +41,9 @@ def _question_delivery_scope(detail):
         return result
     questions = [q for dimension in plan.dimensions
                  for q in research_questions(detail, plan.competitors[0], dimension)]
+    from packages.agents.writer.price_answers import _request
     if not questions or any(not re.search(r'[?？]|是否|能否|如何|哪些|什么|怎样', q['question'])
+                            and _request(detail, q, plan.competitors[0]) is None
                             for q in questions):
         return result
     return {'mode': 'single_product_questions', 'requires_comparison': False,
@@ -51,21 +53,26 @@ def _question_delivery_scope(detail):
 def _comparison_gap_inapplicable(detail, finding):
     """Only explicit comparison coverage limitations can be outside question scope.
 
-    Current selected product cells must still be present and cited. Question
-    evidence/answers are checked independently by the existing final claim QA.
+    Question evidence/answers are checked independently by final claim QA.
+    A bounded single-product question does not require a comparison matrix.
     Unknown reasons and unsupported conclusions retain their original gate.
     """
-    if _question_delivery_scope(detail)['requires_comparison'] or detail.comparison_matrix is None:
-        return False
-    cells = {(cell.competitor.casefold(), cell.dimension.casefold()): cell
-             for cell in detail.comparison_matrix.cells}
-    if any((cell := cells.get((product.casefold(), dimension.casefold()))) is None or not cell.source_ids
-           for product in detail.plan.competitors for dimension in detail.plan.dimensions):
+    if _question_delivery_scope(detail)['requires_comparison']:
         return False
     text = finding.casefold()
     if re.search(r'\b(?:question|answer|claim|conclusion|citation|unknown|unverified)\b|'
                  r'问题|未回答|结论|错引|未知', text):
         return False
+    cell_messages = {
+        message.casefold()
+        for product in detail.plan.competitors for dimension in detail.plan.dimensions
+        for message in (
+            f'Missing comparison cell for {product} / {dimension}.',
+            f'Comparison cell for {product} / {dimension} has no source_ids.',
+        )
+    }
+    if text.strip() in cell_messages:
+        return True
     # A closed structural grammar keeps mixed findings conservative: appending
     # a missing rule or other unknown clause makes the entire finding applicable.
     structural_reasons = (
@@ -74,6 +81,11 @@ def _comparison_gap_inapplicable(detail, finding):
         r'(?:a\s+)?(?:validated|confident)\s+feature\s+comparison\.?',
         r'(?:no|missing)\s+(?:multi|cross)[- ]competitor\s+(?:[a-z]+\s+)?matrix'
         r'(?:\s+exists)?(?:[.;]\s*cross[- ]competitor\s+comparison\s+cannot\s+be\s+produced)?\.?',
+        r'comparison\s+matrix\s+is\s+missing\s+before\s+(?:writing|reflection)\.?',
+        r'missing\s+comparison\s+cell\s+count:\s*\d+\s*'
+        r'\(verified producer metadata\)\.?',
+        r'missing\s+comparison\s+cell\s+source_ids:\s*\d+\s+'
+        r'cell\(s\)\s+has no source_ids\.?',
     )
     return any(re.fullmatch(pattern, text.strip()) for pattern in structural_reasons)
 
@@ -302,12 +314,12 @@ class ReflectorAgentMixin:
         self._finish_delivery_phase(record, 'reflector', None)
 
     @staticmethod
-    def _coverage_metadata_blockers(coverage):
+    def _coverage_metadata_blockers(coverage, *, requires_comparison=True):
         """Local structure checks consume verified counts, never unsent fact values."""
         gaps = []
-        if coverage["missing_cell_count"]:
+        if requires_comparison and coverage["missing_cell_count"]:
             gaps.append(f"Missing comparison cell count: {coverage['missing_cell_count']} (verified producer metadata).")
-        if coverage["uncited_cell_count"]:
+        if requires_comparison and coverage["uncited_cell_count"]:
             gaps.append(f"Missing comparison cell source_ids: {coverage['uncited_cell_count']} cell(s) has no source_ids.")
         if coverage["unavailable_count"]:
             gaps.append(f"Analysis dependency unavailable count: {coverage['unavailable_count']}; reanalyse.")
@@ -332,11 +344,13 @@ class ReflectorAgentMixin:
         if llm_gate_status == 'block' and original_llm_gaps and not llm_blocking_gaps:
             llm_gate_status = 'warn'
         blocking_gaps: list[str] = []
+        requires_comparison = _question_delivery_scope(detail)['requires_comparison']
         if producer_coverage is not None:
-            blocking_gaps.extend(self._coverage_metadata_blockers(producer_coverage))
-        elif detail.comparison_matrix is None:
+            blocking_gaps.extend(self._coverage_metadata_blockers(producer_coverage,
+                requires_comparison=requires_comparison))
+        elif requires_comparison and detail.comparison_matrix is None:
             blocking_gaps.append("Comparison matrix is missing before writing.")
-        else:
+        elif requires_comparison:
             cells_by_key = {
                 (cell.competitor.casefold(), cell.dimension.casefold()): cell
                 for cell in detail.comparison_matrix.cells
@@ -431,17 +445,19 @@ class ReflectorAgentMixin:
         return unique
 
     def _deterministic_reflector_payload(self, detail: RunDetail, *, producer_coverage=None) -> dict[str, object]:
+        requires_comparison = _question_delivery_scope(detail)['requires_comparison']
         if producer_coverage is not None:
             return {"coverage_gaps": [], "confidence_outliers": [],
-                    "cross_competitor_gaps": self._coverage_metadata_blockers(producer_coverage),
+                    "cross_competitor_gaps": self._coverage_metadata_blockers(producer_coverage,
+                        requires_comparison=requires_comparison),
                     "suggested_redo_dimension": None}
         coverage_gaps: list[str] = []
         confidence_outliers: list[str] = []
         cross_competitor_gaps: list[str] = []
         matrix = detail.comparison_matrix
-        if matrix is None:
+        if requires_comparison and matrix is None:
             cross_competitor_gaps.append("Comparison matrix is missing before reflection.")
-        else:
+        elif requires_comparison:
             cells_by_key = {
                 (cell.competitor.casefold(), cell.dimension.casefold()): cell
                 for cell in matrix.cells

@@ -396,6 +396,34 @@ def question_context_blocks(service, detail, snapshot, use, view, gaps, request_
     context_gaps = {CORE_GAP, EXCEPTION_GAP} & set(gaps)
     if not context_gaps:
         return False
+    if context_gaps == {CORE_GAP} and not any(
+        gap.startswith('question_') and gap != CORE_GAP for gap in gaps
+    ):
+        # V3 replaces retrieval's heuristic core union with authenticated task
+        # fulfillment. Missing exceptions and actual unfulfilled tasks never pass.
+        try:
+            receipt = _observations(detail, 'question_atomic_delivery', use.id, optional=True)
+            if receipt and receipt.get('task_execution_policy') == 'selected-task-atoms-v3':
+                from packages.agents.writer.answer_presentation import question_coverage_matches
+                from packages.agents.writer.question_atomic_delivery import replay_atomic_delivery
+                from packages.agents.writer.task_answer_outcomes import TaskOutcomeAuthority
+
+                audit = next(a for a in detail.report_dimension_audits
+                             if a.consumption_id == use.id)
+                replay = replay_atomic_delivery(service, detail, snapshot, use, view, audit=audit)
+                authorities = replay.get('decision_review', {})
+                if audit.answer_coverage and all(
+                    a.status == 'answered'
+                    and isinstance(authorities.get(a.question_id), TaskOutcomeAuthority)
+                    and authorities[a.question_id].matches(a) for a in audit.answer_coverage
+                ) and question_coverage_matches(
+                    detail.report_md, audit, detail.output_language,
+                    audits=detail.report_dimension_audits, detail=detail,
+                    decision_reviews=authorities,
+                ):
+                    return False
+        except (ValueError, KeyError, TypeError, AttributeError, IndexError, StopIteration):
+            return True
     if (
         EXCEPTION_GAP in context_gaps
         or not request_only_ids

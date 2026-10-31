@@ -39,6 +39,24 @@ def answer_decision_lines(
 ):
     """Decision wording has one extension point for reviewed subquestion decisions."""
     zh = language.startswith("zh")
+    if answer_review_contract == 'task-outcomes-v1':
+        from packages.agents.writer.task_answer_outcomes import TaskOutcomeAuthority
+
+        if (not isinstance(decision_review, TaskOutcomeAuthority)
+                or not decision_review.matches(answer)):
+            return []
+        names = {'yes': '是', 'no': '否', 'depends': '需按条件判断', 'unknown': '尚不能确定'}
+        lines = []
+        if answer.conclusion in names:
+            lines.append('  结论：' + names[answer.conclusion] if zh else
+                         '  Conclusion: ' + answer.conclusion)
+        if len(answer.subquestion_bindings) > 1:
+            for b in answer.subquestion_bindings:
+                if b.conclusion == 'not_applicable':
+                    continue
+                label = names.get(b.conclusion, b.conclusion) if zh else b.conclusion
+                lines.append(f'  - {plain(b.question_quote)} — {label}')
+        return lines
     if answer_review_contract in {'subquestion-premises-v5', 'subquestion-premises-v6'}:
         from packages.agents.writer.answer_coverage import coverage_resolution_reasons
 
@@ -125,7 +143,8 @@ def question_coverage_lines(audit, language, *, detail=None, facts=None, decisio
                   if fact.competitor == audit.competitor and fact.dimension == audit.dimension)
     from packages.agents.writer.task_answers import reviewed_task_answer_rows, task_answer_lines
     tasks = reviewed_task_answer_rows(detail, audit) if detail is not None else []
-    if audit.answer_review_contract == 'subquestion-premises-v6' and decision_reviews is None:
+    if (audit.answer_review_contract in {'subquestion-premises-v6', 'task-outcomes-v1'}
+            and decision_reviews is None):
         from packages.agents.writer.question_atomic_delivery import replay_decision_reviews
 
         try:
@@ -135,6 +154,12 @@ def question_coverage_lines(audit, language, *, detail=None, facts=None, decisio
     for answer in audit.answer_coverage:
         decision_review = (decision_reviews or {}).get(answer.question_id)
         qualified = True
+        if (audit.answer_review_contract == 'task-outcomes-v1'
+                and answer.resolution not in {'clarification', 'insufficient'}):
+            from packages.agents.writer.task_answer_outcomes import TaskOutcomeAuthority
+
+            qualified = (isinstance(decision_review, TaskOutcomeAuthority)
+                         and decision_review.matches(answer))
         if audit.answer_review_contract in {'subquestion-premises-v5', 'subquestion-premises-v6'}:
             from packages.agents.writer.answer_coverage import coverage_resolution_reasons
             from packages.agents.writer.complete_predicates import DELIVERY_POLICY

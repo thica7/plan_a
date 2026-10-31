@@ -1,0 +1,917 @@
+{
+  "status": "regression_not_deliverable",
+  "round": "selected_task_atoms_v3",
+  "artifact_directory": "data/artifacts/writer-task-verdict-2026-10-31",
+  "base_commit": "129d9e4cc91e336125454a987031d52d6eff4b26",
+  "production_code_sha256": "c3c3e41fe5130355bf435a23d63f8e401eaf0343c24c84c9e55af1e508dfcfb2",
+  "task_execution_policy": "selected-task-atoms-v3",
+  "answer_review_contract": "task-outcomes-v1",
+  "original_questions": {
+    "question_count": 8,
+    "branch_count": 22,
+    "report_count": 4,
+    "evaluation_population": "既有暴露8题的必要分支回归；不是新盲样本或新的人审",
+    "reference_answers_in_model_input": false,
+    "source_mode": "固定2026-10-21页面回放，不证明当前站点实时性",
+    "verdict_counts": {
+      "pass": 2,
+      "partial": 5,
+      "fail": 1
+    }
+  },
+  "branch_summary": {
+    "denominator": 22,
+    "text_coverage": {
+      "answered": 13,
+      "missing": 7,
+      "partial": 2
+    },
+    "selected_support": {
+      "supported": 9,
+      "missing": 9,
+      "request_only_satisfied": 4
+    }
+  },
+  "report_delivery_summary": {
+    "text_deliverable": {
+      "passed": 0,
+      "denominator": 4
+    },
+    "text_plus_evidence_deliverable": {
+      "passed": 0,
+      "denominator": 4
+    },
+    "all_claims_atomic_deliverable": {
+      "passed": 0,
+      "denominator": 4
+    },
+    "strict_system_qa_deliverable": {
+      "passed": 0,
+      "denominator": 4
+    }
+  },
+  "visible_claim_summary": {
+    "denominator_policy": "只统计正式正文出现的唯一产品规则/场景推论，重复摘要和问答同文去重；不把原题复述、状态占位、置信度模板、必要 request-only 澄清和安全拒编金额当新增产品主张。它们仍逐题验收并单列可见处置。",
+    "unique_claim_count": 10,
+    "fully_supported": 8,
+    "partially_supported": 2,
+    "strict_atomic": 7,
+    "non_atomic": 3
+  },
+  "sensitivity": {
+    "1Password_invitation_vs_confirmed_membership": {
+      "main_support_verdict": "partial",
+      "fixed_boundary": "本条仅所选invited限制不完整支持确认后持续加入/访问限制；另一claim的access span不得补给本条。",
+      "permissive_inference_alternative": "若把移除再加入句视为足够的持续单vault排他线索，第一条可视作合理推论；此为较宽口径，不作为固定严格主判。",
+      "permissive_unique_claim_full_support": 9,
+      "main_unique_claim_full_support": 8,
+      "main_strict_atomic": 7,
+      "if_first_claim_treated_as_one_cap_inference_strict_atomic": 8,
+      "question_core_scoring": "主判原题1仍pass：第二claim自身已发表的两个核心谓词及其自身所选quote分别满足两必要分支。若额外要求第一显式否定整句亦完整支持，则该原题变partial；应与核心分支完成区分。",
+      "report_delivery_impact": "所有敏感性下四类report仍0/4，不改变最终报告交付结论。"
+    }
+  },
+  "reports": [
+    {
+      "product": "Trello",
+      "text_deliverable": false,
+      "text_plus_evidence_deliverable": false,
+      "all_claims_atomic_deliverable": false,
+      "strict_system_qa_deliverable": false,
+      "question_verdicts": {
+        "Trello-1": "partial",
+        "Trello-2": "partial"
+      },
+      "visible_claim_count": 6,
+      "fully_supported_visible_claim_count": 6,
+      "strict_atomic_visible_claim_count": 6,
+      "qa_blocker_count": 3,
+      "all_missing_or_partial_branches": [
+        "Trello-1.5",
+        "Trello-2.1",
+        "Trello-2.2",
+        "Trello-2.4"
+      ],
+      "independent_scoring_note": "生产 blocker 不改变上面的原题独立评分；四类报告都先受正文未完整交付约束。"
+    },
+    {
+      "product": "Cloudflare",
+      "text_deliverable": false,
+      "text_plus_evidence_deliverable": false,
+      "all_claims_atomic_deliverable": false,
+      "strict_system_qa_deliverable": false,
+      "question_verdicts": {
+        "Cloudflare-1": "partial",
+        "Cloudflare-2": "partial"
+      },
+      "visible_claim_count": 2,
+      "fully_supported_visible_claim_count": 2,
+      "strict_atomic_visible_claim_count": 1,
+      "qa_blocker_count": 3,
+      "all_missing_or_partial_branches": [
+        "Cloudflare-1.3",
+        "Cloudflare-2.2"
+      ],
+      "independent_scoring_note": "生产 blocker 不改变上面的原题独立评分；四类报告都先受正文未完整交付约束。"
+    },
+    {
+      "product": "Bitwarden",
+      "text_deliverable": false,
+      "text_plus_evidence_deliverable": false,
+      "all_claims_atomic_deliverable": false,
+      "strict_system_qa_deliverable": false,
+      "question_verdicts": {
+        "Bitwarden-1": "fail",
+        "Bitwarden-2": "pass"
+      },
+      "visible_claim_count": 0,
+      "fully_supported_visible_claim_count": 0,
+      "strict_atomic_visible_claim_count": 0,
+      "qa_blocker_count": 3,
+      "all_missing_or_partial_branches": [
+        "Bitwarden-1.1"
+      ],
+      "independent_scoring_note": "生产 blocker 不改变上面的原题独立评分；四类报告都先受正文未完整交付约束。"
+    },
+    {
+      "product": "1Password",
+      "text_deliverable": false,
+      "text_plus_evidence_deliverable": false,
+      "all_claims_atomic_deliverable": false,
+      "strict_system_qa_deliverable": false,
+      "question_verdicts": {
+        "1Password-1": "pass",
+        "1Password-2": "partial"
+      },
+      "visible_claim_count": 2,
+      "fully_supported_visible_claim_count": 0,
+      "strict_atomic_visible_claim_count": 0,
+      "qa_blocker_count": 3,
+      "all_missing_or_partial_branches": [
+        "1Password-2.2",
+        "1Password-2.3"
+      ],
+      "independent_scoring_note": "生产 blocker 不改变上面的原题独立评分；四类报告都先受正文未完整交付约束。"
+    }
+  ],
+  "original_question_verdicts": [
+    {
+      "original_question_id": "Trello-1",
+      "verdict": "partial",
+      "reason": "A/B 投票、下载附件、导出已完成；许可是否形成逐卡义务尚未发表。",
+      "answered_branches": [
+        "Trello-1.1",
+        "Trello-1.2",
+        "Trello-1.3",
+        "Trello-1.4"
+      ],
+      "partial_branches": [],
+      "unanswered_branches": [
+        "Trello-1.5"
+      ]
+    },
+    {
+      "original_question_id": "Trello-2",
+      "verdict": "partial",
+      "reason": "改现有成员的授权主体已答；Workspace范围、A/B独立权限及Observer标签不足定费的规则仍未完整交付。",
+      "answered_branches": [
+        "Trello-2.3"
+      ],
+      "partial_branches": [
+        "Trello-2.4"
+      ],
+      "unanswered_branches": [
+        "Trello-2.1",
+        "Trello-2.2"
+      ]
+    },
+    {
+      "original_question_id": "Cloudflare-1",
+      "verdict": "partial",
+      "reason": "两条源规则可用且支持，但跨 other.example 场景否定没有正式发表。",
+      "answered_branches": [
+        "Cloudflare-1.1",
+        "Cloudflare-1.2"
+      ],
+      "partial_branches": [],
+      "unanswered_branches": [
+        "Cloudflare-1.3"
+      ]
+    },
+    {
+      "original_question_id": "Cloudflare-2",
+      "verdict": "partial",
+      "reason": "安全拒准确金额且问CPU，但缺CPU独立用量计费这一已知必要规则。",
+      "answered_branches": [
+        "Cloudflare-2.1"
+      ],
+      "partial_branches": [
+        "Cloudflare-2.2"
+      ],
+      "unanswered_branches": []
+    },
+    {
+      "original_question_id": "Bitwarden-1",
+      "verdict": "fail",
+      "reason": "可通过人数cap整体否定的核心目标，最终正文没有任何正式产品答案。",
+      "answered_branches": [],
+      "partial_branches": [],
+      "unanswered_branches": [
+        "Bitwarden-1.1"
+      ]
+    },
+    {
+      "original_question_id": "Bitwarden-2",
+      "verdict": "pass",
+      "reason": "歧义操作及数据归属均明确询问；合理必要澄清通过，未知数据保留行为没有被编造。",
+      "answered_branches": [
+        "Bitwarden-2.1",
+        "Bitwarden-2.2"
+      ],
+      "partial_branches": [],
+      "unanswered_branches": []
+    },
+    {
+      "original_question_id": "1Password-1",
+      "verdict": "pass",
+      "reason": "两个原题必要核心均已发表，可由第二条自身所选don’t have their own private vaults/only have access to a single vault支持；第一条邀请规则强化至确认后成员资格、第二条账户所有者额外断言均未完整支持，另影响主张及报告验收，不互借证据。",
+      "answered_branches": [
+        "1Password-1.1",
+        "1Password-1.2"
+      ],
+      "partial_branches": [],
+      "unanswered_branches": []
+    },
+    {
+      "original_question_id": "1Password-2",
+      "verdict": "partial",
+      "reason": "安全拒编价完成，但公开报价性质与有证官方销售/报价下一步均未交付。",
+      "answered_branches": [
+        "1Password-2.1"
+      ],
+      "partial_branches": [],
+      "unanswered_branches": [
+        "1Password-2.2",
+        "1Password-2.3"
+      ]
+    }
+  ],
+  "runtime": {
+    "products": [
+      {
+        "product": "trello",
+        "run_sha256": "0f58f00d282ffdc85c2a33cd3c6263c41e8ee4e90279f5019faf001acb10ce3c",
+        "exact_witness": true,
+        "report_sha256": "f5c96d5d49efad81d7120f4cd5cae728caae940aceca6dec7bceecbf2a31db42",
+        "transport_attempts": 43,
+        "llm_spans": 43,
+        "by_agent": {
+          "planner": 1,
+          "collector": 2,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 18,
+          "qa": 19
+        },
+        "by_name": {
+          "planner_scope": 1,
+          "collector_semantic_extract": 1,
+          "collector_question_evidence_review": 1,
+          "feature_trello_analyst": 1,
+          "comparison_matrix": 1,
+          "coverage_reflection": 1,
+          "dimension_question_task_support_selection": 9,
+          "dimension_question_atomic_generation": 9,
+          "dimension_question_atomic_review": 7,
+          "dimension_question_atomic_answer_review": 7,
+          "final_question_reconciliation": 5
+        },
+        "guarded_model_transports": 43,
+        "native_json_spans": 32,
+        "native_json_ok": 32,
+        "native_json_error": 0,
+        "native_json_task_review_rows": 11,
+        "known_tokens": 158142,
+        "unknown_usage_spans": 0,
+        "timeout_attempts": 0,
+        "output_length_spans": 0,
+        "qa_protocol": "independent_questions_v9",
+        "qa_planned": 7,
+        "qa_sent": 7,
+        "qa_valid": 7,
+        "qa_unsent": 0,
+        "qa_timeout": 0,
+        "qa_batches": 5,
+        "qa_resumable": 0,
+        "qa_passed_question_ids": [
+          "question-659854eaa5bf118b8901",
+          "question-00e2382d7575b5384c9a"
+        ],
+        "qa_blockers": 3,
+        "answer_review_contracts": {
+          "task-outcomes-v1": 1
+        },
+        "actual_answer_calls": 7,
+        "actual_task_outcome_contracts": {
+          "task-outcomes-v1": 7
+        },
+        "actual_task_counts": [
+          1,
+          1,
+          1,
+          2,
+          1,
+          4,
+          1
+        ],
+        "actual_candidate_projection_versions": {
+          "2": 7
+        },
+        "actual_decision_selection_policies": {
+          "reviewed_quantity_conjunction-v1": 7
+        },
+        "actual_candidate_counts": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "observed_decision_credentials": 0,
+        "decision_witness_kinds": {},
+        "credential_count_is_not_semantic_acceptance": true,
+        "observed_answers": [
+          {
+            "question_id": "question-659854eaa5bf118b8901",
+            "status": "answered"
+          },
+          {
+            "question_id": "question-00e2382d7575b5384c9a",
+            "status": "answered"
+          },
+          {
+            "question_id": "question-1305198ad16f108bf375",
+            "status": "unverified"
+          },
+          {
+            "question_id": "question-a5be8c7a210d770f2ea7",
+            "status": "partial"
+          }
+        ]
+      },
+      {
+        "product": "cloudflare",
+        "run_sha256": "005091e8ad55beda4f7cf1e0d8d61d5e0ad16bb31da7da6bcf3aaed9d064e009",
+        "exact_witness": true,
+        "report_sha256": "b8d5114c1328d9bfc17b535af93c9c4ad6f40691ea99981384f4d2a517239600",
+        "transport_attempts": 26,
+        "llm_spans": 26,
+        "by_agent": {
+          "planner": 1,
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 10,
+          "qa": 9
+        },
+        "by_name": {
+          "planner_scope": 1,
+          "collector_semantic_extract": 2,
+          "collector_question_evidence_review": 1,
+          "feature_cloudflare_analyst": 1,
+          "comparison_matrix": 1,
+          "coverage_reflection": 1,
+          "dimension_question_task_support_selection": 5,
+          "dimension_question_atomic_generation": 5,
+          "dimension_question_atomic_review": 3,
+          "dimension_question_atomic_answer_review": 3,
+          "final_question_reconciliation": 3
+        },
+        "guarded_model_transports": 26,
+        "native_json_spans": 16,
+        "native_json_ok": 16,
+        "native_json_error": 0,
+        "native_json_task_review_rows": 3,
+        "known_tokens": 91715,
+        "unknown_usage_spans": 0,
+        "timeout_attempts": 0,
+        "output_length_spans": 0,
+        "qa_protocol": "independent_questions_v9",
+        "qa_planned": 5,
+        "qa_sent": 5,
+        "qa_valid": 5,
+        "qa_unsent": 0,
+        "qa_timeout": 0,
+        "qa_batches": 3,
+        "qa_resumable": 0,
+        "qa_passed_question_ids": [],
+        "qa_blockers": 3,
+        "answer_review_contracts": {
+          "task-outcomes-v1": 1
+        },
+        "actual_answer_calls": 3,
+        "actual_task_outcome_contracts": {
+          "task-outcomes-v1": 3
+        },
+        "actual_task_counts": [
+          1,
+          1,
+          1
+        ],
+        "actual_candidate_projection_versions": {
+          "2": 3
+        },
+        "actual_decision_selection_policies": {
+          "reviewed_quantity_conjunction-v1": 3
+        },
+        "actual_candidate_counts": [
+          0,
+          0,
+          0
+        ],
+        "observed_decision_credentials": 0,
+        "decision_witness_kinds": {},
+        "credential_count_is_not_semantic_acceptance": true,
+        "observed_answers": [
+          {
+            "question_id": "question-1b7471af0d3dcf4af91c",
+            "status": "partial"
+          },
+          {
+            "question_id": "question-dd9aeefb8be2a32bc5bf",
+            "status": "partial"
+          }
+        ]
+      },
+      {
+        "product": "bitwarden",
+        "run_sha256": "07c5fde0b893ae717513eea1f92c2c26a62b42c4f136105dd9771303e6e72593",
+        "exact_witness": true,
+        "report_sha256": "189d703d5628459d389f7a4b043cf69800acdbe47920f7afcbfbd2bb5e687364",
+        "transport_attempts": 18,
+        "llm_spans": 18,
+        "by_agent": {
+          "planner": 1,
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 6,
+          "qa": 5
+        },
+        "by_name": {
+          "planner_scope": 1,
+          "collector_semantic_extract": 2,
+          "collector_question_evidence_review": 1,
+          "feature_bitwarden_analyst": 1,
+          "comparison_matrix": 1,
+          "coverage_reflection": 1,
+          "dimension_question_task_support_selection": 3,
+          "dimension_question_atomic_generation": 3,
+          "dimension_question_atomic_review": 1,
+          "dimension_question_atomic_answer_review": 2,
+          "final_question_reconciliation": 2
+        },
+        "guarded_model_transports": 18,
+        "native_json_spans": 9,
+        "native_json_ok": 9,
+        "native_json_error": 0,
+        "native_json_task_review_rows": 3,
+        "known_tokens": 62747,
+        "unknown_usage_spans": 0,
+        "timeout_attempts": 0,
+        "output_length_spans": 0,
+        "qa_protocol": "independent_questions_v9",
+        "qa_planned": 6,
+        "qa_sent": 6,
+        "qa_valid": 6,
+        "qa_unsent": 0,
+        "qa_timeout": 0,
+        "qa_batches": 2,
+        "qa_resumable": 0,
+        "qa_passed_question_ids": [],
+        "qa_blockers": 3,
+        "answer_review_contracts": {
+          "task-outcomes-v1": 1
+        },
+        "actual_answer_calls": 2,
+        "actual_task_outcome_contracts": {
+          "task-outcomes-v1": 2
+        },
+        "actual_task_counts": [
+          2,
+          1
+        ],
+        "actual_candidate_projection_versions": {
+          "2": 2
+        },
+        "actual_decision_selection_policies": {
+          "reviewed_quantity_conjunction-v1": 2
+        },
+        "actual_candidate_counts": [
+          0,
+          0
+        ],
+        "observed_decision_credentials": 0,
+        "decision_witness_kinds": {},
+        "credential_count_is_not_semantic_acceptance": true,
+        "observed_answers": [
+          {
+            "question_id": "question-cb40c90e4d944bf23275",
+            "status": "unverified"
+          },
+          {
+            "question_id": "question-63762e09ae5d8faa1071",
+            "status": "partial"
+          }
+        ]
+      },
+      {
+        "product": "1password",
+        "run_sha256": "f258589fe6993d332fbe6b70e987d46e645905f8e54ee4699429b2e89b8b60f4",
+        "exact_witness": true,
+        "report_sha256": "b3663d4a6b59dcd59622af7bd15c04dea36e7ab936e18658b6e7fc00198534fe",
+        "transport_attempts": 21,
+        "llm_spans": 21,
+        "by_agent": {
+          "planner": 1,
+          "collector": 3,
+          "analyst": 1,
+          "comparator": 1,
+          "reflector": 1,
+          "writer": 8,
+          "qa": 6
+        },
+        "by_name": {
+          "planner_scope": 1,
+          "collector_semantic_extract": 2,
+          "collector_question_evidence_review": 1,
+          "feature_1password_analyst": 1,
+          "comparison_matrix": 1,
+          "coverage_reflection": 1,
+          "dimension_question_task_support_selection": 5,
+          "dimension_question_atomic_generation": 3,
+          "dimension_question_atomic_review": 2,
+          "dimension_question_atomic_answer_review": 2,
+          "final_question_reconciliation": 2
+        },
+        "guarded_model_transports": 21,
+        "native_json_spans": 12,
+        "native_json_ok": 12,
+        "native_json_error": 0,
+        "native_json_task_review_rows": 3,
+        "known_tokens": 74702,
+        "unknown_usage_spans": 0,
+        "timeout_attempts": 0,
+        "output_length_spans": 0,
+        "qa_protocol": "independent_questions_v9",
+        "qa_planned": 8,
+        "qa_sent": 8,
+        "qa_valid": 8,
+        "qa_unsent": 0,
+        "qa_timeout": 0,
+        "qa_batches": 2,
+        "qa_resumable": 0,
+        "qa_passed_question_ids": [
+          "question-60a7010e0c7ca2ae7058"
+        ],
+        "qa_blockers": 3,
+        "answer_review_contracts": {
+          "task-outcomes-v1": 1
+        },
+        "actual_answer_calls": 2,
+        "actual_task_outcome_contracts": {
+          "task-outcomes-v1": 2
+        },
+        "actual_task_counts": [
+          2,
+          1
+        ],
+        "actual_candidate_projection_versions": {
+          "2": 2
+        },
+        "actual_decision_selection_policies": {
+          "reviewed_quantity_conjunction-v1": 2
+        },
+        "actual_candidate_counts": [
+          0,
+          0
+        ],
+        "observed_decision_credentials": 0,
+        "decision_witness_kinds": {},
+        "credential_count_is_not_semantic_acceptance": true,
+        "observed_answers": [
+          {
+            "question_id": "question-60a7010e0c7ca2ae7058",
+            "status": "answered"
+          },
+          {
+            "question_id": "question-26d795d67d79bd12e05d",
+            "status": "partial"
+          }
+        ]
+      }
+    ],
+    "transports": 108,
+    "known_tokens": 387306,
+    "unknown_usage_spans": 0,
+    "provider_bill_usd": null,
+    "native_mode_basis": "Trace declarations plus exact SYSTEM/user/mode/contract identity; HTTP parameter emission is independently covered by integration tests, not proved by a mode label alone.",
+    "model_weight_revision": "not established; configured alias only",
+    "content_acceptance": "see separate independent-content-audit.json; counts are not proof",
+    "previous_originals": [
+      {
+        "path": "data/artifacts/writer-task-verdict-2026-10-31/previous-originals-lock.json",
+        "count": 979,
+        "unchanged": true
+      },
+      {
+        "path": "data/artifacts/task-conclusion-window-2026-10-28/previous-originals-lock.json",
+        "count": 254,
+        "unchanged": true
+      },
+      {
+        "path": "data/artifacts/task-conclusion-contract-2026-10-27/previous-originals-lock.json",
+        "count": 211,
+        "unchanged": true
+      },
+      {
+        "path": "data/artifacts/task-scope-source-limits-2026-10-27/previous-originals-lock.json",
+        "count": 155,
+        "unchanged": true
+      },
+      {
+        "path": "data/artifacts/task-scope-live-fix-2026-10-27/previous-originals-lock.json",
+        "count": 218,
+        "unchanged": true
+      },
+      {
+        "path": "data/artifacts/task-scope-delivery-2026-10-27/previous-originals-lock.json",
+        "count": 261,
+        "unchanged": true
+      },
+      {
+        "path": "data/artifacts/answer-guard-repair-2026-10-27/previous-originals-lock.json",
+        "count": 247,
+        "unchanged": true
+      },
+      {
+        "path": "data/artifacts/answer-delivery-followup-2026-10-26/previous-originals-lock.json",
+        "count": 242,
+        "unchanged": true
+      },
+      {
+        "path": "data/artifacts/answer-delivery-repair-2026-10-26/previous-originals-lock.json",
+        "count": 704,
+        "unchanged": true
+      }
+    ]
+  },
+  "qa_totals": {
+    "qa_planned": 26,
+    "qa_sent": 26,
+    "qa_valid": 26,
+    "qa_unsent": 0,
+    "qa_timeout": 0,
+    "qa_resumable": 0,
+    "qa_blockers": 12
+  },
+  "native_json_trace_totals": {
+    "native_json_spans": 69,
+    "native_json_ok": 69,
+    "native_json_error": 0
+  },
+  "sources": [
+    {
+      "product": "trello",
+      "input_sha256": "f6ecc084babe6c3073b56b0c14c0d8b3cc1670b89bb21c4b842848f80791d8f9",
+      "capture_archive_sha256": "bd236c5b14373e40b1e87459a9066fdc2a982fbd73458514042f10172cf7daa6",
+      "source_urls": [
+        "https://support.atlassian.com/trello/docs/adding-observers-to-boards/",
+        "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+      ],
+      "model_parameters": {
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "temperature": 0,
+        "default_max_output_tokens": 2048,
+        "retries": 0
+      },
+      "budget": {
+        "calls": 64,
+        "tokens": 240000,
+        "cost_usd": 0.25,
+        "max_output_tokens": 2048,
+        "retries": 0
+      },
+      "fresh_web_capture": false,
+      "e2e": false
+    },
+    {
+      "product": "cloudflare",
+      "input_sha256": "b2a1fa4913c223c3729673a1cf9c50d9670bea2cdff2b450359e9e2e287f32e1",
+      "capture_archive_sha256": "9d491763358a4970d51bb5131f9eb858bbf5019e96e6edb84cb60c1a27eae6a7",
+      "source_urls": [
+        "https://developers.cloudflare.com/fundamentals/manage-members/roles/",
+        "https://developers.cloudflare.com/workers/platform/pricing/"
+      ],
+      "model_parameters": {
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "temperature": 0,
+        "default_max_output_tokens": 2048,
+        "retries": 0
+      },
+      "budget": {
+        "calls": 64,
+        "tokens": 240000,
+        "cost_usd": 0.25,
+        "max_output_tokens": 2048,
+        "retries": 0
+      },
+      "fresh_web_capture": false,
+      "e2e": false
+    },
+    {
+      "product": "bitwarden",
+      "input_sha256": "ad5a6acb7174933f62b7c18cfa4d46287f70cde53f9ac966fd1ca3591429afde",
+      "capture_archive_sha256": "1c5392d28db239a22167f4806108e5c909380ec5fc8c802e17fc2f14f457ca4e",
+      "source_urls": [
+        "https://bitwarden.com/help/password-manager-plans/",
+        "https://bitwarden.com/help/remove-users/",
+        "https://bitwarden.com/help/delete-member-accounts/"
+      ],
+      "model_parameters": {
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "temperature": 0,
+        "default_max_output_tokens": 2048,
+        "retries": 0
+      },
+      "budget": {
+        "calls": 64,
+        "tokens": 240000,
+        "cost_usd": 0.25,
+        "max_output_tokens": 2048,
+        "retries": 0
+      },
+      "fresh_web_capture": false,
+      "e2e": false
+    },
+    {
+      "product": "1password",
+      "input_sha256": "621243fb9ed5459fb9dd6d5b731b738f8b3dc06f5df3292e57355bc01ebd522b",
+      "capture_archive_sha256": "6c9cb9822f1c4cce09f2609ca00d865c3e11aef5e36e2393113ba5790022d8b1",
+      "source_urls": [
+        "https://support.1password.com/guests/",
+        "https://1password.com/pricing"
+      ],
+      "model_parameters": {
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "temperature": 0,
+        "default_max_output_tokens": 2048,
+        "retries": 0
+      },
+      "budget": {
+        "calls": 64,
+        "tokens": 240000,
+        "cost_usd": 0.25,
+        "max_output_tokens": 2048,
+        "retries": 0
+      },
+      "fresh_web_capture": false,
+      "e2e": false
+    }
+  ],
+  "comparison": {
+    "previous_profile": {
+      "calls": 48,
+      "tokens": 160000
+    },
+    "current_profile": {
+      "calls": 64,
+      "tokens": 240000
+    },
+    "same_condition_comparison": false,
+    "cost_improvement_claim": false
+  },
+  "rounds_this_change": {
+    "v1": {
+      "calls": 107,
+      "known_tokens": 304718
+    },
+    "v2": {
+      "calls": 83,
+      "known_tokens": 291776
+    },
+    "v3": {
+      "calls": 108,
+      "known_tokens": 387306
+    },
+    "total": {
+      "calls": 298,
+      "known_tokens": 983800,
+      "unknown_usage_spans": 0
+    },
+    "model_list_get_requests_separate": 1
+  },
+  "engineering": {
+    "backend": {
+      "passed": 9335,
+      "skipped": 1,
+      "warnings": 250,
+      "elapsed_seconds": 476.07282614707947,
+      "log": "data/artifacts/writer-task-verdict-2026-10-31/full-backend.log",
+      "log_sha256": "b1bd184e6c16da9bf50eee93b1f23d9e54422a738f670724760e236db4522b23",
+      "exit_code": 0
+    },
+    "preserved_failed_backend_runs": [
+      {
+        "path": "data/artifacts/writer-task-verdict-2026-10-31/full-backend-source-final-verification.json",
+        "sha256": "653a86b31107f5f7914b75b3328d7dcc539d9fb06cc3fb956d4c045218bc620a"
+      },
+      {
+        "path": "data/artifacts/writer-task-verdict-2026-10-31/full-backend-final-verification.json",
+        "sha256": "976bffa22957e597c7e00f36c048e2f8009d6b876baf48384ea412b3d3082099"
+      }
+    ],
+    "fixture_resolution": "旧ANSWER字段mock改成V2/V3参数化，原跨qid负例全部保留；26项独立重跑通过，生产未改",
+    "timing_resolution": "未改数据库池测试198ms超过150ms；隔离复验通过后，同一源码在无并行模型负载下全量复验；不修改阈值",
+    "frontend": {
+      "tests": 340,
+      "test_exit_code": 0,
+      "build_exit_code": 0,
+      "verified_file_hashes": 260,
+      "files_unchanged": true
+    },
+    "standard_api_types_byte_identical": true,
+    "ruff": {
+      "files": 24,
+      "baseline": 587,
+      "current": 585,
+      "added": 0
+    },
+    "reviews": {
+      "specification": "APPROVE",
+      "quality": "APPROVE",
+      "test_fixture_addendum": "APPROVE"
+    },
+    "producer_replay_scope": "四家真实生产replay_atomic_delivery逐transport重建support selection、generation、claim review、task answer及缺价处置，再与审计记录比较；均通过。不是只验证receipt hash。"
+  },
+  "provenance": {
+    "source_manifest_sha256": "ff4cc515f74349fdd9934d138f5eb317c6b8b12a8c448cda32fb7991878eb968",
+    "source_archive_sha256": "58168662d3fd7928dca54077137e33be73a3115060676a1bf99120d9f98933a5",
+    "independent_content_audit_sha256": "f1e59a3b57b163a7c8f31090e6b8dd2257c19f2b51dee0553cb9682e6ec5eeea",
+    "old_originals_locked": 979,
+    "old_originals_unchanged": true,
+    "public_report_copies": [
+      {
+        "product": "trello",
+        "source": "data/artifacts/writer-task-verdict-2026-10-31/live-trello-verified/execution/report.md",
+        "public_report": "docs/optimization/reports/2026-10-31-task-verdict-v3/trello.md",
+        "sha256": "f5c96d5d49efad81d7120f4cd5cae728caae940aceca6dec7bceecbf2a31db42",
+        "byte_identical": true,
+        "exact_single_eof": true
+      },
+      {
+        "product": "cloudflare",
+        "source": "data/artifacts/writer-task-verdict-2026-10-31/live-cloudflare-verified/execution/report.md",
+        "public_report": "docs/optimization/reports/2026-10-31-task-verdict-v3/cloudflare.md",
+        "sha256": "b8d5114c1328d9bfc17b535af93c9c4ad6f40691ea99981384f4d2a517239600",
+        "byte_identical": true,
+        "exact_single_eof": true
+      },
+      {
+        "product": "bitwarden",
+        "source": "data/artifacts/writer-task-verdict-2026-10-31/live-bitwarden-verified/execution/report.md",
+        "public_report": "docs/optimization/reports/2026-10-31-task-verdict-v3/bitwarden.md",
+        "sha256": "189d703d5628459d389f7a4b043cf69800acdbe47920f7afcbfbd2bb5e687364",
+        "byte_identical": true,
+        "exact_single_eof": true
+      },
+      {
+        "product": "1password",
+        "source": "data/artifacts/writer-task-verdict-2026-10-31/live-1password-verified/execution/report.md",
+        "public_report": "docs/optimization/reports/2026-10-31-task-verdict-v3/1password.md",
+        "sha256": "b3663d4a6b59dcd59622af7bd15c04dea36e7ab936e18658b6e7fc00198534fe",
+        "byte_identical": true,
+        "exact_single_eof": true
+      }
+    ]
+  },
+  "limits": [
+    "这是固定2026-10-21官方来源、既有暴露8题的回归，不是blind/generalization试验，不代表2026-10-31官网现状。",
+    "模型为原始配置alias deepseek-flash；未独立确认服务端实际权重身份。",
+    "工程双审或receipt重建通过不表示内容通过。模型supported、服务status、隐藏任务与未选全页均不补最终正文。",
+    "本报告未直接修改任何原报告答案；主张分母排除模板、问题复述、必要澄清与安全拒编价。",
+    "两个Writer实验开关默认false；未部署Docker或训练模型。",
+    "Native失败trace用量细分可能显示估算；实际budget/charged保留已知用量，不把估算算作provider细分。",
+    "模型alias为deepseek-flash，具体权重修订未独立确认。",
+    "初稿内容审计冻结前修正邀请/确认状态口径，未保留初稿原字节；最终严格结果与更正记录明确区分。"
+  ]
+}

@@ -337,7 +337,8 @@ def test_irreducible_long_context_is_wholly_unsent_and_reserve_stays_bounded():
 
 
 @pytest.mark.asyncio
-async def test_atomic_core_sent_only_to_other_qid_cannot_close_current_qid(monkeypatch):
+@pytest.mark.parametrize("policy", ["selected-task-atoms-v2", "selected-task-atoms-v3"])
+async def test_atomic_core_sent_only_to_other_qid_cannot_close_current_qid(monkeypatch, policy):
     from dataclasses import replace
 
     from claim_review_fixture import answer_response, expand_prompt_payload
@@ -356,11 +357,29 @@ async def test_atomic_core_sent_only_to_other_qid_cannot_close_current_qid(monke
     service, record, snapshot, *_ = setup
     service._settings = replace(service._settings, writer_question_atomic_enabled=True)
     normal = atomic_model(service, {})
+    actual_execute = atomic.execute_question_atomic_delivery
+
+    async def execute_selected_contract(*args, **kwargs):
+        # Exercise the unchanged historical contract as well as the fresh route.
+        if policy == "selected-task-atoms-v2":
+            kwargs.update(task_execution_policy=policy,
+                          answer_review_contract="subquestion-premises-v6")
+        return await actual_execute(*args, **kwargs)
+
+    monkeypatch.setattr(atomic, "execute_question_atomic_delivery", execute_selected_contract)
 
     async def writer(record, **kwargs):
         if kwargs["name"] != atomic.ANSWER_NAME:
             return await normal(record, **kwargs)
         payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
+        if payload.get("task_outcome_contract") == "task-outcomes-v1":
+            response = json.dumps(dict(version=1, task_reviews=[dict(
+                task_id=task["task_id"], outcome="no",
+                support_refs=[choice["ref"] for choice in task["support_choices"]
+                              if choice["primary"]],
+                missing_fields=[], reason="The exact local guest restriction denies this request.",
+            ) for task in payload["tasks"]]))
+            return append_response(service, record, kwargs, response)
         local = {
             row["question_id"]: row["claim_ids"] for row in payload["question_claim_whitelist"]
         }
@@ -388,6 +407,8 @@ async def test_atomic_core_sent_only_to_other_qid_cannot_close_current_qid(monke
     monkeypatch.setattr(service, "_trace_llm_text", writer)
     await service._real_writer_step(record)
     audit = record.detail.report_dimension_audits[0]
+    assert audit.answer_review_contract == (
+        "task-outcomes-v1" if policy == "selected-task-atoms-v3" else "subquestion-premises-v6")
     questions = research_questions(record.detail, audit.competitor, audit.dimension)
     assert len(questions) == 2
     assert service._final_qa_producer_verified(record, snapshot)

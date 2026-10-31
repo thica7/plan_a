@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import time
 from typing import Any
@@ -95,6 +96,7 @@ class LLMExecutionMixin:
                 cache_usd_per_million=self._settings.llm_cache_usd_per_million,
                 output_usd_per_million=self._settings.llm_output_usd_per_million,
             )
+            record.llm_budget._fresh_selected_task_budget = not checkpoint and not spans
         budget = record.llm_budget
         from packages.agents.writer.dimension_writer import dimension_writing_enabled
         dimension_mode = dimension_writing_enabled(record.detail)
@@ -167,6 +169,12 @@ class LLMExecutionMixin:
                 default_calls = budget.delivery_calls[phase] if task_segments and restoring and checkpoint else 1
                 if agent == 'final_qa' and not (task_segments and restoring and checkpoint):
                     default_calls = final_review_calls
+                elif (agent == 'answer' and self._settings.writer_question_atomic_enabled
+                        and not (restoring and checkpoint)):
+                    from packages.research.question_scope import research_questions
+                    product = phase.split(':', 1)[1].rsplit('/', 1)[0]
+                    default_calls = max(
+                        1, len(research_questions(record.detail, product, 'feature')))
                 budget.delivery_call_reserves[phase] = int(checkpoint.get(
                     f'delivery_call_limit:{phase}', default_calls))
                 if checkpoint.get(f'delivery_finished:{phase}'):
@@ -320,6 +328,8 @@ class LLMExecutionMixin:
         timeout_seconds: float | None = None,
         max_output_tokens: int | None = None,
         max_request_attempts: int | None = None,
+        response_format=None,
+        response_contract=None,
     ) -> str:
         return await self._trace_budgeted_llm(
             record,
@@ -334,6 +344,8 @@ class LLMExecutionMixin:
             timeout_seconds=timeout_seconds,
             max_output_tokens=max_output_tokens,
             max_request_attempts=max_request_attempts,
+            response_format=response_format,
+            response_contract=response_contract,
         )
 
     async def _trace_budgeted_llm(
@@ -351,6 +363,8 @@ class LLMExecutionMixin:
         timeout_seconds,
         max_output_tokens=None,
         max_request_attempts=None,
+        response_format=None,
+        response_contract=None,
     ):
         record = self._evidence_live_record(record)
         started = time.perf_counter()
@@ -390,11 +404,14 @@ class LLMExecutionMixin:
                             # Read provenance inside the provider task before
                             # wait_for propagates cancellation to its caller.
                             extra = self._llm_usage_metadata(None)
+                            if response_format and hasattr(self._llm, 'last_raw_response'):
+                                extra['_native_raw_response'] = self._llm.last_raw_response()
                             raise
 
                     async def invoke():
                         if schema_hint is None:
-                            result = await self._llm.complete_text(system=system, user=user)
+                            result = await self._llm.complete_text(system=system, user=user,
+                                **({"response_format": response_format} if response_format else {}))
                         else:
                             result = await self._llm.complete_json(
                                 system=system,
@@ -428,6 +445,10 @@ class LLMExecutionMixin:
         except Exception as exc:
             output_text = str(exc)
             extra = {**extra, "error": output_text}
+            if response_format and hasattr(self._llm, "last_raw_response"):
+                raw = extra.pop('_native_raw_response', self._llm.last_raw_response())
+                if raw is not None:
+                    output_text = raw
             if isinstance(exc, LLMExecutionLimitError):
                 extra["degradation_reason"] = str(exc)
             elif isinstance(exc, TimeoutError):
@@ -456,7 +477,13 @@ class LLMExecutionMixin:
                     context,
                     {
                         **prompt_trace_metadata(agent, name, system, user, schema_hint),
-                        "response_format": "json" if schema_hint is not None else "text",
+                        "response_format": response_format or (
+                            "json" if schema_hint is not None else "text"),
+                        **({"response_contract": response_contract,
+                            "response_transport_identity": hashlib.sha256(
+                                json.dumps([system, user, response_format, response_contract],
+                                    ensure_ascii=False).encode()).hexdigest()}
+                           if response_format else {}),
                         "queue_wait_ms": queue_wait_ms,
                         "cost_estimate_source": "provider_usage"
                         if usage is not None

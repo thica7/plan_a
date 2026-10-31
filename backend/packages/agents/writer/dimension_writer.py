@@ -973,7 +973,13 @@ class DimensionWriterMixin:
                 APPROVED_QUANTITY_CORE_POLICY,
                 REVIEWED_QUANTITY_CONJUNCTION_POLICY,
             )
-            coverage, gaps, sizes = await atomic_answer_coverage(
+            if compact.get('task_execution_policy') == 'selected-task-atoms-v3':
+                from packages.agents.writer.task_answer_outcomes import task_answer_coverage
+
+                coverage, gaps, sizes = await task_answer_coverage(
+                    self, record, pending, compact, supported, view, use, gaps, audited=audited)
+            else:
+                coverage, gaps, sizes = await atomic_answer_coverage(
                 self, record, pending, compact, supported, view, use, gaps,
                 answer_review_contract='subquestion-premises-v6', audited=audited,
                 decision_selection_policy=(REVIEWED_QUANTITY_CONJUNCTION_POLICY
@@ -1359,8 +1365,9 @@ class DimensionWriterMixin:
                         task_result = await execute_question_atomic_delivery(
                             self, record, selected, view, use, questions,
                             question_packets, allowed, boundaries, gaps,
-                            answer_review_contract='subquestion-premises-v6',
-                            delivery_policy='complete-predicates-v1')
+                            answer_review_contract='task-outcomes-v1',
+                            delivery_policy='complete-predicates-v1',
+                            task_execution_policy='selected-task-atoms-v3')
                     else:
                         from packages.agents.writer.task_execution import execute_question_tasks
                         task_result = await execute_question_tasks(
@@ -1691,7 +1698,8 @@ class DimensionWriterMixin:
                 audited = audit_report_claims(claims, reviews, view, boundaries,
                     available_facts=discovery_facts if allowed else view.facts,
                     review_version=3 if questions else None,
-                    authority_claim_ids=(task_result or {}).get('authority_claim_ids', ()))
+                    authority_claim_ids=(task_result or {}).get('authority_claim_ids', ()),
+                    capability_claim_ids=(task_result or {}).get('capability_claim_ids', ()))
                 coverage, gaps, coverage_sizes = await self._dimension_question_coverage(
                     record, questions, compact, audited, view, use, gaps,
                 )
@@ -1729,6 +1737,8 @@ class DimensionWriterMixin:
                 )
                 if compact.get('_decision_reviews'):
                     decision_reviews[use.id] = compact['_decision_reviews']
+                if compact.get('_task_outcome_authorities'):
+                    decision_reviews[use.id] = compact['_task_outcome_authorities']
                 audits.append(audit)
                 self._validate_evidence_use(record, use)
                 self._trace_local_tool(record, agent="writer", subagent=f"{product}/{dimension}",

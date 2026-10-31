@@ -200,7 +200,7 @@ def _answer_support(detail, snapshot, audit, answer, question):
     if answer.resolution == 'clarification' and not answer.claim_ids:
         return [] if _request_only_clarification(detail, audit, answer, question) else None
     decision_reviews = None
-    if audit.answer_review_contract == 'subquestion-premises-v6':
+    if audit.answer_review_contract in {'subquestion-premises-v6', 'task-outcomes-v1'}:
         from packages.agents.writer.question_atomic_delivery import replay_decision_reviews
 
         try:
@@ -243,6 +243,13 @@ def _answer_support(detail, snapshot, audit, answer, question):
         ):
             return None
     else:
+        if audit.answer_review_contract == 'task-outcomes-v1':
+            from packages.agents.writer.task_answer_outcomes import TaskOutcomeAuthority
+
+            authority = (decision_reviews or {}).get(answer.question_id)
+            return claims if (isinstance(authority, TaskOutcomeAuthority)
+                and authority.matches(answer)
+                and answer.status in {'answered', 'partial'}) else None
         if (
             audit.claim_review_version != 3
             or audit.answer_binding_version != 3

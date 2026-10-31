@@ -2,6 +2,33 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
+## 2026-10-31：按子任务选证与原子交付
+
+同时显式开启 `WRITER_TASK_EXECUTION_ENABLED=1` 和 `WRITER_QUESTION_ATOMIC_ENABLED=1` 时，真实功能维度的逐题 Writer 使用 `selected-task-atoms-v3`。两开关默认仍为 `false`；普通写作、无策略 GEN5、显式 v1／v2 历史记录保留各自行为和真实传输合同。本轮没有更换 Collector、Analyst 或 Comparator。
+
+```text
+当前快照的完整问题证据池
+→ 服务器任务 (question_id, task_id, attempt)
+→ 本任务候选窗口 → SELECT 完整支持片段
+→ GEN 最多一个任务主张 → 独立 REVIEW 及原子子句审核
+→ 失败任务有界补交，保留成功任务
+→ 按任务分窗的独立 ANSWER：task-outcomes-v1
+→ 单一服务端聚合 → 正文、问答状态、QA
+→ 最终 QA 重核实际发表内容及精确引用
+```
+
+- `atomic_question_projection.py` 与 `selected_task_delivery.py` 从完整问题池为各任务分配窗口，按真实 SELECT 输入计量。完整规范事实及父级适用范围进入 GEN 和审核；CPU 表格行仍核对套餐、模式和脚注。Analyst／Comparator／Reflector 的有效产物继续进入写作输入。
+- 同题任务保持独立身份；单次最多一条主张，REVIEW 明确核对完整子句和独立谓词数。两条谓词即使均有支持，也不能冒充一条原子结论。语义审核不是完美的逻辑证明，引用、操作、角色、套餐、条件与例外守卫继续执行。
+- 首轮后仅失败任务有界补交，携带本任务前轮实际传输的诊断；诊断不是产品事实。成功任务保留，未认证、预算不足、超窗或未送审任务明确延期，不由同题其他成功项代替。
+- `task_answer_outcomes.py` 处理 `task-outcomes-v1`：模型只返回服务器任务 ID、有限 `yes/no/rule/unknown/clarification`、当前任务的支持及允许的缺项。服务端统一聚合父题状态，不接受自由父字段、跨题澄清字段或未经审核的 source 引用。来源支持不自动代表场景问题已回答；普通规则和场景结论分别审核。最终局部修正仅按当前任务的封闭提问资格，或既有_request_units明确协调拆出的省略请求允许yes/no；题设不继承父题极性。含旧错误资格的V3响应在当前源重建时拒绝，旧轮按其原源码保存。
+- 数量纯 AND 否定继续使用 `reviewed_quantity_conjunction-v1`，从真实新任务审核签发并重核同单位上限、请求数量及完整限制。描述人数、OR、混合任务和旧错误记录均不能获得该凭证。
+- V3 SELECT／GEN／REVIEW／ANSWER 显式发送 `response_format={"type":"json_object"}`；仅当前支持的 DeepSeek provider 可用。完整原始响应严格解析，空白、多根、重复键、截断和不支持模式明示失败，不静默退回旧解析。实际模式、provider 和合同身份绑定 trace、派送、收据及重放；旧请求不被改写。
+- 角色能力描述仅在本任务不是改权、没有真实改权断言、旧 fallback 误识别且独立 REVIEW 通过时获得有限资格。真实分享／改权操作仍要求原操作绑定，不能全局开放 inference。
+- 最终 QA 重核当前实际正文和全部必要任务。V3 可据真实认证且已发表的任务重判早期核心检索缺口；例外缺证、未答任务、历史 finding 和模型 keep 不被强制清除。Reflector 对明确单产品问答仅豁免完整的矩阵结构缺口，混合业务缺口继续保门。
+- ANSWER 可按任务分多个窗口；调用及 token 预留依实际完整窗口计算，并保护最终 QA。恢复旧 checkpoint 不提高限额、不重置用量。诊断 runner 的64次／240k不改变生产默认配置。
+
+V1／V2 的工程通过和真实报告失败均见[交付记录](optimization/2026-10-31-task-local-writer-delivery.md)。V3及局部任务极性修正已完成冻结、独立规格／质量审查及真实四家复验，最新3/8原题通过，文本与证据报告1/4、严格系统QA仍0/4。实际模型仍可能将双谓词标成单谓词，或漏过邀请到确认后访问的强化；这些是内容失败，不能以transport重建成功掩盖。固定快照测试不证明新抓取、实时性或完整 Graph。
+
 ## 2026-10-30：本机持久化工作台 P0
 
 新入口 `scripts/workbench_runtime.py` 在独立 profile 内启动原生 PostgreSQL → API readyz → Relay ready → Vite。默认 `runs/local-workspace`、API 8010、前端 5180；四个 action（init／start／status／stop）均须 `--execute` 才执行。完整命令与停机备份见[部署说明第 8 节](docker_deployment.md#8-原生-postgresql-本机持久化工作台p0)。

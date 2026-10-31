@@ -7849,7 +7849,7 @@ export interface components {
             /** Answer Binding Version */
             answer_binding_version?: (2 | 3) | null;
             /** Answer Review Contract */
-            answer_review_contract?: ("subquestion-premises-v1" | "subquestion-premises-v2" | "subquestion-premises-v3" | "subquestion-premises-v4" | "subquestion-premises-v5" | "subquestion-premises-v6") | null;
+            answer_review_contract?: ("subquestion-premises-v1" | "subquestion-premises-v2" | "subquestion-premises-v3" | "subquestion-premises-v4" | "subquestion-premises-v5" | "subquestion-premises-v6" | "task-outcomes-v1") | null;
             /** Claim Review Version */
             claim_review_version?: 3 | null;
             /** Upstream Dependencies */

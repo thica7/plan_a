@@ -70,7 +70,11 @@ def atomic_model(service, seen, *, bad_atom=False, bad_review=False, attempts=1)
     async def model(record, **kwargs):
         payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
         seen.setdefault(kwargs["name"], []).append(payload)
-        if kwargs["name"] == "dimension_question_atomic_generation":
+        if kwargs["name"] == "dimension_question_task_support_selection":
+            response = json.dumps(dict(selections=[dict(task_id=task['task_id'], status='selected',
+                binding_kind='span', support_refs=[payload['evidence_view']['facts'][0]
+                    ['source_span_candidates'][0]['support_ref']]) for task in payload['tasks']]))
+        elif kwargs["name"] == "dimension_question_atomic_generation":
             atoms = [
                 dict(text=s["quote"], kind="fact", support_refs=[s["support_ref"]])
                 for row in payload["evidence_view"]["facts"]
@@ -78,12 +82,20 @@ def atomic_model(service, seen, *, bad_atom=False, bad_review=False, attempts=1)
             ]
             if bad_atom:
                 atoms.insert(1, dict(text="Invented claim.", kind="fact", support_refs=["s9999"]))
+            if payload.get('task_support_selections'):
+                atoms = [dict(text=row['supports'][0]['quote'], kind='fact',
+                    support_refs=row['support_refs']) for row in payload['task_support_selections']]
             response = question_plan_response(payload, atoms)
         elif kwargs["name"] == "dimension_question_atomic_review":
             rows = [supported_review(c) for c in payload["claims"]]
             if bad_review and len(seen[kwargs["name"]]) == 1:
                 rows[0]["checks"] = []
-            response = json.dumps(dict(reviews=rows))
+            reviewed = dict(reviews=rows)
+            if payload.get('task_execution_policy') == 'selected-task-atoms-v3':
+                reviewed['atomicity'] = [dict(claim_id=c['id'], predicate_count=1, clauses=[dict(
+                    quote=c['text'], predicate=payload['task_context']['focus'], task_match=True)])
+                    for c in payload['claims']]
+            response = json.dumps(reviewed)
         else:
             raise AssertionError(kwargs["name"])
         return append_response(
@@ -343,6 +355,12 @@ async def test_production_writer_uses_pool_and_binds_atomic_receipt(monkeypatch)
             return await normal_model(record, **kwargs)
         payload = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
         seen.setdefault(kwargs["name"], []).append(payload)
+        if payload.get('task_outcome_contract') == 'task-outcomes-v1':
+            response = json.dumps(dict(version=1, task_reviews=[dict(task_id=t['task_id'],
+                outcome='no', support_refs=[c['ref'] for c in t['support_choices'] if c['primary']],
+                missing_fields=[], reason='The exact task is independently grounded.')
+                for t in payload['tasks']]))
+            return append_response(service, record, kwargs, response)
         response = answer_response(
             payload,
             dict(
@@ -368,7 +386,7 @@ async def test_production_writer_uses_pool_and_binds_atomic_receipt(monkeypatch)
     await service._real_writer_step(record)
     audit = record.detail.report_dimension_audits[0]
     assert audit.question_atomic_contract == "question-atomic-delivery-v1"
-    assert audit.answer_review_contract == "subquestion-premises-v6"
+    assert audit.answer_review_contract == "task-outcomes-v1"
     assert audit.question_atomic_receipt_digest
     assert audit.answer_coverage[0].status == "answered"
     assert "否" in record.detail.report_md
@@ -386,7 +404,9 @@ async def test_production_writer_uses_pool_and_binds_atomic_receipt(monkeypatch)
         "dimension_question_atomic_generation",
         "dimension_question_atomic_review",
         "dimension_question_atomic_answer_review",
+        "dimension_question_task_support_selection",
     }
+    assert receipt['task_execution_policy'] == 'selected-task-atoms-v3'
     assert digest(receipt) == audit.question_atomic_receipt_digest
     record.detail.trace_spans = [
         s for s in record.detail.trace_spans if s.name != "question_atomic_delivery"

@@ -25,6 +25,7 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
         reasons = set()
         decision_reviews = {}
         authority_ids = set()
+        capability_ids = set()
         use = uses.get(audit.consumption_id)
         if not producer_verified or dependency is None or audit.consumption_id not in dependency.consumption_ids:
             reasons.add("claim_producer_unverified")
@@ -51,6 +52,7 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                         service, record.detail, snapshot, use, view, audit=audit)
                     decision_reviews = replay.get('decision_review', {})
                     authority_ids = replay.get('authority_claim_ids', set())
+                    capability_ids = replay.get('capability_claim_ids', set())
                 except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
                     reasons.add("question_atomic_replay_failed")
             published = [c for c in audit.claims if c.status == "supported"]
@@ -59,7 +61,7 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
             replayed = audit_report_claims([c.claim for c in published], [c.review for c in published if c.review],
                 view, boundaries, available_facts=discovery,
                 review_version=audit.claim_review_version,
-                authority_claim_ids=authority_ids)
+                authority_claim_ids=authority_ids, capability_claim_ids=capability_ids)
             if any(c.status != "supported" for c in replayed):
                 reasons.add("claim_review_replay_failed")
             from packages.agents.writer.answer_presentation import (

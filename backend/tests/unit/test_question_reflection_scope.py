@@ -43,7 +43,7 @@ def test_server_rechecks_llm_comparison_only_blocks_for_explicit_single_product_
 
 
 @pytest.mark.parametrize('change', ['multi', 'target', 'full', 'full_analysis', 'full_research',
-                                   'better_than', 'comparison', 'no_questions', 'missing_cell', 'uncited'])
+                                   'better_than', 'comparison', 'no_questions'])
 def test_comparison_and_actual_coverage_gaps_keep_the_original_gate(change):
     detail, service = scope_case()
     if change == 'multi':
@@ -62,10 +62,6 @@ def test_comparison_and_actual_coverage_gaps_keep_the_original_gate(change):
         detail.plan.decision_brief = DecisionBrief(decision_question='ExampleCompute: Compare all features and rank competitors?')
     elif change == 'no_questions':
         detail.plan.decision_brief = None
-    elif change == 'missing_cell':
-        detail.comparison_matrix.cells = []
-    else:
-        detail.comparison_matrix.cells[0].source_ids = []
     assert gate(service, detail)[0] == 'block'
     detail.reflections = [ReflectionRecord(iteration=1, gate_status='block', blocking_gaps=COMPARISON_GAPS)]
     assert any(i.severity == 'blocker' for i in service._build_reflector_qa_issues(detail))
@@ -78,6 +74,14 @@ def test_comparison_and_actual_coverage_gaps_keep_the_original_gate(change):
     'Unknown unresolved issue requires review.',
     'No multi-competitor matrix exists; the requested role has no supporting evidence.',
     'Feature dimension is marked insufficient_evidence (gap_count=6), blocking a validated feature comparison. The billing rule is absent.',
+    'Missing comparison cell for ExampleCompute / feature '
+    'because the requested role has no supporting evidence.',
+    'Missing comparison cell for ExampleCompute / feature '
+    'because the billing rule is absent.',
+    'Comparison cell for ExampleCompute / feature '
+    'because the requested role has no supporting evidence has no source_ids.',
+    'Missing comparison cell for OtherCompute / feature.',
+    'Comparison cell for ExampleCompute / pricing has no source_ids.',
 ])
 def test_question_evidence_and_unknown_blocks_are_preserved(finding):
     detail, service = scope_case()
@@ -91,3 +95,44 @@ def test_question_evidence_and_unknown_blocks_are_preserved(finding):
 def test_block_without_a_reason_is_not_reinterpreted_as_a_comparison_gap():
     detail, service = scope_case()
     assert gate(service, detail, [])[0] == 'block'
+
+
+@pytest.mark.parametrize('finding', [
+    'Missing comparison cell for ExampleCompute / feature.',
+    'Comparison cell for ExampleCompute / feature has no source_ids.',
+])
+def test_only_current_plan_complete_cell_messages_are_outside_question_scope(finding):
+    detail, service = scope_case()
+    assert gate(service, detail, [finding])[0] != 'block'
+    detail.reflections = [ReflectionRecord(iteration=1, gate_status='block',
+        blocking_gaps=[finding])]
+    assert not [i for i in service._build_reflector_qa_issues(detail) if i.severity == 'blocker']
+
+
+@pytest.mark.parametrize('matrix', ['missing', 'empty', 'uncited'])
+def test_explicit_question_scope_does_not_require_matrix_or_matrix_citations(matrix):
+    detail, service = scope_case()
+    if matrix == 'missing':
+        detail.comparison_matrix = None
+    elif matrix == 'empty':
+        detail.comparison_matrix.cells = []
+    else:
+        detail.comparison_matrix.cells[0].source_ids = []
+    assert gate(service, detail)[0] != 'block'
+    payload = service._deterministic_reflector_payload(detail)
+    assert not payload['cross_competitor_gaps']
+    assert not payload['coverage_gaps']
+    assert gate(service, detail, ['The second question is unanswered.'])[0] == 'block'
+
+
+def test_explicit_exact_price_instruction_is_question_scope_without_question_mark():
+    from packages.agents.reflector.logic import _question_delivery_scope
+
+    detail, service = scope_case()
+    detail.comparison_matrix = None
+    detail.plan.decision_brief = DecisionBrief(decision_question=(
+        'ExampleCompute: 能访问两个容器吗？\n'
+        'ExampleCompute: 300名员工购买一年。请仅凭公开定价页，'
+        '直接给出精确的人民币含税总价，不要给区间。'))
+    assert not _question_delivery_scope(detail)['requires_comparison']
+    assert gate(service, detail)[0] != 'block'

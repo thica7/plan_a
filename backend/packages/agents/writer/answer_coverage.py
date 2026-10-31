@@ -214,6 +214,15 @@ def coverage_resolution_reasons(
     decision_review=None,
 ):
     """Replay answer guards against the exact published claims, never review reasons."""
+    if answer_review_contract == 'task-outcomes-v1':
+        from packages.agents.writer.task_answer_outcomes import TaskOutcomeAuthority
+
+        reasons = selection_binding_reasons(record, claims,
+            required_binding_version=required_binding_version)
+        if (not isinstance(decision_review, TaskOutcomeAuthority)
+                or not decision_review.matches(record)):
+            reasons.append('task_outcome_authority_missing_or_changed')
+        return tuple(reasons)
     from packages.agents.writer.answer_resolution import resolution_reasons
     from packages.agents.writer.answer_plan_scope import plan_exclusivity_reasons
 

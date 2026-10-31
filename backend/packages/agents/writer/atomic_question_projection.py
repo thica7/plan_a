@@ -274,7 +274,8 @@ def task_support_hints(tasks, payload, facts):
 
 
 def question_projection(service, record, view, packets, question, allowed, use, *, project=None,
-                        generation_repair=None):
+                        generation_repair=None, task_id=None, priority_fact_ids=(),
+                        size_projection=None):
     from packages.agents.writer.dimension_writer import compact_prompt_json
     from packages.agents.writer.question_allocation import task_support_score
     from packages.agents.writer.question_atomic_delivery import handoff_context
@@ -297,6 +298,10 @@ def question_projection(service, record, view, packets, question, allowed, use, 
         if row["question_id"] == question["question_id"]
     )
     tasks = generation_tasks(question, f"{view.competitor}/{view.dimension}")
+    if task_id is not None:
+        tasks = [task for task in tasks if task["task_id"] == task_id]
+        if len(tasks) != 1:
+            raise ValueError("Unknown task projection")
     if generation_repair is not None:
         target_ids = generation_repair["target_task_ids"]
         tasks = [task for task in tasks if task["task_id"] in target_ids]
@@ -403,7 +408,7 @@ def question_projection(service, record, view, packets, question, allowed, use, 
             for packet in service._question_packet_prompt(record, packets, chosen)
         ]
         result["generation_tasks"] = task_support_hints(tasks, result, view.facts)
-        if missing and generation_repair is None:
+        if missing and generation_repair is None and task_id is None:
             result["generation_tasks"] = [
                 dict(task, state="deferred", reason="question_core_context_budget_exceeded")
                 if task["focus"] == "billing_inputs"
@@ -417,8 +422,9 @@ def question_projection(service, record, view, packets, question, allowed, use, 
         ]
         return project(result) if project is not None else result
 
-    priority = ([] if generation_repair is not None else
+    priority = ([] if generation_repair is not None or task_id is not None else
                 list(dict.fromkeys([*pool["core_fact_ids"], *pool["required_exception_fact_ids"]])))
+    priority = list(dict.fromkeys([*priority_fact_ids, *priority]))
     for task in tasks:
         scores = {
             row["id"]: task_support_score(task, row["quote"], question["question"], view.competitor)
@@ -465,7 +471,8 @@ def question_projection(service, record, view, packets, question, allowed, use, 
             continue
         additions = [item for item in rows if item["id"] in ids - chosen_ids]
         trial = assemble([*chosen, *additions])
-        if len(("\nJSON:\n" + compact_prompt_json(trial)).encode()) <= min(14000, use.max_bytes):
+        measured = size_projection(trial) if size_projection else trial
+        if len(("\nJSON:\n" + compact_prompt_json(measured)).encode()) <= min(14000, use.max_bytes):
             chosen.extend(additions)
             chosen_ids.update(ids)
     return assemble(chosen)

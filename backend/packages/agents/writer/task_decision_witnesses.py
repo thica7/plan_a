@@ -118,6 +118,9 @@ def _unique_json(text):
 
 
 def _transport(context, dispatch):
+    from packages.agents.writer.selected_task_delivery import checked_policy, verified_transport
+    if checked_policy(context.compact.get('task_execution_policy')):
+        return verified_transport(context, dispatch)
     from packages.agents.writer.question_atomic_delivery import GENERATION_NAME
     from packages.research.question_delivery import _expand_text_refs
 
@@ -174,6 +177,9 @@ def _task_identity(task):
 
 
 def _rebuild(context):
+    from packages.agents.writer.selected_task_delivery import checked_policy, rebuild
+    if checked_policy(context.compact.get('task_execution_policy')):
+        return rebuild(context)
     from packages.agents.writer.question_atomic_delivery import (
         GENERATION_NAME,
         REVIEW_NAME,
@@ -621,11 +627,17 @@ def issue_decision_credentials(context: TaskDecisionContext, answer_dispatch):
                            if c.question_id in answer_dispatch['question_ids'])
         span, payload = _transport(context, answer_dispatch)
         sent = payload.get("decision_candidates")
+        task_mode = payload.get("answer_review_contract") == "task-outcomes-v1"
+        if task_mode:
+            task_ids = {t["task_id"] for t in payload["tasks"]}
+            candidates = tuple(c for c in candidates if c.task_id in task_ids)
         projection_version = candidate_projection_version(payload)
         decision_selection_policy(payload)
         if (
             answer_dispatch["name"] != ANSWER_NAME
-            or payload.get("answer_review_contract") != "subquestion-premises-v6"
+            or payload.get("answer_review_contract") not in {
+                "subquestion-premises-v6", "task-outcomes-v1"}
+            or span.status != "ok"
             or sent != [candidate.review_payload(projection_version=projection_version)
                         for candidate in candidates]
             or not {candidate.question_id for candidate in candidates}
@@ -637,6 +649,22 @@ def issue_decision_credentials(context: TaskDecisionContext, answer_dispatch):
         ):
             return ()
         raw = _unique_json(span.full_output)
+        if task_mode:
+            from packages.agents.writer.task_answer_outcomes import parse_task_reviews
+
+            approved, _ = parse_task_reviews(span.full_output, payload)
+            rows = []
+            for candidate in candidates:
+                row = approved.get(candidate.task_id)
+                if (row and row["outcome"] == "no" and candidate.claim_id in row["claim_ids"]
+                        and payload.get("task_execution_policy") == "selected-task-atoms-v3"):
+                    rows.append(dict(
+                        candidate_ref=candidate.candidate_ref, task_fulfilled=True,
+                        target_grounding="supported", conclusion="no",
+                        evidence_refs=list(candidate.evidence_refs),
+                        scenario_refs=list(candidate.scenario_refs),
+                    ))
+            raw = dict(version=3, task_decisions=rows)
         if raw.get("version") != 3 or not isinstance(raw.get("task_decisions"), list):
             return ()
         rows = raw["task_decisions"]
@@ -758,12 +786,22 @@ class DecisionReview:
                     or by_claim[cid]['question_id'] != question_id for cid in ids)):
                 return None
             tasks = {}
-            for dispatch in self.context.compact['dispatches']:
-                if dispatch['name'] == GENERATION_NAME:
-                    _, generated = _transport(self.context, dispatch)
-                    for task in generated['generation_tasks']:
-                        if task['question_id'] == question_id:
-                            tasks.setdefault(task['task_id'], _task_identity(task))
+            from packages.agents.writer.selected_task_delivery import checked_policy
+            if checked_policy(self.context.compact.get('task_execution_policy')):
+                from packages.agents.writer.atomic_question_projection import generation_tasks
+                # Request conjunction is server-owned even when one conjunct's
+                # SELECT returned insufficient evidence. Only the failing
+                # conjunct receives a real source/ANSWER decision credential.
+                tasks = {t['task_id']: _task_identity(t) for q in self.context.questions
+                    if q['question_id'] == question_id for t in generation_tasks(
+                        q, f'{self.context.competitor}/{self.context.dimension}')}
+            else:
+                for dispatch in self.context.compact['dispatches']:
+                    if dispatch['name'] == GENERATION_NAME:
+                        _, generated = _transport(self.context, dispatch)
+                        for task in generated['generation_tasks']:
+                            if task['question_id'] == question_id:
+                                tasks.setdefault(task['task_id'], _task_identity(task))
             if (len(tasks) != 2 or {t.get('request_property') for t in tasks.values()}
                     != {'people_limit', 'container_limit'}):
                 return None
