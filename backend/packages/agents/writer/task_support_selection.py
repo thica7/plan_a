@@ -137,7 +137,8 @@ def support_selection_context(payload, choices):
         {key: payload[key] for key in ("segment_competitor", "dimension", "questions", "tasks",
                                       "task_predicates", "task_repair", "required_clarifications",
                                       "request_context", "task_handoff_version",
-                                      "source_exception_bindings") if key in payload},
+                                      "source_exception_bindings", "source_scopes")
+         if key in payload},
         evidence_view=dict(facts=rows),
     )
 

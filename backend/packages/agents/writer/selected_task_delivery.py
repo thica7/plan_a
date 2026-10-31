@@ -192,7 +192,7 @@ def task_system(name, language, execution_policy=POLICY, task_clause_contract=No
         from packages.agents.writer.task_clauses import checked_contract, system
         checked_contract(dict(task_clause_contract=task_clause_contract,
                               task_execution_policy=execution_policy))
-        return system(task_system(name, language, execution_policy), name)
+        return system(task_system(name, language, execution_policy), name, task_clause_contract)
     if checked_policy(execution_policy) == POLICY_V3:
         from packages.agents.writer.question_atomic_delivery import REVIEW_NAME
 
@@ -413,6 +413,21 @@ def candidate_context(
             from packages.agents.writer.task_clauses import checked_contract
             result['task_clause_contract'] = task_clause_contract
             checked_contract(result)
+            from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+            if task_clause_contract == SEMANTIC_CONTRACT:
+                from packages.agents.writer.task_semantics import semantic_target, source_scopes
+
+                source_ids = {f["source_id"] for f in result["evidence_view"]["facts"]}
+                result["source_scopes"] = source_scopes(
+                    s for s in view.sources if s.id in source_ids)
+                for t, target in zip(tasks, result["task_predicates"], strict=True):
+                    target["semantic_target"] = semantic_target(
+                        dict(t, **{k: target[k] for k in ("selection_target",) if k in target}),
+                        result.get("request_context", {}))
+                    if target["semantic_target"]["relation"] == "cpu_billing_dependency":
+                        from packages.agents.writer.task_clauses import CPU_DEPENDENCY_INSTRUCTION
+
+                        t["task_instruction"] = target["instruction"] = CPU_DEPENDENCY_INSTRUCTION
         if execution_policy in {POLICY_V2, POLICY_V3}:
             from packages.agents.writer.subquestion_premises import _counts
 
@@ -500,6 +515,35 @@ def selection_context(payload, view):
         context["repair_feedback"] = deepcopy(payload["repair_feedback"])
     if payload.get('task_clause_contract') is not None:
         context['task_clause_contract'] = payload['task_clause_contract']
+    from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+    if payload.get("task_clause_contract") == SEMANTIC_CONTRACT:
+        from packages.agents.writer.task_semantics import applicability
+
+        context["support_applicability"] = [dict(task_id=t["task_id"], candidates=applicability(
+            t["semantic_target"], choices)) for t in payload["task_predicates"]]
+        # Eligibility is task-local; a shared catalog may retain a ref usable by
+        # another task. The normal dispatch has exactly one current task.
+        blocked = {ref for ref in choices if all(
+            any(c["support_ref"] == ref and not c["applicable"] for c in row["candidates"])
+            for row in context["support_applicability"])}
+        for row in context["evidence_view"]["facts"]:
+            restrictions = row["source_restrictions"]
+            for candidate in row.get("source_span_candidates", ()):
+                if (candidate["support_ref"] in blocked
+                        and candidate["quote"] not in restrictions.get("quote", "")):
+                    restrictions.setdefault("non_selectable_quotes", []).append(candidate["quote"])
+            row["source_span_candidates"] = [c for c in row.get("source_span_candidates", ())
+                                              if c["support_ref"] not in blocked]
+            operations = list(zip(row.get("operation_support_refs", ()),
+                                  row.get("operation_observations", ()), strict=True))
+            for ref, operation in operations:
+                if ref in blocked:
+                    restrictions.setdefault("non_selectable_operations", []).append(operation)
+            if operations:
+                row["operation_support_refs"] = [ref for ref, _ in operations if ref not in blocked]
+                row["operation_observations"] = [op for ref, op in operations if ref not in blocked]
+        # Return the original authenticated choices. A forged proposal of a
+        # hidden ref must still fail the independent server semantic check.
     return context, choices
 
 
@@ -507,6 +551,13 @@ def generation_context(payload, selections, choices, service, record, packets):
     from packages.agents.writer.task_support_selection import selected_generation_context
 
     for target in payload["task_predicates"]:
+        if target.get("semantic_target"):
+            from packages.agents.writer.task_semantics import selection_reasons
+
+            reasons = selection_reasons(target["semantic_target"],
+                selections[target["task_id"]].get("support_refs", ()), choices)
+            if reasons:
+                raise ValueError(reasons[0])
         if target.get("selection_target") and not set(
             target.get("required_support_refs", ())
         ).intersection(selections[target["task_id"]].get("support_refs", ())):
@@ -554,6 +605,15 @@ def generation_context(payload, selections, choices, service, record, packets):
         result['task_predicates'] = list(targets.values())
         result = dict(current_task=deepcopy(result['generation_tasks'][0]),
                       selected_support=deepcopy(result['task_support_selections'][0]), **result)
+        from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+        if payload.get("task_clause_contract") == SEMANTIC_CONTRACT:
+            # Full task, semantic target and support remain once in their canonical
+            # task-local arrays. SELECT-only duplicates do not consume the GEN wire.
+            for name in ("current_task", "selected_support", "task_predicates"):
+                result.pop(name, None)
+            source_ids = {row["source_id"] for row in result["evidence_view"]["facts"]}
+            result["source_scopes"] = {sid: scope for sid, scope in
+                result["source_scopes"].items() if sid in source_ids}
     return result
 
 
@@ -685,6 +745,12 @@ def review_context(claims, view, question, plan, metadata, task, execution_polic
                       clause_support_refs=list(support_refs),
                       clause_inventory=[dict(claim_id=c.id, clauses=clause_inventory(c.text))
                                         for c in claims])
+        from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+        if task_clause_contract == SEMANTIC_CONTRACT:
+            from packages.agents.writer.task_semantics import source_scopes
+
+            source_ids = {sid for c in claims for sid in c.source_ids}
+            result["source_scopes"] = source_scopes(s for s in view.sources if s.id in source_ids)
     return result
 
 
@@ -757,6 +823,7 @@ def failure_feedback(task, history, facts, consumption_id):
         ],
     )
     codes, claims, reviews, authority_ids = set(), [], [], set()
+    clause_failure = None
     generated = next((row for row in prior if row[0]["name"] == GENERATION_NAME), None)
     if generated is None:
         _, span, payload = prior[0]
@@ -773,6 +840,14 @@ def failure_feedback(task, history, facts, consumption_id):
             parsed, invalid = parse_support_selections(span.full_output, [task], choices)
             codes.update(invalid)
             codes.add(parsed[task["task_id"]].get("reason", "task_generation_not_dispatched"))
+            if payload.get("support_applicability"):
+                blocked = {c["support_ref"] for row in payload["support_applicability"]
+                           if row["task_id"] == task["task_id"]
+                           for c in row["candidates"] if not c["applicable"]}
+                proposed = json.loads(span.full_output).get("selections", ())
+                if any(row.get("task_id") == task["task_id"]
+                       and blocked.intersection(row.get("support_refs", ())) for row in proposed):
+                    codes.add("task_support_semantic_mismatch")
         except (ValueError, TypeError, AttributeError):
             codes.add("task_support_selection_invalid")
     else:
@@ -809,6 +884,18 @@ def failure_feedback(task, history, facts, consumption_id):
                     reviews = parse_task_claim_reviews(span.full_output, claims, payload)
                 except (ValueError, TypeError, AttributeError):
                     codes.add("claim_review_invalid")
+                    from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+                    if payload.get("task_clause_contract") == SEMANTIC_CONTRACT:
+                        from packages.agents.writer.task_clauses import clause_review_failure
+                        from packages.llm.json_extract import strict_json_object
+
+                        try:
+                            clause_failure = clause_review_failure(
+                                strict_json_object(span.full_output), claims, payload)
+                        except (ValueError, TypeError, AttributeError):
+                            clause_failure = None
+                        if clause_failure:
+                            codes.add(clause_failure["reason_code"])
                     if payload.get('task_clause_contract'):
                         feedback['failed_review'] = dict(raw=span.full_output[:1200],
                             truncated=len(span.full_output) > 1200,
@@ -830,6 +917,39 @@ def failure_feedback(task, history, facts, consumption_id):
                     reason_truncated=len(review.reason) > 240,
                 )
     feedback["reason_codes"] = sorted(str(c)[:120] for c in codes)[:8]
+    from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+    if prior[0][2].get("task_clause_contract") == SEMANTIC_CONTRACT:
+        from packages.agents.writer.task_semantics import repair_directive, selection_reasons
+
+        selection_payload = prior[0][2]
+        target = selection_payload["task_predicates"][0].get("semantic_target")
+        if target:
+            choices = {s["support_ref"]: s for f in selection_payload["evidence_view"]["facts"]
+                       for s in f.get("source_span_candidates", ())}
+            try:
+                parsed, _ = parse_support_selections(prior[0][1].full_output, [task], {
+                    ref: dict(choice, binding_kind="span") for ref, choice in choices.items()})
+                codes.update(selection_reasons(target,
+                    parsed[task["task_id"]].get("support_refs", ()), choices))
+            except (ValueError, TypeError, KeyError):
+                codes.add("task_support_selection_invalid")
+        failed_text = ""
+        if generated:
+            try:
+                raw = json.loads(generated[1].full_output)
+                if raw.get("status") == "insufficient_evidence":
+                    codes.add("task_generation_insufficient_evidence")
+                failed_text = (raw.get("atom") or {}).get("text", "")
+            except (ValueError, AttributeError):
+                pass
+            # The reuse certificate separately authenticates SELECT. Diagnostics
+            # need the actual failed GEN/REVIEW spans, not a duplicate certificate.
+            feedback["prior_transports"] = [r for r in feedback["prior_transports"]
+                                            if r["name"] != SELECTION_NAME]
+        feedback["reason_codes"] = sorted(str(c)[:120] for c in codes)[:8]
+        feedback["directive"] = repair_directive(
+            dict(task, semantic_target=target) if target else task,
+            feedback["reason_codes"], failed_text, clause_failure=clause_failure)
     return feedback
 
 
@@ -1663,6 +1783,9 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
     expected_inputs, candidates, selections, local_plans, tasks_by_claim = {}, {}, {}, {}, {}
     generation_payloads = {}
     generated, reviews, sent, facts_by_question, answers, decision_reviews = {}, [], {}, {}, {}, {}
+    from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+    if clause_contract == SEMANTIC_CONTRACT:
+        facts_by_question = {qid: [] for qid in known}
     authority_ids, seen = set(), set()
     capability_ids = set()
     task_answers, task_authorities, task_failures, task_prior = {}, {}, {}, {}

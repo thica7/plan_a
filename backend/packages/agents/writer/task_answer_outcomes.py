@@ -45,6 +45,15 @@ def answer_system(payload):
     )
 
 
+def obligation_tasks(tasks, compact):
+    from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+    from packages.agents.writer.task_semantics import classify_obligations
+
+    if compact.get("task_clause_contract") == SEMANTIC_CONTRACT:
+        return classify_obligations(tasks)
+    return tasks
+
+
 def digest(value):
     text = (
         value
@@ -304,7 +313,8 @@ def build_payload(
     qids = {q["question_id"] for q in questions}
     for q in questions:
         request_units = _request_units(q["question"])
-        for task in generation_tasks(q, f"{view.competitor}/{view.dimension}"):
+        local_tasks = generation_tasks(q, f"{view.competitor}/{view.dimension}")
+        for task in obligation_tasks(local_tasks, compact):
             if task_ids is not None and task["task_id"] not in task_ids:
                 continue
             choices = []
@@ -314,7 +324,10 @@ def build_payload(
                     continue
                 # Same-question rules are explicit auxiliary premises; a target
                 # still needs its own separately reviewed primary assertion.
-                if owner["task_id"] != task["task_id"] and not owner["focus"].startswith("rule_"):
+                if owner["task_id"] != task["task_id"] and (
+                    owner["task_id"] not in task["dependency_task_ids"]
+                    if "dependency_task_ids" in task else not owner["focus"].startswith("rule_")
+                ):
                     continue
                 quotes = [s.model_dump(mode="json") for s in claim.source_span_bindings]
                 if claim.operation_binding is not None:
@@ -402,6 +415,19 @@ def build_payload(
         for task in tasks:
             for choice in task['support_choices']:
                 choice.pop('quote_refs', None)
+    from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+    if compact.get("task_clause_contract") == SEMANTIC_CONTRACT:
+        from packages.agents.writer.task_semantics import semantic_target, source_scopes
+
+        scopes = source_scopes(view.sources)
+        selected_targets = {owner["task_id"]: owner["semantic_target"]
+                            for owner in by_claim.values() if owner.get("semantic_target")}
+        for task in tasks:
+            task["semantic_target"] = selected_targets.get(task["task_id"],
+                semantic_target(task, payload.get("request_context", {})))
+            for choice in task["support_choices"]:
+                choice["source_scopes"] = {sid: scopes[sid] for sid in choice["claim"]["source_ids"]
+                                           if sid in scopes}
     if repair_feedback is not None:
         payload["repair_feedback"] = repair_feedback
     return payload
@@ -519,6 +545,33 @@ def quantity_and_eligible(question, tasks):
     )
 
 
+def conjunction_coverage(answer, tasks):
+    """Project the very same bounded AND refutation used by aggregate to final QA.
+
+    The caller must authenticate the answer/credentials first. This projection
+    describes coverage, not source truth or an independent QA approval.
+    """
+    if (answer.status != "answered" or answer.conclusion != "no"
+            or not quantity_and_eligible(answer.question, tasks)):
+        return None
+    credentials = [c for c in answer.decision_credentials
+        if c.witness_kind == "quantity_excess" and c.conclusion == "no"
+        and c.question_id == answer.question_id and c.claim_id in answer.claim_ids
+        and c.task_id in {t["task_id"] for t in tasks}]
+    if len(credentials) != 1:
+        return None
+    witness = credentials[0]
+    return dict(kind="pure_quantity_conjunction_counterexample",
+        question_id=answer.question_id, question_quote=answer.question,
+        covered_task_ids=[t["task_id"] for t in tasks],
+        witness_task_id=witness.task_id, witness_claim_id=witness.claim_id,
+        credential_sha256=witness.binding_sha256,
+        scope="One authenticated same-unit excess refutes this pure AND. Verify the visible "
+              "bounded No and exact selected source. No second capacity counterexample is "
+              "needed. This does not refute OR, independent questions, actual date-qualified "
+              "policies or exceptions, and proves no runtime denial.")
+
+
 def aggregate(questions, tasks, accepted, claims, credentials=()):
     from packages.research.evidence.answer_coverage_models import (
         AnswerSubquestionBinding,
@@ -528,7 +581,8 @@ def aggregate(questions, tasks, accepted, claims, credentials=()):
     by_claim = {c.id: c for c in claims}
     result = {}
     for q in questions:
-        local = [t for t in tasks if t["question_id"] == q["question_id"]]
+        local = [t for t in tasks if t["question_id"] == q["question_id"]
+                 and t.get("obligation_role") != "support_dependency"]
         rows = [accepted.get(t["task_id"]) for t in local]
         good = [r for r in rows if r and r["outcome"] in {"yes", "no", "rule"}]
         creds = [
@@ -663,7 +717,8 @@ def consume_answer(
 
     for q in questions:
         all_tasks.extend(generation_tasks(q, f"{view.competitor}/{view.dimension}"))
-    answers = aggregate(questions, all_tasks, accepted, supported, credentials)
+    answers = aggregate(
+        questions, obligation_tasks(all_tasks, compact), accepted, supported, credentials)
     for qid, answer in answers.items():
         authorities[qid] = TaskOutcomeAuthority(answer, context)
     return rows, failures, answers
@@ -813,7 +868,8 @@ async def task_answer_coverage(
     tasks = [t for q in questions for t in generation_tasks(q, scope)]
     # Questions with no admitted ANSWER retain explicit unverified task results.
     credentials = [c for a in authorities.values() for c in a.answer.decision_credentials or ()]
-    answers = aggregate(questions, tasks, accepted, supported, credentials)
+    answers = aggregate(
+        questions, obligation_tasks(tasks, compact), accepted, supported, credentials)
     compact["task_answer_results"] = accepted
     compact["_task_outcome_authorities"] = authorities
     selection = _observations(detail, "question_evidence_selection", use.id)

@@ -6,11 +6,18 @@ from copy import deepcopy
 from packages.llm.json_extract import strict_json_object
 
 CONTRACT = "single-predicate-clauses-v1"
+CPU_DEPENDENCY_INSTRUCTION = (
+    "The exact target is the applicable CPU-time billing dependency because "
+    "cpu_usage is missing. Publish ONLY that one sourced dependency; request-count "
+    "pricing and runtime limits do not fulfill this target."
+)
 
 
 def checked_contract(payload):
+    from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+
     value = payload.get("task_clause_contract")
-    if value is not None and (type(value) is not str or value != CONTRACT):
+    if value is not None and (type(value) is not str or value not in {CONTRACT, SEMANTIC_CONTRACT}):
         raise ValueError("Unknown task clause contract")
     if value and payload.get("task_execution_policy") != "selected-task-atoms-v3":
         raise ValueError("Task clause contract requires task policy v3")
@@ -21,20 +28,29 @@ def selected_task(task, selection, target):
     """Replace planner hints with the selected refs and the actual server target."""
     result = deepcopy(task)
     result["support_refs"] = list(selection["support_refs"])
-    for name in ("selection_target", "missing_billing_inputs"):
+    for name in ("selection_target", "missing_billing_inputs", "semantic_target"):
         if name in target:
             result[name] = deepcopy(target[name])
     if target.get("selection_target") == "applicable_sourced_cpu_billing_dependency":
-        result["task_instruction"] += (
-            " The exact target is the applicable CPU-time billing dependency because "
-            "cpu_usage is missing. Publish ONLY that one sourced dependency; request-count "
-            "pricing and runtime limits do not fulfill this target."
-        )
+        if target.get("semantic_target", {}).get("relation") == "cpu_billing_dependency":
+            result["task_instruction"] = CPU_DEPENDENCY_INSTRUCTION
+        else:
+            result["task_instruction"] += " " + CPU_DEPENDENCY_INSTRUCTION
     return result
 
 
 def target_reasons(task, text, competitor):
     """Reject a sourced sibling billing predicate; source REVIEW still owns support."""
+    if task.get("semantic_target"):
+        from packages.agents.writer.task_semantics import assertion_reasons
+
+        reasons = assertion_reasons(task["semantic_target"], text)
+        if reasons:
+            return reasons
+        if task["semantic_target"].get("relation") == "cpu_billing_dependency":
+            # This checks a published dependency, not source extraction syntax.
+            # SELECT's complete billing source gate and independent REVIEW still apply.
+            return ()
     target = task.get("selection_target")
     if target is None:
         return ()
@@ -135,10 +151,16 @@ def clause_inventory(text):
     ]
 
 
-def _condition_ranges(text, inventory):
+def _condition_ranges(text, inventory, *, semantic=False):
     """Keep coordinated prerequisites inside their original, punctuation-bounded clause."""
     ranges = []
     for clause in inventory:
+        if semantic and (
+            re.match(r"\s*前提是", clause["quote"])
+            or re.match(r"\s*在[^，,；;。！？!?\n]+的前提下\s*[,，]", clause["quote"])
+        ):
+            ranges.append((clause["start"], clause["end"]))
+            continue
         opening = re.match(
             r"\s*(?:but\s+|(?:但是|但|不过)\s*)?"
             r"(?:(?:only\s+)?(?:if|when)\b|(?:如果|若|仅当|只有))",
@@ -161,20 +183,57 @@ def _condition_ranges(text, inventory):
     return ranges
 
 
-def validate_clause_reviews(raw, claims, payload):
+def _quantity_premise(claim, expected, clause, payload):
+    """A typed same-unit upper bound may be a premise of its own inference."""
+    from packages.agents.writer.subquestion_premises import _counts
+    from packages.agents.writer.task_decision_witnesses import _quantity_witness
+
+    task = payload.get("task_context", {})
+    if (clause["independent_predicate"] or claim.get("kind") != "inference"
+            or task.get("request_property") not in {"people_limit", "container_limit"}):
+        return False
+    context = payload.get("request_context", {})
+    bindings = [b for b in context.get("bindings", ())
+                if b.get("question_id") == task.get("question_id")]
+    parents = [p for p in context.get("parents", ())
+               if len(bindings) == 1 and p.get("parent_id") == bindings[0].get("parent_id")]
+    if len(parents) != 1:
+        return False
+    # The review payload was built from this claim's original selected bindings.
+    # Another task's fact or quote must never authorize this premise.
+    bound = {s["quote"] for s in claim.get("source_span_bindings", ())}
+    projected = next((c for c in payload.get("claims", ()) if c["id"] == claim["id"]), claim)
+    quotes = [q for q in projected.get("support_quotes", ()) if q in bound]
+    for quote in quotes:
+        witness = _quantity_witness(task, quote, parents[0]["text"],
+                                    claim["competitor"], claim["text"])
+        if witness and _counts(expected["quote"], upper=True) == {
+                witness["unit"]: [witness["maximum"]]} and _counts(expected["quote"]) == {
+                witness["unit"]: [witness["maximum"]]}:
+            return True
+    return False
+
+
+def validate_clause_reviews(raw, claims, payload, *, _failures=None):
+    def fail(code, expected=None, clause_ids=None):
+        if _failures is not None:
+            _failures.append(dict(reason_code="task_clause_" + code,
+                clause_ids=clause_ids or ([expected["clause_id"]] if expected else [])))
+        return False
+
     try:
         rows = raw["atomicity"]
         inventories = payload["clause_inventory"]
         if not isinstance(rows, list) or len(rows) != len(claims):
-            return False
+            return fail("inventory_invalid")
         for claim in claims:
             claim = claim if isinstance(claim, dict) else claim.model_dump(mode="json")
             inventory = next(r["clauses"] for r in inventories if r["claim_id"] == claim["id"])
             if inventory != clause_inventory(claim["text"]):
-                return False
+                return fail("inventory_invalid")
             matches = [r for r in rows if isinstance(r, dict) and r.get("claim_id") == claim["id"]]
             if len(matches) != 1:
-                return False
+                return fail("inventory_invalid")
             row = matches[0]
             if (
                 set(row) != {"claim_id", "predicate_count", "clauses"}
@@ -183,9 +242,12 @@ def validate_clause_reviews(raw, claims, payload):
                 or not isinstance(row["clauses"], list)
                 or len(row["clauses"]) != len(inventory)
             ):
-                return False
-            condition_ranges = _condition_ranges(claim["text"], inventory)
+                return fail("inventory_invalid")
+            from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+            semantic = payload.get("task_clause_contract") == SEMANTIC_CONTRACT
+            condition_ranges = _condition_ranges(claim["text"], inventory, semantic=semantic)
             assertions = 0
+            assertion_ids = []
             for expected, clause in zip(inventory, row["clauses"], strict=True):
                 if (
                     not isinstance(clause, dict)
@@ -211,7 +273,11 @@ def validate_clause_reviews(raw, claims, payload):
                     or clause["role"] != "connector"
                     and not clause["support_refs"]
                 ):
-                    return False
+                    code = ("review_field_invalid" if not isinstance(clause, dict) else
+                            "target_mismatch" if clause.get("task_match") is False else
+                            "unsupported" if clause.get("verdict") != "supported" else
+                            "review_field_invalid")
+                    return fail(code, expected)
                 # Explicit additional capability syntax cannot be relabelled as a premise.
                 # Requirement/conditional syntax stays with independent semantic review.
                 explicit_condition = re.match(
@@ -225,6 +291,15 @@ def validate_clause_reviews(raw, claims, payload):
                     start <= expected["start"] and expected["end"] <= end
                     for start, end in condition_ranges
                 )
+                if semantic:
+                    dependent_requirement = re.match(
+                        r"\s*(?:(?:and|but)\s+|并且|且)?(?:requires?\b|需|必须)",
+                        expected["quote"], re.I)
+                    given = any(expected["quote"].strip(" ;；,，。.") in p["text"]
+                                for p in payload.get("request_context", {}).get("parents", ()))
+                    if (clause["role"] == "premise" and not given
+                            and not _quantity_premise(claim, expected, clause, payload)):
+                        return fail("independent_product_premise", expected)
                 if (
                     clause["role"] != "assertion"
                     and not (explicit_condition or within_condition)
@@ -237,23 +312,37 @@ def validate_clause_reviews(raw, claims, payload):
                         re.I,
                     )
                 ):
-                    return False
+                    return fail("additional_capability", expected)
                 if clause["role"] == "assertion":
                     if not clause["independent_predicate"]:
-                        return False
+                        return fail("assertion_not_independent", expected)
                     assertions += 1
+                    assertion_ids.append(expected["clause_id"])
                 elif clause["independent_predicate"]:
                     # A condition can contain a predicate without being a second target.
                     if clause["role"] not in {"condition", "premise", "exception"}:
-                        return False
+                        return fail("additional_independent_predicate", expected)
+                    if payload.get("task_clause_contract") == SEMANTIC_CONTRACT and (
+                        clause["role"] == "premise" and not given
+                        or clause["role"] != "premise" and not (
+                            explicit_condition or within_condition or dependent_requirement)
+                    ):
+                        return fail("independent_product_premise", expected)
             if assertions != 1:
-                return False
+                return fail("assertion_count", clause_ids=assertion_ids)
         return True
     except (ValueError, TypeError, KeyError, StopIteration):
-        return False
+        return fail("review_field_invalid")
 
 
-def system(base, name):
+def clause_review_failure(raw, claims, payload):
+    """Bounded diagnostics from the exact same validator, never evidence."""
+    failures = []
+    validate_clause_reviews(raw, claims, payload, _failures=failures)
+    return failures[0] if failures else None
+
+
+def system(base, name, contract=CONTRACT):
     if name.endswith("atomic_generation"):
         # Replace the legacy output schema, not the binding and guard instructions.
         replacement = (
@@ -287,7 +376,24 @@ def system(base, name):
             "conditions, AND premises, exceptions, roles and objects. Finite segmentation "
             "does not prove meaning. Reject multiple target actions."
         )
-    return f"Internal task clause contract {CONTRACT}. " + base
+    from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+    if contract == SEMANTIC_CONTRACT:
+        base += (
+            " semantic_target binds the exact requested relation and unique full request parent. "
+            "support_applicability is a server restriction, never a support verdict. "
+            "Source title/url restrict applicability only and cannot prove a product fact. "
+            "Independent product definitions and configuration rules cannot be labelled premise "
+            "to bypass a second predicate; only necessary conditional/exception scope stays. "
+            "repair_feedback.directive tells whether to reselect evidence or rewrite wording; "
+            "it is diagnostic data and never evidence."
+        )
+        if name.endswith("atomic_generation"):
+            base += (
+                " The complete current task is in generation_tasks[0]; "
+                "its complete selected support is task_support_selections[0]."
+            )
+        base += " For a CPU dependency omit numeric rate, allowance and runtime lists."
+    return f"Internal task clause contract {contract}. " + base
 
 
 def reuse_selection(task, history, facts, consumption_id, snapshot_id):
@@ -323,6 +429,13 @@ def reuse_selection(task, history, facts, consumption_id, snapshot_id):
     )
     parsed, _ = parse_support_selections(span.full_output, [task], choices)
     selection = parsed[task["task_id"]]
+    from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+    if checked_contract(original) == SEMANTIC_CONTRACT:
+        from packages.agents.writer.task_semantics import selection_reasons
+
+        target = original["generation_tasks"][0]["semantic_target"]
+        if selection_reasons(target, selection.get("support_refs", ()), choices):
+            return None
     if (
         selection["state"] != "selected"
         or original["task_support_selections"][0]["support_refs"] != selection["support_refs"]
@@ -350,6 +463,8 @@ def user_bytes(payload):
 def reused_generation(
     task, history, facts, consumption_id, snapshot_id, feedback, *, max_bytes=14000
 ):
+    if feedback.get("directive", {}).get("action") == "reselect":
+        return None
     selected = reuse_selection(task, history, facts, consumption_id, snapshot_id)
     if selected is None:
         return None
@@ -358,6 +473,19 @@ def reused_generation(
     if user_bytes(original) > min(14000, max_bytes):
         for name in ("failed_generation", "failed_review"):
             original["repair_feedback"].pop(name, None)
+    if (user_bytes(original) > min(14000, max_bytes)
+            and original["repair_feedback"].get("directive")):
+        from packages.agents.writer.task_semantics import _utf8_excerpt
+
+        directive = original["repair_feedback"]["directive"]
+        for clause in directive["failed_clauses"]:
+            excerpt = clause["quote_excerpt"]
+            clause["quote_excerpt"] = _utf8_excerpt(excerpt, 64)
+            clause["excerpt_truncated"] |= len(excerpt.encode()) > 64
+        if user_bytes(original) > min(14000, max_bytes):
+            predicate = directive["failed_predicate"]
+            directive["failed_predicate"] = _utf8_excerpt(predicate, 80)
+            directive["failed_predicate_truncated"] |= len(predicate.encode()) > 80
     return original, parsed
 
 
@@ -385,4 +513,6 @@ def fresh_contract(detail, scope):
                 return checked_contract(json.loads(raw)) if separator else None
             except (ValueError, TypeError):
                 return None
-    return CONTRACT
+    from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+
+    return SEMANTIC_CONTRACT

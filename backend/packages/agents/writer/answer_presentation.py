@@ -7,6 +7,25 @@ from packages.schema.decision_brief import safe_decision_brief_text as plain
 def observation_claims(detail, audit):
     """Explicit questions publish deductions only inside their final answer."""
     supported = tuple(item for item in audit.claims if item.status == "supported")
+    if getattr(audit, "answer_review_contract", None) == "task-outcomes-v1":
+        from packages.agents.writer.question_atomic_delivery import replay_decision_reviews
+        from packages.agents.writer.task_answer_outcomes import TaskOutcomeAuthority
+        from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+
+        try:
+            authorities = replay_decision_reviews(detail, audit)
+        except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
+            authorities = {}
+        fresh = [a for a in authorities.values() if isinstance(a, TaskOutcomeAuthority)
+                 and a.context is not None
+                 and a.context.compact.get("task_clause_contract") == SEMANTIC_CONTRACT]
+        if fresh:
+            published = {cid for answer in audit.answer_coverage
+                if answer.status in {"answered", "partial"} and answer.answer
+                and isinstance(authorities.get(answer.question_id), TaskOutcomeAuthority)
+                and authorities[answer.question_id].matches(answer) for cid in answer.claim_ids}
+            return tuple(item for item in supported
+                         if item.claim.kind == "fact" or item.claim.id in published)
     if all(item.claim.kind == "fact" for item in supported):
         return supported
     has_questions = bool(

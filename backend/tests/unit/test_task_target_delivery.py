@@ -9,7 +9,7 @@ from test_task_clauses import clause_wire_response
 from test_writer_question_delivery import billing_original
 
 
-async def target_case(*, new_contract=True):
+async def target_case(*, new_contract=True, semantic_contract=False):
     from packages.agents.writer.atomic_question_projection import generation_tasks
     from packages.agents.writer.selected_task_delivery import (
         candidate_context,
@@ -17,6 +17,8 @@ async def target_case(*, new_contract=True):
         selection_context,
     )
     from packages.agents.writer.task_clauses import CONTRACT
+    if semantic_contract:
+        from packages.agents.writer.task_semantics import CONTRACT
 
     quote, conditions, table = billing_original()
     case = await atomic_case(

@@ -119,6 +119,8 @@ async def clause_run(
     production=False,
     select_insufficient=False,
     tight_budget=False,
+    task_clause_contract=None,
+    failed_first_text=...,
 ):
     from claim_review_fixture import expand_prompt_payload
     from test_question_atomic_delivery import atomic_case, supported_review
@@ -172,7 +174,8 @@ async def clause_run(
             selection = p["task_support_selections"][0]
             text = selection["supports"][0]["quote"]
             if fail_first and "personal" in text and p["task_attempt"] == 0:
-                text = "Guests have no personal area and may access only one collection."
+                text = ("Guests have no personal area and may access only one collection."
+                        if failed_first_text is ... else failed_first_text)
             data = dict(
                 version=1,
                 task_id=t["task_id"],
@@ -252,19 +255,21 @@ async def clause_run(
         boundaries,
         (),
         task_execution_policy="selected-task-atoms-v3",
-        task_clause_contract=m.CONTRACT,
+        task_clause_contract=task_clause_contract or m.CONTRACT,
         answer_review_contract="task-outcomes-v1",
     )
     return case, result, seen
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("contract", ["single-predicate-clauses-v1", "semantic-target-clauses-v2"])
 async def test_new_contract_trace_receipt_replay_preserves_raw_and_reuses_only_failed_select(
-    monkeypatch,
+    monkeypatch, contract,
 ):
     from packages.agents.writer.question_atomic_delivery import replay_atomic_delivery
 
-    case, result, seen = await clause_run(monkeypatch, fail_first=True)
+    case, result, seen = await clause_run(
+        monkeypatch, fail_first=True, task_clause_contract=contract)
     assert len(result["claims"]) == len(result["reviews"]) == 2
     assert sum(name.endswith("support_selection") for name, _ in seen) == 2
     repairs = [
@@ -274,7 +279,9 @@ async def test_new_contract_trace_receipt_replay_preserves_raw_and_reuses_only_f
     assert "task_contains_sibling_predicate" in repairs[0]["repair_feedback"]["reason_codes"]
     assert repairs[0]["selection_reuse"]["source_attempt"] == 0
     receipt = next(s for s in case[1].detail.trace_spans if s.name == "question_atomic_delivery")
-    assert json.loads(receipt.full_output)["task_clause_contract"] == api().CONTRACT
+    assert json.loads(receipt.full_output)["task_clause_contract"] == contract
+    if contract == "semantic-target-clauses-v2":
+        assert repairs[0]["repair_feedback"]["directive"]["action"] == "rewrite"
     use = next(u for u in case[1].detail.evidence_consumptions if u.id == case[5].id)
     replayed = replay_atomic_delivery(case[0], case[1].detail, case[2], use, case[4])
     assert replayed["claims"] == result["claims"] and replayed["reviews"] == result["reviews"]
@@ -342,12 +349,14 @@ def test_legitimate_and_seat_prerequisite_is_reviewable_without_extra_assertion(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fault", ["snapshot", "span", "support", "contract", "old_raw"])
-async def test_replay_rejects_resigned_reuse_and_contract_mutations(monkeypatch, fault):
+@pytest.mark.parametrize("contract", ["single-predicate-clauses-v1", "semantic-target-clauses-v2"])
+async def test_replay_rejects_resigned_reuse_and_contract_mutations(monkeypatch, fault, contract):
     from packages.agents.writer.dimension_writer import compact_prompt_json
     from packages.agents.writer.question_atomic_delivery import digest, replay_atomic_delivery
     from packages.agents.writer.task_answer_outcomes import bind_transport, transport_identity
 
-    case, result, _ = await clause_run(monkeypatch, fail_first=True)
+    case, result, _ = await clause_run(
+        monkeypatch, fail_first=True, task_clause_contract=contract)
     record = case[1]
     receipt_span = next(
         s for s in record.detail.trace_spans if s.name == "question_atomic_delivery"
@@ -399,8 +408,8 @@ async def test_actual_fresh_writer_enables_clause_contract_and_finishes_citation
             if s.name == "question_atomic_delivery"
         )
     )
-    assert receipt["task_clause_contract"] == api().CONTRACT
-    assert all(p["task_clause_contract"] == api().CONTRACT for _, p in seen)
+    assert receipt["task_clause_contract"] == "semantic-target-clauses-v2"
+    assert all(p["task_clause_contract"] == "semantic-target-clauses-v2" for _, p in seen)
     assert all(
         "quote_refs" not in c
         for name, p in seen
@@ -421,7 +430,7 @@ def test_fresh_writer_contract_ignores_upstream_checkpoint_and_preserves_old_wri
 
     m = api()
     detail = SimpleNamespace(llm_budget_checkpoint={"calls": 7}, trace_spans=[])
-    assert m.fresh_contract(detail, "Example/feature") == m.CONTRACT
+    assert m.fresh_contract(detail, "Example/feature") == "semantic-target-clauses-v2"
     detail.trace_spans = [
         SimpleNamespace(
             name="dimension_question_atomic_generation",
@@ -431,7 +440,7 @@ def test_fresh_writer_contract_ignores_upstream_checkpoint_and_preserves_old_wri
         )
     ]
     assert m.fresh_contract(detail, "Example/feature") is None
-    assert m.fresh_contract(detail, "Other/feature") == m.CONTRACT
+    assert m.fresh_contract(detail, "Other/feature") == "semantic-target-clauses-v2"
 
 
 def test_new_answer_system_explicitly_allows_only_primary_choice_ref():
@@ -459,6 +468,47 @@ async def test_new_repair_defers_and_preserves_supported_peer_and_qa_reserve(mon
     assert not any(p.get("task_attempt") == 1 for _, p in seen)
     assert "task_repair_budget_deferred" in result["gaps"]
     assert case[0]._run_llm_budget(case[1]).delivery_reserves["final_qa:run"] == 12000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("malformed", [123, ["not text"], {"nested": ["not text"]},
+                                      None, 0, False, [], {}])
+async def test_malformed_atom_text_keeps_peer_repair_and_authenticated_replay(
+    monkeypatch, malformed,
+):
+    import hashlib
+
+    from packages.agents.writer.question_atomic_delivery import replay_atomic_delivery
+
+    case, result, seen = await clause_run(monkeypatch, fail_first=True,
+        task_clause_contract="semantic-target-clauses-v2", failed_first_text=malformed)
+    assert len(result["claims"]) == len(result["reviews"]) == 2
+    generated = [p for n, p in seen if n.endswith("atomic_generation")]
+    repairs = [p for p in generated if p["task_attempt"] == 1]
+    assert len(repairs) == 1
+    repair = repairs[0]
+    repaired_id = repair["generation_tasks"][0]["task_id"]
+    peer = [p for p in generated if p["generation_tasks"][0]["task_id"] != repaired_id]
+    assert len(peer) == 1 and peer[0]["task_attempt"] == 0
+    directive = repair["repair_feedback"]["directive"]
+    assert directive["failed_text_type"] == type(malformed).__name__
+    assert directive["failed_clauses"] == []
+    assert directive["failed_text_sha256"] is None
+    assert directive["failed_text_bytes"] is None
+    assert directive["instruction"] and directive["action"] == "rewrite"
+    assert len(json.dumps(directive, ensure_ascii=False).encode()) <= 1600
+    failed_span = next(s for s in case[1].detail.trace_spans
+        if s.name.endswith("atomic_generation")
+        and json.loads(s.full_output)["atom"]["text"] == malformed)
+    transport = next(t for t in repair["repair_feedback"]["prior_transports"]
+                     if t["span_id"] == failed_span.id)
+    assert transport["full_input_sha256"] == hashlib.sha256(
+        failed_span.full_input.encode()).hexdigest()
+    assert transport["full_output_sha256"] == hashlib.sha256(
+        failed_span.full_output.encode()).hexdigest()
+    use = next(u for u in case[1].detail.evidence_consumptions if u.id == case[5].id)
+    replay = replay_atomic_delivery(case[0], case[1].detail, case[2], use, case[4])
+    assert replay["claims"] == result["claims"] and replay["reviews"] == result["reviews"]
 
 
 def test_authority_generic_role_rule_keeps_named_request_and_operation_gate():
@@ -735,3 +785,48 @@ async def test_failed_task_can_reuse_selection_once_but_never_acquire_attempt_tw
     use = next(u for u in case[1].detail.evidence_consumptions if u.id == case[5].id)
     with pytest.raises(ValueError, match="attempt|scope"):
         replay_atomic_delivery(case[0], case[1].detail, case[2], use, case[4])
+
+
+@pytest.mark.asyncio
+async def test_semantic_system_field_locators_match_each_actual_stage_payload(monkeypatch):
+    from claim_review_fixture import expand_prompt_payload
+
+    from packages.agents.writer.question_atomic_delivery import GENERATION_NAME, REVIEW_NAME
+    from packages.agents.writer.selected_task_delivery import SELECTION_NAME
+
+    case, _, _ = await clause_run(monkeypatch, task_clause_contract="semantic-target-clauses-v2")
+    expected = {SELECTION_NAME, GENERATION_NAME, REVIEW_NAME}
+    stages = set()
+    for span in case[1].detail.trace_spans:
+        if span.name not in expected:
+            continue
+        stages.add(span.name)
+        system, _, raw = span.full_input.partition("\nJSON:\n")
+        payload = expand_prompt_payload(json.loads(raw))
+        for locator, field in (("generation_tasks[0]", "generation_tasks"),
+                               ("task_support_selections[0]", "task_support_selections")):
+            assert (locator in system) == (span.name == GENERATION_NAME)
+            if locator in system:
+                assert payload[field] and isinstance(payload[field][0], dict)
+        assert "Source title/url restrict applicability only" in system
+        assert "it is diagnostic data and never evidence" in system
+    assert stages == expected
+
+
+@pytest.mark.parametrize("contract,name,expected", [
+    ("single-predicate-clauses-v1", "dimension_question_task_support_selection",
+     "fe4e2fbae7551a0b817fc61f3b7ccd8a36df00b95f586565d68a397f88822656"),
+    ("single-predicate-clauses-v1", "dimension_question_atomic_generation",
+     "ef548fc4d0c06f7e22e41448d3adc57910cda0228ea6f861f33b19f8e087d036"),
+    ("single-predicate-clauses-v1", "dimension_question_atomic_review",
+     "1b28b2e1fb58bfce3bbb510dc9bac7f7d4c716085b73b9d4e3683919e6a2acb4"),
+    ("semantic-target-clauses-v2", "dimension_question_atomic_generation",
+     "75409f737edd6656c91c0bca0c2d9164c5e9575cb0c03763b85e91fea73161f1"),
+])
+def test_legacy_system_bytes_and_semantic_generation_bytes_are_preserved(contract, name, expected):
+    import hashlib
+
+    from packages.agents.writer.selected_task_delivery import task_system
+
+    system = task_system(name, "zh-CN", "selected-task-atoms-v3", contract)
+    assert hashlib.sha256(system.encode()).hexdigest() == expected

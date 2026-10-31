@@ -19,6 +19,9 @@ QUESTION_CONTEXT_FIELDS = frozenset(
         "publication_matches",
         "support_verified",
         "server_delivery_type",
+        "task_semantic_contract",
+        "coverage_contract",
+        "source_scopes",
     }
 )
 

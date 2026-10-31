@@ -2,7 +2,25 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-## 2026-10-31：单谓词子合同与失败补交
+## 2026-10-31：任务语义选证、具体补交与必要前提
+
+同时显式打开两个Writer实验开关时，新鲜执行使用内部`semantic-target-clauses-v2`，外层继续`selected-task-atoms-v3`／`task-outcomes-v1`。没有新增公开API或默认开启项。旧单谓词v1、无子合同及其他旧记录不被自动提升为新鲜执行。
+
+- `task_semantics.py`从精确任务和唯一完整父题构造限制性目标，分开“已接受邀请”的过去事件与新的邀请动作。断言检查仅分析副本，原文字、引用及哈希不改；邀请方等角色名不当作动作。
+- `selected_task_delivery.py`将明确不适用的ref移出实际正向SELECT目录，完整quote留作限制上下文。neutral候选不代表已获支持，服务端仍核对原canonical事实、快照、task与精确引用。标题／URL只能限制范围，不能证明产品事实。
+- `task_clauses.py`的新V2 CPU任务替换旧额度／费率指令，只要求已选的账单依赖；完整规则条件与例外仍进入GEN及REVIEW。源正确但回答错目标不会发表。
+- 必要数量前提仅在本任务typed property、唯一父题、实际所选原始span、既有同单位上限见证与该前提的unit/max匹配时准入；不能泛化为允许所有`independent_predicate=false`。完整来源审核继续执行，OR、描述人数、其他单位、未知条件或独立产品定义不能借此通过。
+- 新V2识别“前提是……”与“在……前提下”的中文条件范围，条件闭合后的第二操作仍作为独立谓词核对。真正源审不支持的结论保留失败。
+- 补交反馈提取实际REVIEW的失败子句、作用／目标不符及原位置／哈希；证据语义失败重选，纯写作失败可复用认证SELECT。诊断不当证据，有1600字节总界及原14k user上限，非字符串JSON值不会阻断成功peer；失败原件仍留trace。
+- 正文、问答和最终QA继续消费同一实际审核结论。辅助规则依赖不重复算用户分支；必要澄清的空事实qid只修新合同的重建，不豁免缺失例外或历史finding。
+
+Collector、Analyst、Comparator、Reflector及其实际有效产物没有被替换；本轮修改在Writer任务执行及对应最终QA边界。首轮真实正文仍0/4，续修不能追溯改判首轮；各候选按自己的冻结源码核验，旧失败与原样报告保留。完整记录见[语义交付](optimization/2026-10-31-semantic-delivery.md)与[首轮结果](optimization/2026-10-31-semantic-initial-results.json)。
+
+续修最终（本机验收续至11-01）：3/8原题完整、22分支13完整／2部分／7缺失；文本／证据／原子报告各1/4，仅Bitwarden，严格QA仍0/4。CF权限与BW上限推论已发表，CPU依赖、1P双vault及Trello剩余分支仍缺；BW合理澄清和容量回答不能自动清除历史QA阻断，观察区尚未同步。当前主要剩余问题是正确选证后仍自由复写复合原句，以及历史问题与实际结论状态映射；下一步用经验证的单关系结论对象统一生成与发表。
+
+最终全后端9546通过／1跳过／250警告，测试前后源码一致，变更13份Python的Ruff新增0。113次真实传输／417730已知token，29项最终QA全部送达有效、无未送审或超时；这些不代表内容合格。[最终脱敏结果及四份原样正文](optimization/2026-10-31-semantic-final-results.json)保留全部失败。实验两个开关默认仍关闭。
+
+## 2026-10-31 上一候选：单谓词子合同与失败补交
 
 新鲜执行在下述两个实验开关同时打开时使用内部 `task_clause_contract=single-predicate-clauses-v1`。仍保留外层 `selected-task-atoms-v3` 与 `task-outcomes-v1`；公开 API 没有新增枚举。默认开关继续关闭。已存在的 Writer 消费记录按其持久化合同恢复；只有上游检查点而尚未开始 Writer 的任务可使用新合同。
 

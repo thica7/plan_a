@@ -202,6 +202,44 @@ INDEPENDENT_SYSTEM_V9 = (
     'evidence and visible answer reasoning"}]}.'
 )
 INDEPENDENT_SYSTEM = INDEPENDENT_SYSTEM_V9
+
+
+def final_review_system(payload):
+    """Only freshly authenticated semantic-task contexts receive the sub-contract."""
+    from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+
+    contexts = [*payload.get("findings", ()),
+                *payload.get("question_contexts", {}).values()]
+    if not any(c.get("task_semantic_contract") == SEMANTIC_CONTRACT for c in contexts):
+        return INDEPENDENT_SYSTEM
+    old = (
+        "Reviewed tasks "
+        "and task_support_claim_ids support only their exact local fragments, never whole-question "
+        "coverage or other source gaps. Permission does not imply obligation; authorization for "
+        "one resource does not authorize another. A supported resource scope or upper bound under "
+        "given assumptions may entail a bounded No without a verbatim quantity/resource "
+        "or separate "
+        "negative quote. Never invent runtime rejection, enforcement or broader behavior. A "
+        "background date alone is not a policy claim; preserve any asked or explicitly "
+        "date-qualified "
+        "policy or exception. Unknown premises and unanswered branches remain gaps. "
+    )
+    replacement = (
+        f"Contract {SEMANTIC_CONTRACT}. coverage_contract certifies coverage, "
+        "never a source verdict: one published same-unit excess refutes its pure AND; "
+        "independently "
+        "verify its bounded No and exact quote. No second capacity witness is needed. This does "
+        "not refute OR or independent requests, waive dated policies/exceptions, or narrow "
+        "historical findings. source_scopes title/url restrict only. Permission does not imply "
+        "duty; resource A grants no B. A sourced resource scope can entail bounded No without "
+        "verbatim denial. Unknown branches stay gaps. Invent no runtime denial. Scenario dates "
+        "are not policy assertions. "
+    )
+    if INDEPENDENT_SYSTEM.count(old) != 1 or len(replacement.encode()) > len(old.encode()):
+        raise ValueError("Semantic QA SYSTEM no longer fits the protected legacy envelope")
+    return INDEPENDENT_SYSTEM.replace(old, replacement, 1)
+
+
 MAX_REVIEW_OUTPUT_TOKENS = 1600
 FINAL_QA_REQUEST_RESERVE = (
     len(INDEPENDENT_SYSTEM.encode()) + review_byte_limit(PROTOCOL) + 256
@@ -261,6 +299,29 @@ def _question_context(service, record, snapshot, question, audit, *, verified, p
     )
     if answer and _request_only_clarification(detail, audit, answer, question):
         context["server_delivery_type"] = "canonical_request_only_clarification"
+    if answer and context["support_verified"]:
+        from packages.agents.writer.question_atomic_delivery import replay_decision_reviews
+        from packages.agents.writer.task_answer_outcomes import (
+            TaskOutcomeAuthority,
+            conjunction_coverage,
+        )
+        from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
+
+        try:
+            authority = replay_decision_reviews(detail, audit).get(qid)
+            if (isinstance(authority, TaskOutcomeAuthority) and authority.matches(answer)
+                    and authority.context.compact.get("task_clause_contract") == SEMANTIC_CONTRACT):
+                from packages.agents.writer.atomic_question_projection import generation_tasks
+                from packages.agents.writer.task_semantics import source_scopes
+
+                context["task_semantic_contract"] = SEMANTIC_CONTRACT
+                context["coverage_contract"] = conjunction_coverage(answer,
+                    generation_tasks(question, f"{audit.competitor}/{audit.dimension}"))
+                source_ids = {sid for claim in claims for sid in claim["source_ids"]}
+                context["source_scopes"] = source_scopes(
+                    s for s in snapshot.sources if s.id in source_ids)
+        except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
+            pass
     return context
 
 
@@ -391,6 +452,9 @@ def _bound_batch_transport(detail, basis_hash, candidates, receipt, *, protocol=
                   "independent_questions_v8": INDEPENDENT_SYSTEM_V8,
                   "independent_questions_v7": INDEPENDENT_SYSTEM_V7,
                   "independent_questions_v6": INDEPENDENT_SYSTEM_V6}[protocol]
+        if protocol == PROTOCOL:
+            system = final_review_system(dict(findings=[candidates[key]
+                for key in receipt["issue_ids"]]))
         spans = [span for span in detail.trace_spans if span.id == receipt['span_id']]
         if len(spans) != 1:
             return None
@@ -703,6 +767,7 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
         invalid_ids, missing_ids = [], []
         response, parsed = None, None
         user = "\nJSON:\n" + review_dumps(batch)
+        system = final_review_system(batch)
         before = len(detail.trace_spans)
         try:
             view, use = service._begin_evidence_use(
@@ -720,7 +785,7 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
                 agent="qa",
                 subagent=None,
                 name="final_question_reconciliation",
-                system=INDEPENDENT_SYSTEM,
+                system=system,
                 user=user,
                 max_output_tokens=MAX_REVIEW_OUTPUT_TOKENS,
                 max_request_attempts=min(
@@ -763,7 +828,7 @@ async def review_current_questions(service, record, issues, *, evidence_issues):
                        and span.metadata['llm_transport_attempts'] > 0 for span in spans)
         bound_receipt = dict(issue_ids=sorted(ids))
         actual = [span for span in spans
-                  if span.full_input == INDEPENDENT_SYSTEM + '\n\n' + user
+                  if span.full_input == system + '\n\n' + user
                   and (span.status != 'ok' or span.full_output == response)]
         if len(actual) == 1:
             span = actual[0]
