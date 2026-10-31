@@ -226,7 +226,8 @@ async def test_v3_production_named_resource_outcomes_do_not_depend_on_modal_word
                     for t in p["tasks"]
                 ],
             )
-        return append_response(service, record, kwargs, json.dumps(data))
+        from test_task_clauses import clause_wire_response
+        return append_response(service, record, kwargs, json.dumps(clause_wire_response(p, data)))
 
     monkeypatch.setattr(service, "_trace_llm_text", model)
     record.detail.report_md = await service._writer_dimension_report(record, 60)
@@ -698,7 +699,8 @@ async def test_same_question_four_complete_task_envelopes_split_and_replay_witho
                     for t in p["tasks"]
                 ],
             )
-        return append_response(service, record, kwargs, json.dumps(data))
+        from test_task_clauses import clause_wire_response
+        return append_response(service, record, kwargs, json.dumps(clause_wire_response(p, data)))
 
     monkeypatch.setattr(service, "_trace_llm_text", model)
     record.detail.report_md = await service._writer_dimension_report(record, 60)

@@ -1,0 +1,1088 @@
+{
+  "status": "not_deliverable",
+  "round": "single_predicate_clause_dispatchfix",
+  "artifact_directory": "data/artifacts/writer-clause-dispatchfix-2026-10-31",
+  "base_commit": "7c228f38474ded5ec1031cbf04e73a78c61e7e57",
+  "production_code_sha256": "431964082cadbbd130026e0f4b3d2d4b16de7be1ddc102013ec72f2dfd89d0ae",
+  "task_clause_contract": "single-predicate-clauses-v1",
+  "default_enabled": false,
+  "source_manifest_sha256": "64b6c7e98b844754745eedb57872ef50dcdd3514c5649e32ed2be95f3126483f",
+  "source_archive_sha256": "4bcf54402290fba6effabea75f3a5d4e7ffb9a1e7a5ce80793241beb09f22989",
+  "original_question_summary": {
+    "total": 8,
+    "pass": 2,
+    "partial": 6,
+    "fail": 0
+  },
+  "branch_summary": {
+    "total": 22,
+    "text_status_counts": {
+      "answered": 14,
+      "missing": 7,
+      "partial": 1
+    },
+    "support_status_counts": {
+      "supported": 10,
+      "missing": 8,
+      "request_only_satisfied": 4
+    },
+    "branches": [
+      {
+        "id": "Trello-1.1",
+        "original_question_id": "Trello-1",
+        "requirement": "A投票否定及启用条件",
+        "report_lines": [
+          24,
+          26
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-02ca7b0e639af6a6ccde"
+        ],
+        "reason": "明确A不能投票及看板启用条件；题设A未启用用于有限条件应用。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 24,
+            "text": "  - 小林能在 A、B 投票吗？ (A) — 否"
+          },
+          {
+            "line": 26,
+            "text": "  Observer 仅在看板已启用投票功能时才能对卡片投票；看板 A 未启用投票，因此小林不能在看板 A 投票。 在已启用卡片投票的看板 B 上，作为 Observer 的小林可以投票。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-1.2",
+        "original_question_id": "Trello-1",
+        "requirement": "B投票允许及启用条件",
+        "report_lines": [
+          25,
+          26
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-11ad99575d8ce65e8b02"
+        ],
+        "reason": "明确B允许投票及已启用条件；题设B已启用并允许该Observer满足前提。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 25,
+            "text": "  - 小林能在 A、B 投票吗？ (B) — 是"
+          },
+          {
+            "line": 26,
+            "text": "  Observer 仅在看板已启用投票功能时才能对卡片投票；看板 A 未启用投票，因此小林不能在看板 A 投票。 在已启用卡片投票的看板 B 上，作为 Observer 的小林可以投票。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-1.3",
+        "original_question_id": "Trello-1",
+        "requirement": "下载A卡片附件",
+        "report_lines": [
+          28,
+          29,
+          31
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-8e9cf8b6e1ac04c23832"
+        ],
+        "reason": "问答明确是，并实际发表Observer下载附件规则，支持A场景。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 28,
+            "text": "  结论：是"
+          },
+          {
+            "line": 29,
+            "text": "  - 他能下载 A 的卡片附件并导出 A 吗？ — 是"
+          },
+          {
+            "line": 31,
+            "text": "  Trello 的 Observer 作为看板成员，可以下载看板内卡片的附件。 Trello 的 Observer 可以导出看板。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-1.4",
+        "original_question_id": "Trello-1",
+        "requirement": "导出A",
+        "report_lines": [
+          28,
+          30,
+          31
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-04123bd31d1b21535d58"
+        ],
+        "reason": "问答明确是，并实际发表Observer导出看板规则，支持A场景。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 28,
+            "text": "  结论：是"
+          },
+          {
+            "line": 30,
+            "text": "  - 他能下载 A 的卡片附件并导出 A 吗？ — 是"
+          },
+          {
+            "line": 31,
+            "text": "  Trello 的 Observer 作为看板成员，可以下载看板内卡片的附件。 Trello 的 Observer 可以导出看板。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-1.5",
+        "original_question_id": "Trello-1",
+        "requirement": "允许投票不推出每卡强制义务",
+        "report_lines": [
+          32,
+          33
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "该必要子题正式正文仍尚未核实；未发表的许可不构成义务草稿不能补正文。许可不推出义务本可作有限逻辑判断，未从页面沉默推出全局绝无义务。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 32,
+            "text": "- B 允许投票，是否意味着他必须给每张卡片投票？ 请将可以执行的操作、启用条件与是否存在强制义务分别说明。 — 尚未核实"
+          },
+          {
+            "line": 33,
+            "text": "  本次已审核证据尚未完整覆盖此问题。"
+          }
+        ]
+      },
+      {
+        "id": "Trello-2.1",
+        "original_question_id": "Trello-2",
+        "requirement": "Workspace不能统一设Observer",
+        "report_lines": [
+          36,
+          39
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-98889a6f80f0c88598a1"
+        ],
+        "reason": "虽子项状态尚不能确定，L39实际明文无法在Workspace层级统一设置，精确所选quote直接支持；内容独立主判据实际正文通过，不让状态标签抹去已发表规则。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 36,
+            "text": "  - 能否在 Workspace 层级把他统一设置成 Observer — 尚不能确定"
+          },
+          {
+            "line": 39,
+            "text": "  Observer 是看板成员权限，无法在 Workspace 层级统一设置，且每位 Observer 均按成员、按看板单独设置，因此在看板 A 上把某成员改为 Observer 不会自动决定其在看板 B 上的权限。 只有 Workspace 管理员和看板管理员有权把看板成员的权限状态改为 Observer。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-2.2",
+        "original_question_id": "Trello-2",
+        "requirement": "A改权不自动决定B具体权限",
+        "report_lines": [
+          37,
+          39
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-98889a6f80f0c88598a1"
+        ],
+        "reason": "L39明确A不会自动决定B权限；逐成员逐板设置规则支持有限结论，未臆断小周B成员资格/具体权限。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 37,
+            "text": "  - A 上这次改权是否自动决定他在 B 的权限 — 否"
+          },
+          {
+            "line": 39,
+            "text": "  Observer 是看板成员权限，无法在 Workspace 层级统一设置，且每位 Observer 均按成员、按看板单独设置，因此在看板 A 上把某成员改为 Observer 不会自动决定其在看板 B 上的权限。 只有 Workspace 管理员和看板管理员有权把看板成员的权限状态改为 Observer。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-2.3",
+        "original_question_id": "Trello-2",
+        "requirement": "谁可把A现有成员设Observer",
+        "report_lines": [
+          17,
+          39
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-7ddd53f5bc63346a66c0"
+        ],
+        "reason": "正式给出only Workspace管理员与看板管理员可改现有看板成员权限，所选quote完整。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 17,
+            "text": "- 只有 Workspace 管理员和看板管理员有权把看板成员的权限状态改为 Observer。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 39,
+            "text": "  Observer 是看板成员权限，无法在 Workspace 层级统一设置，且每位 Observer 均按成员、按看板单独设置，因此在看板 A 上把某成员改为 Observer 不会自动决定其在看板 B 上的权限。 只有 Workspace 管理员和看板管理员有权把看板成员的权限状态改为 Observer。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-2.4",
+        "original_question_id": "Trello-2",
+        "requirement": "仅凭Observer标签不能确定免费/计费",
+        "report_lines": [
+          38,
+          39
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "仅剩尚不能确定占位，没有实际发表仅标签不足与计费依赖/分类规则；L39无计费内容，未发表计费草稿不得补齐。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 38,
+            "text": "  - 能否确定他一定免费或一定计费？ — 尚不能确定"
+          },
+          {
+            "line": 39,
+            "text": "  Observer 是看板成员权限，无法在 Workspace 层级统一设置，且每位 Observer 均按成员、按看板单独设置，因此在看板 A 上把某成员改为 Observer 不会自动决定其在看板 B 上的权限。 只有 Workspace 管理员和看板管理员有权把看板成员的权限状态改为 Observer。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-1.1",
+        "original_question_id": "Cloudflare-1",
+        "requirement": "Cache Domain Purge特定域权限规则",
+        "report_lines": [
+          19,
+          20,
+          21
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "正文未发表Cache Domain Purge清除特定域边缘缓存的权限规则。仅赋权作用域通则不足代替；相关GEN/REVIEW未发稿不得补正文。",
+        "product": "Cloudflare",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 19,
+            "text": "  - 他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？ — 尚不能确定"
+          },
+          {
+            "line": 20,
+            "text": "  - 他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？ (other.example) — 尚不能确定"
+          },
+          {
+            "line": 21,
+            "text": "  角色只能被分配到其给定的作用域。 [source:raw-source-c71a5d8161af6e06ae53]"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-1.2",
+        "original_question_id": "Cloudflare-1",
+        "requirement": "角色只能被赋予其给定域范围",
+        "report_lines": [
+          13,
+          21
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-328bd3cf24db2d5a32e7"
+        ],
+        "reason": "正文直接发表角色只能被分配到给定作用域，所选quote完整支持。",
+        "product": "Cloudflare",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 13,
+            "text": "- 角色只能被分配到其给定的作用域。 [source:raw-source-c71a5d8161af6e06ae53]"
+          },
+          {
+            "line": 21,
+            "text": "  角色只能被分配到其给定的作用域。 [source:raw-source-c71a5d8161af6e06ae53]"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-1.3",
+        "original_question_id": "Cloudflare-1",
+        "requirement": "example.com角色不能据此清除other.example",
+        "report_lines": [
+          18,
+          19,
+          20
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "正文对other.example两处实际子项均为尚不能确定，未给出不能据此获权的否定结论；不以未发表推论补齐。",
+        "product": "Cloudflare",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 18,
+            "text": "  结论：需按条件判断"
+          },
+          {
+            "line": 19,
+            "text": "  - 他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？ — 尚不能确定"
+          },
+          {
+            "line": 20,
+            "text": "  - 他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？ (other.example) — 尚不能确定"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-2.1",
+        "original_question_id": "Cloudflare-2",
+        "requirement": "不能仅据15M请求报准确完整美元账单",
+        "report_lines": [
+          23
+        ],
+        "text_status": "answered",
+        "support_status": "request_only_satisfied",
+        "selected_claim_ids": [],
+        "reason": "明确拒绝仅凭现有条件给出准确完整账单并索要输入；作为安全拒价，不新增产品事实或抬claim分母。",
+        "product": "Cloudflare",
+        "evidence_required": false,
+        "original_report_lines": [
+          {
+            "line": 23,
+            "text": "  已给请求条件：购买范围 Workers Paid、报价币种 美元。本次请求及已准入资料不足以核实准确的完整账单。请先确认：适用市场／地区、税费口径、CPU 总用量、完整用量明细及其他计费项目；补齐适用的定价资料和输入后，再核验截至 2026-10-31 的适用金额。"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-2.2",
+        "original_question_id": "Cloudflare-2",
+        "requirement": "CPU为独立用量计费，须CPU输入",
+        "report_lines": [
+          23
+        ],
+        "text_status": "partial",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "正文请求CPU总用量，但没有正式发表CPU为独立计费用量的有证规则；两个CPU草稿并列了价格与运行上限且均未发表，不能补齐。",
+        "product": "Cloudflare",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 23,
+            "text": "  已给请求条件：购买范围 Workers Paid、报价币种 美元。本次请求及已准入资料不足以核实准确的完整账单。请先确认：适用市场／地区、税费口径、CPU 总用量、完整用量明细及其他计费项目；补齐适用的定价资料和输入后，再核验截至 2026-10-31 的适用金额。"
+          }
+        ]
+      },
+      {
+        "id": "Bitwarden-1.1",
+        "original_question_id": "Bitwarden-1",
+        "requirement": "Free organization无法满足3人且3collections整体请求",
+        "report_lines": [
+          18,
+          19
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-43896686e386b32cdf7d"
+        ],
+        "reason": "3 collections大于明文2 collections上限，足以否定3人AND3collections整体请求；无须新增未请求的人数硬cap证明。2026新账户为场景前提，不当官方事实。",
+        "product": "Bitwarden",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 18,
+            "text": "  结论：否"
+          },
+          {
+            "line": 19,
+            "text": "  Bitwarden 的 Free organization 最多支持 2 个 collections，因此 3 个 collections 超出该上限，无法满足。 [source:raw-source-476cdfef80ec06d6a285]"
+          }
+        ]
+      },
+      {
+        "id": "Bitwarden-2.1",
+        "original_question_id": "Bitwarden-2",
+        "requirement": "澄清移除成员还是永久删除账户/数据",
+        "report_lines": [
+          21
+        ],
+        "text_status": "answered",
+        "support_status": "request_only_satisfied",
+        "selected_claim_ids": [],
+        "reason": "实际询问移除成员还是永久删除账户/数据，满足必要操作澄清，不预断密码去留。",
+        "product": "Bitwarden",
+        "evidence_required": false,
+        "original_report_lines": [
+          {
+            "line": 21,
+            "text": "  请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？"
+          }
+        ]
+      },
+      {
+        "id": "Bitwarden-2.2",
+        "original_question_id": "Bitwarden-2",
+        "requirement": "澄清个人数据还是组织数据",
+        "report_lines": [
+          21
+        ],
+        "text_status": "answered",
+        "support_status": "request_only_satisfied",
+        "selected_claim_ids": [],
+        "reason": "实际询问数据属于个人还是组织，满足必要数据归属澄清，不把澄清写成产品行为事实。",
+        "product": "Bitwarden",
+        "evidence_required": false,
+        "original_report_lines": [
+          {
+            "line": 21,
+            "text": "  请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？"
+          }
+        ]
+      },
+      {
+        "id": "1Password-1.1",
+        "original_question_id": "1Password-1",
+        "requirement": "访客不能同时加入2共享vault",
+        "report_lines": [
+          19,
+          21
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "同时加入两共享vault子项仍尚不能确定，正文只给Private否定；invited草稿未发表，且邀请动作限制不能完整证明已接受确认后的持续访问。不得拿Private任务已选access句回填。",
+        "product": "1Password",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 19,
+            "text": "  - 1Password: 在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库 — 尚不能确定"
+          },
+          {
+            "line": 21,
+            "text": "  1Password 的访客账户没有自己的 Private vault。 [source:raw-source-9ea4b68f00a9a2851e78]"
+          }
+        ]
+      },
+      {
+        "id": "1Password-1.2",
+        "original_question_id": "1Password-1",
+        "requirement": "访客没有自己的Private vault",
+        "report_lines": [
+          20,
+          21
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-dfe824d4780fdda0dbf5"
+        ],
+        "reason": "正文明确否定自己的Private vault，精确所选quote直接支持。",
+        "product": "1Password",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 20,
+            "text": "  - 或者拥有自己的 Private vault 吗？ — 否"
+          },
+          {
+            "line": 21,
+            "text": "  1Password 的访客账户没有自己的 Private vault。 [source:raw-source-9ea4b68f00a9a2851e78]"
+          }
+        ]
+      },
+      {
+        "id": "1Password-2.1",
+        "original_question_id": "1Password-2",
+        "requirement": "不编造精确RMB含税总价",
+        "report_lines": [
+          23
+        ],
+        "text_status": "answered",
+        "support_status": "request_only_satisfied",
+        "selected_claim_ids": [],
+        "reason": "安全拒编精确RMB含税总价并请求相关输入，不抬产品claim分母。",
+        "product": "1Password",
+        "evidence_required": false,
+        "original_report_lines": [
+          {
+            "line": 23,
+            "text": "  已给请求条件：购买范围 Unified Access、购买期限 12个月、报价币种 人民币、含税。本次请求及已准入资料不足以核实准确的当前报价。请先确认：适用市场／地区、计费周期、适用 SKU／合同及实际购买范围、实际付费席位数量；补齐适用的定价资料和输入后，再核验截至 2026-10-31 的适用金额。"
+          }
+        ]
+      },
+      {
+        "id": "1Password-2.2",
+        "original_question_id": "1Password-2",
+        "requirement": "公开报价性质有官方证据",
+        "report_lines": [
+          23
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "未发表公开报价性质的官方规则；安全拒价不代替公开定价/合同销售性质的有证回答。",
+        "product": "1Password",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 23,
+            "text": "  已给请求条件：购买范围 Unified Access、购买期限 12个月、报价币种 人民币、含税。本次请求及已准入资料不足以核实准确的当前报价。请先确认：适用市场／地区、计费周期、适用 SKU／合同及实际购买范围、实际付费席位数量；补齐适用的定价资料和输入后，再核验截至 2026-10-31 的适用金额。"
+          }
+        ]
+      },
+      {
+        "id": "1Password-2.3",
+        "original_question_id": "1Password-2",
+        "requirement": "有证官方销售/报价下一步",
+        "report_lines": [
+          23
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "未发表官方销售/报价路径的有证下一步；笼统要求补资料不等于官方销售途径。",
+        "product": "1Password",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 23,
+            "text": "  已给请求条件：购买范围 Unified Access、购买期限 12个月、报价币种 人民币、含税。本次请求及已准入资料不足以核实准确的当前报价。请先确认：适用市场／地区、计费周期、适用 SKU／合同及实际购买范围、实际付费席位数量；补齐适用的定价资料和输入后，再核验截至 2026-10-31 的适用金额。"
+          }
+        ]
+      }
+    ]
+  },
+  "report_delivery_summary": {
+    "total_reports": 4,
+    "text_deliverable": 1,
+    "text_plus_evidence_deliverable": 1,
+    "all_claims_atomic_deliverable": 1,
+    "strict_system_qa_deliverable": 0
+  },
+  "visible_claim_summary": {
+    "denominator_policy": "只统计正式正文出现的唯一产品规则/场景推论，重复摘要和问答同文去重；不把原题复述、状态占位、置信度模板、必要 request-only 澄清和安全拒编金额当新增产品主张。它们仍逐题验收并单列可见处置。",
+    "unique_claim_count": 9,
+    "fully_supported": 9,
+    "partially_supported": 0,
+    "unsupported": 0,
+    "strict_atomic": 8,
+    "non_atomic": 1
+  },
+  "questions": [
+    {
+      "id": "Trello-1",
+      "verdict": "partial",
+      "reason": "A/B投票条件与许可、下载和导出4个分支正式交付；允许投票不推出逐卡义务仍未发表。",
+      "answered": [
+        "Trello-1.1",
+        "Trello-1.2",
+        "Trello-1.3",
+        "Trello-1.4"
+      ],
+      "partial": [],
+      "missing": [
+        "Trello-1.5"
+      ]
+    },
+    {
+      "id": "Trello-2",
+      "verdict": "partial",
+      "reason": "L39实际交付不能Workspace统一设、A不决定B、谁可改权；Observer标签与计费判断分支缺。该内容评分独立于unknown状态与非原子扣分。",
+      "answered": [
+        "Trello-2.1",
+        "Trello-2.2",
+        "Trello-2.3"
+      ],
+      "partial": [],
+      "missing": [
+        "Trello-2.4"
+      ]
+    },
+    {
+      "id": "Cloudflare-1",
+      "verdict": "partial",
+      "reason": "仅赋权作用域通则正式交付；角色特定域清缓存规则与other.example场景否定仍缺。",
+      "answered": [
+        "Cloudflare-1.2"
+      ],
+      "partial": [],
+      "missing": [
+        "Cloudflare-1.1",
+        "Cloudflare-1.3"
+      ]
+    },
+    {
+      "id": "Cloudflare-2",
+      "verdict": "partial",
+      "reason": "安全拒绝精确账单并请求CPU输入有用，但CPU独立计费规则未正式交付。",
+      "answered": [
+        "Cloudflare-2.1"
+      ],
+      "partial": [
+        "Cloudflare-2.2"
+      ],
+      "missing": []
+    },
+    {
+      "id": "Bitwarden-1",
+      "verdict": "pass",
+      "reason": "明文2 collections上限与3 collections请求的有限数量推论足以否定3人且3collections整体，无须把one other user扩成硬用户cap。",
+      "answered": [
+        "Bitwarden-1.1"
+      ],
+      "partial": [],
+      "missing": []
+    },
+    {
+      "id": "Bitwarden-2",
+      "verdict": "pass",
+      "reason": "实际明确提出具体删除操作与数据归属两项必要澄清；固定边界允许该澄清交付，虽本地status仍partial。",
+      "answered": [
+        "Bitwarden-2.1",
+        "Bitwarden-2.2"
+      ],
+      "partial": [],
+      "missing": []
+    },
+    {
+      "id": "1Password-1",
+      "verdict": "partial",
+      "reason": "仅Private vault必要分支正式交付；已接受并确认访客的双共享vault分支仍未知。",
+      "answered": [
+        "1Password-1.2"
+      ],
+      "partial": [],
+      "missing": [
+        "1Password-1.1"
+      ]
+    },
+    {
+      "id": "1Password-2",
+      "verdict": "partial",
+      "reason": "安全拒造精确RMB含税价格有用；缺公开报价性质及官方销售/报价下一步两项有证必要分支。",
+      "answered": [
+        "1Password-2.1"
+      ],
+      "partial": [],
+      "missing": [
+        "1Password-2.2",
+        "1Password-2.3"
+      ]
+    }
+  ],
+  "runtime": {
+    "transports": 114,
+    "known_tokens": 415688,
+    "unknown_usage_spans": 0,
+    "provider_bill_usd": null,
+    "model_weight_revision": "not established; configured alias only"
+  },
+  "reports": [
+    {
+      "product": "Trello",
+      "run_id": "run-ba6d259471254a379a8006ffa1983769",
+      "snapshot_id": "evidence-snapshot-88b1939fedb16920d0d2b5ccede0ab471923972a1816b7820dd9ee869875fad7",
+      "text_deliverable": false,
+      "text_plus_evidence_deliverable": false,
+      "all_claims_atomic_deliverable": false,
+      "strict_system_qa_deliverable": false,
+      "question_verdicts": {
+        "Trello-1": "partial",
+        "Trello-2": "partial"
+      },
+      "visible_claim_count": 6,
+      "fully_supported_visible_claim_count": 6,
+      "strict_atomic_visible_claim_count": 5,
+      "support_rate": 1.0,
+      "strict_atomic_rate": 0.8333333333333334,
+      "qa_blocker_count": 3,
+      "all_missing_or_partial_branches": [
+        "Trello-1.5",
+        "Trello-2.4"
+      ],
+      "independent_scoring_note": "生产blocker、模型supported/keep及状态不改变原题独立评分；额外无证强化仍单独否决报告证据交付。",
+      "path": "docs/optimization/reports/2026-10-31-clause-final-trello.md",
+      "sha256": "c3c078301c78eaaf245d3d8340aa85b07a1ae935a9ba0cd45bad324dd03f7ac1",
+      "source_sha256": "c3c078301c78eaaf245d3d8340aa85b07a1ae935a9ba0cd45bad324dd03f7ac1"
+    },
+    {
+      "product": "Cloudflare",
+      "run_id": "run-1f82238f1f384d82aa79b313ab132c2d",
+      "snapshot_id": "evidence-snapshot-7ce735894a2cf378222644e809981e65ac0f439eac3a7f04a2dd4f3b4a945048",
+      "text_deliverable": false,
+      "text_plus_evidence_deliverable": false,
+      "all_claims_atomic_deliverable": false,
+      "strict_system_qa_deliverable": false,
+      "question_verdicts": {
+        "Cloudflare-1": "partial",
+        "Cloudflare-2": "partial"
+      },
+      "visible_claim_count": 1,
+      "fully_supported_visible_claim_count": 1,
+      "strict_atomic_visible_claim_count": 1,
+      "support_rate": 1.0,
+      "strict_atomic_rate": 1.0,
+      "qa_blocker_count": 3,
+      "all_missing_or_partial_branches": [
+        "Cloudflare-1.1",
+        "Cloudflare-1.3",
+        "Cloudflare-2.2"
+      ],
+      "independent_scoring_note": "生产blocker、模型supported/keep及状态不改变原题独立评分；额外无证强化仍单独否决报告证据交付。",
+      "path": "docs/optimization/reports/2026-10-31-clause-final-cloudflare.md",
+      "sha256": "20b12f773734746b7497896666657c1ce11c94a6ed9fe67ffc74732bd9988fdf",
+      "source_sha256": "20b12f773734746b7497896666657c1ce11c94a6ed9fe67ffc74732bd9988fdf"
+    },
+    {
+      "product": "Bitwarden",
+      "run_id": "run-0f37492e1027465dac03eced68be0a9b",
+      "snapshot_id": "evidence-snapshot-0125632c3351048d002545cbafa33694dc27cfb047a09736f70c322eb0af0a37",
+      "text_deliverable": true,
+      "text_plus_evidence_deliverable": true,
+      "all_claims_atomic_deliverable": true,
+      "strict_system_qa_deliverable": false,
+      "question_verdicts": {
+        "Bitwarden-1": "pass",
+        "Bitwarden-2": "pass"
+      },
+      "visible_claim_count": 1,
+      "fully_supported_visible_claim_count": 1,
+      "strict_atomic_visible_claim_count": 1,
+      "support_rate": 1.0,
+      "strict_atomic_rate": 1.0,
+      "qa_blocker_count": 5,
+      "all_missing_or_partial_branches": [],
+      "independent_scoring_note": "生产blocker、模型supported/keep及状态不改变原题独立评分；额外无证强化仍单独否决报告证据交付。",
+      "path": "docs/optimization/reports/2026-10-31-clause-final-bitwarden.md",
+      "sha256": "1789f23035862aadeaec16598773cb773683850a8e21f068ddbdcb2b7b59301e",
+      "source_sha256": "1789f23035862aadeaec16598773cb773683850a8e21f068ddbdcb2b7b59301e"
+    },
+    {
+      "product": "1Password",
+      "run_id": "run-a6c2646e99ac48daa47629b99aa394e7",
+      "snapshot_id": "evidence-snapshot-11355285371763d22592998fa593df82e1ee860039833d4cc3285ffc95c8b919",
+      "text_deliverable": false,
+      "text_plus_evidence_deliverable": false,
+      "all_claims_atomic_deliverable": false,
+      "strict_system_qa_deliverable": false,
+      "question_verdicts": {
+        "1Password-1": "partial",
+        "1Password-2": "partial"
+      },
+      "visible_claim_count": 1,
+      "fully_supported_visible_claim_count": 1,
+      "strict_atomic_visible_claim_count": 1,
+      "support_rate": 1.0,
+      "strict_atomic_rate": 1.0,
+      "qa_blocker_count": 5,
+      "all_missing_or_partial_branches": [
+        "1Password-1.1",
+        "1Password-2.2",
+        "1Password-2.3"
+      ],
+      "independent_scoring_note": "生产blocker、模型supported/keep及状态不改变原题独立评分；额外无证强化仍单独否决报告证据交付。",
+      "path": "docs/optimization/reports/2026-10-31-clause-final-1password.md",
+      "sha256": "7c640ffbc439a69a8eaaaf8ffcec00547e189f2c7ed97b5189219b9dad7c957d",
+      "source_sha256": "7c640ffbc439a69a8eaaaf8ffcec00547e189f2c7ed97b5189219b9dad7c957d"
+    }
+  ],
+  "independent_audit_sha256": "4640db4bd99061a4be7419b6e2589d7f985c8227e29ad56591340ae061d35794",
+  "full_backend": {
+    "passed": 9446,
+    "skipped": 1,
+    "warnings": 250,
+    "source_unchanged_during_tests": true,
+    "log_sha256": "7ac3a346b62b243cd2e4d4c762b8930d0ff2aa283597def7b3feba28ad8e13bc"
+  },
+  "review_sha256": {
+    "spec-dispatchfix.json": "baff9033730decfc274edc1cb18267f339562e2a9bd305149cc2f396bc77d498",
+    "quality-dispatchfix.json": "e2ba1e40dc77a3a4ae217e9845b8fb0b713c6015da1b60f78c0950b959ac9713"
+  },
+  "api_types_and_frontend": {
+    "standard_exported_schema_byte_identical": true,
+    "standard_generated_types_byte_identical": true,
+    "frontend_file_count": 260,
+    "identical_to_verified_340_tests_and_build": true,
+    "fresh_frontend_tests": false,
+    "fresh_api_export": true,
+    "model_calls": 0,
+    "exported_schema_sha256": "6a9e89817046e1f2c20a1a7e078274cb06479011833552d2eeec7cef8a9fbf44",
+    "exported_types_sha256": "8cc798496055eb5521642786fdd62710381df25901b6993c56c02b699ec02a1a"
+  },
+  "limits": [
+    "2026-10-21冻结官方页、既有暴露8题回归，非blind/generalization，不代表2026-10-31网页现状。",
+    "模型alias deepseek-flash；未独立确认服务端具体权重/revision。",
+    "预算64calls/240k，temperature0、retry0；新工程双审与producer重建通过不预设内容提升。",
+    "仅七生产阶段captured-page replay；没有新抓取、全Graph或数据库全链验收。",
+    "请求假设可用作条件输入，不可充当产品事实；别条claim/未选整页不可补各条正文支持。",
+    "纯澄清、安全拒价、问题复述、状态占位不抬claim分母；零主张0/0为n/a。"
+  ],
+  "iteration_totals": {
+    "real_transports": 342,
+    "known_tokens": 1243279,
+    "unknown_usage_spans": 0,
+    "provider_bill_usd": null,
+    "not_an_account_invoice": true
+  },
+  "before_this_turn": {
+    "real_transports": 405,
+    "known_tokens": 1372032,
+    "models_get_separate": 1
+  },
+  "cumulative_local_record": {
+    "real_transports": 747,
+    "known_tokens": 2615311,
+    "models_get_separate": 1
+  },
+  "mechanics_vs_semantics": {
+    "real_context_deferrals": 0,
+    "context_deferral_proof_validated_offline": true,
+    "cloudflare_cpu_actual_gen_calls": 2,
+    "cloudflare_cpu_published_claims": 0,
+    "semantic_generation_not_solved": true
+  },
+  "runtime_products": [
+    {
+      "product": "trello",
+      "transport_attempts": 45,
+      "known_tokens": 171006,
+      "by_name": {
+        "planner_scope": 1,
+        "collector_semantic_extract": 1,
+        "collector_question_evidence_review": 1,
+        "feature_trello_analyst": 1,
+        "comparison_matrix": 1,
+        "coverage_reflection": 1,
+        "dimension_question_task_support_selection": 10,
+        "dimension_question_atomic_generation": 10,
+        "dimension_question_atomic_review": 8,
+        "dimension_question_atomic_answer_review": 6,
+        "final_question_reconciliation": 5
+      },
+      "qa_planned": 9,
+      "qa_sent": 9,
+      "qa_valid": 9,
+      "qa_unsent": 0,
+      "qa_timeout": 0,
+      "qa_blockers": 3,
+      "native_json_spans": 34,
+      "native_json_error": 0,
+      "task_clause_execution": {
+        "contract_counts": {
+          "single-predicate-clauses-v1": 34
+        },
+        "stage_counts": {
+          "dimension_question_task_support_selection": 10,
+          "dimension_question_atomic_generation": 10,
+          "dimension_question_atomic_review": 8,
+          "dimension_question_atomic_answer_review": 6
+        },
+        "gen_envelopes": 10,
+        "server_clauses": 17,
+        "reported_clauses": 17,
+        "selection_reuses": [],
+        "selected_reuse_count": 0,
+        "transport_shape_is_not_semantic_acceptance": true
+      }
+    },
+    {
+      "product": "cloudflare",
+      "transport_attempts": 29,
+      "known_tokens": 104614,
+      "by_name": {
+        "planner_scope": 1,
+        "collector_semantic_extract": 2,
+        "collector_question_evidence_review": 1,
+        "feature_cloudflare_analyst": 1,
+        "comparison_matrix": 1,
+        "coverage_reflection": 1,
+        "dimension_question_task_support_selection": 4,
+        "dimension_question_atomic_generation": 8,
+        "dimension_question_atomic_review": 5,
+        "dimension_question_atomic_answer_review": 2,
+        "final_question_reconciliation": 3
+      },
+      "qa_planned": 5,
+      "qa_sent": 5,
+      "qa_valid": 5,
+      "qa_unsent": 0,
+      "qa_timeout": 0,
+      "qa_blockers": 3,
+      "native_json_spans": 19,
+      "native_json_error": 0,
+      "task_clause_execution": {
+        "contract_counts": {
+          "single-predicate-clauses-v1": 19
+        },
+        "stage_counts": {
+          "dimension_question_task_support_selection": 4,
+          "dimension_question_atomic_generation": 8,
+          "dimension_question_atomic_review": 5,
+          "dimension_question_atomic_answer_review": 2
+        },
+        "gen_envelopes": 8,
+        "server_clauses": 10,
+        "reported_clauses": 7,
+        "selection_reuses": [
+          {
+            "span_id": "span-68",
+            "source_selection_span_id": "span-46",
+            "task_id": "task-fee5fabdb31a8bee6139",
+            "literal_identity_verified": true
+          },
+          {
+            "span_id": "span-73",
+            "source_selection_span_id": "span-53",
+            "task_id": "task-29abd50835806d68da21",
+            "literal_identity_verified": true
+          },
+          {
+            "span_id": "span-78",
+            "source_selection_span_id": "span-57",
+            "task_id": "task-ce773497738ea0cda188",
+            "literal_identity_verified": true
+          },
+          {
+            "span_id": "span-83",
+            "source_selection_span_id": "span-63",
+            "task_id": "task-eaaade70d686153e1757",
+            "literal_identity_verified": true
+          }
+        ],
+        "selected_reuse_count": 4,
+        "transport_shape_is_not_semantic_acceptance": true
+      }
+    },
+    {
+      "product": "bitwarden",
+      "transport_attempts": 19,
+      "known_tokens": 65531,
+      "by_name": {
+        "planner_scope": 1,
+        "collector_semantic_extract": 2,
+        "collector_question_evidence_review": 1,
+        "feature_bitwarden_analyst": 1,
+        "comparison_matrix": 1,
+        "coverage_reflection": 1,
+        "dimension_question_task_support_selection": 2,
+        "dimension_question_atomic_generation": 2,
+        "dimension_question_atomic_review": 2,
+        "dimension_question_atomic_answer_review": 3,
+        "final_question_reconciliation": 3
+      },
+      "qa_planned": 8,
+      "qa_sent": 8,
+      "qa_valid": 8,
+      "qa_unsent": 0,
+      "qa_timeout": 0,
+      "qa_blockers": 5,
+      "native_json_spans": 9,
+      "native_json_error": 0,
+      "task_clause_execution": {
+        "contract_counts": {
+          "single-predicate-clauses-v1": 9
+        },
+        "stage_counts": {
+          "dimension_question_task_support_selection": 2,
+          "dimension_question_atomic_generation": 2,
+          "dimension_question_atomic_review": 2,
+          "dimension_question_atomic_answer_review": 3
+        },
+        "gen_envelopes": 2,
+        "server_clauses": 6,
+        "reported_clauses": 6,
+        "selection_reuses": [],
+        "selected_reuse_count": 0,
+        "transport_shape_is_not_semantic_acceptance": true
+      }
+    },
+    {
+      "product": "1password",
+      "transport_attempts": 21,
+      "known_tokens": 74537,
+      "by_name": {
+        "planner_scope": 1,
+        "collector_semantic_extract": 2,
+        "collector_question_evidence_review": 1,
+        "feature_1password_analyst": 1,
+        "comparison_matrix": 1,
+        "coverage_reflection": 1,
+        "dimension_question_task_support_selection": 4,
+        "dimension_question_atomic_generation": 4,
+        "dimension_question_atomic_review": 2,
+        "dimension_question_atomic_answer_review": 2,
+        "final_question_reconciliation": 2
+      },
+      "qa_planned": 7,
+      "qa_sent": 7,
+      "qa_valid": 7,
+      "qa_unsent": 0,
+      "qa_timeout": 0,
+      "qa_blockers": 5,
+      "native_json_spans": 12,
+      "native_json_error": 0,
+      "task_clause_execution": {
+        "contract_counts": {
+          "single-predicate-clauses-v1": 12
+        },
+        "stage_counts": {
+          "dimension_question_task_support_selection": 4,
+          "dimension_question_atomic_generation": 4,
+          "dimension_question_atomic_review": 2,
+          "dimension_question_atomic_answer_review": 2
+        },
+        "gen_envelopes": 4,
+        "server_clauses": 3,
+        "reported_clauses": 3,
+        "selection_reuses": [
+          {
+            "span_id": "span-56",
+            "source_selection_span_id": "span-44",
+            "task_id": "task-02a135a0dd1a531f2d05",
+            "literal_identity_verified": true
+          },
+          {
+            "span_id": "span-61",
+            "source_selection_span_id": "span-49",
+            "task_id": "task-ad2a9b4a2483cd77eb3c",
+            "literal_identity_verified": true
+          }
+        ],
+        "selected_reuse_count": 2,
+        "transport_shape_is_not_semantic_acceptance": true
+      }
+    }
+  ]
+}

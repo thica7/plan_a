@@ -362,7 +362,7 @@ async def test_atomic_core_sent_only_to_other_qid_cannot_close_current_qid(monke
     async def execute_selected_contract(*args, **kwargs):
         # Exercise the unchanged historical contract as well as the fresh route.
         if policy == "selected-task-atoms-v2":
-            kwargs.update(task_execution_policy=policy,
+            kwargs.update(task_execution_policy=policy, task_clause_contract=None,
                           answer_review_contract="subquestion-premises-v6")
         return await actual_execute(*args, **kwargs)
 

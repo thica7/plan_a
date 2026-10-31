@@ -98,6 +98,9 @@ def atomic_model(service, seen, *, bad_atom=False, bad_review=False, attempts=1)
             response = json.dumps(reviewed)
         else:
             raise AssertionError(kwargs["name"])
+        if payload.get('task_clause_contract'):
+            from test_task_clauses import clause_wire_response
+            response = json.dumps(clause_wire_response(payload, json.loads(response)))
         return append_response(
             service,
             record,

@@ -1,0 +1,830 @@
+{
+  "status": "not_deliverable",
+  "round": "single_predicate_clause_initial",
+  "artifact_directory": "data/artifacts/writer-clause-delivery-2026-10-31",
+  "base_commit": "7c228f38474ded5ec1031cbf04e73a78c61e7e57",
+  "production_code_sha256": "3861daa35b8fd98134da8ac5c372e1c036c88d1f5d8b282da227d4bb08a09b26",
+  "task_clause_contract": "single-predicate-clauses-v1",
+  "default_enabled": false,
+  "original_question_summary": {
+    "total": 8,
+    "pass": 2,
+    "partial": 6,
+    "fail": 0
+  },
+  "branch_summary": {
+    "total": 22,
+    "text_status_counts": {
+      "missing": 9,
+      "answered": 11,
+      "partial": 2
+    },
+    "support_status_counts": {
+      "missing": 10,
+      "supported": 7,
+      "request_only_satisfied": 4,
+      "partial": 1
+    },
+    "branches": [
+      {
+        "id": "Trello-1.1",
+        "original_question_id": "Trello-1",
+        "requirement": "A投票否定及启用条件",
+        "report_lines": [
+          23,
+          25,
+          27
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "A场景明确仍尚不能确定；通用投票启用规则不代替实际发表A未启用所以不能投票，未发表A推论不可补正文。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 23,
+            "text": "- Trello: 假设 Trello Workspace 已订阅 Premium，小林已分别被设为看板 A 和 B 的 Observer；A 未启用卡片投票，B 已启用且允许该 Observer 投票。仅依据所给官方页面，逐项判断：小林能在 A、B 投票吗？ — 部分回答"
+          },
+          {
+            "line": 25,
+            "text": "  - 小林能在 A、B 投票吗？ (A) — 尚不能确定"
+          },
+          {
+            "line": 27,
+            "text": "  Observer 作为看板成员，可以在看板上对卡片投票，前提是该看板已启用投票功能。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-1.2",
+        "original_question_id": "Trello-1",
+        "requirement": "B投票允许及启用条件",
+        "report_lines": [
+          23,
+          26,
+          27
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "B场景明确仍尚不能确定；通用启用许可规则不代替实际发表B已启用且获准所以可以投票，未发B推论不可补正文。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 23,
+            "text": "- Trello: 假设 Trello Workspace 已订阅 Premium，小林已分别被设为看板 A 和 B 的 Observer；A 未启用卡片投票，B 已启用且允许该 Observer 投票。仅依据所给官方页面，逐项判断：小林能在 A、B 投票吗？ — 部分回答"
+          },
+          {
+            "line": 26,
+            "text": "  - 小林能在 A、B 投票吗？ (B) — 尚不能确定"
+          },
+          {
+            "line": 27,
+            "text": "  Observer 作为看板成员，可以在看板上对卡片投票，前提是该看板已启用投票功能。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-1.3",
+        "original_question_id": "Trello-1",
+        "requirement": "下载A卡片附件",
+        "report_lines": [
+          15,
+          28,
+          29,
+          32
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-10bd3fee9d4e45e59f3d"
+        ],
+        "reason": "下载卡片附件实际发表，问答绑定A请求。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 15,
+            "text": "- Trello 的 Observer 作为看板成员，可以下载看板内卡片的附件。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 28,
+            "text": "- 他能下载 A 的卡片附件并导出 A 吗？ — 已回答"
+          },
+          {
+            "line": 29,
+            "text": "  结论：是"
+          },
+          {
+            "line": 32,
+            "text": "  Trello 的 Observer 作为看板成员，可以下载看板内卡片的附件。 Trello 的 Observer 作为看板成员，可以导出该看板。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-1.4",
+        "original_question_id": "Trello-1",
+        "requirement": "导出A",
+        "report_lines": [
+          17,
+          28,
+          29,
+          32
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-168d3c9e0ce4022a485b"
+        ],
+        "reason": "导出本看板实际发表，问答绑定A请求。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 17,
+            "text": "- Trello 的 Observer 作为看板成员，可以导出该看板。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 28,
+            "text": "- 他能下载 A 的卡片附件并导出 A 吗？ — 已回答"
+          },
+          {
+            "line": 29,
+            "text": "  结论：是"
+          },
+          {
+            "line": 32,
+            "text": "  Trello 的 Observer 作为看板成员，可以下载看板内卡片的附件。 Trello 的 Observer 作为看板成员，可以导出该看板。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-1.5",
+        "original_question_id": "Trello-1",
+        "requirement": "允许投票不推出每卡强制义务",
+        "report_lines": [
+          33,
+          34
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "正文尚未核实逐卡强制义务，许可不推出义务稿unreviewed未发；不能由后台或摘录沉默补正文。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 33,
+            "text": "- B 允许投票，是否意味着他必须给每张卡片投票？ 请将可以执行的操作、启用条件与是否存在强制义务分别说明。 — 尚未核实"
+          },
+          {
+            "line": 34,
+            "text": "  本次已审核证据尚未完整覆盖此问题。"
+          }
+        ]
+      },
+      {
+        "id": "Trello-2.1",
+        "original_question_id": "Trello-2",
+        "requirement": "Workspace不能统一设Observer",
+        "report_lines": [
+          35,
+          37,
+          40
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "Workspace层级统一设Observer仍尚不能确定，没有正式产品规则。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 35,
+            "text": "- Trello: 假设某 Trello Workspace 已订阅 Premium，管理员把看板 A 上现有协作者小周的权限改成了 Observer。同一 Workspace 另有看板 B，但题设没有说明小周是否加入 B、在 B 上的权限，或他属于 Workspace 成员还是哪一种 guest。仅依据所给页面，逐项回答：能否在 Workspace 层级把他统一设置成 Observer，A 上这次改权是否自动决定他在 B 的权限；谁有权把 A 的现有成员改为 Observer；只凭 A 上的 Observer 标签，能否确定他一定免费或一定计费？不要推定题设未说明的成员资格。 — 部分回答"
+          },
+          {
+            "line": 37,
+            "text": "  - 能否在 Workspace 层级把他统一设置成 Observer — 尚不能确定"
+          },
+          {
+            "line": 40,
+            "text": "  只有 Workspace 管理员和看板管理员有权把看板现有成员的状态改为 Observer。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-2.2",
+        "original_question_id": "Trello-2",
+        "requirement": "A改权不自动决定B具体权限",
+        "report_lines": [
+          35,
+          38,
+          40
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "A改权是否自动决定B权限仍尚不能确定，未发表不自动传播边界。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 35,
+            "text": "- Trello: 假设某 Trello Workspace 已订阅 Premium，管理员把看板 A 上现有协作者小周的权限改成了 Observer。同一 Workspace 另有看板 B，但题设没有说明小周是否加入 B、在 B 上的权限，或他属于 Workspace 成员还是哪一种 guest。仅依据所给页面，逐项回答：能否在 Workspace 层级把他统一设置成 Observer，A 上这次改权是否自动决定他在 B 的权限；谁有权把 A 的现有成员改为 Observer；只凭 A 上的 Observer 标签，能否确定他一定免费或一定计费？不要推定题设未说明的成员资格。 — 部分回答"
+          },
+          {
+            "line": 38,
+            "text": "  - A 上这次改权是否自动决定他在 B 的权限 — 尚不能确定"
+          },
+          {
+            "line": 40,
+            "text": "  只有 Workspace 管理员和看板管理员有权把看板现有成员的状态改为 Observer。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-2.3",
+        "original_question_id": "Trello-2",
+        "requirement": "谁可把A现有成员设Observer",
+        "report_lines": [
+          19,
+          40
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-2f19ea0b906c3a7b0875"
+        ],
+        "reason": "明确只有Workspace管理员和看板管理员可把现有看板成员改Observer，完整所选闭名单支持。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 19,
+            "text": "- 只有 Workspace 管理员和看板管理员有权把看板现有成员的状态改为 Observer。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 40,
+            "text": "  只有 Workspace 管理员和看板管理员有权把看板现有成员的状态改为 Observer。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-2.4",
+        "original_question_id": "Trello-2",
+        "requirement": "仅凭Observer标签不能确定免费/计费",
+        "report_lines": [
+          35,
+          39,
+          40
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "仅凭Observer标签是否免费/计费仍尚不能确定；没有发表标签不足与分类/依赖规则，不将尚不能确定当完整有证回答。",
+        "product": "Trello",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 35,
+            "text": "- Trello: 假设某 Trello Workspace 已订阅 Premium，管理员把看板 A 上现有协作者小周的权限改成了 Observer。同一 Workspace 另有看板 B，但题设没有说明小周是否加入 B、在 B 上的权限，或他属于 Workspace 成员还是哪一种 guest。仅依据所给页面，逐项回答：能否在 Workspace 层级把他统一设置成 Observer，A 上这次改权是否自动决定他在 B 的权限；谁有权把 A 的现有成员改为 Observer；只凭 A 上的 Observer 标签，能否确定他一定免费或一定计费？不要推定题设未说明的成员资格。 — 部分回答"
+          },
+          {
+            "line": 39,
+            "text": "  - 能否确定他一定免费或一定计费？ — 尚不能确定"
+          },
+          {
+            "line": 40,
+            "text": "  只有 Workspace 管理员和看板管理员有权把看板现有成员的状态改为 Observer。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-1.1",
+        "original_question_id": "Cloudflare-1",
+        "requirement": "Cache Domain Purge特定域权限规则",
+        "report_lines": [
+          13,
+          19,
+          20,
+          21
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "正文未实际发表Cache Domain Purge授予清除特定域边缘缓存的能力规则。包含purge与read的后台稿unreviewed未发；域范围非蕴含推论只完成跨域边界，不补该独立必要能力分支。",
+        "product": "Cloudflare",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 13,
+            "text": "- 角色只能被分配到其给定的作用域。 [source:raw-source-c71a5d8161af6e06ae53]"
+          },
+          {
+            "line": 19,
+            "text": "  - 他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？ — 尚不能确定"
+          },
+          {
+            "line": 20,
+            "text": "  - 他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？ (other.example) — 否"
+          },
+          {
+            "line": 21,
+            "text": "  域级作用域角色仅适用于账户内的某个给定域，因此仅被授予 example.com 的 Cache Domain Purge 角色并不蕴含其可清除同一账户内 other.example 的边缘缓存。 角色只能被分配到其给定的作用域。 [source:raw-source-c71a5d8161af6e06ae53]"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-1.2",
+        "original_question_id": "Cloudflare-1",
+        "requirement": "角色只能被赋予其给定域范围",
+        "report_lines": [
+          13,
+          21
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-3e7413c8f99c8ef80fcd",
+          "claim-d2e70b136ae5c2495359"
+        ],
+        "reason": "给定scope赋权限制与domain-scoped给定域规则均实际发表，有各自精确选证。",
+        "product": "Cloudflare",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 13,
+            "text": "- 角色只能被分配到其给定的作用域。 [source:raw-source-c71a5d8161af6e06ae53]"
+          },
+          {
+            "line": 21,
+            "text": "  域级作用域角色仅适用于账户内的某个给定域，因此仅被授予 example.com 的 Cache Domain Purge 角色并不蕴含其可清除同一账户内 other.example 的边缘缓存。 角色只能被分配到其给定的作用域。 [source:raw-source-c71a5d8161af6e06ae53]"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-1.3",
+        "original_question_id": "Cloudflare-1",
+        "requirement": "example.com角色不能据此清除other.example",
+        "report_lines": [
+          20,
+          21
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-d2e70b136ae5c2495359"
+        ],
+        "reason": "明确other.example否定及权限非蕴含解释；题设仅example.com且无其他角色可作条件输入，不冒充运行实测。",
+        "product": "Cloudflare",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 20,
+            "text": "  - 他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？ (other.example) — 否"
+          },
+          {
+            "line": 21,
+            "text": "  域级作用域角色仅适用于账户内的某个给定域，因此仅被授予 example.com 的 Cache Domain Purge 角色并不蕴含其可清除同一账户内 other.example 的边缘缓存。 角色只能被分配到其给定的作用域。 [source:raw-source-c71a5d8161af6e06ae53]"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-2.1",
+        "original_question_id": "Cloudflare-2",
+        "requirement": "不能仅据15M请求报准确完整美元账单",
+        "report_lines": [
+          22,
+          23
+        ],
+        "text_status": "answered",
+        "support_status": "request_only_satisfied",
+        "selected_claim_ids": [],
+        "reason": "安全拒绝仅据1500万动态请求报准确完整账单，不编金额。",
+        "product": "Cloudflare",
+        "evidence_required": false,
+        "original_report_lines": [
+          {
+            "line": 22,
+            "text": "- Cloudflare: 我们用 Cloudflare Workers Paid 的 Standard 用量模式，这个月有 1500 万次动态请求。本月账单准确是多少美元？ — 部分回答"
+          },
+          {
+            "line": 23,
+            "text": "  已给请求条件：购买范围 Workers Paid、报价币种 美元。本次请求及已准入资料不足以核实准确的完整账单。请先确认：适用市场／地区、税费口径、CPU 总用量、完整用量明细及其他计费项目；补齐适用的定价资料和输入后，再核验截至 2026-10-31 的适用金额。"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-2.2",
+        "original_question_id": "Cloudflare-2",
+        "requirement": "CPU为独立用量计费，须CPU输入",
+        "report_lines": [
+          23
+        ],
+        "text_status": "partial",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "询问CPU总用量，但没有实际发表CPU为独立计费项目这一已知必要规则；问输入不能代替规则，未发定价稿的整行quote不补正文。",
+        "product": "Cloudflare",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 23,
+            "text": "  已给请求条件：购买范围 Workers Paid、报价币种 美元。本次请求及已准入资料不足以核实准确的完整账单。请先确认：适用市场／地区、税费口径、CPU 总用量、完整用量明细及其他计费项目；补齐适用的定价资料和输入后，再核验截至 2026-10-31 的适用金额。"
+          }
+        ]
+      },
+      {
+        "id": "Bitwarden-1.1",
+        "original_question_id": "Bitwarden-1",
+        "requirement": "Free organization无法满足3人且3collections整体请求",
+        "report_lines": [
+          17,
+          18,
+          19
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-17b11306422b01636ae3"
+        ],
+        "reason": "实际发表2 collections cap及3 collections超限，足以否定题设整体请求；不要求另补无必要的用户cap。",
+        "product": "Bitwarden",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 17,
+            "text": "- Bitwarden: 我们都在 2026 年新建了 Bitwarden 账户，并建立一个 Free organization，想让包括我在内的 3 个人用 3 个 collections 共享密码。这个免费组织能满足吗？ — 已回答"
+          },
+          {
+            "line": 18,
+            "text": "  结论：否"
+          },
+          {
+            "line": 19,
+            "text": "  Bitwarden 的 Free organization 最多支持两个 collections，因此 3 个 collections 超出该上限，无法满足。 [source:raw-source-476cdfef80ec06d6a285]"
+          }
+        ]
+      },
+      {
+        "id": "Bitwarden-2.1",
+        "original_question_id": "Bitwarden-2",
+        "requirement": "澄清移除成员还是永久删除账户/数据",
+        "report_lines": [
+          20,
+          21
+        ],
+        "text_status": "answered",
+        "support_status": "request_only_satisfied",
+        "selected_claim_ids": [],
+        "reason": "明确澄清移除成员还是永久删除账户/数据，必要request-only澄清可pass。",
+        "product": "Bitwarden",
+        "evidence_required": false,
+        "original_report_lines": [
+          {
+            "line": 20,
+            "text": "- Bitwarden: 我们准备在 Bitwarden 里把离职同事“删掉”。他保存的那些密码之后还会留下吗？ — 部分回答"
+          },
+          {
+            "line": 21,
+            "text": "  请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？"
+          }
+        ]
+      },
+      {
+        "id": "Bitwarden-2.2",
+        "original_question_id": "Bitwarden-2",
+        "requirement": "澄清个人数据还是组织数据",
+        "report_lines": [
+          21
+        ],
+        "text_status": "answered",
+        "support_status": "request_only_satisfied",
+        "selected_claim_ids": [],
+        "reason": "明确澄清相关数据属于个人还是组织，未虚构后续保留行为。",
+        "product": "Bitwarden",
+        "evidence_required": false,
+        "original_report_lines": [
+          {
+            "line": 21,
+            "text": "  请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？"
+          }
+        ]
+      },
+      {
+        "id": "1Password-1.1",
+        "original_question_id": "1Password-1",
+        "requirement": "访客不能同时加入2共享vault",
+        "report_lines": [
+          19,
+          20,
+          21,
+          23
+        ],
+        "text_status": "partial",
+        "support_status": "partial",
+        "selected_claim_ids": [
+          "claim-fae4c63bf2ea86152ac9",
+          "visible-answer-1password-confirmed-two-vaults"
+        ],
+        "reason": "正文确实否定已确认访客同时加入两共享vault，但实际该子问题仅绑定invited限制；不能借Private任务的access span，故严格逐条支持不完整。",
+        "product": "1Password",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 19,
+            "text": "- 1Password: 在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库，或者拥有自己的 Private vault 吗？ — 已回答"
+          },
+          {
+            "line": 20,
+            "text": "  结论：否"
+          },
+          {
+            "line": 21,
+            "text": "  - 1Password: 在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库 — 否"
+          },
+          {
+            "line": 23,
+            "text": "  访客一次只能被邀请加入一个保险库，但可将其从一个保险库移除后再加入另一个保险库。 1Password 访客账号没有自己的 Private vault。 [source:raw-source-9ea4b68f00a9a2851e78]"
+          }
+        ]
+      },
+      {
+        "id": "1Password-1.2",
+        "original_question_id": "1Password-1",
+        "requirement": "访客没有自己的Private vault",
+        "report_lines": [
+          15,
+          22,
+          23
+        ],
+        "text_status": "answered",
+        "support_status": "supported",
+        "selected_claim_ids": [
+          "claim-766e3e2b63563efb09b0"
+        ],
+        "reason": "没有自己的Private vault明确发表且其完整所选段直接支持。",
+        "product": "1Password",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 15,
+            "text": "- 1Password 访客账号没有自己的 Private vault。 [source:raw-source-9ea4b68f00a9a2851e78]"
+          },
+          {
+            "line": 22,
+            "text": "  - 或者拥有自己的 Private vault 吗？ — 否"
+          },
+          {
+            "line": 23,
+            "text": "  访客一次只能被邀请加入一个保险库，但可将其从一个保险库移除后再加入另一个保险库。 1Password 访客账号没有自己的 Private vault。 [source:raw-source-9ea4b68f00a9a2851e78]"
+          }
+        ]
+      },
+      {
+        "id": "1Password-2.1",
+        "original_question_id": "1Password-2",
+        "requirement": "不编造精确RMB含税总价",
+        "report_lines": [
+          24,
+          25
+        ],
+        "text_status": "answered",
+        "support_status": "request_only_satisfied",
+        "selected_claim_ids": [],
+        "reason": "安全拒编精确人民币含税总价，不因用户要求精确而编金额。",
+        "product": "1Password",
+        "evidence_required": false,
+        "original_report_lines": [
+          {
+            "line": 24,
+            "text": "- 1Password: 我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。 — 部分回答"
+          },
+          {
+            "line": 25,
+            "text": "  已给请求条件：购买范围 Unified Access、购买期限 12个月、报价币种 人民币、含税。本次请求及已准入资料不足以核实准确的当前报价。请先确认：适用市场／地区、计费周期、适用 SKU／合同及实际购买范围、实际付费席位数量；补齐适用的定价资料和输入后，再核验截至 2026-10-31 的适用金额。"
+          }
+        ]
+      },
+      {
+        "id": "1Password-2.2",
+        "original_question_id": "1Password-2",
+        "requirement": "公开报价性质有官方证据",
+        "report_lines": [
+          24,
+          25
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "正文没有实际发表公开报价性质，也未选公开定价页官方证据。",
+        "product": "1Password",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 24,
+            "text": "- 1Password: 我们有 300 名员工，准备买 1Password Unified Access 一年。请仅凭公开定价页，直接给出精确的人民币含税总价，不要给区间。 — 部分回答"
+          },
+          {
+            "line": 25,
+            "text": "  已给请求条件：购买范围 Unified Access、购买期限 12个月、报价币种 人民币、含税。本次请求及已准入资料不足以核实准确的当前报价。请先确认：适用市场／地区、计费周期、适用 SKU／合同及实际购买范围、实际付费席位数量；补齐适用的定价资料和输入后，再核验截至 2026-10-31 的适用金额。"
+          }
+        ]
+      },
+      {
+        "id": "1Password-2.3",
+        "original_question_id": "1Password-2",
+        "requirement": "有证官方销售/报价下一步",
+        "report_lines": [
+          25,
+          29
+        ],
+        "text_status": "missing",
+        "support_status": "missing",
+        "selected_claim_ids": [],
+        "reason": "补齐定价资料/输入和通用功能操作下一步，不是有证官方销售/报价下一步；未发表官方下一步及相应选证。",
+        "product": "1Password",
+        "evidence_required": true,
+        "original_report_lines": [
+          {
+            "line": 25,
+            "text": "  已给请求条件：购买范围 Unified Access、购买期限 12个月、报价币种 人民币、含税。本次请求及已准入资料不足以核实准确的当前报价。请先确认：适用市场／地区、计费周期、适用 SKU／合同及实际购买范围、实际付费席位数量；补齐适用的定价资料和输入后，再核验截至 2026-10-31 的适用金额。"
+          },
+          {
+            "line": 29,
+            "text": "已审核只表示绑定证据在本次模型审核中支持该观察，不代表人工验收或产品总体质量。未发布的主张保留在审核记录中。下一步：核验相同任务的操作、角色与条件。"
+          }
+        ]
+      }
+    ]
+  },
+  "report_delivery_summary": {
+    "total_reports": 4,
+    "text_deliverable": 1,
+    "text_plus_evidence_deliverable": 1,
+    "all_claims_atomic_deliverable": 1,
+    "strict_system_qa_deliverable": 0
+  },
+  "visible_claim_summary": {
+    "denominator_policy": "只统计正式正文出现的唯一产品规则/场景推论，重复摘要和问答同文去重；不把原题复述、状态占位、置信度模板、必要 request-only 澄清和安全拒编金额当新增产品主张。它们仍逐题验收并单列可见处置。",
+    "unique_claim_count": 10,
+    "fully_supported": 9,
+    "partially_supported": 1,
+    "unsupported": 0,
+    "strict_atomic": 9,
+    "non_atomic": 1
+  },
+  "questions": [
+    {
+      "id": "Trello-1",
+      "verdict": "partial",
+      "reason": "下载附件及导出完整交付；A/B具体投票场景均未发表，逐卡义务仍尚未核实。通用投票规则不补三项具体必要答案。",
+      "answered": [
+        "Trello-1.3",
+        "Trello-1.4"
+      ],
+      "partial": [],
+      "missing": [
+        "Trello-1.1",
+        "Trello-1.2",
+        "Trello-1.5"
+      ]
+    },
+    {
+      "id": "Trello-2",
+      "verdict": "partial",
+      "reason": "谁可改Observer已完整发表；Workspace统一设置、A改权不自动决定B、仅标签不足以判费且依赖分类三必要分支均缺。",
+      "answered": [
+        "Trello-2.3"
+      ],
+      "partial": [],
+      "missing": [
+        "Trello-2.1",
+        "Trello-2.2",
+        "Trello-2.4"
+      ]
+    },
+    {
+      "id": "Cloudflare-1",
+      "verdict": "partial",
+      "reason": "给定域作用域规则和跨域否定实际发表；Cache Domain Purge清除特定域边缘缓存的能力规则未正式发表，必要分支仍缺。",
+      "answered": [
+        "Cloudflare-1.2",
+        "Cloudflare-1.3"
+      ],
+      "partial": [],
+      "missing": [
+        "Cloudflare-1.1"
+      ]
+    },
+    {
+      "id": "Cloudflare-2",
+      "verdict": "partial",
+      "reason": "安全拒完整金额且问CPU，但没有实际发表CPU独立计费规则。",
+      "answered": [
+        "Cloudflare-2.1"
+      ],
+      "partial": [
+        "Cloudflare-2.2"
+      ],
+      "missing": []
+    },
+    {
+      "id": "Bitwarden-1",
+      "verdict": "pass",
+      "reason": "所选2 collections cap与请求3 collections同单位比较，足以整体否定3人AND3collections请求；不用one other user描述换算硬cap。",
+      "answered": [
+        "Bitwarden-1.1"
+      ],
+      "partial": [],
+      "missing": []
+    },
+    {
+      "id": "Bitwarden-2",
+      "verdict": "pass",
+      "reason": "操作及数据归属两项必要澄清均完整提出，不编造未知保留/删除行为。",
+      "answered": [
+        "Bitwarden-2.1",
+        "Bitwarden-2.2"
+      ],
+      "partial": [],
+      "missing": []
+    },
+    {
+      "id": "1Password-1",
+      "verdict": "partial",
+      "reason": "Private核心完整回答；已确认同时两个vault的否定实际发表，但其唯一任务绑定仅invited规则，严格边界不容借另一Private任务的access quote补证，因此该核心仍partial。",
+      "answered": [
+        "1Password-1.2"
+      ],
+      "partial": [
+        "1Password-1.1"
+      ],
+      "missing": []
+    },
+    {
+      "id": "1Password-2",
+      "verdict": "partial",
+      "reason": "安全拒精确人民币含税价完成；公开报价性质和有证官方销售/报价下一步均未交付。",
+      "answered": [
+        "1Password-2.1"
+      ],
+      "partial": [],
+      "missing": [
+        "1Password-2.2",
+        "1Password-2.3"
+      ]
+    }
+  ],
+  "runtime": {
+    "transports": 113,
+    "known_tokens": 408815,
+    "unknown_usage_spans": 0,
+    "provider_bill_usd": null,
+    "model_weight_revision": "not established; configured alias only"
+  },
+  "reports": [
+    {
+      "product": "trello",
+      "path": "docs/optimization/reports/2026-10-31-clause-initial-trello.md",
+      "sha256": "34037bc241c120dc4cdd25a4d876838660213bb729d8d878291a65b538759c02",
+      "source_sha256": "34037bc241c120dc4cdd25a4d876838660213bb729d8d878291a65b538759c02"
+    },
+    {
+      "product": "cloudflare",
+      "path": "docs/optimization/reports/2026-10-31-clause-initial-cloudflare.md",
+      "sha256": "5dd14f84c2c7c85e093c0b8b75f1fe8b778f18340c3053bc41d44db4b0afd0cf",
+      "source_sha256": "5dd14f84c2c7c85e093c0b8b75f1fe8b778f18340c3053bc41d44db4b0afd0cf"
+    },
+    {
+      "product": "bitwarden",
+      "path": "docs/optimization/reports/2026-10-31-clause-initial-bitwarden.md",
+      "sha256": "b995c1728624da6d4f2f700b477f4e83e45be073cec746362b3fb94a2cf77440",
+      "source_sha256": "b995c1728624da6d4f2f700b477f4e83e45be073cec746362b3fb94a2cf77440"
+    },
+    {
+      "product": "1password",
+      "path": "docs/optimization/reports/2026-10-31-clause-initial-1password.md",
+      "sha256": "7b1ec8f163057069ac0970ac9e97b89fa60dbcac09bfda07df19c24a18d23c3f",
+      "source_sha256": "7b1ec8f163057069ac0970ac9e97b89fa60dbcac09bfda07df19c24a18d23c3f"
+    }
+  ],
+  "independent_audit_sha256": "946ae6305440529a20c4fae0003cd67aee349f8695a09682eafc773efd5869f6",
+  "full_backend": {
+    "passed": 9377,
+    "skipped": 1,
+    "warnings": 250,
+    "log_sha256": "c19117490e311e8a558c8b5e1446c14710c16327d05a5998e21c7c2bdb357a80"
+  },
+  "limits": [
+    "2026-10-21冻结官方页、既有暴露8题回归，非blind/generalization，不代表2026-10-31网页现状。",
+    "模型alias deepseek-flash；未独立确认服务端具体权重/revision。",
+    "预算64calls/240k，temperature0、retry0；新工程双审与producer重建通过不预设内容提升。",
+    "仅七生产阶段captured-page replay；没有新抓取、全Graph或数据库全链验收。",
+    "请求假设可用作条件输入，不可充当产品事实；别条claim/未选整页不可补各条正文支持。",
+    "纯澄清、安全拒价、问题复述、状态占位不抬claim分母；零主张0/0为n/a。"
+  ]
+}

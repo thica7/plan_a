@@ -2,7 +2,28 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
-## 2026-10-31：按子任务选证与原子交付
+## 2026-10-31：单谓词子合同与失败补交
+
+新鲜执行在下述两个实验开关同时打开时使用内部 `task_clause_contract=single-predicate-clauses-v1`。仍保留外层 `selected-task-atoms-v3` 与 `task-outcomes-v1`；公开 API 没有新增枚举。默认开关继续关闭。已存在的 Writer 消费记录按其持久化合同恢复；只有上游检查点而尚未开始 Writer 的任务可使用新合同。
+
+| 执行步骤 | 入口及职责 | 不能替代的检查 |
+| --- | --- | --- |
+| SELECT | `selected_task_delivery.py` 按任务选择精确完整支持 | 规划候选不等于实际所选引用 |
+| GEN | `task_clauses.py` 的单任务 envelope；服务器绑定问题 ID | 一条 atom 不自动等于一个谓词 |
+| REVIEW | 完整子句清单逐项审核作用、任务匹配及支持，再走原来源与操作守卫 | 模型整体 supported 或自报 count=1 不代替逐子句审核 |
+| 局部补交 | 校验原成功 SELECT 的哈希、快照、消费和任务身份；失败项最多复用一次 | 不能覆盖成功的普通任务或 capability 回退任务，不能虚构 SELECT span |
+| ANSWER | `task_answer_outcomes.py` 只引用已审核 claim；完整原句内联 | 不接受 quote alias、跨任务主张或无证场景强化 |
+| 正文／QA | 同一服务器聚合；最终 QA 重核实际发表内容 | 缺项、未送审、超时及历史 blocker 不因流程完成而清除 |
+
+有限分句保留完整字符串、条件和例外；AND 共享前提可跨片段，但不能将条件结束后的第二能力误标成前提。该机制仍需真实语义验收，不能保证任意自然语言都能正确拆句。Collector、Analyst、Comparator、Reflector 及生产预算本轮没有替换。
+
+补交按实际完整UTF-8 wire与`min(14000, use.max_bytes)`检查。仅超窗的认证复用GEN可省去可选失败raw诊断，完整问题、已选证据、原因码和前次真实传输哈希继续保留；raw原件仍在原trace。小于14000的真实server cap经内部context传入rebuild/replay。压缩后仍超窗时记录本地拒绝、任务延期及receipt证明，不伪造LLMdispatch；预算保护拒绝与上下文超窗分别记录。
+
+首轮严格验收仅2/8原题完整，报告前三种口径1/4、系统QA0/4，详见[首轮原样结果](optimization/2026-10-31-clause-initial-results.json)。目标传递的后续修复与最终复验见[本轮交付](optimization/2026-10-31-single-predicate-clause-delivery.md)。
+
+最终派送修复轮：2/8原题完整，22分支14完整／1部分／7缺失，报告前三类1/4、严格QA0/4。CF已实际补交而CPU两稿仍混入运行时规则；Trello正文与子任务状态、Bitwarden澄清与QA存在不一致，1Password持续访问选证仍缺。实际GEN／REVIEW／ANSWER和本地派送证明不能代替语义交付。9446项后端回归及标准API／TS新生成核对通过，详见[最终结果和原样报告](optimization/2026-10-31-clause-final-results.json)。
+
+## 2026-10-31 上一版本：按子任务选证与原子交付
 
 同时显式开启 `WRITER_TASK_EXECUTION_ENABLED=1` 和 `WRITER_QUESTION_ATOMIC_ENABLED=1` 时，真实功能维度的逐题 Writer 使用 `selected-task-atoms-v3`。两开关默认仍为 `false`；普通写作、无策略 GEN5、显式 v1／v2 历史记录保留各自行为和真实传输合同。本轮没有更换 Collector、Analyst 或 Comparator。
 
@@ -27,7 +48,7 @@
 - 最终 QA 重核当前实际正文和全部必要任务。V3 可据真实认证且已发表的任务重判早期核心检索缺口；例外缺证、未答任务、历史 finding 和模型 keep 不被强制清除。Reflector 对明确单产品问答仅豁免完整的矩阵结构缺口，混合业务缺口继续保门。
 - ANSWER 可按任务分多个窗口；调用及 token 预留依实际完整窗口计算，并保护最终 QA。恢复旧 checkpoint 不提高限额、不重置用量。诊断 runner 的64次／240k不改变生产默认配置。
 
-V1／V2 的工程通过和真实报告失败均见[交付记录](optimization/2026-10-31-task-local-writer-delivery.md)。V3及局部任务极性修正已完成冻结、独立规格／质量审查及真实四家复验，最新3/8原题通过，文本与证据报告1/4、严格系统QA仍0/4。实际模型仍可能将双谓词标成单谓词，或漏过邀请到确认后访问的强化；这些是内容失败，不能以transport重建成功掩盖。固定快照测试不证明新抓取、实时性或完整 Graph。
+V1／V2 的工程通过和真实报告失败均见[交付记录](optimization/2026-10-31-task-local-writer-delivery.md)。V3及局部任务极性修正的上一版本已完成冻结、独立规格／质量审查及真实四家复验，当轮3/8原题通过，文本与证据报告1/4、严格系统QA仍0/4。实际模型仍可能将双谓词标成单谓词，或漏过邀请到确认后访问的强化；这些是内容失败，不能以transport重建成功掩盖。固定快照测试不证明新抓取、实时性或完整 Graph。
 
 ## 2026-10-30：本机持久化工作台 P0
 

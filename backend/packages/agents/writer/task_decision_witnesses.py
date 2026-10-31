@@ -47,6 +47,7 @@ class TaskDecisionContext:
     compact: dict
     trace_spans: tuple[Any, ...]
     expected_inputs: Mapping[str, tuple[str, dict]]
+    max_user_bytes: int = 14000
 
 
 class DecisionCandidate(BaseModel):

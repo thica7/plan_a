@@ -858,6 +858,9 @@ def save_atomic_receipt(service, record, compact, view, use, packets):
         receipt['task_answer_results'] = compact.get('task_answer_results', {})
     if checked_delivery_policy(compact):
         receipt['delivery_policy'] = compact['delivery_policy']
+    from packages.agents.writer.task_clauses import checked_contract
+    if checked_contract(compact):
+        receipt['task_clause_contract'] = compact['task_clause_contract']
     from packages.agents.writer.selected_task_delivery import checked_policy
     if checked_policy(compact.get('task_execution_policy')):
         receipt['task_execution_policy'] = compact['task_execution_policy']
@@ -1009,7 +1012,7 @@ async def execute_question_atomic_delivery(
     service, record, selected, view, use, questions, packets, allowed, boundaries, gaps,
     *, review_projection_version=3, generation_projection_version=5,
     answer_review_contract='subquestion-premises-v1', delivery_policy=None,
-    task_execution_policy=None,
+    task_execution_policy=None, task_clause_contract=None,
 ):
     from packages.agents.writer.selected_task_delivery import checked_policy, execute
     if checked_policy(task_execution_policy):
@@ -1017,7 +1020,7 @@ async def execute_question_atomic_delivery(
             raise ValueError('Task execution policy requires GEN5 and REVIEW3')
         return await execute(service, record, selected, view, use, questions, packets, allowed,
             boundaries, gaps, answer_review_contract=answer_review_contract,
-            execution_policy=task_execution_policy)
+            execution_policy=task_execution_policy, task_clause_contract=task_clause_contract)
     from packages.agents.writer.dimension_writer import (
         _support_ref_catalog,
         compact_prompt_json,
@@ -1628,6 +1631,7 @@ def atomic_decision_context(service, record, view, use, compact):
         compact=dict(compact, consumption_id=use.id, snapshot_id=snapshot.id),
         trace_spans=tuple(detail.trace_spans),
         expected_inputs=compact.get('_decision_expected_inputs', {}),
+        max_user_bytes=min(14000, use.max_bytes),
     )
 
 

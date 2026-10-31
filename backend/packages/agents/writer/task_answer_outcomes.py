@@ -35,6 +35,16 @@ SYSTEM = (
 )
 
 
+def answer_system(payload):
+    from packages.agents.writer.task_clauses import checked_contract
+    contract = checked_contract(payload)
+    return SYSTEM if not contract else (
+        f'Internal task clause contract {contract}. ' + SYSTEM
+        + ' support_refs may contain only this task support_choices[].ref. '
+          'Inline quotes are complete evidence context, never additional selectable references.'
+    )
+
+
 def digest(value):
     text = (
         value
@@ -386,6 +396,12 @@ def build_payload(
             for q in questions
         ],
     )
+    from packages.agents.writer.task_clauses import checked_contract
+    if checked_contract(compact):
+        payload['task_clause_contract'] = compact['task_clause_contract']
+        for task in tasks:
+            for choice in task['support_choices']:
+                choice.pop('quote_refs', None)
     if repair_feedback is not None:
         payload["repair_feedback"] = repair_feedback
     return payload
@@ -673,6 +689,7 @@ async def task_answer_coverage(
         decision_selection_policy="reviewed_quantity_conjunction-v1",
         _decision_audited=tuple(audited),
     )
+    system = answer_system(compact)
     scope = f"{view.competitor}/{view.dimension}"
     accepted, authorities, answers, sizes = {}, {}, {}, []
     detail = service._evidence_live_record(record).detail
@@ -700,7 +717,7 @@ async def task_answer_coverage(
             continue
         validate_atomic_handoff(service, record, payload, view)
         diagnostic = _current_request_preflight(
-            service, record, scope, [q["question_id"]], (ANSWER_NAME, "qa", SYSTEM, user, 1600)
+            service, record, scope, [q["question_id"]], (ANSWER_NAME, "qa", system, user, 1600)
         )
         if not diagnostic["current_request"]["admitted"]:
             gaps = tuple(sorted(set(gaps) | {"task_answer_budget_deferred"}))
@@ -712,7 +729,7 @@ async def task_answer_coverage(
             agent="qa",
             subagent=scope,
             name=ANSWER_NAME,
-            system=SYSTEM,
+            system=system,
             user=user,
             max_request_attempts=1,
             max_output_tokens=1600,
@@ -728,7 +745,7 @@ async def task_answer_coverage(
             name=ANSWER_NAME,
             agent="qa",
             scope=scope,
-            system=SYSTEM,
+            system=system,
             user=user,
             response=response,
         )
@@ -738,7 +755,7 @@ async def task_answer_coverage(
                 for s in detail.trace_spans[start:]
                 if s.name == ANSWER_NAME
                 and s.status == "error"
-                and s.full_input == SYSTEM + "\n\n" + user
+                and s.full_input == system + "\n\n" + user
                 and s.metadata.get("llm_transport_attempts", 0) > 0
             ]
             span = failed[0] if len(failed) == 1 else None
@@ -755,7 +772,7 @@ async def task_answer_coverage(
         if span.status == "error":
             dispatch["failed_transport"] = True
         bind_transport(dispatch, span)
-        compact["_decision_expected_inputs"][span.id] = SYSTEM, payload
+        compact["_decision_expected_inputs"][span.id] = system, payload
         compact["dispatches"].append(dispatch)
         rows, failures, current = consume_answer(
             service,

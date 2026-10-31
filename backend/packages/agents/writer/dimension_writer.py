@@ -1362,12 +1362,16 @@ class DimensionWriterMixin:
                         from packages.agents.writer.question_atomic_delivery import (
                             execute_question_atomic_delivery,
                         )
+                        from packages.agents.writer.task_clauses import fresh_contract
                         task_result = await execute_question_atomic_delivery(
                             self, record, selected, view, use, questions,
                             question_packets, allowed, boundaries, gaps,
                             answer_review_contract='task-outcomes-v1',
                             delivery_policy='complete-predicates-v1',
-                            task_execution_policy='selected-task-atoms-v3')
+                            task_execution_policy='selected-task-atoms-v3',
+                            task_clause_contract=fresh_contract(
+                                self._evidence_live_record(record).detail,
+                                f'{product}/{dimension}'))
                     else:
                         from packages.agents.writer.task_execution import execute_question_tasks
                         task_result = await execute_question_tasks(

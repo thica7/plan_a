@@ -187,7 +187,12 @@ def task_predicate_reasons(task, text, quotes):
     return ()
 
 
-def task_system(name, language, execution_policy=POLICY):
+def task_system(name, language, execution_policy=POLICY, task_clause_contract=None):
+    if task_clause_contract is not None:
+        from packages.agents.writer.task_clauses import checked_contract, system
+        checked_contract(dict(task_clause_contract=task_clause_contract,
+                              task_execution_policy=execution_policy))
+        return system(task_system(name, language, execution_policy), name)
     if checked_policy(execution_policy) == POLICY_V3:
         from packages.agents.writer.question_atomic_delivery import REVIEW_NAME
 
@@ -297,6 +302,7 @@ def candidate_context(
     attempt=0,
     execution_policy=POLICY,
     repair_feedback=None,
+    task_clause_contract=None,
 ):
     from packages.agents.writer.atomic_question_projection import (
         generation_tasks,
@@ -403,6 +409,10 @@ def candidate_context(
             task_attempt=attempt,
             delivery_policy="complete-predicates-v1",
         )
+        if task_clause_contract is not None:
+            from packages.agents.writer.task_clauses import checked_contract
+            result['task_clause_contract'] = task_clause_contract
+            checked_contract(result)
         if execution_policy in {POLICY_V2, POLICY_V3}:
             from packages.agents.writer.subquestion_premises import _counts
 
@@ -488,6 +498,8 @@ def selection_context(payload, view):
     if (payload.get("task_execution_policy") in {POLICY_V2, POLICY_V3}
             and "repair_feedback" in payload):
         context["repair_feedback"] = deepcopy(payload["repair_feedback"])
+    if payload.get('task_clause_contract') is not None:
+        context['task_clause_contract'] = payload['task_clause_contract']
     return context, choices
 
 
@@ -525,6 +537,23 @@ def generation_context(payload, selections, choices, service, record, packets):
             ]
             row["operation_observations"] = [op for op, _ in ops]
             row["operation_support_refs"] = [ref for _, ref in ops]
+    if payload.get('task_clause_contract'):
+        from packages.agents.writer.task_clauses import selected_task
+
+        targets = {row['task_id']: deepcopy(row) for row in result['task_predicates']}
+        selections_by_task = {row['task_id']: row for row in result['task_support_selections']}
+        result['generation_tasks'] = [
+            selected_task(task, selections_by_task[task['task_id']], targets[task['task_id']])
+            for task in result['generation_tasks']
+        ]
+        for task in result['generation_tasks']:
+            target = targets[task['task_id']]
+            target.update(instruction=task['task_instruction'], support_refs=task['support_refs'])
+            if 'required_support_refs' in target:
+                target['required_support_refs'] = list(task['support_refs'])
+        result['task_predicates'] = list(targets.values())
+        result = dict(current_task=deepcopy(result['generation_tasks'][0]),
+                      selected_support=deepcopy(result['task_support_selections'][0]), **result)
     return result
 
 
@@ -548,10 +577,13 @@ def normalized_authority_text(text, quotes, competitor):
 def parse_generation(response, payload, view, use):
     from packages.agents.writer.dimension_writer import encoded, parse_json
     from packages.agents.writer.question_atomic_delivery import digest, parse_atomic_generation
-
-    raw = parse_json(response)
+    from packages.agents.writer.task_clauses import checked_contract, generation_plan
+    clause_contract = checked_contract(payload)
     (task,) = payload["generation_tasks"]
     (selected,) = payload["task_support_selections"]
+    raw = generation_plan(response, task, selected['support_refs'],
+                          payload['question_plan_missing_fields'][0]['missing_fields']) \
+        if clause_contract else parse_json(response)
     plans = raw.get("question_plans") if isinstance(raw, dict) else None
     if (
         not isinstance(plans, list)
@@ -569,7 +601,13 @@ def parse_generation(response, payload, view, use):
         ):
             raise ValueError("Task selected support changed")
         text = atom.get("text", "")
-        if payload.get("task_execution_policy") in {POLICY_V2, POLICY_V3}:
+        if clause_contract:
+            from packages.agents.writer.task_clauses import target_reasons
+
+            target_invalid = target_reasons(task, text, payload['segment_competitor'])
+            if target_invalid:
+                raise ValueError(target_invalid[0])
+        if not clause_contract and payload.get("task_execution_policy") in {POLICY_V2, POLICY_V3}:
             from packages.agents.writer.complete_predicates import authority_question
 
             if task["focus"] == "source_rule" and authority_question(task["question_quote"]):
@@ -578,15 +616,17 @@ def parse_generation(response, payload, view, use):
                     [s.get("quote", "") for s in selected["supports"]],
                     payload["segment_competitor"],
                 )
-        if task_predicate_reasons(
+        reasons = task_predicate_reasons(
             task,
             text,
             [
                 s.get("quote", s.get("operation_binding", {}).get("operation_quote", ""))
                 for s in selected["supports"]
             ],
-        ):
-            raise ValueError("Task predicate differs from selected support")
+        )
+        if reasons:
+            raise ValueError(reasons[0] if clause_contract else
+                             "Task predicate differs from selected support")
     quarantined = None
     if payload.get("task_execution_policy") == POLICY_V3 and plans[0]["atoms"]:
         from packages.agents.writer.task_answer_outcomes import quarantine_candidate
@@ -631,30 +671,64 @@ def merge_task_plan(target, local, task_id, attempt):
     )
 
 
-def review_context(claims, view, question, plan, metadata, task, execution_policy=POLICY):
+def review_context(claims, view, question, plan, metadata, task, execution_policy=POLICY,
+                   task_clause_contract=None, support_refs=()):
     from packages.agents.writer.question_atomic_delivery import atomic_review_payload
 
     result = atomic_review_payload(
         claims, view, [question], [plan], metadata, review_projection_version=3
     )
     result.update(task_execution_policy=execution_policy, task_context=task)
+    if task_clause_contract:
+        from packages.agents.writer.task_clauses import clause_inventory
+        result.update(task_clause_contract=task_clause_contract,
+                      clause_support_refs=list(support_refs),
+                      clause_inventory=[dict(claim_id=c.id, clauses=clause_inventory(c.text))
+                                        for c in claims])
     return result
 
 
 def parse_task_claim_reviews(response, claims, payload):
     from packages.agents.writer.question_atomic_delivery import parse_atomic_reviews
+    from packages.agents.writer.task_clauses import checked_contract, target_reasons
+
+    if checked_contract(payload):
+        for claim in claims:
+            invalid = target_reasons(payload['task_context'], claim.text, claim.competitor)
+            if invalid:
+                raise ValueError(invalid[0])
 
     if payload.get("task_execution_policy") == POLICY_V3:
         from packages.agents.writer.task_answer_outcomes import validate_atomicity
         from packages.llm.json_extract import strict_json_object
 
         raw = strict_json_object(response)
-        if set(raw) != {"reviews", "atomicity"} or not validate_atomicity(
-            response, claims, payload["task_context"]
-        ):
+        from packages.agents.writer.task_clauses import validate_clause_reviews
+        valid = validate_clause_reviews(raw, claims, payload) if checked_contract(payload) else \
+            validate_atomicity(response, claims, payload['task_context'])
+        if set(raw) != {"reviews", "atomicity"} or not valid:
             raise ValueError("Task independent predicate review failed")
         response = json.dumps(dict(reviews=raw["reviews"]), ensure_ascii=False)
     return parse_atomic_reviews(response, claims, payload=payload, review_projection_version=3)
+
+
+def _audit_task_candidates(claims, reviews, tasks_by_claim, facts, authority_ids, policy):
+    """Use the same authenticated authority and capability success gates before repair."""
+    from packages.agents.writer.task_answer_outcomes import capability_ids_from_rebuild
+    from packages.research.evidence.report_claims import audit_report_claims
+
+    generated = {claim.id: claim for claim in claims}
+    reviewed = {review.claim_id: (review, None) for review in reviews}
+    capability_ids = (
+        capability_ids_from_rebuild(generated, tasks_by_claim, reviewed)
+        if policy == POLICY_V3 else ()
+    )
+    return audit_report_claims(
+        claims, reviews, SimpleNamespace(facts=facts),
+        [SimpleNamespace(allowed_fact_ids={f.id for f in facts})],
+        available_facts=facts, review_version=3, authority_claim_ids=authority_ids,
+        capability_claim_ids=capability_ids,
+    )
 
 
 def failure_feedback(task, history, facts, consumption_id):
@@ -665,7 +739,6 @@ def failure_feedback(task, history, facts, consumption_id):
         authority_task_claim_ids,
     )
     from packages.agents.writer.task_support_selection import parse_support_selections
-    from packages.research.evidence.report_claims import audit_report_claims
 
     prior = [
         (d, span, payload)
@@ -716,6 +789,11 @@ def failure_feedback(task, history, facts, consumption_id):
                 codes.update(row.get("diagnostic", ()))
                 codes.add(row.get("reason", "task_generation_produced_no_claim"))
         except (ValueError, TypeError, AttributeError) as exc:
+            if payload.get('task_clause_contract'):
+                codes.add(str(exc)[:120])
+                feedback['failed_generation'] = dict(raw=span.full_output[:1200],
+                    truncated=len(span.full_output) > 1200,
+                    target=task['question_quote'][:400])
             codes.add({
                 "One task permits at most one claim": "task_atomic_claim_count_invalid",
                 "Task selected support changed": "task_selected_support_changed",
@@ -731,10 +809,14 @@ def failure_feedback(task, history, facts, consumption_id):
                     reviews = parse_task_claim_reviews(span.full_output, claims, payload)
                 except (ValueError, TypeError, AttributeError):
                     codes.add("claim_review_invalid")
-            audited = audit_report_claims(
-                claims, reviews, SimpleNamespace(facts=facts),
-                [SimpleNamespace(allowed_fact_ids={f.id for f in facts})],
-                available_facts=facts, review_version=3, authority_claim_ids=authority_ids,
+                    if payload.get('task_clause_contract'):
+                        feedback['failed_review'] = dict(raw=span.full_output[:1200],
+                            truncated=len(span.full_output) > 1200,
+                            target=task['question_quote'][:400])
+            audited = _audit_task_candidates(
+                claims, reviews,
+                {c.id: generated[2]["generation_tasks"][0] for c in claims},
+                facts, authority_ids, generated[2].get("task_execution_policy"),
             )
             if any(row.status == "supported" for row in audited):
                 raise ValueError("Successful task cannot receive repair feedback")
@@ -751,6 +833,30 @@ def failure_feedback(task, history, facts, consumption_id):
     return feedback
 
 
+def record_context_rejection(service, record, compact, payload, task_id, attempt, name, cap):
+    """Keep a real local refusal, never a synthetic LLM dispatch."""
+    from packages.agents.writer.question_atomic_delivery import GENERATION_NAME, digest
+    from packages.agents.writer.task_clauses import user_bytes
+
+    identity = dict(task_id=task_id, attempt=attempt, request_name=name,
+                    consumption_id=payload['consumption_id'], snapshot_id=payload['snapshot_id'])
+    outcome = dict(reason='task_context_deferred', user_bytes=user_bytes(payload),
+                   max_user_bytes=cap,
+                   payload_sha256=digest(payload))
+    service._trace_local_tool(record, agent='writer' if name != 'dimension_question_atomic_review'
+                              else 'qa',
+                              subagent=f'{payload["segment_competitor"]}/{payload["dimension"]}',
+                              name='question_task_context_rejected',
+                              input_text=json.dumps(identity), output_text=json.dumps(outcome))
+    if attempt == 1 and name == GENERATION_NAME and payload.get('selection_reuse'):
+        span = service._evidence_live_record(record).detail.trace_spans[-1]
+        plan = next(p for p in compact['question_answer_plans']
+                    if any(r['task_id'] == task_id for r in p['task_results']))
+        plan.setdefault('context_deferrals', []).append(dict(task_id=task_id, span_id=span.id))
+        state = next(r for r in plan['task_results'] if r['task_id'] == task_id)
+        state.update(state='deferred', reason='task_context_deferred')
+
+
 def repair_admitted(service, record, scope, payload, use, question_count, answer_contract):
     """Forecast a whole optional repair on a budget copy, never an audited claim."""
     from packages.agents.writer.dimension_writer import compact_prompt_json
@@ -760,7 +866,7 @@ def repair_admitted(service, record, scope, payload, use, question_count, answer
         REVIEW_NAME,
         atomic_system,
     )
-    from packages.agents.writer.task_answer_outcomes import SYSTEM as task_answer_system
+    from packages.agents.writer.task_answer_outcomes import answer_system as task_answer_system
     from packages.llm.errors import LLMExecutionLimitError
 
     budget = copy(service._run_llm_budget(record))
@@ -773,7 +879,7 @@ def repair_admitted(service, record, scope, payload, use, question_count, answer
     answer_system = atomic_system(
         ANSWER_NAME, record.detail.output_language,
         answer_review_contract=answer_contract, delivery_policy="complete-predicates-v1",
-    ) if answer_contract != "task-outcomes-v1" else task_answer_system
+    ) if answer_contract != "task-outcomes-v1" else task_answer_system(payload)
     _, answer_input, answer_output = service._llm_request_envelope(
         system=answer_system, user="x" * cap, max_output_tokens=1600
     )
@@ -788,12 +894,20 @@ def repair_admitted(service, record, scope, payload, use, question_count, answer
         (GENERATION_NAME, "writer", "x" * cap, 1600),
         (REVIEW_NAME, "qa", "x" * cap, 1600),
     ]
-    reason = None
+    if payload.get('selection_reuse'):
+        requests = requests[1:]
+        requests[0] = (GENERATION_NAME, 'writer', '\nJSON:\n' + compact_prompt_json(payload), 1600)
+    from packages.agents.writer.task_clauses import user_bytes
+
+    actual_bytes = user_bytes(payload)
+    context_invalid = bool(payload.get('task_clause_contract') and actual_bytes > cap)
+    reason = 'task_context_deferred' if context_invalid else None
     try:
-        for name, agent, user, output in requests:
+        for name, agent, user, output in ([] if context_invalid else requests):
             _, input_tokens, output_tokens = service._llm_request_envelope(
                 system=task_system(name, record.detail.output_language,
-                                   payload.get("task_execution_policy", POLICY_V2)),
+                                   payload.get("task_execution_policy", POLICY_V2),
+                                   payload.get("task_clause_contract")),
                 user=user, max_output_tokens=output,
             )
             budget.reserve(
@@ -804,11 +918,14 @@ def repair_admitted(service, record, scope, payload, use, question_count, answer
         reason = str(exc)
     service._trace_local_tool(
         record, agent="writer", subagent=scope, name="question_task_repair_preflight",
-        input_text=json.dumps(dict(task_id=payload["tasks"][0]["task_id"])),
+        input_text=json.dumps(dict(
+            task_id=(payload.get("tasks") or payload["generation_tasks"])[0]["task_id"]
+        )),
         output_text=json.dumps(dict(
             forecast_only=True, admitted=reason is None, reason=reason,
             additional_answer_windows=extra_windows, additional_answer_tokens=forecast,
             repair_request_count=len(requests), max_user_bytes=cap,
+            **(dict(user_bytes=actual_bytes) if payload.get('task_clause_contract') else {}),
         )),
     )
     return reason is None
@@ -828,6 +945,7 @@ async def execute(
     *,
     answer_review_contract,
     execution_policy=POLICY,
+    task_clause_contract=None,
 ):
     from packages.agents.writer.atomic_question_projection import generation_tasks
     from packages.agents.writer.dimension_writer import compact_prompt_json
@@ -875,6 +993,10 @@ async def execute(
         snapshot_id=view.snapshot_id,
         _decision_expected_inputs={},
     )
+    if task_clause_contract is not None:
+        from packages.agents.writer.task_clauses import checked_contract
+        compact['task_clause_contract'] = task_clause_contract
+        checked_contract(compact)
     if execution_policy == POLICY_V3:
         compact.update(answer_review_contract="task-outcomes-v1",
                        task_outcome_contract="task-outcomes-v1")
@@ -917,7 +1039,7 @@ async def execute(
             has_lifecycle_rule,
             server_clarification_answer,
         )
-        from packages.agents.writer.task_answer_outcomes import SYSTEM as task_answer_system
+        from packages.agents.writer.task_answer_outcomes import answer_system
         from packages.agents.writer.task_decision_witnesses import (
             REVIEWED_QUANTITY_CONJUNCTION_POLICY,
         )
@@ -960,7 +1082,7 @@ async def execute(
             record.detail.output_language,
             answer_review_contract=answer_review_contract,
             delivery_policy="complete-predicates-v1",
-        ) if answer_review_contract != "task-outcomes-v1" else task_answer_system
+        ) if answer_review_contract != "task-outcomes-v1" else answer_system(compact)
         required = sum(
             sum(
                 service._llm_request_envelope(
@@ -975,11 +1097,17 @@ async def execute(
         nonlocal gaps
         refresh_tail()
         system, agent = (
-            task_system(name, record.detail.output_language, execution_policy),
+            task_system(
+                name, record.detail.output_language, execution_policy, task_clause_contract
+            ),
             ("qa" if name == REVIEW_NAME else "writer"),
         )
         user = "\nJSON:\n" + compact_prompt_json(payload)
         if len(user.encode()) > min(14000, use.max_bytes):
+            if task_clause_contract:
+                record_context_rejection(service, record, compact, payload, task_id, attempt,
+                                         name, min(14000, use.max_bytes))
+                gaps = tuple(sorted(set(gaps) | {'task_context_deferred'}))
             return None
         diagnostic = _current_request_preflight(
             service,
@@ -1088,41 +1216,62 @@ async def execute(
             task["task_id"],
             attempt,
             execution_policy=execution_policy,
+            task_clause_contract=task_clause_contract,
             repair_feedback=failure_feedback(task, history, view.facts, use.id)
             if execution_policy in {POLICY_V2, POLICY_V3} and attempt
             else None,
         )
         candidate = _expand_text_refs(json.loads(compact_prompt_json(candidate)))
         context, choices = selection_context(candidate, view)
+        reused = None
+        if task_clause_contract and attempt:
+            from packages.agents.writer.task_clauses import reused_generation
+            reused = reused_generation(task, history, view.facts, use.id, view.snapshot_id,
+                                       candidate['repair_feedback'], max_bytes=use.max_bytes)
         if execution_policy in {POLICY_V2, POLICY_V3} and attempt and not repair_admitted(
-            service, record, scope, context, use, len(questions), answer_review_contract
+            service, record, scope, reused[0] if reused else context,
+            use, len(questions), answer_review_contract
         ):
-            gaps = tuple(sorted(set(gaps) | {"task_repair_budget_deferred"}))
+            from packages.agents.writer.task_clauses import user_bytes
+
+            proposed = reused[0] if reused else context
+            if task_clause_contract and user_bytes(proposed) > min(14000, use.max_bytes):
+                record_context_rejection(service, record, compact, proposed, task['task_id'],
+                                         attempt, GENERATION_NAME if reused else SELECTION_NAME,
+                                         min(14000, use.max_bytes))
+                gaps = tuple(sorted(set(gaps) | {'task_context_deferred'}))
+            else:
+                gaps = tuple(sorted(set(gaps) | {"task_repair_budget_deferred"}))
             continue
-        selected_call = await call(
-            SELECTION_NAME,
-            context,
-            attempt=attempt,
-            task_id=task["task_id"],
-            fact_ids={r["id"] for r in candidate["evidence_view"]["facts"]},
-        )
-        if selected_call is None:
-            state.update(state="deferred", reason="task_selection_unavailable")
-            continue
-        try:
-            selections, _ = parse_support_selections(selected_call[0], [task], choices)
-        except (ValueError, TypeError, AttributeError):
-            state.update(state="deferred", reason="task_selection_invalid")
-            continue
-        selection = selections[task["task_id"]]
-        if selection["state"] != "selected":
-            state.update(selection)
-            continue
-        try:
-            payload = generation_context(candidate, selections, choices, service, record, packets)
-        except ValueError:
-            state.update(state="rejected", reason="task_selected_predicate_mismatch")
-            continue
+        if reused:
+            payload = reused[0]
+        else:
+            selected_call = await call(
+                SELECTION_NAME,
+                context,
+                attempt=attempt,
+                task_id=task["task_id"],
+                fact_ids={r["id"] for r in candidate["evidence_view"]["facts"]},
+            )
+            if selected_call is None:
+                state.update(state="deferred", reason="task_selection_unavailable")
+                continue
+            try:
+                selections, _ = parse_support_selections(selected_call[0], [task], choices)
+            except (ValueError, TypeError, AttributeError):
+                state.update(state="deferred", reason="task_selection_invalid")
+                continue
+            selection = selections[task["task_id"]]
+            if selection["state"] != "selected":
+                state.update(selection)
+                continue
+            try:
+                payload = generation_context(
+                    candidate, selections, choices, service, record, packets
+                )
+            except ValueError:
+                state.update(state="rejected", reason="task_selected_predicate_mismatch")
+                continue
         validate_atomic_handoff(service, record, payload, view)
         sent = {r["id"] for r in payload["evidence_view"]["facts"]}
         generated_call = await call(
@@ -1157,6 +1306,8 @@ async def execute(
             metadata,
             payload["generation_tasks"][0],
             execution_policy=execution_policy,
+            task_clause_contract=task_clause_contract,
+            support_refs=payload["task_support_selections"][0]["support_refs"],
         )
         reviewed_call = await call(
             REVIEW_NAME,
@@ -1206,11 +1357,13 @@ def generation_outcome(response, payload, facts, consumption_id):
         return parse_generation(
             response, payload, SimpleNamespace(facts=facts), SimpleNamespace(id=consumption_id)
         )
-    except (ValueError, TypeError, AttributeError):
+    except (ValueError, TypeError, AttributeError) as exc:
         task = payload["generation_tasks"][0]
+        reason = (str(exc)[:120] if payload.get('task_clause_contract')
+                  else 'task_generation_invalid')
         return (
             [],
-            {"task_generation_invalid"},
+            {reason},
             [
                 dict(
                     question_id=task["question_id"],
@@ -1220,7 +1373,7 @@ def generation_outcome(response, payload, facts, consumption_id):
                         dict(
                             task_id=task["task_id"],
                             state="rejected",
-                            reason="task_generation_invalid",
+                            reason=reason,
                         )
                     ],
                 )
@@ -1271,6 +1424,9 @@ def verified_transport(context, dispatch):
         != checked_policy(context.compact.get("task_execution_policy"))
     ):
         raise ValueError("Task transport scope changed")
+    from packages.agents.writer.task_clauses import checked_contract
+    if checked_contract(actual) != checked_contract(context.compact):
+        raise ValueError('Task clause transport contract changed')
     return span, actual
 
 
@@ -1284,9 +1440,10 @@ def rebuild(context):
     )
     from packages.agents.writer.readable_support import dispatched_support_choices
     from packages.agents.writer.task_support_selection import parse_support_selections
-    from packages.research.evidence.report_claims import audit_report_claims
 
     checked_policy(context.compact.get("task_execution_policy"))
+    from packages.agents.writer.task_clauses import checked_contract
+    checked_contract(context.compact)
     expected_tasks = {
         t["task_id"]: t
         for q in context.questions
@@ -1333,18 +1490,11 @@ def rebuild(context):
                     raise ValueError("Task repair feedback changed")
                 repair_feedbacks[key] = feedback
             if attempt:
-                from packages.agents.writer.task_answer_outcomes import capability_ids_from_rebuild
-
-                prior = audit_report_claims(
+                prior = _audit_task_candidates(
                     list(generated.values()),
                     [row for row, _ in reviewed.values() if row is not None],
-                    SimpleNamespace(facts=context.facts),
-                    [SimpleNamespace(allowed_fact_ids={f.id for f in context.facts})],
-                    available_facts=context.facts,
-                    review_version=3,
-                    authority_claim_ids=authority_ids,
-                    capability_claim_ids=capability_ids_from_rebuild(generated, by_claim, reviewed)
-                    if context.compact.get("task_execution_policy") == POLICY_V3 else (),
+                    by_claim, context.facts, authority_ids,
+                    context.compact.get("task_execution_policy"),
                 )
                 if any(
                     row.status == "supported" and by_claim[row.claim.id]["task_id"] == tid
@@ -1374,6 +1524,17 @@ def rebuild(context):
             if dispatch["claim_ids"]:
                 raise ValueError("Selection cannot publish a claim")
         elif dispatch["name"] == GENERATION_NAME:
+            if (checked_contract(context.compact) and attempt and key not in selections):
+                from packages.agents.writer.task_clauses import reused_generation
+                feedback = failure_feedback(expected_tasks[tid], history, context.facts,
+                                            context.consumption_id)
+                reuse = reused_generation(expected_tasks[tid], history, context.facts,
+                                          context.consumption_id, context.snapshot_id, feedback,
+                                          max_bytes=getattr(context, 'max_user_bytes', 14000))
+                if reuse is None or payload != reuse[0]:
+                    raise ValueError('Task selection reuse changed')
+                selections[key], repair_feedbacks[key] = reuse[1], reuse[0]['repair_feedback']
+                repair_started = True
             if key in attempts or key not in selections or selections[key] is None:
                 raise ValueError("Task generation has no unique selection")
             attempts.add(key)
@@ -1460,6 +1621,8 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
     from packages.research.question_scope import research_questions
 
     checked_policy(receipt.get("task_execution_policy"))
+    from packages.agents.writer.task_clauses import checked_contract
+    clause_contract = checked_contract(receipt)
     if receipt.get("task_execution_policy") == POLICY_V3 and audit is not None and (
         audit.answer_review_contract != "task-outcomes-v1"
         or receipt.get("answer_review_contract") != "task-outcomes-v1"
@@ -1498,6 +1661,7 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
     )
     record = SimpleNamespace(detail=detail, evidence_origin=None)
     expected_inputs, candidates, selections, local_plans, tasks_by_claim = {}, {}, {}, {}, {}
+    generation_payloads = {}
     generated, reviews, sent, facts_by_question, answers, decision_reviews = {}, [], {}, {}, {}, {}
     authority_ids, seen = set(), set()
     capability_ids = set()
@@ -1542,7 +1706,9 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
             ):
                 raise ValueError("Task dispatch scope changed")
             key, question = (tid, attempt), known[ids[0]]
-            system = task_system(name, detail.output_language, receipt["task_execution_policy"])
+            system = task_system(
+                name, detail.output_language, receipt["task_execution_policy"], clause_contract
+            )
             if name == SELECTION_NAME:
                 candidate = candidate_context(
                     service,
@@ -1555,6 +1721,7 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                     tid,
                     attempt,
                     execution_policy=receipt["task_execution_policy"],
+                    task_clause_contract=clause_contract,
                     repair_feedback=failure_feedback(tasks[tid], history, view.facts, use.id)
                     if receipt["task_execution_policy"] in {POLICY_V2, POLICY_V3} and attempt
                     else None,
@@ -1573,15 +1740,28 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                 ):
                     raise ValueError("Task selection originals changed")
             elif name == GENERATION_NAME:
+                reused = None
+                if clause_contract and attempt and key not in candidates:
+                    from packages.agents.writer.task_clauses import reused_generation
+                    reused = reused_generation(tasks[tid], history, view.facts, use.id, snapshot.id,
+                        failure_feedback(tasks[tid], history, view.facts, use.id),
+                        max_bytes=use.max_bytes)
+                    if reused is None:
+                        raise ValueError('Task selection reuse unavailable')
+                    selections[key] = reused[1]
                 if (
-                    key not in candidates
+                    not reused and key not in candidates
                     or selections.get(key, {}).get(tid, {}).get("state") != "selected"
                 ):
                     raise ValueError("Task selected support unavailable")
-                candidate, choices = candidates[key]
-                expected = generation_context(
-                    candidate, selections[key], choices, service, record, packets
-                )
+                if reused:
+                    expected = reused[0]
+                else:
+                    candidate, choices = candidates[key]
+                    expected = generation_context(
+                        candidate, selections[key], choices, service, record, packets
+                    )
+                generation_payloads[key] = expected
                 current, _, parsed = generation_outcome(
                     span.full_output, expected, view.facts, use.id
                 )
@@ -1617,6 +1797,8 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                     ),
                     tasks_by_claim[cids[0]][1],
                     execution_policy=receipt["task_execution_policy"],
+                    task_clause_contract=clause_contract,
+                    support_refs=generation_payloads[key]['task_support_selections'][0]['support_refs'],
                 )
                 if dispatch.get("support_witness_restorations") != review_witness_restorations(
                     span.full_output, expected
@@ -1649,6 +1831,7 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                 competitor=view.competitor,
                 dimension=view.dimension,
                 audited_claims=(),
+                max_user_bytes=min(14000, use.max_bytes),
             )
             rebuilt, owners, reviewed = rebuild(context)
             if receipt["task_execution_policy"] == POLICY_V3:
@@ -1663,10 +1846,8 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                     CONTRACT as TASK_CONTRACT,
                 )
                 from packages.agents.writer.task_answer_outcomes import (
-                    SYSTEM as TASK_SYSTEM,
-                )
-                from packages.agents.writer.task_answer_outcomes import (
                     answer_feedback,
+                    answer_system,
                     consume_answer,
                     task_windows,
                 )
@@ -1703,7 +1884,7 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                 if len(matches) != 1:
                     raise ValueError("Task answer window or failed-task scope changed")
                 expected = matches[0]
-                expected_inputs[span.id] = TASK_SYSTEM, expected
+                expected_inputs[span.id] = answer_system(compact), expected
                 validated_review_payload(raw, expected)
                 expected_claims = list(dict.fromkeys(
                     c["claim_id"] for t in expected["tasks"] for c in t["support_choices"]
@@ -1821,6 +2002,44 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
             "generation_attempts", []
         ) != local.get("generation_attempts", []):
             raise ValueError("Task aggregate plan changed")
+        seen_deferrals = set()
+        for event in plan.get('context_deferrals', []):
+            if not clause_contract or set(event) != {'task_id', 'span_id'}:
+                raise ValueError('Task context deferral contract changed')
+            tid = event['task_id']
+            matched = [s for s in detail.trace_spans if s.id == event['span_id']]
+            if (tid not in tasks or tasks[tid]['question_id'] != qid
+                    or tid in seen_deferrals or len(matched) != 1):
+                raise ValueError('Task context deferral identity changed')
+            seen_deferrals.add(tid)
+            span = matched[0]
+            if (span.kind, span.status, span.name, span.agent, span.subagent) != (
+                'tool', 'ok', 'question_task_context_rejected', 'writer',
+                f'{view.competitor}/{view.dimension}',
+            ):
+                raise ValueError('Task context deferral trace changed')
+            before = {s.id for s in detail.trace_spans[:detail.trace_spans.index(span)]}
+            prior_history = [r for r in history if r[0]['span_id'] in before]
+            from packages.agents.writer.task_clauses import reused_generation, user_bytes
+
+            reuse = reused_generation(tasks[tid], prior_history, view.facts, use.id, snapshot.id,
+                failure_feedback(tasks[tid], prior_history, view.facts, use.id),
+                max_bytes=use.max_bytes)
+            if reuse is None:
+                raise ValueError('Task context deferral has no selected generation')
+            proposed = reuse[0]
+            identity = dict(task_id=tid, attempt=1, request_name=GENERATION_NAME,
+                            consumption_id=use.id, snapshot_id=snapshot.id)
+            outcome = dict(reason='task_context_deferred', user_bytes=user_bytes(proposed),
+                max_user_bytes=min(14000, use.max_bytes),
+                payload_sha256=digest(proposed))
+            if (json.loads(span.full_input) != identity or json.loads(span.full_output) != outcome
+                    or outcome['user_bytes'] <= outcome['max_user_bytes']
+                    or any(d['name'] == GENERATION_NAME and d.get('task_id') == tid
+                           and d['attempt'] == 1 for d in receipt['dispatches'])):
+                raise ValueError('Task context deferral proof changed')
+            state = next(r for r in local['task_results'] if r['task_id'] == tid)
+            state.update(state='deferred', reason='task_context_deferred')
         generated_tasks = {r["task_id"] for r in local.get("generation_attempts", [])}
         if any(
             row != next(r for r in local["task_results"] if r["task_id"] == row["task_id"])
