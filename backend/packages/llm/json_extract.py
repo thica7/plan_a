@@ -19,7 +19,10 @@ def strict_json_object(content: str) -> dict[str, Any]:
             result[key] = value
         return result
 
-    result = json.loads(content, object_pairs_hook=unique)
+    try:
+        result = json.loads(content, object_pairs_hook=unique)
+    except RecursionError as exc:
+        raise JsonExtractionError("JSON nesting exceeds parser depth") from exc
     if not isinstance(result, dict):
         raise JsonExtractionError("JSON root must be an object")
     return result

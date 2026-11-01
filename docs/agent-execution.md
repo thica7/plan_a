@@ -2,6 +2,25 @@
 
 本文描述真实执行入口，供开发、测试与排查使用。总图以 [`graph.py`](../backend/packages/orchestrator/graph.py) 为准；demo 图生成合成数据，不能作为 real 图事实准确率的验收依据。
 
+## 2026-11-01：有限关系与统一发表版本（验收续至11-02）
+
+新对象位于 Writer 交付阶段。上游 Collector、Analyst、Comparator、Reflector 继续提供准入事实和有效依赖；Writer 在实际 v3／semantic-v2 执行入口、两个实验开关均开启时，为新鲜 scope 选择 `structured-conclusions-v1`。存量记录保留自身 selector，未知或混合身份拒绝恢复；两开关默认仍关闭。
+
+| 环节 | 实际执行功能 | 保留的审核边界 |
+| --- | --- | --- |
+| SELECT 后候选 | `structured_conclusions.py` 从本任务实际选择构造上限／CPU计量候选，分开请求前提与来源事实 | 不借未选引用补断言；来源范围、完整条件和例外继续核对 |
+| 结构化 GEN | 模型只选择一个服务器候选 ID，或返回不足 | 额外段落、数值、判定、未知 ID 和无效 JSON 局部拒绝 |
+| 独立源审 | 审核最小来源事实及完整所选原文 | 未送审、不确定或不支持的结果不能生成已验证结论 |
+| 受限推导 | 同单位超限可得本地 No；纯 AND 才可据一项超限否定整体；CPU 计量关系与费用输入分开 | 不推 OR／独立多问、低于上限的全面支持、实际超额或完整账单 |
+| 最终发表 | `conclusion_publication.py` 在价格／澄清覆盖后冻结结论集，保存到现有 atomic receipt | 内容 revision 独立于 Journal 存储递增版本；JSON 和哈希自身不能签发 authority |
+| 正文、问答、QA | 同一已重建 authority 生成问答及观察投影；QA读取相同 revision、实际正文、原题和完整来源上下文 | 对正文改动重新核验；独立 keep、未答任务及未绑定历史问题保留 |
+
+CPU 充分输入只接受有限、完整且唯一的范围／周期断言；不能证明时保留未知，源捕获日期不能补用量日期。普通单数量问句尚未必由上游生成类型化属性，其他语言的派生正文也尚未单独验收。默认中文的实际快照模拟链与最终真实结果分开记录，见[本轮交付](optimization/2026-11-01-structured-conclusions-delivery.md)和[计划](optimization/2026-11-01-structured-conclusions-plan.md)。
+
+坏 JSON 在明确新 selector 中保存可重建的局部失败：dispatch 使用对象，TraceSpan 的标量 metadata 保存规范 JSON 字符串；重放从实际 raw、输入与 native identity 重算，不能自填失败来绕过验证。已拒绝／拒选尝试不再在最终冻结二次解析，合法补交及成功同伴继续保留。深度解析错误规范化为 `ValueError`，原始响应与原因不改；零派送澄清和全延期也在冻结前走真实证据使用验证。
+
+本轮真实117次传输／450696已知token，27项最终QA均送达有效；两类各1条结论已在正文、问答、最终QA输入及冷重放对齐。独立内容为3/8原题完整、12/22分支完整，报告前三类1/4、严格QA仍0/4。合法澄清／缺项与“事实未知”的QA混淆、权限／并列任务漏答仍未解决，不能以同版本或流程完成宣称报告合格。最终全后端9628通过／1跳过，15份变更Python Ruff新增0，API／TS新生成相同；[结果与原样正文](optimization/2026-11-01-structured-conclusions-results.json)保留全部失败。
+
 ## 2026-10-31：任务语义选证、具体补交与必要前提
 
 同时显式打开两个Writer实验开关时，新鲜执行使用内部`semantic-target-clauses-v2`，外层继续`selected-task-atoms-v3`／`task-outcomes-v1`。没有新增公开API或默认开启项。旧单谓词v1、无子合同及其他旧记录不被自动提升为新鲜执行。

@@ -1161,6 +1161,12 @@ class DimensionWriterMixin:
             ):
                 by_id[qid] = answer
         coverage = tuple(by_id[question['question_id']] for question in questions)
+        from packages.agents.writer.structured_conclusions import (
+            checked_contract as structured_contract,
+        )
+        if structured_contract(compact):
+            from packages.agents.writer.conclusion_publication import freeze
+            coverage = freeze(self, record, view, use, compact, audited, coverage)
         if price_answers:
             gaps = tuple(sorted(set(gaps) | {'current_price_unverified'}))
         if any(
@@ -1952,20 +1958,10 @@ def render_dimension_report(detail, audits, *, snapshot=None, comparison_assessm
                            if zh else "These are captured page prices only. Unverified billing interval, market, tax and seat conditions preclude total-cost comparisons."), ""])
         for audit in dimension_audits:
             lines.extend([audit_heading(audit, detail.output_language), ""])
-            supported = observation_claims(task_projection_detail or detail, audit)
-            printed = set()
-            for item in supported:
-                identity = (plain(item.claim.text), tuple(item.claim.source_ids))
-                if identity in printed:
-                    continue
-                printed.add(identity)
-                prefix = ("页面采集标价（不代表适用报价）：" if zh else "Captured page price (not an applicable quote): ") if pricing else ""
-                if item.claim.kind == "inference":
-                    prefix += "条件推断：" if zh else "Conditional inference: "
-                citations = "".join(f"[source:{sid}]" for sid in item.claim.source_ids)
-                lines.extend([f"- {prefix}{plain(item.claim.text)} {citations}", ""])
-            if not supported:
-                lines.extend(["- 暂无通过主张审核的证据观察。" if zh else "- No observation passed claim review.", ""])
+            from packages.agents.writer.answer_presentation import observation_lines
+            local_authorities = (decision_reviews or {}).get(audit.consumption_id)
+            lines.extend(observation_lines(task_projection_detail or detail, audit,
+                language=detail.output_language, decision_reviews=local_authorities))
             lines.extend(question_coverage_lines(audit, detail.output_language,
                 detail=task_projection_detail or detail,
                 facts=snapshot.facts if snapshot is not None else None,

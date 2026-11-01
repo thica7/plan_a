@@ -4,7 +4,7 @@ from packages.research.question_scope import research_questions
 from packages.schema.decision_brief import safe_decision_brief_text as plain
 
 
-def observation_claims(detail, audit):
+def observation_claims(detail, audit, *, decision_reviews=None):
     """Explicit questions publish deductions only inside their final answer."""
     supported = tuple(item for item in audit.claims if item.status == "supported")
     if getattr(audit, "answer_review_contract", None) == "task-outcomes-v1":
@@ -12,10 +12,12 @@ def observation_claims(detail, audit):
         from packages.agents.writer.task_answer_outcomes import TaskOutcomeAuthority
         from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
 
-        try:
-            authorities = replay_decision_reviews(detail, audit)
-        except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
-            authorities = {}
+        authorities = decision_reviews
+        if authorities is None:
+            try:
+                authorities = replay_decision_reviews(detail, audit)
+            except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
+                authorities = {}
         fresh = [a for a in authorities.values() if isinstance(a, TaskOutcomeAuthority)
                  and a.context is not None
                  and a.context.compact.get("task_clause_contract") == SEMANTIC_CONTRACT]
@@ -39,6 +41,39 @@ def observation_claims(detail, audit):
                 for cid in answer.claim_ids}
     return tuple(item for item in supported if not has_questions or item.claim.kind == "fact"
                  or item.claim.id in projected - selected)
+
+
+def observation_lines(detail, audit, *, language=None, decision_reviews=None):
+    """One authorized observation projection and exact rendering for report and QA."""
+    from packages.agents.writer.conclusion_publication import derived_observation_lines
+    from packages.agents.writer.question_atomic_delivery import replay_decision_reviews
+
+    if decision_reviews is None:
+        try:
+            decision_reviews = replay_decision_reviews(detail, audit)
+        except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
+            decision_reviews = {}
+    language = language or detail.output_language
+    zh = language.startswith("zh")
+    supported = observation_claims(detail, audit, decision_reviews=decision_reviews)
+    lines, seen = [], set()
+    for item in supported:
+        identity = (plain(item.claim.text), tuple(item.claim.source_ids))
+        if identity in seen:
+            continue
+        seen.add(identity)
+        prefix = (("页面采集标价（不代表适用报价）：" if zh else
+                   "Captured page price (not an applicable quote): ")
+                  if audit.dimension == "pricing" else "")
+        if item.claim.kind == "inference":
+            prefix += "条件推断：" if zh else "Conditional inference: "
+        citations = "".join(f"[source:{sid}]" for sid in item.claim.source_ids)
+        lines.extend([f"- {prefix}{plain(item.claim.text)} {citations}", ""])
+    if not supported:
+        lines.extend(["- 暂无通过主张审核的证据观察。" if zh else
+                      "- No observation passed claim review.", ""])
+    lines.extend(derived_observation_lines(audit, language, decision_reviews))
+    return lines
 
 
 def audit_heading(audit, language):
@@ -173,6 +208,13 @@ def question_coverage_lines(audit, language, *, detail=None, facts=None, decisio
     for answer in audit.answer_coverage:
         decision_review = (decision_reviews or {}).get(answer.question_id)
         qualified = True
+        from packages.agents.writer.conclusion_publication import ConclusionAuthority
+        if isinstance(decision_review, ConclusionAuthority):
+            qualified = decision_review.matches(answer)
+            if answer.resolution == 'insufficient' and not decision_review.has_typed_entry:
+                from packages.agents.writer.price_answers import verified_missing_price_answer
+                qualified = qualified and verified_missing_price_answer(
+                    detail, snapshot, answer, audit.competitor, claims=tuple(supported.values()))
         if (audit.answer_review_contract == 'task-outcomes-v1'
                 and answer.resolution not in {'clarification', 'insufficient'}):
             from packages.agents.writer.task_answer_outcomes import TaskOutcomeAuthority
@@ -194,6 +236,11 @@ def question_coverage_lines(audit, language, *, detail=None, facts=None, decisio
                     [claim.model_dump(mode='json') for claim in supported.values()], facts=facts,
                     require_subquestions=True, answer_review_contract=audit.answer_review_contract,
                     decision_review=decision_review)
+        if (audit.answer_review_contract == 'task-outcomes-v1'
+                and answer.resolution == 'insufficient' and decision_review is None):
+            from packages.agents.writer.price_answers import verified_missing_price_answer
+            qualified = verified_missing_price_answer(
+                detail, snapshot, answer, audit.competitor, claims=tuple(supported.values()))
         status = (names[answer.status] if zh else answer.status) if qualified else (
             names['unverified'] if zh else 'unverified')
         lines.append(f"- {plain(answer.question)} — {status}")

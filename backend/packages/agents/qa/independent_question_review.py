@@ -210,7 +210,9 @@ def final_review_system(payload):
 
     contexts = [*payload.get("findings", ()),
                 *payload.get("question_contexts", {}).values()]
-    if not any(c.get("task_semantic_contract") == SEMANTIC_CONTRACT for c in contexts):
+    if not any(c.get("task_semantic_contract") == SEMANTIC_CONTRACT
+               or c.get("structured_conclusions_contract") == "structured-conclusions-v1"
+               for c in contexts):
         return INDEPENDENT_SYSTEM
     old = (
         "Reviewed tasks "
@@ -235,6 +237,17 @@ def final_review_system(payload):
         "verbatim denial. Unknown branches stay gaps. Invent no runtime denial. Scenario dates "
         "are not policy assertions. "
     )
+    from packages.agents.writer.structured_conclusions import CONTRACT as CONCLUSION_CONTRACT
+    if any(c.get("structured_conclusions_contract") == CONCLUSION_CONTRACT for c in contexts):
+        replacement = (
+            f"Contract {CONCLUSION_CONTRACT}. conclusion_revision_sha256 binds source facts, "
+            "program deductions and final coverage; it is never a QA verdict. Independently "
+            "check visible_observations, visible_answer, original question, complete selected "
+            "sources and conditions. A same-unit excess refutes only its pure AND, never OR "
+            "or independent requests. A priced CPU meter can coexist with unresolved cost "
+            "inputs; infer no amount, excess or runtime denial. Request premises are hypothetical. "
+            "Preserve unknown facts, conditions, exceptions and every historical finding scope. "
+        )
     if INDEPENDENT_SYSTEM.count(old) != 1 or len(replacement.encode()) > len(old.encode()):
         raise ValueError("Semantic QA SYSTEM no longer fits the protected legacy envelope")
     return INDEPENDENT_SYSTEM.replace(old, replacement, 1)
@@ -320,6 +333,30 @@ def _question_context(service, record, snapshot, question, audit, *, verified, p
                 source_ids = {sid for claim in claims for sid in claim["source_ids"]}
                 context["source_scopes"] = source_scopes(
                     s for s in snapshot.sources if s.id in source_ids)
+        except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
+            pass
+    if answer and producer_verified:
+        from packages.agents.writer.conclusion_publication import (
+            ConclusionAuthority,
+            observations_match,
+            visible_observations,
+        )
+        from packages.agents.writer.question_atomic_delivery import replay_decision_reviews
+        try:
+            authorities = replay_decision_reviews(detail, audit)
+            authority = authorities.get(qid)
+            if isinstance(authority, ConclusionAuthority) and authority.matches(answer):
+                body_matches = observations_match(detail, audit, authorities)
+                context["publication_matches"] = bool(
+                    context["publication_matches"] and body_matches)
+                context["support_verified"] = bool(context["support_verified"] and body_matches)
+                context["structured_conclusions_contract"] = "structured-conclusions-v1"
+                context["conclusion_revision_sha256"] = authority.revision_sha256
+                context["structured_conclusions"] = authority.question_projection()
+                context["visible_observations"] = visible_observations(detail, audit)
+                context["selected_source_context"] = [dict(fact_id=f.id, source_id=f.source_id,
+                    quote=f.quote, value=f.value, qualifiers=f.qualifiers)
+                    for f in snapshot.facts if any(f.id in c["fact_ids"] for c in claims)]
         except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
             pass
     return context

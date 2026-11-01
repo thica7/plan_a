@@ -237,6 +237,12 @@ def _answer_support(detail, snapshot, audit, answer, question):
                 return None
         else:
             return None
+    from packages.agents.writer.conclusion_publication import ConclusionAuthority
+    structured = (decision_reviews or {}).get(answer.question_id)
+    if isinstance(structured, ConclusionAuthority) and structured.has_typed_entry:
+        from packages.agents.writer.conclusion_publication import observations_match
+        return claims if (structured.matches(answer) and answer.status in {"answered", "partial"}
+                          and observations_match(detail, audit, decision_reviews)) else None
     if answer.resolution == "insufficient":
         if not verified_missing_price_answer(
             detail, snapshot, answer, audit.competitor, claims=tuple(published)

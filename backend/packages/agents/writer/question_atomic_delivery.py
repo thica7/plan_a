@@ -861,6 +861,13 @@ def save_atomic_receipt(service, record, compact, view, use, packets):
     from packages.agents.writer.task_clauses import checked_contract
     if checked_contract(compact):
         receipt['task_clause_contract'] = compact['task_clause_contract']
+    from packages.agents.writer.structured_conclusions import (
+        checked_contract as structured_contract,
+    )
+    if structured_contract(compact):
+        receipt['structured_conclusions_contract'] = compact['structured_conclusions_contract']
+        if 'conclusion_set' in compact:
+            receipt['conclusion_set'] = compact['conclusion_set']
     from packages.agents.writer.selected_task_delivery import checked_policy
     if checked_policy(compact.get('task_execution_policy')):
         receipt['task_execution_policy'] = compact['task_execution_policy']
@@ -1012,15 +1019,25 @@ async def execute_question_atomic_delivery(
     service, record, selected, view, use, questions, packets, allowed, boundaries, gaps,
     *, review_projection_version=3, generation_projection_version=5,
     answer_review_contract='subquestion-premises-v1', delivery_policy=None,
-    task_execution_policy=None, task_clause_contract=None,
+    task_execution_policy=None, task_clause_contract=None, structured_conclusions_contract=None,
 ):
     from packages.agents.writer.selected_task_delivery import checked_policy, execute
+    if (structured_conclusions_contract is None
+            and task_execution_policy == 'selected-task-atoms-v3'
+            and task_clause_contract == 'semantic-target-clauses-v2'
+            and service._settings.writer_task_execution_enabled
+            and service._settings.writer_question_atomic_enabled):
+        from packages.agents.writer.structured_conclusions import fresh_contract
+        structured_conclusions_contract = fresh_contract(
+            service._evidence_live_record(record).detail,
+            f'{view.competitor}/{view.dimension}')
     if checked_policy(task_execution_policy):
         if generation_projection_version != 5 or review_projection_version != 3:
             raise ValueError('Task execution policy requires GEN5 and REVIEW3')
         return await execute(service, record, selected, view, use, questions, packets, allowed,
             boundaries, gaps, answer_review_contract=answer_review_contract,
-            execution_policy=task_execution_policy, task_clause_contract=task_clause_contract)
+            execution_policy=task_execution_policy, task_clause_contract=task_clause_contract,
+            structured_conclusions_contract=structured_conclusions_contract)
     from packages.agents.writer.dimension_writer import (
         _support_ref_catalog,
         compact_prompt_json,

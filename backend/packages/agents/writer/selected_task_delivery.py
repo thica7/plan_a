@@ -187,7 +187,13 @@ def task_predicate_reasons(task, text, quotes):
     return ()
 
 
-def task_system(name, language, execution_policy=POLICY, task_clause_contract=None):
+def task_system(name, language, execution_policy=POLICY, task_clause_contract=None,
+                structured_conclusions_contract=None, *, conclusion_candidates=False):
+    if structured_conclusions_contract is not None:
+        from packages.agents.writer.structured_conclusions import system
+
+        return system(task_system(name, language, execution_policy, task_clause_contract),
+                      name, structured_conclusions_contract, candidates=conclusion_candidates)
     if task_clause_contract is not None:
         from packages.agents.writer.task_clauses import checked_contract, system
         checked_contract(dict(task_clause_contract=task_clause_contract,
@@ -290,6 +296,23 @@ def task_system(name, language, execution_policy=POLICY, task_clause_contract=No
     raise ValueError("Unknown task transport")
 
 
+def _task_response(response, payload):
+    from packages.agents.writer.structured_conclusions import checked_contract
+    if checked_contract(payload):
+        from packages.llm.json_extract import strict_json_object
+        strict_json_object(response)
+    return response
+
+
+def _task_review_restorations(response, payload):
+    from packages.agents.writer.atomic_claim_review import review_witness_restorations
+    try:
+        _task_response(response, payload)
+    except (TypeError, ValueError):
+        return []
+    return review_witness_restorations(response, payload)
+
+
 def candidate_context(
     service,
     record,
@@ -303,6 +326,7 @@ def candidate_context(
     execution_policy=POLICY,
     repair_feedback=None,
     task_clause_contract=None,
+    structured_conclusions_contract=None,
 ):
     from packages.agents.writer.atomic_question_projection import (
         generation_tasks,
@@ -409,6 +433,9 @@ def candidate_context(
             task_attempt=attempt,
             delivery_policy="complete-predicates-v1",
         )
+        if structured_conclusions_contract is not None:
+            result['structured_conclusions_contract'] = structured_conclusions_contract
+            result['conclusion_language'] = record.detail.output_language
         if task_clause_contract is not None:
             from packages.agents.writer.task_clauses import checked_contract
             result['task_clause_contract'] = task_clause_contract
@@ -515,6 +542,8 @@ def selection_context(payload, view):
         context["repair_feedback"] = deepcopy(payload["repair_feedback"])
     if payload.get('task_clause_contract') is not None:
         context['task_clause_contract'] = payload['task_clause_contract']
+    if payload.get('structured_conclusions_contract') is not None:
+        context['structured_conclusions_contract'] = payload['structured_conclusions_contract']
     from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
     if payload.get("task_clause_contract") == SEMANTIC_CONTRACT:
         from packages.agents.writer.task_semantics import applicability
@@ -614,6 +643,9 @@ def generation_context(payload, selections, choices, service, record, packets):
             source_ids = {row["source_id"] for row in result["evidence_view"]["facts"]}
             result["source_scopes"] = {sid: scope for sid, scope in
                 result["source_scopes"].items() if sid in source_ids}
+    from packages.agents.writer.structured_conclusions import build_candidates, checked_contract
+    if checked_contract(result):
+        result['conclusion_candidates'] = build_candidates(result)
     return result
 
 
@@ -641,9 +673,20 @@ def parse_generation(response, payload, view, use):
     clause_contract = checked_contract(payload)
     (task,) = payload["generation_tasks"]
     (selected,) = payload["task_support_selections"]
-    raw = generation_plan(response, task, selected['support_refs'],
-                          payload['question_plan_missing_fields'][0]['missing_fields']) \
-        if clause_contract else parse_json(response)
+    from packages.agents.writer.structured_conclusions import (
+        checked_contract as structured_contract,
+    )
+    from packages.agents.writer.structured_conclusions import (
+        generation_plan as conclusion_plan,
+    )
+    structured = structured_contract(payload) and bool(payload.get('conclusion_candidates'))
+    if structured:
+        raw = conclusion_plan(response, payload)
+    elif clause_contract:
+        raw = generation_plan(response, task, selected['support_refs'],
+                              payload['question_plan_missing_fields'][0]['missing_fields'])
+    else:
+        raw = parse_json(response)
     plans = raw.get("question_plans") if isinstance(raw, dict) else None
     if (
         not isinstance(plans, list)
@@ -661,7 +704,7 @@ def parse_generation(response, payload, view, use):
         ):
             raise ValueError("Task selected support changed")
         text = atom.get("text", "")
-        if clause_contract:
+        if clause_contract and not structured:
             from packages.agents.writer.task_clauses import target_reasons
 
             target_invalid = target_reasons(task, text, payload['segment_competitor'])
@@ -684,11 +727,11 @@ def parse_generation(response, payload, view, use):
                 for s in selected["supports"]
             ],
         )
-        if reasons:
+        if reasons and not structured:
             raise ValueError(reasons[0] if clause_contract else
                              "Task predicate differs from selected support")
     quarantined = None
-    if payload.get("task_execution_policy") == POLICY_V3 and plans[0]["atoms"]:
+    if not structured and payload.get("task_execution_policy") == POLICY_V3 and plans[0]["atoms"]:
         from packages.agents.writer.task_answer_outcomes import quarantine_candidate
 
         quarantined = quarantine_candidate(raw, payload, view, use)
@@ -732,13 +775,16 @@ def merge_task_plan(target, local, task_id, attempt):
 
 
 def review_context(claims, view, question, plan, metadata, task, execution_policy=POLICY,
-                   task_clause_contract=None, support_refs=()):
+                   task_clause_contract=None, support_refs=(),
+                   structured_conclusions_contract=None):
     from packages.agents.writer.question_atomic_delivery import atomic_review_payload
 
     result = atomic_review_payload(
         claims, view, [question], [plan], metadata, review_projection_version=3
     )
     result.update(task_execution_policy=execution_policy, task_context=task)
+    if structured_conclusions_contract is not None:
+        result['structured_conclusions_contract'] = structured_conclusions_contract
     if task_clause_contract:
         from packages.agents.writer.task_clauses import clause_inventory
         result.update(task_clause_contract=task_clause_contract,
@@ -837,7 +883,8 @@ def failure_feedback(task, history, facts, consumption_id):
             for ref in refs
         }
         try:
-            parsed, invalid = parse_support_selections(span.full_output, [task], choices)
+            parsed, invalid = parse_support_selections(
+                _task_response(span.full_output, payload), [task], choices)
             codes.update(invalid)
             codes.add(parsed[task["task_id"]].get("reason", "task_generation_not_dispatched"))
             if payload.get("support_applicability"):
@@ -927,7 +974,8 @@ def failure_feedback(task, history, facts, consumption_id):
             choices = {s["support_ref"]: s for f in selection_payload["evidence_view"]["facts"]
                        for s in f.get("source_span_candidates", ())}
             try:
-                parsed, _ = parse_support_selections(prior[0][1].full_output, [task], {
+                parsed, _ = parse_support_selections(
+                    _task_response(prior[0][1].full_output, selection_payload), [task], {
                     ref: dict(choice, binding_kind="span") for ref, choice in choices.items()})
                 codes.update(selection_reasons(target,
                     parsed[task["task_id"]].get("support_refs", ()), choices))
@@ -936,7 +984,7 @@ def failure_feedback(task, history, facts, consumption_id):
         failed_text = ""
         if generated:
             try:
-                raw = json.loads(generated[1].full_output)
+                raw = json.loads(_task_response(generated[1].full_output, generated[2]))
                 if raw.get("status") == "insufficient_evidence":
                     codes.add("task_generation_insufficient_evidence")
                 failed_text = (raw.get("atom") or {}).get("text", "")
@@ -1066,6 +1114,7 @@ async def execute(
     answer_review_contract,
     execution_policy=POLICY,
     task_clause_contract=None,
+    structured_conclusions_contract=None,
 ):
     from packages.agents.writer.atomic_question_projection import generation_tasks
     from packages.agents.writer.dimension_writer import compact_prompt_json
@@ -1077,7 +1126,6 @@ async def execute(
         authority_task_claim_ids,
         dispatch_row,
         handoff_context,
-        review_witness_restorations,
         save_atomic_receipt,
         transport_span,
         validate_atomic_handoff,
@@ -1116,6 +1164,10 @@ async def execute(
     if task_clause_contract is not None:
         from packages.agents.writer.task_clauses import checked_contract
         compact['task_clause_contract'] = task_clause_contract
+        checked_contract(compact)
+    if structured_conclusions_contract is not None:
+        from packages.agents.writer.structured_conclusions import checked_contract
+        compact['structured_conclusions_contract'] = structured_conclusions_contract
         checked_contract(compact)
     if execution_policy == POLICY_V3:
         compact.update(answer_review_contract="task-outcomes-v1",
@@ -1218,7 +1270,9 @@ async def execute(
         refresh_tail()
         system, agent = (
             task_system(
-                name, record.detail.output_language, execution_policy, task_clause_contract
+                name, record.detail.output_language, execution_policy, task_clause_contract,
+                structured_conclusions_contract,
+                conclusion_candidates=bool(payload.get('conclusion_candidates')),
             ),
             ("qa" if name == REVIEW_NAME else "writer"),
         )
@@ -1278,7 +1332,7 @@ async def execute(
         if execution_policy == POLICY_V3:
             from packages.agents.writer.task_answer_outcomes import bind_transport
 
-            bind_transport(dispatch, span)
+            bind_transport(dispatch, span, structured=bool(structured_conclusions_contract))
         compact["dispatches"].append(dispatch)
         history.append((dispatch, span, deepcopy(payload)))
         return response, dispatch
@@ -1337,6 +1391,7 @@ async def execute(
             attempt,
             execution_policy=execution_policy,
             task_clause_contract=task_clause_contract,
+            structured_conclusions_contract=structured_conclusions_contract,
             repair_feedback=failure_feedback(task, history, view.facts, use.id)
             if execution_policy in {POLICY_V2, POLICY_V3} and attempt
             else None,
@@ -1377,7 +1432,8 @@ async def execute(
                 state.update(state="deferred", reason="task_selection_unavailable")
                 continue
             try:
-                selections, _ = parse_support_selections(selected_call[0], [task], choices)
+                selections, _ = parse_support_selections(
+                    _task_response(selected_call[0], context), [task], choices)
             except (ValueError, TypeError, AttributeError):
                 state.update(state="deferred", reason="task_selection_invalid")
                 continue
@@ -1428,6 +1484,7 @@ async def execute(
             execution_policy=execution_policy,
             task_clause_contract=task_clause_contract,
             support_refs=payload["task_support_selections"][0]["support_refs"],
+            structured_conclusions_contract=structured_conclusions_contract,
         )
         reviewed_call = await call(
             REVIEW_NAME,
@@ -1438,7 +1495,7 @@ async def execute(
             fact_ids={fid for c in current for fid in c.fact_ids},
         )
         if reviewed_call is not None:
-            reviewed_call[1]["support_witness_restorations"] = review_witness_restorations(
+            reviewed_call[1]["support_witness_restorations"] = _task_review_restorations(
                 reviewed_call[0], batch
             )
             try:
@@ -1533,7 +1590,8 @@ def verified_transport(context, dispatch):
     if context.compact.get("task_execution_policy") == POLICY_V3:
         from packages.agents.writer.task_answer_outcomes import verify_transport
 
-        verify_transport(span, dispatch)
+        verify_transport(span, dispatch, structured=(context.compact.get(
+            "structured_conclusions_contract") == "structured-conclusions-v1"))
     known = {q["question_id"]: q for q in context.questions}
     if (
         actual != payload
@@ -1547,6 +1605,11 @@ def verified_transport(context, dispatch):
     from packages.agents.writer.task_clauses import checked_contract
     if checked_contract(actual) != checked_contract(context.compact):
         raise ValueError('Task clause transport contract changed')
+    from packages.agents.writer.structured_conclusions import (
+        checked_contract as structured_contract,
+    )
+    if structured_contract(actual) != structured_contract(context.compact):
+        raise ValueError('Structured conclusion transport contract changed')
     return span, actual
 
 
@@ -1635,7 +1698,8 @@ def rebuild(context):
                 choices = dispatched_support_choices(
                     complete, context.facts, {r["id"] for r in complete["evidence_view"]["facts"]}
                 )
-                parsed, _ = parse_support_selections(span.full_output, payload["tasks"], choices)
+                parsed, _ = parse_support_selections(
+                    _task_response(span.full_output, payload), payload["tasks"], choices)
                 selections[key] = parsed
             else:
                 # No generation grants no decision credential. A malformed or
@@ -1728,7 +1792,6 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
         authority_task_claim_ids,
         digest,
         handoff_context,
-        review_witness_restorations,
         validate_atomic_handoff,
     )
     from packages.agents.writer.task_decision_witnesses import (
@@ -1743,6 +1806,10 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
     checked_policy(receipt.get("task_execution_policy"))
     from packages.agents.writer.task_clauses import checked_contract
     clause_contract = checked_contract(receipt)
+    from packages.agents.writer.structured_conclusions import (
+        checked_contract as structured_contract,
+    )
+    conclusion_contract = structured_contract(receipt)
     if receipt.get("task_execution_policy") == POLICY_V3 and audit is not None and (
         audit.answer_review_contract != "task-outcomes-v1"
         or receipt.get("answer_review_contract") != "task-outcomes-v1"
@@ -1830,7 +1897,9 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                 raise ValueError("Task dispatch scope changed")
             key, question = (tid, attempt), known[ids[0]]
             system = task_system(
-                name, detail.output_language, receipt["task_execution_policy"], clause_contract
+                name, detail.output_language, receipt["task_execution_policy"], clause_contract,
+                conclusion_contract,
+                conclusion_candidates=bool(payload.get('conclusion_candidates')),
             )
             if name == SELECTION_NAME:
                 candidate = candidate_context(
@@ -1845,6 +1914,7 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                     attempt,
                     execution_policy=receipt["task_execution_policy"],
                     task_clause_contract=clause_contract,
+                    structured_conclusions_contract=conclusion_contract,
                     repair_feedback=failure_feedback(tasks[tid], history, view.facts, use.id)
                     if receipt["task_execution_policy"] in {POLICY_V2, POLICY_V3} and attempt
                     else None,
@@ -1854,7 +1924,7 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                 candidates[key] = candidate, choices
                 try:
                     selections[key], _ = parse_support_selections(
-                        span.full_output, [tasks[tid]], choices
+                        _task_response(span.full_output, expected), [tasks[tid]], choices
                     )
                 except (ValueError, TypeError, AttributeError):
                     selections[key] = {}
@@ -1922,8 +1992,9 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                     execution_policy=receipt["task_execution_policy"],
                     task_clause_contract=clause_contract,
                     support_refs=generation_payloads[key]['task_support_selections'][0]['support_refs'],
+                    structured_conclusions_contract=conclusion_contract,
                 )
-                if dispatch.get("support_witness_restorations") != review_witness_restorations(
+                if dispatch.get("support_witness_restorations") != _task_review_restorations(
                     span.full_output, expected
                 ):
                     raise ValueError("Task review witness changed")
@@ -2174,6 +2245,42 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
         if receipt.get("task_answer_results", {}) != task_answers:
             raise ValueError("Task answer aggregate changed")
         decision_reviews = task_authorities
+    if conclusion_contract:
+        from packages.agents.writer.conclusion_publication import (
+            final_coverage_overrides,
+            materialize,
+        )
+        from packages.agents.writer.task_answer_outcomes import aggregate, obligation_tasks
+
+        audited = audit_report_claims(list(generated.values()), reviews, view, boundaries,
+            available_facts=view.facts, review_version=3, authority_claim_ids=authority_ids,
+            capability_claim_ids=capability_ids)
+        supported = [r.claim for r in audited if r.status == "supported"]
+        if supported:
+            credentials = [c for a in task_authorities.values()
+                           for c in a.answer.decision_credentials or ()]
+            base = aggregate(questions, obligation_tasks(list(tasks.values()), compact),
+                             task_answers, supported, credentials)
+            base = tuple(base[q["question_id"]] for q in questions)
+        else:
+            from packages.agents.writer.answer_coverage import unverified_coverage
+            base = unverified_coverage(questions, "No supported answer claims are available.")
+        merged = final_coverage_overrides(
+            detail, snapshot, questions, supported, view, compact, base)
+        compact["_decision_audited"] = tuple(audited)
+        context = atomic_decision_context(service, record, view, use, compact)
+        final, bundle, decision_reviews = materialize(context, detail, snapshot, merged)
+        if receipt.get("conclusion_set") != bundle:
+            raise ValueError("Frozen conclusion publication changed")
+        answers = {a.question_id: a for a in final}
+        if audit is not None:
+            actual = {r.claim.id: r for r in audited}
+            if any(r.claim.id not in actual or (r.claim, r.review, r.status) !=
+                   (actual[r.claim.id].claim, actual[r.claim.id].review, actual[r.claim.id].status)
+                   for r in audit.claims):
+                raise ValueError("Structured source audit changed")
+            if any(a != answers.get(a.question_id) for a in audit.answer_coverage):
+                raise ValueError("Structured published answer changed")
     if audit is not None:
         by_review = {r.claim_id: r for r in reviews}
         for row in audit.claims:
@@ -2183,6 +2290,8 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
             ):
                 raise ValueError("Task published claim changed")
         for answer in audit.answer_coverage:
+            if conclusion_contract:
+                continue
             if answer.resolution == "insufficient":
                 from packages.agents.writer.price_answers import verified_missing_price_answer
 

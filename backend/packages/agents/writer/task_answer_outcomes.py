@@ -70,13 +70,29 @@ def transport_identity(system, user, contract=TRANSPORT_CONTRACT):
     ).hexdigest()
 
 
-def bind_transport(dispatch, span):
+def _structured_response_failure(span):
+    """Only an actual strict-parser failure can witness a local response failure."""
+    if span.status == "ok":
+        try:
+            strict_json_object(span.full_output)
+        except (ValueError, TypeError):
+            return dict(contract="structured-conclusions-v1", reason="invalid_json_object",
+                        output_sha256=digest(span.full_output))
+    return None
+
+
+def bind_transport(dispatch, span, *, structured=False):
     keys = ("response_format", "response_contract", "response_transport_identity", "llm_provider")
     dispatch["native_transport"] = {key: span.metadata.get(key) for key in keys}
-    verify_transport(span, dispatch)
+    if structured and (failure := _structured_response_failure(span)) is not None:
+        dispatch["structured_response_failure"] = failure
+        # Trace metadata is scalar-only. Persist its exact canonical JSON string.
+        from packages.research.evidence.snapshot_models import canonical_json
+        span.metadata["structured_response_failure_json"] = canonical_json(failure)
+    verify_transport(span, dispatch, structured=structured)
 
 
-def verify_transport(span, dispatch):
+def verify_transport(span, dispatch, *, structured=False):
     system, separator, raw = span.full_input.partition("\nJSON:\n")
     expected = dict(
         response_format="json_object",
@@ -90,6 +106,20 @@ def verify_transport(span, dispatch):
         or any(span.metadata.get(k) != v for k, v in expected.items())
     ):
         raise ValueError("Task native transport mode or identity changed")
+    if structured:
+        from packages.research.evidence.snapshot_models import canonical_json
+        failure = _structured_response_failure(span)
+        field = "structured_response_failure"
+        meta = "structured_response_failure_json"
+        if ((field in dispatch) != (failure is not None)
+                or (meta in span.metadata) != (failure is not None)):
+            raise ValueError("Structured response failure identity changed")
+        if failure is not None:
+            recorded = span.metadata[meta]
+            if (not isinstance(recorded, str) or strict_json_object(recorded) != failure
+                    or recorded != canonical_json(failure) or dispatch[field] != failure):
+                raise ValueError("Structured response failure witness changed")
+            return
     if span.status == "ok":
         strict_json_object(span.full_output)
 
@@ -430,6 +460,8 @@ def build_payload(
                                            if sid in scopes}
     if repair_feedback is not None:
         payload["repair_feedback"] = repair_feedback
+    if compact.get('structured_conclusions_contract') is not None:
+        payload['structured_conclusions_contract'] = compact['structured_conclusions_contract']
     return payload
 
 
@@ -706,7 +738,13 @@ def consume_answer(
         )
     accepted.update(rows)
     review = DecisionReview(context, dispatch)
-    credentials = review.credentials()
+    # verified_transport has rebuilt this new-scope failure from the actual raw.
+    # An authenticated parse failure cannot supply decision credentials, and
+    # must not enter the legacy credential parser a second time.
+    failed_response = (context.compact.get("structured_conclusions_contract")
+                       == "structured-conclusions-v1"
+                       and dispatch.get("structured_response_failure") is not None)
+    credentials = () if failed_response else review.credentials()
     # Retain previously authenticated per-task credentials when a peer retries.
     prior_credentials = [
         c for a in authorities.values() for c in a.answer.decision_credentials or ()
@@ -826,7 +864,8 @@ async def task_answer_coverage(
         dispatch["task_ids"] = [t["task_id"] for t in payload["tasks"]]
         if span.status == "error":
             dispatch["failed_transport"] = True
-        bind_transport(dispatch, span)
+        bind_transport(dispatch, span, structured=bool(compact.get(
+            "structured_conclusions_contract")))
         compact["_decision_expected_inputs"][span.id] = system, payload
         compact["dispatches"].append(dispatch)
         rows, failures, current = consume_answer(

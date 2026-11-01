@@ -466,6 +466,7 @@ def question_delivery_complete(service, detail, snapshot, audit, question, *, re
             from packages.agents.writer.question_atomic_delivery import replay_atomic_delivery
 
             replay = replay_atomic_delivery(service, detail, snapshot, use, view, audit=audit)
+            replay_authority = replay.get('decision_review', {})
             selection = _observations(detail, 'question_evidence_selection', use.id)
             packets = selection['packets']
             if len(packets) != 1:
@@ -482,6 +483,12 @@ def question_delivery_complete(service, detail, snapshot, audit, question, *, re
             if len(rows) != 1:
                 return False
             gaps = set(rows[0]['evidence_gaps'])
+            if gaps == {CORE_GAP} and audit.question_atomic_contract is not None:
+                from packages.agents.writer.conclusion_publication import ConclusionAuthority
+                authority = replay_authority.get(question['question_id'])
+                if (isinstance(authority, ConclusionAuthority)
+                        and authority.covers_core_gap(question)):
+                    continue
             if gaps and (not request_only or gaps != {CORE_GAP}):
                 return False
         return True
