@@ -19,6 +19,20 @@ class _Envelope(BaseModel):
     reviews: list[object] = Field(max_length=MAX_FINDINGS)
 
 
+class _DeliveryGap(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal[
+        "unanswered_branch", "unsupported_rule", "wrong_source", "condition_omitted",
+        "clarification_omitted", "input_already_given", "publication_changed",
+        "unsupported_premise",
+    ]
+    obligation_ref: str = Field(min_length=1, max_length=180)
+
+
+class _DeliveryDecision(_Decision):
+    delivery_gaps: list[_DeliveryGap] = Field(max_length=8)
+
+
 @dataclass
 class ReviewRows:
     reviews: dict[str, _Decision]
@@ -46,7 +60,7 @@ def _finite_float(value):
     return parsed
 
 
-def parse_response(response, basis_hash, candidates):
+def parse_response(response, basis_hash, candidates, *, delivery_contract=False):
     """Keep valid peers; ambiguous envelopes or batch identities reject globally."""
     value = json.loads(
         response, object_pairs_hook=_unique_object, parse_constant=_nonfinite,
@@ -65,11 +79,22 @@ def parse_response(response, basis_hash, candidates):
             returned.add(issue_id)
     reviews = {}
     for row in parsed.reviews:
+        candidate = candidates.get(row.get("issue_id"), {}) if isinstance(row, dict) else {}
+        delivery = delivery_contract and "delivery_obligations" in candidate
         try:
-            review = _Decision.model_validate(row)
+            review = (_DeliveryDecision if delivery else _Decision).model_validate(row)
         except ValidationError:
             continue
         candidate = candidates[review.issue_id]
+        if delivery:
+            obligations = {o["ref"]: o["gap_kinds"] for o in candidate["delivery_obligations"]}
+            gaps = review.delivery_gaps
+            if (any(g.obligation_ref not in obligations
+                    or g.kind not in obligations[g.obligation_ref] for g in gaps)
+                    or len({(g.kind, g.obligation_ref) for g in gaps}) != len(gaps)
+                    or (review.disposition == "keep" or not review.finding_fully_addressed
+                        or bool(review.remaining_gaps)) != bool(gaps)):
+                continue
         if (review.question_id == candidate["question_id"]
                 and review.support_digest == candidate["support_digest"]
                 and len(review.claim_ids) == len(set(review.claim_ids))

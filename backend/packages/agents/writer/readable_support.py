@@ -138,7 +138,11 @@ def _catalogs(payload, source_facts, sent_fact_ids):
             item["observation_id"]: item
             for item in (operation_binding(op) for op in operation_observations(original))
         }
-        spans = source_span_candidates(original)
+        spans = (
+            source_span_candidates(original, relation_members=True)
+            if payload.get('structured_conclusions_contract') == 'structured-conclusions-v2'
+            else source_span_candidates(original)
+        )
         operation_rows = row.get("operation_observations", ())
         operation_refs = row.get("operation_support_refs", ())
         annotated_operations = (

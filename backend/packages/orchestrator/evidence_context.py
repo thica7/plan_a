@@ -1022,7 +1022,9 @@ class EvidenceContextMixin:
             if snapshot.fact_market_policy_version != FACT_MARKET_POLICY_VERSION:
                 raise EvidenceUseRejectedError("evidence market policy requires accepted resealing")
         budget = _DEPTH_BYTES.get(record.detail.plan.research_depth, 8192)
-        if agent == "qa" and qa_review_protocol == "independent_questions_v9":
+        if agent == "qa" and qa_review_protocol in {
+                "independent_questions_v9", "independent_questions_v10",
+                "independent_questions_v11"}:
             from packages.agents.qa.independent_question_review import review_byte_limit
 
             budget = max(budget, review_byte_limit(qa_review_protocol))

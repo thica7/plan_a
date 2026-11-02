@@ -209,6 +209,24 @@ def _html_to_text(body: str) -> str:
     return _capture_html(body)[0]
 
 
+def _disclosure_question(node, panel):
+    """An icon control may use its unique adjacent visible source heading."""
+    question = _visible_source_text(node)
+    if question:
+        return question, node
+    header = node.getparent()
+    if header is None or panel is None or header.getnext() is not panel:
+        return '', None
+    children = list(header)
+    headings = [child for child in children if child.tag in {'h1', 'h2', 'h3', 'h4', 'h5', 'h6'}]
+    buttons = list(header.iter('button'))
+    if (len(children) != 2 or len(headings) != 1 or buttons != [node]
+            or not _heading_block_visible(headings[0])
+            or panel.get('aria-labelledby', '').split() != [node.get('id')]):
+        return '', None
+    return _visible_source_text(headings[0]), headings[0]
+
+
 def _capture_html(body: str) -> tuple[str, tuple[tuple[int, str], ...], dict[str, Any]]:
     """Extract one source scope and restore only explicit, verifiable disclosures."""
     metadata: dict[str, Any] = {"capture_structure_version": 1, "content_root": "body",
@@ -271,10 +289,10 @@ def _capture_html(body: str) -> tuple[str, tuple[tuple[int, str], ...], dict[str
                 record['element_id'] = node.get('id')
             disclosures.append((node, record))
         elif node.tag == 'button' and node.get('aria-controls') and _effective_disclosure_button(node):
-            question = _visible_source_text(node)
             targets = node.get('aria-controls', '').split()
             panels = ids.get(targets[0], []) if len(targets) == 1 else []
             panel = panels[0] if len(panels) == 1 else None
+            question, question_node = _disclosure_question(node, panel)
             reason = None
             if len(controls.get(node.get('aria-controls'), [])) != 1 or (node.get('id') and len(ids[node.get('id')]) != 1):
                 reason = 'ambiguous_disclosure_control'
@@ -284,6 +302,8 @@ def _capture_html(body: str) -> tuple[str, tuple[tuple[int, str], ...], dict[str
                 reason = 'disclosure_panel_outside_scope'
             elif any(not _node_visible(parent) for parent in panel.iterancestors()):
                 reason = 'hidden_disclosure_ancestor'
+            elif not question:
+                reason = 'empty_disclosure_question'
             if reason:
                 record = _disclosure_record('aria_controls', question, '')
                 record.update(reason=reason, panel_id=targets[0] if len(targets) == 1 else '')
@@ -292,6 +312,8 @@ def _capture_html(body: str) -> tuple[str, tuple[tuple[int, str], ...], dict[str
                 record = _disclosure_record('aria_controls', question,
                                             _disclosure_answer(panel, reveal=True))
             record.update(control_id=node.get('id', ''), source_path=tree.getroottree().getpath(node))
+            if question_node is not None:
+                record['question_source_path'] = tree.getroottree().getpath(question_node)
             if panel is not None:
                 record['panel_id'] = panel.get('id', '')
             disclosures.append((node, record))
@@ -349,7 +371,33 @@ def _capture_html(body: str) -> tuple[str, tuple[tuple[int, str], ...], dict[str
             quote = record['quote']
             record['recovered'] = quote not in text
             if quote not in text:
-                text = _insert_disclosure(clone, copies[node], text, record, protected_quotes)
+                question_nodes = tree.getroottree().xpath(
+                    record.get("question_source_path", "/*[false()]")
+                )
+                question_node = question_nodes[0] if len(question_nodes) == 1 else node
+                if question_node.tag == 'button':
+                    question_node = next(
+                        (
+                            p
+                            for p in question_node.iterancestors()
+                            if re.fullmatch(r"h[1-6]", p.tag)
+                            and _visible_source_text(p) == record["question"]
+                        ),
+                        question_node,
+                    )
+                question_path = (clone.getroottree().getpath(copies[question_node])
+                                 if question_node in copies else None)
+                heading = next((r for r in heading_records if r['source_path'] == question_path
+                                and r['title'] == record['question']), None)
+                if heading:
+                    text, reason = _insert_heading_disclosure(
+                        text, record, heading, heading_records
+                    )
+                    if reason:
+                        record.update(status='incomplete', reason=reason)
+                        metadata['capture_gaps'].append(reason)
+                else:
+                    text = _insert_disclosure(clone, copies[node], text, record, protected_quotes)
             protected_quotes.append(quote)
         else:
             metadata['capture_gaps'].append(record['reason'])
@@ -562,6 +610,29 @@ def _source_match(value: str, text: str, protected=()):
     matches = [match for match in matches
                if not any(match.start() < end and start < match.end() for start, end in protected)]
     return matches[0] if len(matches) == 1 else None
+
+
+def _insert_heading_disclosure(text, record, heading, headings):
+    """Use the real DOM heading token while its title is intentionally hidden."""
+    token = heading['token']
+    if text.count(token) != 1:
+        return text, 'disclosure_heading_identity_ambiguous'
+    start = text.index(token) + len(token)
+    end = min(
+        (
+            text.index(h["token"])
+            for h in headings
+            if text.count(h["token"]) == 1 and text.index(h["token"]) >= start
+        ),
+        default=len(text),
+    )
+    section = text[start:end]
+    answer = _source_match(record['answer'], section)
+    if answer is not None and not section[:answer.start()].strip():
+        return text[:start] + '\n' + record['answer'] + section[answer.end():] + text[end:], None
+    if answer is not None or _source_match(record['answer'], text) is not None:
+        return text, 'disclosure_answer_outside_heading_boundary'
+    return text[:start] + '\n' + record['answer'] + section + text[end:], None
 
 
 def _insert_disclosure(root, node, text: str, record: dict[str, Any], protected_quotes=()) -> str:

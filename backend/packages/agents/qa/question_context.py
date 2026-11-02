@@ -404,18 +404,21 @@ def question_context_blocks(service, detail, snapshot, use, view, gaps, request_
         try:
             receipt = _observations(detail, 'question_atomic_delivery', use.id, optional=True)
             if receipt and receipt.get('task_execution_policy') == 'selected-task-atoms-v3':
+                from packages.agents.qa.question_reconciliation import authenticated_answer_delivery
                 from packages.agents.writer.answer_presentation import question_coverage_matches
                 from packages.agents.writer.question_atomic_delivery import replay_atomic_delivery
-                from packages.agents.writer.task_answer_outcomes import TaskOutcomeAuthority
+                from packages.research.question_scope import research_questions
 
                 audit = next(a for a in detail.report_dimension_audits
                              if a.consumption_id == use.id)
                 replay = replay_atomic_delivery(service, detail, snapshot, use, view, audit=audit)
                 authorities = replay.get('decision_review', {})
+                questions = {q['question_id']: q for q in research_questions(
+                    detail, audit.competitor, audit.dimension)}
                 if audit.answer_coverage and all(
-                    a.status == 'answered'
-                    and isinstance(authorities.get(a.question_id), TaskOutcomeAuthority)
-                    and authorities[a.question_id].matches(a) for a in audit.answer_coverage
+                    a.question_id in questions and authenticated_answer_delivery(
+                        detail, snapshot, audit, a, questions[a.question_id])
+                    for a in audit.answer_coverage
                 ) and question_coverage_matches(
                     detail.report_md, audit, detail.output_language,
                     audits=detail.report_dimension_audits, detail=detail,
@@ -466,12 +469,14 @@ def question_delivery_complete(service, detail, snapshot, audit, question, *, re
             from packages.agents.writer.question_atomic_delivery import replay_atomic_delivery
 
             replay = replay_atomic_delivery(service, detail, snapshot, use, view, audit=audit)
-            replay_authority = replay.get('decision_review', {})
             selection = _observations(detail, 'question_evidence_selection', use.id)
             packets = selection['packets']
             if len(packets) != 1:
                 return False
             packet = dict(packets[0], questions=[question])
+            local_fact_ids = {
+                fact['id'] for fact in replay['facts_by_question'][question['question_id']]
+            }
             actual = reconcile_packet_originals(
                 packet, snapshot, replay['facts_by_question'][question['question_id']])
             replays = [actual]
@@ -484,11 +489,19 @@ def question_delivery_complete(service, detail, snapshot, audit, question, *, re
                 return False
             gaps = set(rows[0]['evidence_gaps'])
             if gaps == {CORE_GAP} and audit.question_atomic_contract is not None:
-                from packages.agents.writer.conclusion_publication import ConclusionAuthority
-                authority = replay_authority.get(question['question_id'])
-                if (isinstance(authority, ConclusionAuthority)
-                        and authority.covers_core_gap(question)):
-                    continue
+                from packages.agents.qa.question_reconciliation import authenticated_answer_delivery
+                answers = [a for a in audit.answer_coverage
+                           if a.question_id == question['question_id']]
+                if len(answers) == 1:
+                    answer = answers[0]
+                    required_fact_ids = {
+                        fid for item in audit.claims
+                        if item.claim.id in answer.claim_ids
+                        for fid in item.claim.fact_ids
+                    }
+                    if required_fact_ids <= local_fact_ids and authenticated_answer_delivery(
+                            detail, snapshot, audit, answer, question):
+                        continue
             if gaps and (not request_only or gaps != {CORE_GAP}):
                 return False
         return True

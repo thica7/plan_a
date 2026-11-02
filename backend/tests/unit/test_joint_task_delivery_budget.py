@@ -559,9 +559,9 @@ async def test_real_independent_qa_sends_nine_complete_findings_and_rejects_old_
 
     async def post(url, payload, headers):
         system, user = [message["content"] for message in payload["messages"]]
-        assert system == qa.INDEPENDENT_SYSTEM
         assert len(user.encode()) <= qa.review_byte_limit(qa.PROTOCOL) == 14000
         batch = decode_review_payload(user.split("\nJSON:\n", 1)[1])
+        assert system == qa.final_review_system(batch)
         requests.append(batch)
         return httpx.Response(
             200,
@@ -593,7 +593,7 @@ async def test_real_independent_qa_sends_nine_complete_findings_and_rejects_old_
     span.full_output = json.dumps(old_receipt)
     await qa.review_current_questions(service, record, historical, evidence_issues=[])
     assert len(requests) == 8 and budget.calls == 8 and budget.tokens_used == 1200
-    assert receipt(detail)["mode"] == qa.PROTOCOL == "independent_questions_v9"
+    assert receipt(detail)["mode"] == qa.PROTOCOL == "independent_questions_v11"
     assert (budget.max_calls, budget.max_tokens) == (24, 80000)
 
 

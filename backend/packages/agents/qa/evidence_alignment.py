@@ -96,7 +96,14 @@ def audit_dimension_claims(service, record, snapshot, *, producer_verified):
                                answer_ids=published_ids,
                                review_contract=audit.answer_review_contract,
                                current_decisions=decision_reviews, price_product=audit.competitor,
-                               price_claims=tuple(row.claim for row in published)):
+                               price_claims=tuple(row.claim for row in published),
+                               current_questions=tuple(questions), current_audit=audit):
+                from packages.agents.qa.question_reconciliation import authenticated_answer_delivery
+                question = next((q for q in current_questions
+                                 if q['question_id'] == item.question_id), None)
+                if (question is not None and authenticated_answer_delivery(
+                        record.detail, snapshot, current_audit, item, question)):
+                    return False
                 if item.resolution == 'insufficient':
                     return not verified_missing_price_answer(record.detail, snapshot,
                         item, price_product, claims=price_claims)

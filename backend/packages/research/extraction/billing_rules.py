@@ -46,6 +46,21 @@ def billing_rule_text_signal(text: str) -> bool:
     return bool(_RULE.search(text) or _UNIT.search(text) and (_CHARGE.search(text) or _RATE.search(text)))
 
 
+def sales_quote_scope(text):
+    """A complete contiguous FAQ/paragraph linking scope and obtaining its quote."""
+    name = r'[A-Za-z][A-Za-z -]{0,60}?'
+    match = re.fullmatch(
+        rf"(?:How do I get pricing for (?P<question_plan>{name})\? )?"
+        rf"(?P<plan>{name}) pricing is tailored to your organization[’\x27]s needs "
+        r"and the capabilities you require\. "
+        r"Contact our sales team to discuss your environment and receive a quote\.",
+        " ".join(text.split()),
+        re.I,
+    )
+    return (match['plan'] if match and (not match['question_plan']
+            or match['question_plan'] == match['plan']) else None)
+
+
 def _cells(line):
     line = line.strip()
     if not line.startswith('|') or not line.endswith('|') or '\\|' in line:

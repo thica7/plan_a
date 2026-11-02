@@ -62,7 +62,7 @@ async def test_price_permission_and_unmapped_findings_never_share_actual_request
     monkeypatch.setattr(service._llm, "_post_chat_completion", post)
     await service._real_qa_step(record)
     output = receipt(detail)
-    assert output["mode"] == "independent_questions_v9"
+    assert output["mode"] == "independent_questions_v11"
     assert {r["question_id"] for b in calls for r in b["findings"]} == {
         *[q["question_id"] for q in questions],
         "unmapped",
@@ -106,7 +106,8 @@ async def test_canonical_clarification_real_qa_adapter_replays_partial_limitatio
         context = batch["findings"][0]
         assert context["server_delivery_type"] == "canonical_request_only_clarification"
         assert context["answer"]["status"] == "partial"
-        assert context["answer"]["answer"] in context["visible_answer"]
+        assert "请确认" in context["visible_answer"]
+        assert context["answer"]["missing_fields"] == ["actual_action", "data_ownership"]
         assert context["claims"] == context["expected_claim_ids"] == []
         response = json.loads(reviewed(batch, "current_limitation"))
         for row in response["reviews"]:
@@ -122,7 +123,7 @@ async def test_canonical_clarification_real_qa_adapter_replays_partial_limitatio
     audit, question, answer = clarification(record)
     assert answer.status == "partial" and answer.resolution == "clarification"
     output = receipt(record.detail)
-    assert output["mode"] == "independent_questions_v9"
+    assert output["mode"] == "independent_questions_v11"
     assert output["passed_question_ids"] == [question["question_id"]]
     assert output["question_review_states"][question["question_id"]] == "current_limitation"
     assert not any(
@@ -195,12 +196,12 @@ async def test_actual_evidence_cap_keeps_complete_context_unsent_and_retryable(m
 
 
 def test_current_reserve_covers_actual_plain_cap_and_preserves_legacy_system():
-    assert independent.PROTOCOL == "independent_questions_v9"
+    assert independent.PROTOCOL == "independent_questions_v11"
     assert independent.TASK_REVIEW_BYTES == 8192
     assert "Decode exact-content sharing first" in independent.INDEPENDENT_SYSTEM_V5
     assert "Decode exact-content sharing first" not in independent.INDEPENDENT_SYSTEM
     assert independent.FINAL_QA_REQUEST_RESERVE == (
-        len(independent.INDEPENDENT_SYSTEM.encode())
+        len(independent.INDEPENDENT_SYSTEM_V9.encode())
         + 14000
         + 256
         + independent.MAX_REVIEW_OUTPUT_TOKENS

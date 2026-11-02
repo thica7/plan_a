@@ -420,6 +420,7 @@ async def test_writer_question_coverage_is_persisted_and_final_qa_blocks_omissio
     from packages.skills.registry import SkillRegistry
 
     monkeypatch.setattr("packages.research.evidence.views.datetime", FixedTime)
+    monkeypatch.setattr("packages.agents.writer.question_retrieval.datetime", FixedTime)
     detail = distributed_detail(observations=1)
     detail.plan.competitors = ["Notion"]
     detail.plan.research_depth = "quick"

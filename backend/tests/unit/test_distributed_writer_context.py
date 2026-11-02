@@ -1,7 +1,7 @@
-from test_stage_evidence_views import distributed_detail
 from types import SimpleNamespace
 
 import pytest
+from test_stage_evidence_views import FixedTime, distributed_detail
 
 from packages.config import Settings
 from packages.orchestrator.checkpointer import GraphCheckpointer
@@ -10,7 +10,8 @@ from packages.research.evidence.snapshot import seal_snapshot
 from packages.skills.registry import SkillRegistry
 
 
-def test_writer_actual_prompt_includes_each_collected_product_with_price_gaps():
+def test_writer_actual_prompt_includes_each_collected_product_with_price_gaps(monkeypatch):
+    monkeypatch.setattr("packages.research.evidence.views.datetime", FixedTime)
     detail = distributed_detail()
     detail.plan.dimensions = ["feature", "pricing"]
     service = RunService(SkillRegistry.from_default_path(), Settings(demo_mode=True), graph_checkpointer=GraphCheckpointer.in_memory())
@@ -49,7 +50,8 @@ async def test_first_draft_grounding_has_only_the_consumed_sources(monkeypatch):
     assert set(grounded) < {source.id for source in detail.raw_sources}
 
 
-def test_writer_reclaims_budget_when_incomplete_price_controls_drop_out():
+def test_writer_reclaims_budget_when_incomplete_price_controls_drop_out(monkeypatch):
+    monkeypatch.setattr("packages.research.evidence.views.datetime", FixedTime)
     detail = distributed_detail(dimensions=("feature", "pricing"), observations=8)
     detail.raw_sources = [s for s in detail.raw_sources if s.dimension == "feature" or s.competitor == "Notion"]
     for source in detail.raw_sources:

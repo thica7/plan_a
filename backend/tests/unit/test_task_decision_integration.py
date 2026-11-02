@@ -391,7 +391,8 @@ async def test_quantity_core_still_sends_the_complete_question_to_independent_qa
         row = payload['findings'][0]
         context = payload.get('question_contexts', {}).get(row.get('context_id'), row)
         assert context['question'] == packets[0]['questions'][0]['question']
-        assert context['answer']['answer'] == INFERENCE
+        assert INFERENCE in context['visible_answer']
+        assert 'answer' not in context['answer']
         assert context['answer']['claim_ids'] == list(audit.answer_coverage[0].claim_ids)
         response = json.loads(reviewed(payload, 'keep'))
         response['reviews'][0].update(finding_fully_addressed=False,

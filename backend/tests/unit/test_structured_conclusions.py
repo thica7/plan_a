@@ -168,7 +168,7 @@ async def test_fresh_selector_preserves_existing_scope_and_legacy_system():
     from packages.agents.writer.structured_conclusions import fresh_contract
 
     scope = "Example/feature"
-    assert fresh_contract(SimpleNamespace(trace_spans=[]), scope) == CONTRACT
+    assert fresh_contract(SimpleNamespace(trace_spans=[]), scope) == "structured-conclusions-v2"
     for value in (None, CONTRACT):
         receipt = dict(
             task_execution_policy="selected-task-atoms-v3",

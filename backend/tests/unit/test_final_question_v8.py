@@ -94,6 +94,9 @@ async def test_target_never_overrides_a_negative_or_wrong_disposition(
     def mutate(value):
         value["reviews"][0].update(disposition=disposition, finding_fully_addressed=fully,
                                    remaining_gaps=gaps)
+        if disposition == "keep" or not fully or gaps:
+            value["reviews"][0]["delivery_gaps"] = [
+                dict(kind="unsupported_premise", obligation_ref="question")]
     calls = install_review(monkeypatch, service, mutate=mutate)
     assert await reconcile_question_findings(service, record, [], evidence_issues=[])
     assert len(calls) == 1
@@ -126,7 +129,7 @@ async def test_noncanonical_or_unverified_clarification_never_receives_delivery_
 
 
 def test_protocol_freezes_old_systems_and_scopes_boolean_to_verification_target():
-    assert qa.PROTOCOL == "independent_questions_v9"
+    assert qa.PROTOCOL == "independent_questions_v11"
     for name, expected in {
         "INDEPENDENT_SYSTEM_V5": "d3b389c339ed353b83560842c33f5f64acd500e2241ce49a40ea9f5a1c7466c5",
         "INDEPENDENT_SYSTEM_V6": "077d6cffe1ace86417e94cb16baa4747ca081d285dc2a3f17ed70c2f931fae43",
@@ -138,7 +141,7 @@ def test_protocol_freezes_old_systems_and_scopes_boolean_to_verification_target(
     assert "assigned verification target" in qa.INDEPENDENT_SYSTEM
     assert "Pending user inputs are not delivery omissions" in qa.INDEPENDENT_SYSTEM
     assert qa.FINAL_QA_REQUEST_RESERVE == (
-        len(qa.INDEPENDENT_SYSTEM.encode()) + 14000 + 256 + 1600 + 2)
+        len(qa.INDEPENDENT_SYSTEM_V9.encode()) + 14000 + 256 + 1600 + 2)
 
 
 @pytest.mark.asyncio
@@ -147,7 +150,8 @@ async def test_explicit_legacy_keeps_its_original_wire_and_affirmative_semantics
     install_review(monkeypatch, service)
     await reconcile_question_findings(service, record, [history(record)], evidence_issues=[])
     rows = candidates(record.detail)
-    original_rows = [{k: v for k, v in row.items() if k != "verification_target"}
+    original_rows = [{k: v for k, v in row.items() if k not in {
+        "verification_target", "delivery_obligations", "pending_inputs", "blocked_outputs"}}
                      for row in rows.values()]
     legacy, omitted = final_review_batches(original_rows, "legacy", max_bytes=8192,
                                            max_batches=6, protocol="independent_questions_v7")
@@ -192,7 +196,8 @@ async def test_target_and_protocol_cannot_be_rehashed_into_a_valid_transport(mon
     span = next(s for s in record.detail.trace_spans if s.id == bound["span_id"])
     payload = json.loads(span.full_input.split("\nJSON:\n", 1)[1])
     if tamper == "system7":
-        span.full_input = span.full_input.replace(qa.INDEPENDENT_SYSTEM, qa.INDEPENDENT_SYSTEM_V7)
+        span.full_input = (qa.INDEPENDENT_SYSTEM_V7 + '\n\n\nJSON:\n'
+                           + span.full_input.split('\nJSON:\n', 1)[1])
     elif tamper == "mode7":
         assert qa._bound_batch_reviews(record.detail, output["basis_hash"], rows, bound,
                                        protocol="independent_questions_v7") == {}
@@ -266,8 +271,9 @@ async def test_real_adapter_full_qa_preserves_partial_history_budget_and_cache(m
                         LLMExecutionMixin._trace_llm_text.__get__(service))
     requests = []
     async def post(url, payload, headers):
-        assert payload["messages"][0]["content"] == qa.INDEPENDENT_SYSTEM
         user = payload["messages"][1]["content"]
+        wire = json.loads(user.split('\nJSON:\n', 1)[1])
+        assert payload["messages"][0]["content"] == qa.final_review_system(wire)
         assert len(user.encode()) <= 8192
         batch = payload_from({"user": user})
         requests.append(batch)

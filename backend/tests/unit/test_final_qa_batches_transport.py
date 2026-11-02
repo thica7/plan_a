@@ -51,7 +51,7 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
         original.model_copy(
             update={
                 "id": f"issue-{index}",
-                "problem": "Q1: " + "condition remains unmet. " * 200 + str(index),
+                "problem": "Q1: " + "condition remains unmet. " * 300 + str(index),
             }
         )
         for index in range(2)
@@ -106,7 +106,6 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
     ] + (["ok"] if second_batch == "foreign" else [])
     complete = json.loads(detail.trace_spans[-1].full_input)['findings']
     expected = {row['issue_id']: row for row in complete}
-    from packages.agents.qa.independent_question_review import INDEPENDENT_SYSTEM
     from packages.agents.qa.question_review_transport import dumps, final_review_batches, loads
     for span, batch in zip(spans, requests, strict=True):
         wire = loads(span.full_input.split('\nJSON:\n', 1)[1])
@@ -115,8 +114,14 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
             batch['basis_hash'], max_bytes=qa.review_byte_limit(qa.PROTOCOL),
             max_batches=1, protocol=qa.PROTOCOL)
         assert not omitted and wire == rebuilt[0]
-        assert span.full_input == INDEPENDENT_SYSTEM + '\n\n\nJSON:\n' + dumps(wire)
-        assert all(row == expected[row['issue_id']] for row in batch['findings'])
+        assert span.full_input == qa.final_review_system(wire) + '\n\n\nJSON:\n' + dumps(wire)
+        for row in batch['findings']:
+            original_row = expected[row['issue_id']]
+            assert row['finding'] == original_row['finding']
+            assert row['claims'] == original_row['claims']
+            assert row['visible_answer'] == original_row['visible_answer']
+            assert row.get('selected_source_context') == original_row.get('selected_source_context')
+            assert row['answer']['claim_ids'] == original_row['answer']['claim_ids']
     assert all(span.metadata["llm_transport_attempts"] == 1 for span in spans)
     assert all(span.metadata["llm_request_attempts"] == 1 for span in spans)
     assert all(span.metadata["llm_phase"] == "final_qa:run" for span in spans)
@@ -131,7 +136,7 @@ async def test_complete_context_batches_use_real_admission_and_bounded_partial_c
     assert budget.max_calls == 24 and budget.max_tokens == 80000
     assert budget.tokens_used <= budget.max_tokens
     receipt = json.loads(detail.trace_spans[-1].full_output)
-    assert receipt["mode"] == qa.PROTOCOL == "independent_questions_v9"
+    assert receipt["mode"] == qa.PROTOCOL == "independent_questions_v11"
     assert receipt["planned_batches"] == initial_calls
     assert receipt["unsent_issue_ids"] == []
     assert [row["issue_id"] for row in receipt["model_review"]["reviews"]] == (

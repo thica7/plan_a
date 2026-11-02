@@ -79,7 +79,10 @@ async def test_no_reflector_still_checks_complete_current_question_and_visible_a
         context = context_for(payload, row)
         assert row["independent_question_check"] is True
         assert context["question"] == QUESTION
-        assert context["answer"]["answer"] in context["visible_answer"]
+        expected = detail.report_dimension_audits[0].answer_coverage[0]
+        assert expected.answer in context["visible_answer"]
+        assert "answer" not in context["answer"]
+        assert context["answer"]["claim_ids"] == list(expected.claim_ids)
         assert context["claims"][0]["source_span_bindings"]
         assert len(kwargs["user"].encode()) <= 8192
         return reviewed(payload)

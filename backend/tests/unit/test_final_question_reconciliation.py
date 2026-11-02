@@ -137,6 +137,7 @@ def reviewed(payload, disposition="superseded"):
                     finding_fully_addressed=True,
                     remaining_gaps=[],
                     reason="The exact reviewed resource scope resolves this historical objection.",
+                    **({"delivery_gaps": []} if "delivery_obligations" in row else {}),
                 )
                 for row in payload["findings"]
             ],
@@ -442,15 +443,20 @@ async def test_oversized_final_reconciliation_context_keeps_findings_without_a_c
 @pytest.mark.asyncio
 async def test_task_final_qa_packs_whole_findings_and_keeps_unsent_ones(monkeypatch):
     from dataclasses import replace
+
+    from packages.agents.qa.independent_question_review import PROTOCOL, review_byte_limit
+
     detail, service, record = await scope_case(monkeypatch)
     service._settings = replace(service._settings, writer_task_execution_enabled=True)
     original = service._build_reflector_qa_issues(detail)[0]
+    limit = review_byte_limit(PROTOCOL)
     large = original.model_copy(update={
-        'id': 'oversized-finding', 'problem': 'Q1: ' + 'diagnostic ' * 1000})
+        'id': 'oversized-finding', 'problem': 'Q1: ' + 'diagnostic ' * 2000})
+    assert len(large.problem.encode()) > limit
     calls = []
 
     async def model(record, **kwargs):
-        assert len(kwargs['user'].encode()) <= 8192
+        assert len(kwargs['user'].encode()) <= limit
         payload = decode_review_payload(kwargs['user'].split('\nJSON:\n', 1)[1])
         qid = detail.report_dimension_audits[0].answer_coverage[0].question_id
         assert [row['issue_id'] for row in payload['findings']] == [
@@ -461,11 +467,16 @@ async def test_task_final_qa_packs_whole_findings_and_keeps_unsent_ones(monkeypa
         calls.append(payload)
         return reviewed(payload)
 
-    from test_independent_final_question_qa import traced_model_double
+    from test_independent_final_question_qa import receipt, traced_model_double
     traced_model_double(monkeypatch, service, model)
     result = await api()(service, record, [original, large], evidence_issues=[])
     assert [row.id for row in result] == [large.id]
     assert len(calls) == 1
+    output = receipt(detail)
+    assert output['unsent_issue_ids'] == output['omitted_issue_ids'] == [large.id]
+    assert large.id not in output['sent_issue_ids']
+    assert output['valid_review_issue_ids'] == output['sent_issue_ids']
+    assert output['resumable_issue_ids'] == []
     assert 'final_qa:run' in service._run_llm_budget(record).delivery_finished
 
 

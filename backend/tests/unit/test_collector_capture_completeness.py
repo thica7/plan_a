@@ -412,3 +412,81 @@ async def test_distinct_questions_with_source_repeated_answers_keep_each_complet
         assert disclosure['quote_start'] >= 0
         assert page.text[disclosure['quote_start']:disclosure['quote_start'] + len(quote)] == quote
     assert page.metadata['capture_incomplete'] is False
+
+
+@pytest.mark.asyncio
+async def test_icon_disclosure_binds_unique_adjacent_visible_heading(monkeypatch):
+    markup = (
+        f'<div><div><h3>{QUESTION}</h3><button id="icon-q" aria-controls="icon-a" '
+        'aria-expanded="false" aria-label="Open answer"></button></div>'
+        '<div id="icon-a" role="region" aria-labelledby="icon-q" aria-hidden="true">'
+        f'{ANSWER}</div></div>'
+    )
+    _, page, _ = await _capture(monkeypatch, _document(markup))
+    disclosure = page.metadata['disclosures'][0]
+    assert disclosure['status'] == 'complete'
+    assert disclosure['question'] == QUESTION
+    assert disclosure['question_source_path'].endswith('/h3')
+    assert QUESTION in page.text and ANSWER in page.text
+    assert not page.metadata['capture_incomplete']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mutation", ["two_headings", "not_adjacent", "hidden_heading", "two_controls"]
+)
+async def test_icon_heading_recovery_rejects_ambiguous_relationships(monkeypatch, mutation):
+    heading = f'<h3>{QUESTION}</h3>'
+    button = ('<button id="icon-q" aria-controls="icon-a" aria-expanded="false" '
+        'aria-label="Fake question"></button>')
+    if mutation == 'two_headings':
+        heading += '<h3>Another question?</h3>'
+    if mutation == 'hidden_heading':
+        heading = f'<h3 hidden>{QUESTION}</h3>'
+    if mutation == 'two_controls':
+        button += '<button aria-controls="icon-a" aria-expanded="false"></button>'
+    between = '<p>Unrelated block.</p>' if mutation == 'not_adjacent' else ''
+    markup = (f'<div><div>{heading}{button}</div>{between}'
+              '<div id="icon-a" role="region" aria-labelledby="icon-q" aria-hidden="true">'
+              f'{ANSWER}</div></div>')
+    _, page, _ = await _capture(monkeypatch, _document(markup))
+    assert ANSWER not in page.text
+    assert page.metadata['capture_incomplete']
+    assert all(d['question'] != 'Fake question' for d in page.metadata['disclosures'])
+
+
+@pytest.mark.asyncio
+async def test_icon_faqs_keep_answers_in_their_dom_heading_sections(monkeypatch):
+    pairs = [
+        ("How is the team price quoted?", "Team quotes depend on the organization requirements."),
+        (
+            "How is the access price quoted?",
+            "Access quotes depend on capabilities and official sales.",
+        ),
+    ]
+    blocks = []
+    for index, (question, answer) in enumerate(pairs):
+        blocks.append(
+            f'<div><div><h3>{question}</h3><button id="faq-{index}" '
+            f'aria-controls="answer-{index}" aria-expanded="false"></button></div>'
+            f'<div id="answer-{index}" role="region" aria-labelledby="faq-{index}" '
+            f'aria-hidden="true"><p>{answer}</p></div></div>'
+        )
+    _, page, _ = await _capture(
+        monkeypatch,
+        _document(
+            "".join(blocks)
+            + "<h2>Later section</h2><p>Next source section content is retained here.</p>"
+        ),
+    )
+    assert not page.metadata['capture_incomplete']
+    anchors = page.metadata['document_heading_anchors']
+    for question, answer in pairs:
+        assert page.text.count(question) == 1
+        disclosure = next(d for d in page.metadata['disclosures'] if d['question'] == question)
+        anchor = next(a for a in anchors if a['title'] == question)
+        following = min(
+            (a["start"] for a in anchors if a["start"] > anchor["start"]), default=len(page.text)
+        )
+        assert anchor['start'] == disclosure['quote_start']
+        assert answer in page.text[anchor['start']:following]

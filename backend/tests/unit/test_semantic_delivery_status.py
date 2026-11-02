@@ -96,16 +96,24 @@ def test_authenticated_and_counterexample_has_one_shared_qa_coverage_contract():
 
 def test_qa_semantic_system_preserves_legacy_identity_and_explicit_counterexample_scope():
     from packages.agents.qa.independent_question_review import (
-        INDEPENDENT_SYSTEM,
+        INDEPENDENT_SYSTEM_V10,
         final_review_system,
     )
 
-    assert final_review_system(dict(findings=[dict(question_id="q")])) == INDEPENDENT_SYSTEM
+    payload = dict(findings=[dict(question_id="q")])
+    legacy = final_review_system(payload, protocol="independent_questions_v10")
+    assert legacy == INDEPENDENT_SYSTEM_V10
+    fresh = final_review_system(payload)
+    assert fresh.startswith("Independent final question QA v11.")
+    assert "{TARGET_RESPONSE_RULE}" not in fresh and "{TARGET_DISPOSITIONS}" not in fresh
+    assert "Historical response: superseded|keep" in fresh
+    assert "current_limitation is not a historical verdict" in fresh
     system = final_review_system(dict(question_contexts=dict(current=dict(
         task_semantic_contract="semantic-target-clauses-v2"))))
     assert "pure AND" in system and "independent requests" in system
     assert "never a source verdict" in system
-    assert len(system.encode()) <= len(INDEPENDENT_SYSTEM.encode())
+    base_system = final_review_system(dict(question_contexts=dict(current={})))
+    assert len(system.encode()) <= len(base_system.encode()) <= 3844
 
 
 @pytest.mark.asyncio

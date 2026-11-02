@@ -36,9 +36,31 @@ def protect_answer_calls(budget, checkpoint, phase, question_count):
         )
 
 
-def reserve_answer_tail(budget, phase, required, *, fresh):
+def reserve_answer_tail(budget, phase, required, *, fresh, package_owner=None, window_count=None):
     """Protect measured future ANSWER envelopes inside the unchanged global cap."""
     if fresh and phase not in budget.delivery_finished:
+        if package_owner is not None:
+            from packages.agents.writer.task_evidence_package import CONTRACT
+            if (not isinstance(package_owner, tuple) or len(package_owner) != 3
+                    or package_owner[0] != CONTRACT
+                    or any(not isinstance(v, str) or not v for v in package_owner)
+                    or type(required) is not int or required < 0
+                    or type(window_count) is not int or window_count < 0):
+                raise ValueError('Complete task plan owner changed')
+            owners = getattr(budget, '_complete_task_plan_owners', {})
+            if phase in owners and owners[phase] != package_owner:
+                raise ValueError('Complete task plan owner changed')
+            budget._complete_task_plan_owners = dict(owners, **{phase: package_owner})
+            floor = getattr(budget, '_complete_task_repair_floors', {}).get(phase)
+            if floor is not None:
+                if floor[0] != package_owner:
+                    raise ValueError('Complete task plan owner changed')
+                required = max(required, floor[1] - budget.delivery_charged.get(phase, 0))
+                window_count = max(window_count, floor[2] - budget.delivery_calls.get(phase, 0))
+            budget.delivery_reserves[phase] = budget.delivery_charged.get(phase, 0) + required
+            budget.delivery_call_reserves[phase] = (
+                budget.delivery_calls.get(phase, 0) + window_count)
+            return
         budget.delivery_reserves[phase] = max(
             budget.delivery_reserves.get(phase, 0), budget.delivery_charged.get(phase, 0) + required
         )
@@ -188,7 +210,14 @@ def task_predicate_reasons(task, text, quotes):
 
 
 def task_system(name, language, execution_policy=POLICY, task_clause_contract=None,
-                structured_conclusions_contract=None, *, conclusion_candidates=False):
+                structured_conclusions_contract=None, *, conclusion_candidates=False,
+                task_package_contract=None):
+    if task_package_contract is not None:
+        from packages.agents.writer.task_evidence_package import system
+        return system(task_system(name, language, execution_policy, task_clause_contract,
+                                 structured_conclusions_contract,
+                                 conclusion_candidates=conclusion_candidates),
+                      task_package_contract)
     if structured_conclusions_contract is not None:
         from packages.agents.writer.structured_conclusions import system
 
@@ -327,6 +356,7 @@ def candidate_context(
     repair_feedback=None,
     task_clause_contract=None,
     structured_conclusions_contract=None,
+    task_package_contract=None,
 ):
     from packages.agents.writer.atomic_question_projection import (
         generation_tasks,
@@ -404,6 +434,20 @@ def candidate_context(
         return refs
 
     def project(payload):
+        if structured_conclusions_contract == 'structured-conclusions-v2':
+            from packages.research.evidence.source_spans import source_span_candidates
+            originals = {f.id: f for f in local_view.facts}
+            payload = deepcopy(payload)
+            rows = payload['evidence_view']['facts']
+            next_ref = 1 + max((int(s['support_ref'][1:]) for r in rows
+                for s in r.get('source_span_candidates', ())), default=0)
+            for row in rows:
+                for span in source_span_candidates(originals[row['id']], relation_members=True):
+                    if not any(s['quote'] == span['quote'] for s in row['source_span_candidates']):
+                        row["source_span_candidates"].insert(
+                            0, dict(support_ref=f"s{next_ref}", quote=span["quote"])
+                        )
+                        next_ref += 1
         tasks = [
             dict(t, max_claims=1, task_instruction=task_instruction(t))
             for t in payload["generation_tasks"]
@@ -436,6 +480,8 @@ def candidate_context(
         if structured_conclusions_contract is not None:
             result['structured_conclusions_contract'] = structured_conclusions_contract
             result['conclusion_language'] = record.detail.output_language
+        if task_package_contract is not None:
+            result['task_package_contract'] = task_package_contract
         if task_clause_contract is not None:
             from packages.agents.writer.task_clauses import checked_contract
             result['task_clause_contract'] = task_clause_contract
@@ -483,6 +529,8 @@ def candidate_context(
                 result["task_predicates"][0]["required_support_refs"] = cpu_refs(result)
             if repair_feedback is not None:
                 result["repair_feedback"] = deepcopy(repair_feedback)
+        from packages.agents.writer.task_evidence_package import selection_requirements
+        selection_requirements(result)
         return result
 
     result = question_projection(
@@ -544,6 +592,9 @@ def selection_context(payload, view):
         context['task_clause_contract'] = payload['task_clause_contract']
     if payload.get('structured_conclusions_contract') is not None:
         context['structured_conclusions_contract'] = payload['structured_conclusions_contract']
+    from packages.agents.writer.task_evidence_package import checked_contract as package_contract
+    if package_contract(payload):
+        context['task_package_contract'] = payload['task_package_contract']
     from packages.agents.writer.task_semantics import CONTRACT as SEMANTIC_CONTRACT
     if payload.get("task_clause_contract") == SEMANTIC_CONTRACT:
         from packages.agents.writer.task_semantics import applicability
@@ -573,11 +624,16 @@ def selection_context(payload, view):
                 row["operation_observations"] = [op for ref, op in operations if ref not in blocked]
         # Return the original authenticated choices. A forged proposal of a
         # hidden ref must still fail the independent server semantic check.
-    return context, choices
+    from packages.agents.writer.task_evidence_package import selection_packet
+    return selection_packet(context), choices
 
 
 def generation_context(payload, selections, choices, service, record, packets):
+    from packages.agents.writer.task_evidence_package import complete_selection
     from packages.agents.writer.task_support_selection import selected_generation_context
+
+    if not complete_selection(payload, selections):
+        raise ValueError("no_complete_task_support")
 
     for target in payload["task_predicates"]:
         if target.get("semantic_target"):
@@ -646,6 +702,11 @@ def generation_context(payload, selections, choices, service, record, packets):
     from packages.agents.writer.structured_conclusions import build_candidates, checked_contract
     if checked_contract(result):
         result['conclusion_candidates'] = build_candidates(result)
+    from packages.agents.writer.task_evidence_package import checked_contract as package_contract
+    if package_contract(result) and any(
+        'required_relation_refs' in t for t in payload['task_predicates']
+    ) and not result.get('conclusion_candidates'):
+        raise ValueError('no_complete_task_support')
     return result
 
 
@@ -697,10 +758,12 @@ def parse_generation(response, payload, view, use):
     ):
         raise ValueError("One task permits at most one claim")
     for atom in plans[0]["atoms"]:
+        from packages.agents.writer.permission_relations import typed_atom_matches
+        typed_source = typed_atom_matches(payload, atom)
         if (
             not isinstance(atom, dict)
             or atom.get("task_id") != task["task_id"]
-            or atom.get("support_refs") != selected["support_refs"]
+            or atom.get("support_refs") != selected["support_refs"] and not typed_source
         ):
             raise ValueError("Task selected support changed")
         text = atom.get("text", "")
@@ -776,7 +839,7 @@ def merge_task_plan(target, local, task_id, attempt):
 
 def review_context(claims, view, question, plan, metadata, task, execution_policy=POLICY,
                    task_clause_contract=None, support_refs=(),
-                   structured_conclusions_contract=None):
+                   structured_conclusions_contract=None, conclusion_candidate=None):
     from packages.agents.writer.question_atomic_delivery import atomic_review_payload
 
     result = atomic_review_payload(
@@ -785,6 +848,9 @@ def review_context(claims, view, question, plan, metadata, task, execution_polic
     result.update(task_execution_policy=execution_policy, task_context=task)
     if structured_conclusions_contract is not None:
         result['structured_conclusions_contract'] = structured_conclusions_contract
+    if conclusion_candidate is not None:
+        from packages.agents.writer.permission_relations import selected_source
+        result['typed_source_relation'] = selected_source(conclusion_candidate)
     if task_clause_contract:
         from packages.agents.writer.task_clauses import clause_inventory
         result.update(task_clause_contract=task_clause_contract,
@@ -801,10 +867,14 @@ def review_context(claims, view, question, plan, metadata, task, execution_polic
 
 
 def parse_task_claim_reviews(response, claims, payload):
+    from packages.agents.writer.permission_relations import source_review_matches
     from packages.agents.writer.question_atomic_delivery import parse_atomic_reviews
     from packages.agents.writer.task_clauses import checked_contract, target_reasons
 
-    if checked_contract(payload):
+    typed_source = source_review_matches(payload, claims)
+    if payload.get('typed_source_relation') is not None and not typed_source:
+        raise ValueError('Typed source relation changed')
+    if checked_contract(payload) and not typed_source:
         for claim in claims:
             invalid = target_reasons(payload['task_context'], claim.text, claim.competitor)
             if invalid:
@@ -885,6 +955,9 @@ def failure_feedback(task, history, facts, consumption_id):
         try:
             parsed, invalid = parse_support_selections(
                 _task_response(span.full_output, payload), [task], choices)
+            from packages.agents.writer.task_evidence_package import complete_selection
+            if not complete_selection(payload, parsed):
+                codes.add("no_complete_task_support")
             codes.update(invalid)
             codes.add(parsed[task["task_id"]].get("reason", "task_generation_not_dispatched"))
             if payload.get("support_applicability"):
@@ -927,6 +1000,15 @@ def failure_feedback(task, history, facts, consumption_id):
                 codes.add("task_claim_review_not_dispatched")
             else:
                 _, span, payload = reviewed
+                from packages.agents.writer.task_evidence_package import (
+                    checked_contract as package_contract,
+                )
+                from packages.agents.writer.task_evidence_package import (
+                    source_review_state,
+                )
+                if package_contract(payload):
+                    feedback['source_review_state'] = source_review_state(
+                        span.full_output, claims, payload)
                 try:
                     reviews = parse_task_claim_reviews(span.full_output, claims, payload)
                 except (ValueError, TypeError, AttributeError):
@@ -998,6 +1080,12 @@ def failure_feedback(task, history, facts, consumption_id):
         feedback["directive"] = repair_directive(
             dict(task, semantic_target=target) if target else task,
             feedback["reason_codes"], failed_text, clause_failure=clause_failure)
+        from packages.agents.writer.task_evidence_package import (
+            checked_contract as package_contract,
+        )
+        if package_contract(prior[0][2]) and feedback.get('source_review_state') != 'supported':
+            feedback.setdefault('source_review_state', 'missing')
+            feedback['directive']['action'] = 'reselect'
     return feedback
 
 
@@ -1025,7 +1113,8 @@ def record_context_rejection(service, record, compact, payload, task_id, attempt
         state.update(state='deferred', reason='task_context_deferred')
 
 
-def repair_admitted(service, record, scope, payload, use, question_count, answer_contract):
+def repair_admitted(service, record, scope, payload, use, question_count, answer_contract,
+                    *, remaining_plan=None, finite_repairs=None):
     """Forecast a whole optional repair on a budget copy, never an audited claim."""
     from packages.agents.writer.dimension_writer import compact_prompt_json
     from packages.agents.writer.question_atomic_delivery import (
@@ -1037,7 +1126,8 @@ def repair_admitted(service, record, scope, payload, use, question_count, answer
     from packages.agents.writer.task_answer_outcomes import answer_system as task_answer_system
     from packages.llm.errors import LLMExecutionLimitError
 
-    budget = copy(service._run_llm_budget(record))
+    actual_budget = service._run_llm_budget(record)
+    budget = copy(actual_budget)
     for key in (
         "delivery_reserves", "delivery_charged", "delivery_calls", "delivery_call_reserves"
     ):
@@ -1056,7 +1146,23 @@ def repair_admitted(service, record, scope, payload, use, question_count, answer
     extra_windows = min(2, question_count)
     forecast = extra_windows * (answer_input + answer_output)
     phase = f"answer:{scope}"
+    from packages.agents.writer.task_evidence_package import checked_contract as package_contract
+    package = package_contract(payload)
+    mode, delta, finite_error = 'conservative_unbounded_repair', None, None
+    if package and remaining_plan is not None and finite_repairs is not None:
+        from packages.agents.writer.task_repair_budget import repair_delta
+
+        try:
+            delta = repair_delta(service, actual_budget, phase, remaining_plan, finite_repairs)
+            forecast = delta['additional_answer_tokens']
+            extra_windows = delta['additional_answer_windows']
+            mode = 'canonical_remaining_positive_delta'
+        except (ValueError, TypeError, KeyError) as exc:
+            finite_error = str(exc)
     budget.delivery_reserves[phase] = budget.delivery_reserves.get(phase, 0) + forecast
+    if delta is not None:
+        budget.delivery_call_reserves[phase] = (
+            budget.delivery_call_reserves.get(phase, 0) + extra_windows)
     requests = [
         (SELECTION_NAME, "writer", "\nJSON:\n" + compact_prompt_json(payload), 600),
         (GENERATION_NAME, "writer", "x" * cap, 1600),
@@ -1070,20 +1176,44 @@ def repair_admitted(service, record, scope, payload, use, question_count, answer
     actual_bytes = user_bytes(payload)
     context_invalid = bool(payload.get('task_clause_contract') and actual_bytes > cap)
     reason = 'task_context_deferred' if context_invalid else None
+    reason = finite_error or reason
+    variant_requests = [requests]
+    if delta is not None:
+        selection = requests[:1] if not payload.get('selection_reuse') else []
+        variant_requests = [selection + variant['requests'] for variant in finite_repairs]
     try:
-        for name, agent, user, output in ([] if context_invalid else requests):
-            _, input_tokens, output_tokens = service._llm_request_envelope(
-                system=task_system(name, record.detail.output_language,
-                                   payload.get("task_execution_policy", POLICY_V2),
-                                   payload.get("task_clause_contract")),
-                user=user, max_output_tokens=output,
-            )
-            budget.reserve(
-                is_repair=False, input_tokens=input_tokens, max_output_tokens=output_tokens,
-                phase=service._llm_phase(agent, scope, name=name, record=record),
-            )
+        for variant in ([] if reason else variant_requests):
+            forecast_budget = copy(budget)
+            forecast_budget.delivery_charged = dict(budget.delivery_charged)
+            forecast_budget.delivery_calls = dict(budget.delivery_calls)
+            for request in variant:
+                if len(request) == 5:
+                    name, agent, system, user, output = request
+                else:
+                    name, agent, user, output = request
+                    system = task_system(
+                        name, record.detail.output_language,
+                        payload.get("task_execution_policy", POLICY_V2),
+                        payload.get("task_clause_contract"),
+                        payload.get('structured_conclusions_contract') if package else None,
+                        task_package_contract=package,
+                    )
+                if package and len(user.encode()) > cap:
+                    raise LLMExecutionLimitError('task_context_deferred')
+                _, input_tokens, output_tokens = service._llm_request_envelope(
+                    system=system, user=user, max_output_tokens=output)
+                forecast_budget.reserve(
+                    is_repair=False, input_tokens=input_tokens, max_output_tokens=output_tokens,
+                    phase=service._llm_phase(agent, scope, name=name, record=record))
     except LLMExecutionLimitError as exc:
         reason = str(exc)
+    if package and delta is not None and reason is None:
+        actual_budget.delivery_reserves[phase] += forecast
+        actual_budget.delivery_call_reserves[phase] += extra_windows
+        floors = dict(getattr(actual_budget, '_complete_task_repair_floors', {}))
+        floors[phase] = (remaining_plan.owner, actual_budget.delivery_reserves[phase],
+                         actual_budget.delivery_call_reserves[phase])
+        actual_budget._complete_task_repair_floors = floors
     service._trace_local_tool(
         record, agent="writer", subagent=scope, name="question_task_repair_preflight",
         input_text=json.dumps(dict(
@@ -1092,7 +1222,10 @@ def repair_admitted(service, record, scope, payload, use, question_count, answer
         output_text=json.dumps(dict(
             forecast_only=True, admitted=reason is None, reason=reason,
             additional_answer_windows=extra_windows, additional_answer_tokens=forecast,
-            repair_request_count=len(requests), max_user_bytes=cap,
+            repair_request_count=max(len(r) for r in variant_requests), max_user_bytes=cap,
+            **(dict(forecast_mode=mode,
+                    affected_task_ids=delta['affected_task_ids'] if delta else [],
+                    plan_revision=delta['plan_revision'] if delta else None) if package else {}),
             **(dict(user_bytes=actual_bytes) if payload.get('task_clause_contract') else {}),
         )),
     )
@@ -1115,6 +1248,7 @@ async def execute(
     execution_policy=POLICY,
     task_clause_contract=None,
     structured_conclusions_contract=None,
+    task_package_contract=None,
 ):
     from packages.agents.writer.atomic_question_projection import generation_tasks
     from packages.agents.writer.dimension_writer import compact_prompt_json
@@ -1169,6 +1303,12 @@ async def execute(
         from packages.agents.writer.structured_conclusions import checked_contract
         compact['structured_conclusions_contract'] = structured_conclusions_contract
         checked_contract(compact)
+    if task_package_contract is not None:
+        from packages.agents.writer.task_evidence_package import (
+            checked_contract as package_contract,
+        )
+        compact['task_package_contract'] = task_package_contract
+        package_contract(compact)
     if execution_policy == POLICY_V3:
         compact.update(answer_review_contract="task-outcomes-v1",
                        task_outcome_contract="task-outcomes-v1")
@@ -1200,11 +1340,15 @@ async def execute(
     claims, reviews, sizes, sent_ids, dependencies, authority_ids = [], [], [], set(), (), set()
     capability_ids = set()
     history = []
+    remaining_plan = None
 
     def refresh_tail():
-        if not fresh_tail or not reviews or answer_review_contract not in {
+        nonlocal remaining_plan
+        if (not fresh_tail or (not reviews and not task_package_contract)
+                or (task_package_contract and not compact["dispatches"])
+                or answer_review_contract not in {
             "subquestion-premises-v6", "task-outcomes-v1"
-        }:
+        }):
             return
         from packages.agents.writer.question_atomic_delivery import ANSWER_NAME, atomic_system
         from packages.agents.writer.request_clarification import (
@@ -1227,7 +1371,7 @@ async def execute(
             capability_claim_ids=capability_ids,
         )
         supported = [r.claim for r in audited if r.status == "supported"]
-        if not supported:
+        if not supported and not task_package_contract:
             return
         compact["_decision_audited"] = tuple(audited)
         compact["decision_selection_policy"] = REVIEWED_QUANTITY_CONJUNCTION_POLICY
@@ -1238,17 +1382,39 @@ async def execute(
             if server_clarification_answer(q) is None
             or has_lifecycle_rule(q["question"], published)
         ]
-        windows, _ = answer_windows(
-            service,
-            record,
-            pending_questions,
-            supported,
-            view,
-            use,
-            compact,
-            answer_review_contract=answer_review_contract,
-            decision_selection_policy=REVIEWED_QUANTITY_CONJUNCTION_POLICY,
-        )
+        if task_package_contract:
+            from packages.agents.writer.structured_conclusions import digest
+            from packages.agents.writer.task_answer_outcomes import build_payload
+            from packages.agents.writer.task_evidence_package import answer_windows as pack_windows
+            from packages.agents.writer.task_repair_budget import make_plan
+
+            complete = [build_payload(service, record, [q], supported, view, use, compact)
+                        for q in pending_questions]
+            windows, omitted = [], []
+            for payload in complete:
+                packed, deferred = pack_windows(payload, min(14000, use.max_bytes))
+                windows.extend(packed)
+                omitted.extend(deferred)
+            remaining_plan = None
+            if not omitted:
+                owner = (task_package_contract, use.id, view.snapshot_id)
+                remaining_plan = make_plan(service, owner, digest(compact['dispatches']),
+                                           complete, min(14000, use.max_bytes))
+                revisions = dict(getattr(budget, '_complete_task_plan_revisions', {}))
+                revisions[f'answer:{scope}'] = remaining_plan.revision
+                budget._complete_task_plan_revisions = revisions
+        else:
+            windows, omitted = answer_windows(
+                service,
+                record,
+                pending_questions,
+                supported,
+                view,
+                use,
+                compact,
+                answer_review_contract=answer_review_contract,
+                decision_selection_policy=REVIEWED_QUANTITY_CONJUNCTION_POLICY,
+            )
         system = atomic_system(
             ANSWER_NAME,
             record.detail.output_language,
@@ -1263,7 +1429,20 @@ async def execute(
             )
             for p in windows
         )
-        reserve_answer_tail(budget, f"answer:{scope}", required, fresh=fresh_tail)
+        if task_package_contract and omitted:
+            required += len(omitted) * sum(service._llm_request_envelope(
+                system=system, user='x' * min(14000, use.max_bytes), max_output_tokens=1600)[1:])
+        floor = getattr(budget, '_complete_task_repair_floors', {}).get(f'answer:{scope}')
+        if task_package_contract and floor is not None:
+            if floor[0] != (task_package_contract, use.id, view.snapshot_id):
+                raise ValueError('Repair plan owner changed')
+            required = max(required, floor[1] - budget.delivery_charged.get(f'answer:{scope}', 0))
+        reserve_answer_tail(
+            budget, f"answer:{scope}", required, fresh=fresh_tail,
+            package_owner=(task_package_contract, use.id, view.snapshot_id)
+            if task_package_contract else None,
+            window_count=len(windows) + len(omitted),
+        )
 
     async def call(name, payload, *, attempt, task_id, claim_ids=(), fact_ids=()):
         nonlocal gaps
@@ -1273,6 +1452,7 @@ async def execute(
                 name, record.detail.output_language, execution_policy, task_clause_contract,
                 structured_conclusions_contract,
                 conclusion_candidates=bool(payload.get('conclusion_candidates')),
+                task_package_contract=task_package_contract,
             ),
             ("qa" if name == REVIEW_NAME else "writer"),
         )
@@ -1339,6 +1519,8 @@ async def execute(
 
     pending = [(t, 0) for t in tasks if t["state"] == "planned"] + [(None, 0)]
     for task, attempt in pending:
+        if task_package_contract:
+            getattr(budget, '_complete_task_repair_floors', {}).pop(f'answer:{scope}', None)
         if task is None:
             refresh_tail()
             audited = audit_report_claims(
@@ -1392,6 +1574,7 @@ async def execute(
             execution_policy=execution_policy,
             task_clause_contract=task_clause_contract,
             structured_conclusions_contract=structured_conclusions_contract,
+            task_package_contract=task_package_contract,
             repair_feedback=failure_feedback(task, history, view.facts, use.id)
             if execution_policy in {POLICY_V2, POLICY_V3} and attempt
             else None,
@@ -1403,9 +1586,19 @@ async def execute(
             from packages.agents.writer.task_clauses import reused_generation
             reused = reused_generation(task, history, view.facts, use.id, view.snapshot_id,
                                        candidate['repair_feedback'], max_bytes=use.max_bytes)
+        finite = None
+        if task_package_contract and attempt:
+            from packages.agents.writer.task_repair_budget import finite_variants
+            refresh_tail()
+            try:
+                finite = finite_variants(service, record, view, use, packets, candidate,
+                                         choices, reused[0] if reused else None)
+            except (ValueError, TypeError, KeyError):
+                finite = None
         if execution_policy in {POLICY_V2, POLICY_V3} and attempt and not repair_admitted(
             service, record, scope, reused[0] if reused else context,
-            use, len(questions), answer_review_contract
+            use, len(questions), answer_review_contract,
+            remaining_plan=remaining_plan, finite_repairs=finite,
         ):
             from packages.agents.writer.task_clauses import user_bytes
 
@@ -1483,9 +1676,28 @@ async def execute(
             payload["generation_tasks"][0],
             execution_policy=execution_policy,
             task_clause_contract=task_clause_contract,
-            support_refs=payload["task_support_selections"][0]["support_refs"],
+            support_refs=next(
+                (
+                    c["support_refs"]
+                    for c in payload.get("conclusion_candidates", ())
+                    if structured_conclusions_contract == "structured-conclusions-v2"
+                    and c["source_fact_text"] == current[0].text
+                ),
+                payload["task_support_selections"][0]["support_refs"],
+            ),
             structured_conclusions_contract=structured_conclusions_contract,
+            conclusion_candidate=next(
+                (
+                    c
+                    for c in payload.get("conclusion_candidates", ())
+                    if structured_conclusions_contract == "structured-conclusions-v2"
+                    and c["source_fact_text"] == current[0].text
+                ),
+                None,
+            ),
         )
+        if task_package_contract is not None:
+            batch['task_package_contract'] = task_package_contract
         reviewed_call = await call(
             REVIEW_NAME,
             batch,
@@ -1510,6 +1722,8 @@ async def execute(
             except (ValueError, TypeError, AttributeError):
                 gaps = tuple(sorted(set(gaps) | {"claim_review_invalid"}))
             refresh_tail()
+    if task_package_contract:
+        getattr(budget, '_complete_task_repair_floors', {}).pop(f'answer:{scope}', None)
     refresh_tail()
     compact["_authority_claim_ids"] = authority_ids
     compact["evidence_view"]["facts"] = [dict(id=fid) for fid in sorted(sent_ids)]
@@ -1590,8 +1804,8 @@ def verified_transport(context, dispatch):
     if context.compact.get("task_execution_policy") == POLICY_V3:
         from packages.agents.writer.task_answer_outcomes import verify_transport
 
-        verify_transport(span, dispatch, structured=(context.compact.get(
-            "structured_conclusions_contract") == "structured-conclusions-v1"))
+        verify_transport(span, dispatch, structured=bool(context.compact.get(
+            "structured_conclusions_contract")))
     known = {q["question_id"]: q for q in context.questions}
     if (
         actual != payload
@@ -1602,6 +1816,9 @@ def verified_transport(context, dispatch):
         != checked_policy(context.compact.get("task_execution_policy"))
     ):
         raise ValueError("Task transport scope changed")
+    from packages.agents.writer.task_evidence_package import checked_contract as package_contract
+    if package_contract(actual) != package_contract(context.compact):
+        raise ValueError('Task package transport contract changed')
     from packages.agents.writer.task_clauses import checked_contract
     if checked_contract(actual) != checked_contract(context.compact):
         raise ValueError('Task clause transport contract changed')
@@ -1900,6 +2117,7 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                 name, detail.output_language, receipt["task_execution_policy"], clause_contract,
                 conclusion_contract,
                 conclusion_candidates=bool(payload.get('conclusion_candidates')),
+                task_package_contract=receipt.get('task_package_contract'),
             )
             if name == SELECTION_NAME:
                 candidate = candidate_context(
@@ -1915,6 +2133,7 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                     execution_policy=receipt["task_execution_policy"],
                     task_clause_contract=clause_contract,
                     structured_conclusions_contract=conclusion_contract,
+                    task_package_contract=receipt.get('task_package_contract'),
                     repair_feedback=failure_feedback(tasks[tid], history, view.facts, use.id)
                     if receipt["task_execution_policy"] in {POLICY_V2, POLICY_V3} and attempt
                     else None,
@@ -1991,9 +2210,28 @@ def replay(service, detail, snapshot, use, view, packets, receipt, *, audit=None
                     tasks_by_claim[cids[0]][1],
                     execution_policy=receipt["task_execution_policy"],
                     task_clause_contract=clause_contract,
-                    support_refs=generation_payloads[key]['task_support_selections'][0]['support_refs'],
+                    support_refs=next(
+                        (
+                            c["support_refs"]
+                            for c in generation_payloads[key].get("conclusion_candidates", ())
+                            if conclusion_contract == "structured-conclusions-v2"
+                            and c["source_fact_text"] == current[0].text
+                        ),
+                        generation_payloads[key]["task_support_selections"][0]["support_refs"],
+                    ),
                     structured_conclusions_contract=conclusion_contract,
+                    conclusion_candidate=next(
+                        (
+                            c
+                            for c in generation_payloads[key].get("conclusion_candidates", ())
+                            if conclusion_contract == "structured-conclusions-v2"
+                            and c["source_fact_text"] == current[0].text
+                        ),
+                        None,
+                    ),
                 )
+                if receipt.get('task_package_contract') is not None:
+                    expected['task_package_contract'] = receipt['task_package_contract']
                 if dispatch.get("support_witness_restorations") != _task_review_restorations(
                     span.full_output, expected
                 ):

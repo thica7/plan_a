@@ -9,7 +9,7 @@ import json
 from copy import deepcopy
 
 from packages.agents.writer.structured_conclusions import (
-    CONTRACT,
+    CONTRACT_V2,
     checked_contract,
     digest,
 )
@@ -57,12 +57,28 @@ class ConclusionAuthority(TaskOutcomeAuthority):
     def question_projection(self):
         bundle = json.loads(self._bundle_json)
         return dict(
-            contract=CONTRACT,
+            contract=bundle['contract'],
             revision_sha256=self.revision_sha256,
             entries=[
                 row for row in bundle["entries"] if row["question_id"] == self.answer.question_id
             ],
         )
+
+    def qa_projection(self):
+        """V2 shares originals through claims/source context, never truncates them."""
+        projection = self.question_projection()
+        from packages.agents.writer.permission_relations import selected_source
+
+        if projection['contract'] != CONTRACT_V2:
+            return projection
+        fields = ('conclusion_id', 'question_id', 'task_id', 'claim_id', 'relation',
+                  'observation', 'verification_status', 'delivery_status',
+                  'publication_status', 'missing_inputs', 'task_cell')
+        projection['entries'] = [dict(
+            {k: row[k] for k in fields if k in row},
+            source_relation=selected_source(row['candidate']),
+        ) for row in projection['entries']]
+        return projection
 
 
 def visible_observations(detail, audit):
@@ -99,6 +115,8 @@ def derived_observation_lines(audit, language, authorities):
             if entry["conclusion_id"] in seen or entry["claim_id"] not in supported:
                 continue
             seen.add(entry["conclusion_id"])
+            if entry.get('task_cell', {}).get('derived') is False:
+                continue
             prefix = "条件推断：" if language.startswith("zh") else "Conditional inference: "
             sources = "".join(f"[source:{sid}]" for sid in supported[entry["claim_id"]].source_ids)
             lines.extend([f"- {prefix}{plain(entry['observation'])} {sources}", ""])
@@ -110,6 +128,35 @@ def observations_match(detail, audit, authorities):
 
     lines = observation_lines(detail, audit, decision_reviews=authorities)
     return visible_observations(detail, audit) == "\n".join(lines).strip()
+
+
+def question_observation_scope(detail, audit, question_id, authorities):
+    """Project published rows only after authenticating the whole observation body."""
+    from packages.agents.writer.answer_presentation import observation_claims, observation_lines
+
+    authority = authorities.get(question_id)
+    if (not isinstance(authority, ConclusionAuthority)
+            or not authority.matches(authority.answer)
+            or not observations_match(detail, audit, authorities)):
+        raise ValueError("Question publication scope is unverified")
+    owners = {}
+    for dispatch in authority.context.compact['dispatches']:
+        if dispatch['name'] != 'dimension_question_atomic_generation':
+            continue
+        for claim_id in dispatch['claim_ids']:
+            owners.setdefault(claim_id, set()).update(dispatch['question_ids'])
+    observed = observation_claims(detail, audit, decision_reviews=authorities)
+    if any(len(owners.get(item.claim.id, ())) != 1 for item in observed):
+        raise ValueError("Published observation has ambiguous question ownership")
+    own = tuple(item for item in observed if owners[item.claim.id] == {question_id})
+    if any(owners.get(entry['claim_id']) != {question_id}
+           for entry in authority.question_projection()['entries']):
+        raise ValueError("Derived observation has foreign question ownership")
+    if not own:
+        return '', own
+    local = audit.model_copy(update=dict(claims=own, answer_coverage=(authority.answer,)))
+    return '\n'.join(observation_lines(
+        detail, local, decision_reviews={question_id: authority})).strip(), own
 
 
 def final_coverage_overrides(detail, snapshot, questions, supported, view, compact, coverage):
@@ -330,9 +377,21 @@ def materialize(context, detail, snapshot, coverage):
         if task["task_id"] != candidate["task_id"] or qid not in known:
             raise ValueError("Conclusion task scope changed")
         tasks = generation_tasks(known[qid], f"{context.competitor}/{context.dimension}")
-        answer, observation = _derived_answer(
-            candidate, claim, by_id[qid], known[qid], tasks, snapshot.id
+        from packages.agents.writer.permission_relations import derive
+        cell = (
+            derive(candidate, task)
+            if context.compact.get("structured_conclusions_contract") == CONTRACT_V2
+            and candidate["relation"] not in {"quantity_upper_bound", "billing_input_gap"}
+            else None
         )
+        if candidate['relation'] not in {'quantity_upper_bound', 'billing_input_gap'}:
+            if cell is None:
+                continue
+            answer, observation = by_id[qid], cell['observation']
+        else:
+            answer, observation = _derived_answer(
+                candidate, claim, by_id[qid], known[qid], tasks, snapshot.id
+            )
         if observation is None:
             continue
         by_id[qid] = answer
@@ -352,10 +411,20 @@ def materialize(context, detail, snapshot, coverage):
                 delivery_status="complete" if answer.status == "answered" else "limitation",
                 publication_status="published",
                 missing_inputs=list(answer.missing_fields),
+                **({'task_cell': cell} if cell is not None else {}),
             )
         )
+    if checked_contract(context.compact) == CONTRACT_V2:
+        from packages.agents.writer.permission_relations import merge_answers
+        by_id = merge_answers(context, context.questions, entries, generated, by_id, snapshot.id)
+        for entry in entries:
+            answer = by_id[entry['question_id']]
+            entry.update(
+                delivery_status="complete" if answer.status == "answered" else "limitation",
+                missing_inputs=list(answer.missing_fields),
+            )
     body = dict(
-        contract=CONTRACT,
+        contract=checked_contract(context.compact),
         scope=dict(
             workspace_id=detail.workspace_id,
             project_id=detail.project_id,

@@ -10,7 +10,6 @@ from test_final_question_reconciliation import reviewed
 from test_independent_final_question_qa import context_for, payload_from, receipt
 from test_question_context_qa import CLARIFY, case, findings
 
-from packages.agents.qa import independent_question_review as independent
 from packages.agents.qa.question_reconciliation import _answer_support, reconcile_question_findings
 from packages.orchestrator.evidence_context import EvidenceUseRejectedError
 from packages.research.question_scope import research_questions
@@ -161,7 +160,7 @@ async def test_current_cache_needs_current_actual_qa_trace_and_hashes(monkeypatc
     calls = install_review(monkeypatch, service)
     assert await reconcile_question_findings(service, record, [], evidence_issues=[]) == []
     output = receipt(record.detail)
-    assert output['mode'] == 'independent_questions_v9'
+    assert output['mode'] == 'independent_questions_v11'
     batch = output['batch_receipts'][0]
     span = next(s for s in record.detail.trace_spans if s.id == batch['span_id'])
     assert batch['full_input_sha256'] == hashlib.sha256(span.full_input.encode()).hexdigest()
@@ -188,6 +187,7 @@ async def test_cached_local_receipt_cannot_substitute_for_actual_review(monkeypa
     output = json.loads(local.full_output)
     batch = output['batch_receipts'][0]
     span = next(s for s in record.detail.trace_spans if s.id == batch['span_id'])
+    actual_system = span.full_input.split('\nJSON:\n', 1)[0]
     if mutation == 'receipt_only':
         output['batch_receipts'] = []
     elif mutation in {'v3', 'v4', 'v5'}:
@@ -202,8 +202,7 @@ async def test_cached_local_receipt_cannot_substitute_for_actual_review(monkeypa
     elif mutation == 'output_hash':
         span.full_output += ' '
     elif mutation == 'system_rehashed':
-        span.full_input = span.full_input.replace(
-            independent.INDEPENDENT_SYSTEM, 'Different system')
+        span.full_input = span.full_input.replace(actual_system, 'Different system\n\n', 1)
         batch['full_input_sha256'] = hashlib.sha256(span.full_input.encode()).hexdigest()
     elif mutation in {'duplicate_key', 'extra_context'}:
         raw = span.full_input.split('\nJSON:\n', 1)[1]
@@ -214,14 +213,14 @@ async def test_cached_local_receipt_cannot_substitute_for_actual_review(monkeypa
             wire['hidden_context'] = 'Unsent hidden condition'
             from packages.research.evidence.snapshot_models import canonical_json
             raw = canonical_json(wire)
-        span.full_input = independent.INDEPENDENT_SYSTEM + '\n\n\nJSON:\n' + raw
+        span.full_input = actual_system + '\nJSON:\n' + raw
         batch['full_input_sha256'] = hashlib.sha256(span.full_input.encode()).hexdigest()
     elif mutation == 'payload_rehashed':
         payload = decode_review_payload(span.full_input.split('\nJSON:\n', 1)[1])
         row = payload['findings'][0]
         context_for(payload, row)['visible_answer'] += ' Claimed product behavior.'
         from packages.agents.qa.question_review_transport import dumps
-        span.full_input = independent.INDEPENDENT_SYSTEM + '\n\n\nJSON:\n' + dumps(payload)
+        span.full_input = actual_system + '\nJSON:\n' + dumps(payload)
         batch['full_input_sha256'] = hashlib.sha256(span.full_input.encode()).hexdigest()
     else:
         response = json.loads(span.full_output)

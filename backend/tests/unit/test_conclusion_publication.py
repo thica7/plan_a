@@ -13,6 +13,18 @@ async def publication_case(
     question=QUESTION,
     review_status="supported",
     source_qualifiers=None,
+    conclusion_contract=CONTRACT,
+    decline_operations=(),
+    sources=None,
+    selected_refs_limit=1,
+    source_values=None,
+    selected_quote_contains=None,
+    output_language="zh-CN",
+    task_package_contract=None,
+    selection_hook=None,
+    review_hook=None,
+    generation_hook=None,
+    answer_hook=None,
 ):
     from claim_review_fixture import expand_prompt_payload
     from test_question_atomic_delivery import atomic_case, supported_review
@@ -23,8 +35,14 @@ async def publication_case(
     from packages.agents.writer.dimension_writer import render_dimension_report
     from packages.research.evidence.report_claims import ReportDimensionAudit, audit_report_claims
 
-    case = await atomic_case([source], question=question, source_qualifiers=source_qualifiers)
+    case = await atomic_case(
+        sources or [source],
+        question=question,
+        source_qualifiers=source_qualifiers,
+        source_values=source_values,
+    )
     service, record, snapshot, selected, view, use, packets, boundaries, allowed = case
+    record.detail.output_language = output_language
     record.detail.report_answer_boundaries = boundaries
     seen = []
 
@@ -38,15 +56,22 @@ async def publication_case(
                 s["support_ref"]
                 for f in p["evidence_view"]["facts"]
                 for s in f["source_span_candidates"]
+                if selected_quote_contains is None or selected_quote_contains in s["quote"]
             ]
-            selected = bool(refs) and t.get("request_property") != "people_limit"
+            if selection_hook is not None:
+                refs = selection_hook(p, refs)
+            selected = (
+                bool(refs)
+                and t.get("request_property") != "people_limit"
+                and t["focus"] not in decline_operations
+            )
             data = dict(
                 selections=[
                     dict(
                         task_id=t["task_id"],
                         status="selected" if selected else "insufficient_evidence",
                         binding_kind="span" if selected else None,
-                        support_refs=refs[:1] if selected else [],
+                        support_refs=refs[:selected_refs_limit] if selected else [],
                     )
                 ]
             )
@@ -64,6 +89,8 @@ async def publication_case(
                 data = dict(
                     version=1, task_id=t["task_id"], status="insufficient_evidence", atom=None
                 )
+            if generation_hook is not None:
+                data = generation_hook(p, data)
         elif name == atomic.REVIEW_NAME:
             data = dict(
                 reviews=[dict(supported_review(c), verdict=review_status) for c in p["claims"]],
@@ -72,6 +99,8 @@ async def publication_case(
                 ],
             )
             data = clause_wire_response(p, data)
+            if review_hook is not None:
+                data = review_hook(p, data)
         elif name == atomic.ANSWER_NAME:
             data = dict(
                 version=1,
@@ -86,6 +115,8 @@ async def publication_case(
                     for t in p["tasks"]
                 ],
             )
+            if answer_hook is not None:
+                data = answer_hook(p, data)
         else:
             raise AssertionError(name)
         return append_response(service, record, kwargs, json.dumps(data))
@@ -106,7 +137,8 @@ async def publication_case(
         answer_review_contract="task-outcomes-v1",
         delivery_policy="complete-predicates-v1",
         task_clause_contract="semantic-target-clauses-v2",
-        structured_conclusions_contract=CONTRACT,
+        structured_conclusions_contract=conclusion_contract,
+        task_package_contract=task_package_contract,
     )
     audited = audit_report_claims(
         result["claims"],
@@ -115,6 +147,8 @@ async def publication_case(
         boundaries,
         available_facts=view.facts,
         review_version=3,
+        authority_claim_ids=result.get('authority_claim_ids', ()),
+        capability_claim_ids=result.get('capability_claim_ids', ()),
     )
     use = next(u for u in record.detail.evidence_consumptions if u.id == use.id)
     answers, gaps, _ = await service._dimension_question_coverage(
@@ -324,7 +358,7 @@ async def test_journal_storage_revision_does_not_change_semantic_revision(monkey
 def test_final_qa_keeps_original_protected_system_and_output_capacity():
     from packages.agents.qa.independent_question_review import (
         FINAL_QA_REQUEST_RESERVE,
-        INDEPENDENT_SYSTEM,
+        INDEPENDENT_SYSTEM_V9,
         MAX_REVIEW_OUTPUT_TOKENS,
         final_review_system,
     )
@@ -339,7 +373,8 @@ def test_final_qa_keeps_original_protected_system_and_output_capacity():
             )
         )
     )
-    assert len(system.encode()) <= len(INDEPENDENT_SYSTEM.encode()) == 3844
+    assert len(system.encode()) <= len(INDEPENDENT_SYSTEM_V9.encode()) == 3844
+    assert len(system.encode()) + 14000 + 256 + 1600 + 2 <= FINAL_QA_REQUEST_RESERVE
     assert MAX_REVIEW_OUTPUT_TOKENS == 1600 and FINAL_QA_REQUEST_RESERVE == 19702
     assert "structured-conclusions-v1" in system
 

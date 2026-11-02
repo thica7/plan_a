@@ -197,6 +197,8 @@ def _request_only_clarification(detail, audit, answer, question):
 
 
 def _answer_support(detail, snapshot, audit, answer, question):
+    if answer.binding_version in (2, 3) and answer.binding_version != audit.answer_binding_version:
+        return None
     if answer.resolution == 'clarification' and not answer.claim_ids:
         return [] if _request_only_clarification(detail, audit, answer, question) else None
     decision_reviews = None
@@ -277,6 +279,56 @@ def _answer_support(detail, snapshot, audit, answer, question):
         if answer.status not in {"answered", "partial"}:
             return None
     return claims
+
+
+def authenticated_answer_delivery(detail, snapshot, audit, answer, question):
+    """Classify complete visible delivery without promoting unresolved facts.
+
+    Authority is rebuilt by the existing support verifier, never deserialized
+    from a receipt label. Only exact canonical clarification and a selected,
+    reviewed CPU rule with a genuinely missing CPU input qualify as limitations.
+    """
+    if _answer_support(detail, snapshot, audit, answer, question) is None:
+        return None
+    if _request_only_clarification(detail, audit, answer, question):
+        return "canonical_request_only_clarification"
+    from packages.agents.writer.conclusion_publication import ConclusionAuthority
+    from packages.agents.writer.question_atomic_delivery import replay_decision_reviews
+    from packages.agents.writer.task_answer_outcomes import TaskOutcomeAuthority
+
+    try:
+        authority = replay_decision_reviews(detail, audit).get(answer.question_id)
+        if not isinstance(authority, TaskOutcomeAuthority) or not authority.matches(answer):
+            return None
+        if answer.status == "answered":
+            return "supported_answer"
+        if (isinstance(authority, ConclusionAuthority) and authority.has_typed_entry
+                and answer.status == 'partial' and answer.resolution == 'insufficient'):
+            entries = authority.question_projection()['entries']
+            limitations = [
+                e for e in entries if e.get("task_cell", {}).get("outcome") == "limitation"
+            ]
+            expected_fields = {'sales_scoped_quote': ['official_scoped_quote'],
+                               'role_billing_input_gap': ['actual_membership_type']}
+            if (limitations and all(
+                    e['relation'] in expected_fields
+                    and e['task_cell'].get('limitation_delivery_complete') is True
+                    and e['task_cell']['missing_fields'] == expected_fields[e['relation']]
+                    for e in limitations)
+                    and set(answer.missing_fields) == {
+                        m for e in limitations for m in e['task_cell']['missing_fields']}):
+                return 'supported_sourced_limitation'
+        if (isinstance(authority, ConclusionAuthority) and authority.has_typed_entry
+                and authority.covers_core_gap(question)
+                and answer.status == "partial" and answer.resolution == "insufficient"
+                and "cpu_usage" in answer.missing_fields):
+            entries = authority.question_projection()["entries"]
+            if all(e["relation"] == "billing_input_gap"
+                   and e["candidate"]["rule"]["input_sufficient"] is False for e in entries):
+                return "supported_billing_input_limitation"
+    except (ValueError, KeyError, TypeError, AttributeError, IndexError, RuntimeError):
+        pass
+    return None
 
 
 def _review_response(response, basis_hash):

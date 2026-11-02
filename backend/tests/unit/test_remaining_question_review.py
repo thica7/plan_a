@@ -236,6 +236,7 @@ async def test_complete_review_envelope_fits_its_reserved_global_budget():
         if phase != "final_qa:run":
             budget.finish_delivery(phase)
     budget.tokens_used = 80000 - budget.delivery_reserves["final_qa:run"]
+    before_tokens = budget.tokens_used
     requests = []
 
     async def post(url, payload, headers):
@@ -255,7 +256,8 @@ async def test_complete_review_envelope_fits_its_reserved_global_budget():
         user=user,
         max_output_tokens=1600,
     )
-    assert len(requests) == 1 and budget.tokens_used == 80000
+    assert len(requests) == 1 and budget.tokens_used - before_tokens == expected
+    assert budget.tokens_used <= 80000
     assert (budget.max_calls, budget.max_tokens) == (24, 80000)
 
 

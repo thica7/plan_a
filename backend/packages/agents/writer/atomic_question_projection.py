@@ -511,6 +511,9 @@ def scoped_generation_response(response, payload, *, forecast=False):
         identities = Counter(predicate_identity(atom) for atom in plan["atoms"])
         accepted = {tid: [] for tid in tasks}
         for atom in plan["atoms"]:
+            from packages.agents.writer.permission_relations import typed_atom_matches
+
+            typed_source = isinstance(atom, dict) and typed_atom_matches(payload, atom)
             task = (
                 tasks.get(atom.get("task_id"))
                 if isinstance(atom, dict) and isinstance(atom.get("task_id"), str)
@@ -536,7 +539,7 @@ def scoped_generation_response(response, payload, *, forecast=False):
                     or counts[task["task_id"]] == 1
                 )
                 and (
-                    forecast
+                    forecast or typed_source
                     or not generation_task_atom_reasons(task, atom["text"], kind=atom["kind"],
                         generation_projection_version=payload.get(
                             "generation_projection_version", 2))

@@ -112,17 +112,17 @@ def test_original_bitwarden_bad_digest_keeps_three_authentic_decisions():
 
 
 def test_protocol_and_legacy_system_are_frozen_without_ignored_artifacts():
-    assert qa.PROTOCOL == "independent_questions_v9"
+    assert qa.PROTOCOL == "independent_questions_v11"
     assert hashlib.sha256(qa.INDEPENDENT_SYSTEM_V6.encode()).hexdigest() == (
         "077d6cffe1ace86417e94cb16baa4747ca081d285dc2a3f17ed70c2f931fae43")
     assert qa.INDEPENDENT_SYSTEM_V7.startswith("Independent final question QA v7.")
-    assert qa.INDEPENDENT_SYSTEM.startswith("Independent final question QA v9.")
+    assert qa.INDEPENDENT_SYSTEM.startswith("Independent final question QA v11.")
     assert "background date" in qa.INDEPENDENT_SYSTEM
     assert "explicitly date-qualified" in qa.INDEPENDENT_SYSTEM
     assert "diagnostic_only must always keep" in qa.INDEPENDENT_SYSTEM
     assert qa.TASK_REVIEW_BYTES == 8192 and qa.MAX_REVIEW_OUTPUT_TOKENS == 1600
     assert qa.FINAL_QA_REQUEST_RESERVE == (
-        len(qa.INDEPENDENT_SYSTEM.encode()) + 14000 + 256 + 1600 + 2)
+        len(qa.INDEPENDENT_SYSTEM_V9.encode()) + 14000 + 256 + 1600 + 2)
 
 
 async def three_findings(monkeypatch):
@@ -162,7 +162,8 @@ async def test_real_adapter_retries_only_bad_rows_and_replays_transport_bound_ca
     calls = []
 
     async def post(url, request, headers):
-        assert request["messages"][0]["content"] == qa.INDEPENDENT_SYSTEM
+        wire = json.loads(request["messages"][1]["content"].split('\nJSON:\n', 1)[1])
+        assert request["messages"][0]["content"] == qa.final_review_system(wire)
         assert request["max_tokens"] == 1600
         batch = payload_from({"user": request["messages"][1]["content"]})
         calls.append(batch)
@@ -300,8 +301,8 @@ async def test_cache_reconstructs_attempts_and_rejects_legacy_downgrade(monkeypa
     else:
         bound = output["batch_receipts"][0]
         span = next(s for s in detail.trace_spans if s.id == bound["span_id"])
-        span.full_input = span.full_input.replace(
-            qa.INDEPENDENT_SYSTEM, qa.INDEPENDENT_SYSTEM_V6, 1)
+        span.full_input = (qa.INDEPENDENT_SYSTEM_V6 + '\n\n\nJSON:\n'
+                           + span.full_input.split('\nJSON:\n', 1)[1])
         bound["full_input_sha256"] = hashlib.sha256(span.full_input.encode()).hexdigest()
     local.full_output = json.dumps(output)
     await reconcile_question_findings(service, record, [], evidence_issues=[])
@@ -326,7 +327,14 @@ async def test_explicit_v6_bound_replay_keeps_original_whole_batch_parser(monkey
     output = receipt(detail)
     bound = output["batch_receipts"][0]
     span = next(s for s in detail.trace_spans if s.id == bound["span_id"])
-    span.full_input = span.full_input.replace(qa.INDEPENDENT_SYSTEM, qa.INDEPENDENT_SYSTEM_V6, 1)
+    from packages.agents.qa.question_review_transport import dumps, final_review_batches
+
+    old, omitted = final_review_batches(
+        list(candidates.values()), output['basis_hash'], max_bytes=8192,
+        max_batches=1, protocol='independent_questions_v6',
+    )
+    assert not omitted and len(old) == 1
+    span.full_input = qa.INDEPENDENT_SYSTEM_V6 + '\n\n\nJSON:\n' + dumps(old[0])
     bound["full_input_sha256"] = hashlib.sha256(span.full_input.encode()).hexdigest()
     assert len(qa._bound_batch_reviews(detail, output["basis_hash"], candidates, bound,
                                      protocol="independent_questions_v6")) == 3

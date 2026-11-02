@@ -33,7 +33,7 @@ def _members(fact):
                 yield f'value/{index}', text
 
 
-def source_span_candidates(fact):
+def source_span_candidates(fact, *, relation_members=False):
     """Offer whole members/paragraphs, keeping conditional lists and context intact.
 
     IDs bind the complete immutable fact (including scope and item identity),
@@ -53,6 +53,11 @@ def source_span_candidates(fact):
             paragraph = paragraph.strip()
             if not paragraph:
                 continue
+            if relation_members:
+                from packages.research.extraction.billing_rules import sales_quote_scope
+
+                if sales_quote_scope(paragraph):
+                    choices.append(paragraph)
             # A standalone optional-example lead-in does not qualify the
             # preceding completed rule. Keep that whole prefix, with its
             # original negations/conditions and offsets; required list headers
@@ -119,7 +124,9 @@ def projected_source_facts(claim, facts):
         return (), ('source_span_binding_mismatch',)
     for binding in bindings:
         fact = by_id.get(binding.fact_id)
-        if fact is None or binding.model_dump(mode='json') not in source_span_candidates(fact):
+        if fact is None or binding.model_dump(mode="json") not in source_span_candidates(
+            fact, relation_members=True
+        ):
             return (), ('source_span_binding_mismatch',)
         projected.append(fact.model_copy(update={'quote': binding.quote,
             'value_json': canonical_json([binding.quote])}))

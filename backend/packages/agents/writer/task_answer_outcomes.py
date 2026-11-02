@@ -38,11 +38,17 @@ SYSTEM = (
 def answer_system(payload):
     from packages.agents.writer.task_clauses import checked_contract
     contract = checked_contract(payload)
-    return SYSTEM if not contract else (
+    result = SYSTEM if not contract else (
         f'Internal task clause contract {contract}. ' + SYSTEM
         + ' support_refs may contain only this task support_choices[].ref. '
           'Inline quotes are complete evidence context, never additional selectable references.'
     )
+    from packages.agents.writer.task_evidence_package import checked_contract as package_contract
+    if package_contract(payload):
+        result += (' Complete task evidence v1. parent_context_refs resolves full source_contexts; '
+                   'source_scopes restricts claims. Full selected quotes are in claim bindings. '
+                   'upstream_identity_refs are identities only, never evidence.')
+    return result
 
 
 def obligation_tasks(tasks, compact):
@@ -311,6 +317,22 @@ def quarantine_candidate(raw, payload, view, use):
     return claim if capability_candidate(claim, task) else None
 
 
+def support_choice(task, claim, owner, originals):
+    """Pure packet member; approval is checked by the caller, never by this projection."""
+    quotes = [s.model_dump(mode="json") for s in claim.source_span_bindings]
+    if claim.operation_binding is not None:
+        quotes = [claim.operation_binding.model_dump(mode="json")]
+    return dict(
+        ref="reviewed-claim-" + digest([task["task_id"], claim.model_dump(mode="json")])[:24],
+        claim_id=claim.id, primary=owner["task_id"] == task["task_id"],
+        claim=claim.model_dump(mode="json"), quotes=quotes,
+        quote_refs=["reviewed-quote-" + digest(s)[:24] for s in quotes],
+        parent_context={fid: dict(source_id=originals[fid].source_id,
+            quote=originals[fid].quote, value=originals[fid].value,
+            qualifiers=originals[fid].qualifiers) for fid in claim.fact_ids},
+    )
+
+
 def build_payload(
     service,
     record,
@@ -326,8 +348,10 @@ def build_payload(
     from packages.agents.writer.answer_resolution import _CLOSED_QUESTION, _OPEN_QUESTION
     from packages.agents.writer.atomic_question_projection import generation_tasks
     from packages.agents.writer.complete_predicates import authority_question
+    from packages.agents.writer.permission_relations import source_application_allowed
     from packages.agents.writer.question_allocation import _request_units
     from packages.agents.writer.question_atomic_delivery import (
+        GENERATION_NAME,
         atomic_decision_context,
         handoff_context,
     )
@@ -337,6 +361,19 @@ def build_payload(
 
     context = atomic_decision_context(service, record, view, use, compact)
     _, by_claim, _ = rebuild(context)
+    inapplicable = set()
+    for dispatch in compact.get('dispatches', ()):
+        if dispatch['name'] != GENERATION_NAME:
+            continue
+        _, generated = context.expected_inputs[dispatch['span_id']]
+        for claim in supported:
+            if claim.id not in dispatch['claim_ids']:
+                continue
+            for candidate in generated.get('conclusion_candidates', ()):
+                if (candidate['source_fact_text'] == claim.text
+                        and candidate['task_id'] == by_claim[claim.id]['task_id']
+                        and not source_application_allowed(candidate, by_claim[claim.id])):
+                    inapplicable.add(claim.id)
     candidates = build_decision_candidates(context)
     originals = {f.id: f for f in view.facts}
     tasks = []
@@ -352,6 +389,8 @@ def build_payload(
                 owner = by_claim.get(claim.id)
                 if owner is None or owner["question_id"] != q["question_id"]:
                     continue
+                if owner['task_id'] == task['task_id'] and claim.id in inapplicable:
+                    continue
                 # Same-question rules are explicit auxiliary premises; a target
                 # still needs its own separately reviewed primary assertion.
                 if owner["task_id"] != task["task_id"] and (
@@ -359,29 +398,7 @@ def build_payload(
                     if "dependency_task_ids" in task else not owner["focus"].startswith("rule_")
                 ):
                     continue
-                quotes = [s.model_dump(mode="json") for s in claim.source_span_bindings]
-                if claim.operation_binding is not None:
-                    quotes = [claim.operation_binding.model_dump(mode="json")]
-                choices.append(
-                    dict(
-                        ref="reviewed-claim-"
-                        + digest([task["task_id"], claim.model_dump(mode="json")])[:24],
-                        claim_id=claim.id,
-                        primary=owner["task_id"] == task["task_id"],
-                        claim=claim.model_dump(mode="json"),
-                        quotes=quotes,
-                        quote_refs=["reviewed-quote-" + digest(s)[:24] for s in quotes],
-                        parent_context={
-                            fid: dict(
-                                source_id=originals[fid].source_id,
-                                quote=originals[fid].quote,
-                                value=originals[fid].value,
-                                qualifiers=originals[fid].qualifiers,
-                            )
-                            for fid in claim.fact_ids
-                        },
-                    )
-                )
+                choices.append(support_choice(task, claim, owner, originals))
             candidate = next((c for c in candidates if c.task_id == task["task_id"]), None)
             rule_task = (
                 task["focus"].startswith("rule_")
@@ -462,7 +479,10 @@ def build_payload(
         payload["repair_feedback"] = repair_feedback
     if compact.get('structured_conclusions_contract') is not None:
         payload['structured_conclusions_contract'] = compact['structured_conclusions_contract']
-    return payload
+    if compact.get('task_package_contract') is not None:
+        payload['task_package_contract'] = compact['task_package_contract']
+    from packages.agents.writer.task_evidence_package import answer_packet
+    return answer_packet(payload)
 
 
 def answer_feedback(dispatch, failures):
@@ -484,11 +504,13 @@ def task_windows(
 
     def build(ids):
         ids = set(ids)
-        return dict(
+        result = dict(
             complete,
             tasks=[t for t in complete["tasks"] if t["task_id"] in ids],
             decision_candidates=[c for c in complete["decision_candidates"] if c["task_id"] in ids],
         )
+        from packages.agents.writer.task_evidence_package import answer_packet
+        return answer_packet(result)
 
     complete = build_payload(
         service,
@@ -501,6 +523,14 @@ def task_windows(
         task_ids=task_ids,
         repair_feedback=repair_feedback,
     )
+    from packages.agents.writer.task_evidence_package import (
+        answer_windows,
+    )
+    from packages.agents.writer.task_evidence_package import (
+        checked_contract as package_contract,
+    )
+    if package_contract(complete):
+        return answer_windows(complete, min(14000, use.max_bytes))
     windows, current, omitted = [], [], []
     for task in complete["tasks"]:
         ids = [*current, task["task_id"]]
@@ -741,8 +771,7 @@ def consume_answer(
     # verified_transport has rebuilt this new-scope failure from the actual raw.
     # An authenticated parse failure cannot supply decision credentials, and
     # must not enter the legacy credential parser a second time.
-    failed_response = (context.compact.get("structured_conclusions_contract")
-                       == "structured-conclusions-v1"
+    failed_response = (bool(context.compact.get("structured_conclusions_contract"))
                        and dispatch.get("structured_response_failure") is not None)
     credentials = () if failed_response else review.credentials()
     # Retain previously authenticated per-task credentials when a peer retries.
@@ -787,13 +816,37 @@ async def task_answer_coverage(
     accepted, authorities, answers, sizes = {}, {}, {}, []
     detail = service._evidence_live_record(record).detail
     jobs = []
+    deferred_tasks = set()
     for q in questions:
         windows, omitted = task_windows(service, record, q, supported, view, use, compact)
-        jobs.extend((q, 0, {t["task_id"] for t in p["tasks"]}, None) for p in windows)
+        jobs.extend((q, 0, {t["task_id"] for t in p["tasks"]}, None, p) for p in windows)
+        deferred_tasks.update(omitted)
         if omitted:
             gaps = tuple(sorted(set(gaps) | {"task_answer_context_budget_exceeded"}))
-    for q, attempt, targets, feedback in jobs:
-        payload = build_payload(
+    from packages.agents.writer.task_evidence_package import checked_contract as package_contract
+    package = package_contract(compact)
+
+    def refresh_plan(start):
+        if not package:
+            return
+        from packages.agents.writer.selected_task_delivery import reserve_answer_tail
+
+        budget = service._run_llm_budget(record)
+        required = sum(sum(service._llm_request_envelope(
+            system=system, user='\nJSON:\n' + compact_prompt_json(job[4]),
+            max_output_tokens=1600)[1:]) for job in jobs[start:])
+        required += len(deferred_tasks) * sum(service._llm_request_envelope(
+            system=system, user='x' * min(14000, use.max_bytes), max_output_tokens=1600)[1:])
+        reserve_answer_tail(
+            budget, f'answer:{scope}', required,
+            fresh=getattr(budget, '_fresh_selected_task_budget', False),
+            package_owner=(package, use.id, view.snapshot_id),
+            window_count=len(jobs) - start + len(deferred_tasks),
+        )
+
+    for index, (q, attempt, targets, feedback, planned) in enumerate(jobs):
+        refresh_plan(index)
+        payload = planned if package else build_payload(
             service,
             record,
             [q],
@@ -806,6 +859,7 @@ async def task_answer_coverage(
         )
         user = "\nJSON:\n" + compact_prompt_json(payload)
         if len(user.encode()) > min(14000, use.max_bytes):
+            deferred_tasks.update(targets)
             gaps = tuple(sorted(set(gaps) | {"task_answer_context_budget_exceeded"}))
             continue
         validate_atomic_handoff(service, record, payload, view)
@@ -813,6 +867,7 @@ async def task_answer_coverage(
             service, record, scope, [q["question_id"]], (ANSWER_NAME, "qa", system, user, 1600)
         )
         if not diagnostic["current_request"]["admitted"]:
+            deferred_tasks.update(targets)
             gaps = tuple(sorted(set(gaps) | {"task_answer_budget_deferred"}))
             continue
         start = len(service._evidence_live_record(record).detail.trace_spans)
@@ -853,6 +908,7 @@ async def task_answer_coverage(
             ]
             span = failed[0] if len(failed) == 1 else None
         if span is None:
+            deferred_tasks.update(targets)
             continue
         ids = list(
             dict.fromkeys(c["claim_id"] for t in payload["tasks"] for c in t["support_choices"])
@@ -898,10 +954,12 @@ async def task_answer_coverage(
                 repair_feedback=feedback,
             )
             jobs.extend(
-                (q, 1, {t["task_id"] for t in p["tasks"]}, feedback) for p in repair_windows
+                (q, 1, {t["task_id"] for t in p["tasks"]}, feedback, p) for p in repair_windows
             )
+            deferred_tasks.update(omitted)
             if omitted:
                 gaps = tuple(sorted(set(gaps) | {"task_answer_context_budget_exceeded"}))
+    refresh_plan(len(jobs))
     from packages.agents.writer.atomic_question_projection import generation_tasks
 
     tasks = [t for q in questions for t in generation_tasks(q, scope)]

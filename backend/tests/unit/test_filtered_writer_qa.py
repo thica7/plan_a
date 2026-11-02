@@ -21,7 +21,9 @@ from packages.skills.registry import SkillRegistry
 
 @pytest.mark.asyncio
 async def test_final_qa_replays_question_filtered_generation_view():
-    with patch("packages.research.evidence.views.datetime", FixedTime):
+    with patch("packages.research.evidence.views.datetime", FixedTime), patch(
+        "packages.agents.writer.question_retrieval.datetime", FixedTime
+    ):
         picked = None
         for size in (800,):
             d = distributed_detail(observations=1)

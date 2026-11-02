@@ -32,7 +32,9 @@ def supported_review(claim):
     return row
 
 
-async def atomic_case(texts=TEXTS, question=QUESTION, *, source_qualifiers=None):
+async def atomic_case(
+    texts=TEXTS, question=QUESTION, *, source_qualifiers=None, source_values=None
+):
     detail, _ = research_case(texts, question=question)
     detail.created_at = detail.updated_at = datetime.now(UTC)
     detail.plan.competitors, detail.plan.dimensions = ["Example Product"], ["feature"]
@@ -42,6 +44,9 @@ async def atomic_case(texts=TEXTS, question=QUESTION, *, source_qualifiers=None)
     if source_qualifiers is not None:
         for source, qualifiers in zip(detail.raw_sources, source_qualifiers, strict=True):
             source.metadata["normalized_fields"][0]["qualifiers"] = qualifiers
+    if source_values is not None:
+        for source, values in zip(detail.raw_sources, source_values, strict=True):
+            source.metadata["normalized_fields"][0]["evidence_terms"] = values
     snapshot = seal_snapshot(detail, phase="analysis", canonical_documents={})
     service, record = service_for(detail, task_execution=True)
     _, _, packets = await service._begin_question_evidence_use(

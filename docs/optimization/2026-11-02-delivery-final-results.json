@@ -1,0 +1,403 @@
+{
+  "date": "2026-11-02",
+  "base_commit": "e177d38a0e26546ea70765dcf6eef4a03e707fe2",
+  "scope": "固定官方捕获页的生产阶段入口回放；已曝光8题回归，不是全Graph、在线发现、盲测或生产RAG验收。",
+  "original_questions": {
+    "total": 8,
+    "pass_count": 8,
+    "partial_count": 0
+  },
+  "necessary_branches": {
+    "total": 22,
+    "answered": 22
+  },
+  "visible_claims": {
+    "unique_semantic_count": 28,
+    "supported": 28,
+    "strict_text_atomic": 26,
+    "independent_factual_atom_count": 26,
+    "fact_atomic": 26
+  },
+  "report_delivery": {
+    "text_deliverable": 4,
+    "text_plus_evidence_deliverable": 4,
+    "strict_text_atomic_deliverable": 2,
+    "independent_fact_atomic_deliverable": 4,
+    "strict_system_qa_deliverable": 2,
+    "current_question_qa_deliverable": 4,
+    "total_reports": 4
+  },
+  "products": [
+    {
+      "product": "Trello",
+      "original_questions": {
+        "total": 2,
+        "pass": 2
+      },
+      "necessary_branches": {
+        "total": 9,
+        "answered": 9
+      },
+      "visible_claims": {
+        "unique_semantic_count": 15,
+        "supported": 15,
+        "strict_text_atomic": 14,
+        "independent_factual_atom_count": 14,
+        "fact_atomic": 14,
+        "denominator_policy": "全部唯一正式 source/derived/renderer 语义主张；重复投影不重复计；受控父题聚合是另列严格文本与独立事实口径。"
+      },
+      "delivery": {
+        "text_deliverable": true,
+        "text_plus_evidence_deliverable": true,
+        "strict_text_atomic_deliverable": false,
+        "independent_fact_atomic_deliverable": true,
+        "current_question_qa_deliverable": true,
+        "strict_system_qa_deliverable": false,
+        "qa_blocker_count": 0
+      },
+      "actual_qa": {
+        "protocol": "independent_questions_v11",
+        "planned": 7,
+        "sent": 6,
+        "valid": 6,
+        "invalid": 0,
+        "unsent": 1,
+        "timeouts": 0,
+        "unresolved_invalid": 0,
+        "invalid_count_policy": "Unique issue IDs with any invalid attempt; may overlap finally valid IDs. See unresolved_invalid and immutable batches.",
+        "sent_issue_occurrences": 6,
+        "invalid_review_row_occurrences": 0,
+        "all_current_questions_valid_affirmative": true
+      },
+      "model_transports": 47,
+      "model_spans_by_agent": {
+        "planner": 1,
+        "collector": 2,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 20,
+        "qa": 21
+      },
+      "known_tokens": 168053,
+      "unknown_usage_spans": 0,
+      "report_path": "docs/optimization/2026-11-02-delivery-final-reports/trello.md",
+      "report_sha256": "acfc541a383a48fdc071d5cc6cde8793dd873df45187ea3782e69d6719d8a758",
+      "sources": [
+        {
+          "id": "raw-source-033d8ca615035ad47a36",
+          "title": "Add an observer to a board | Trello | Atlassian Support",
+          "url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+        }
+      ]
+    },
+    {
+      "product": "Cloudflare",
+      "original_questions": {
+        "total": 2,
+        "pass": 2
+      },
+      "necessary_branches": {
+        "total": 5,
+        "answered": 5
+      },
+      "visible_claims": {
+        "unique_semantic_count": 5,
+        "supported": 5,
+        "strict_text_atomic": 5,
+        "independent_factual_atom_count": 5,
+        "fact_atomic": 5,
+        "denominator_policy": "全部唯一正式 source/derived/renderer 语义主张；重复投影不重复计；受控父题聚合是另列严格文本与独立事实口径。"
+      },
+      "delivery": {
+        "text_deliverable": true,
+        "text_plus_evidence_deliverable": true,
+        "strict_text_atomic_deliverable": true,
+        "independent_fact_atomic_deliverable": true,
+        "strict_system_qa_deliverable": true,
+        "qa_blocker_count": 0
+      },
+      "actual_qa": {
+        "protocol": "independent_questions_v11",
+        "planned": 5,
+        "sent": 5,
+        "valid": 5,
+        "invalid": 0,
+        "unsent": 0,
+        "timeouts": 0,
+        "all_current_questions_valid_affirmative": true
+      },
+      "model_transports": 26,
+      "model_spans_by_agent": {
+        "planner": 1,
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 8,
+        "qa": 11
+      },
+      "known_tokens": 86477,
+      "unknown_usage_spans": 0,
+      "report_path": "docs/optimization/2026-11-02-delivery-final-reports/cloudflare.md",
+      "report_sha256": "fb48b1f672e456423136456241cfd5d46c4c9f64e73aee518ca5b207a7f14afa",
+      "sources": [
+        {
+          "id": "raw-source-52ba7b31b51e937245c1",
+          "title": "Pricing · Cloudflare Workers docs",
+          "url": "https://developers.cloudflare.com/workers/platform/pricing/"
+        },
+        {
+          "id": "raw-source-c71a5d8161af6e06ae53",
+          "title": "Account roles · Cloudflare Fundamentals docs",
+          "url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/"
+        }
+      ]
+    },
+    {
+      "product": "Bitwarden",
+      "original_questions": {
+        "total": 2,
+        "pass": 2
+      },
+      "necessary_branches": {
+        "total": 3,
+        "answered": 3
+      },
+      "visible_claims": {
+        "unique_semantic_count": 2,
+        "supported": 2,
+        "strict_text_atomic": 2,
+        "independent_factual_atom_count": 2,
+        "fact_atomic": 2,
+        "denominator_policy": "全部唯一正式 source/derived/renderer 语义主张；重复投影不重复计；受控父题聚合是另列严格文本与独立事实口径。"
+      },
+      "delivery": {
+        "text_deliverable": true,
+        "text_plus_evidence_deliverable": true,
+        "strict_text_atomic_deliverable": true,
+        "independent_fact_atomic_deliverable": true,
+        "strict_system_qa_deliverable": false,
+        "qa_blocker_count": 1
+      },
+      "actual_qa": {
+        "protocol": "independent_questions_v11",
+        "planned": 9,
+        "sent": 9,
+        "valid": 9,
+        "invalid": 1,
+        "unsent": 0,
+        "timeouts": 0,
+        "unresolved_invalid": 0,
+        "invalid_count_policy": "Unique issue IDs with any invalid attempt; may overlap finally valid IDs. See unresolved_invalid and immutable batches.",
+        "sent_issue_occurrences": 10,
+        "invalid_review_row_occurrences": 1,
+        "all_current_questions_valid_affirmative": true
+      },
+      "model_transports": 23,
+      "model_spans_by_agent": {
+        "planner": 1,
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 6,
+        "qa": 10
+      },
+      "known_tokens": 77932,
+      "unknown_usage_spans": 0,
+      "report_path": "docs/optimization/2026-11-02-delivery-final-reports/bitwarden.md",
+      "report_sha256": "c7f06dd6145983a81d99a9faa4f54395ad153cd00c343179308c8b1fbc7ddea0",
+      "sources": [
+        {
+          "id": "raw-source-476cdfef80ec06d6a285",
+          "title": "Password Manager Plans | Bitwarden",
+          "url": "https://bitwarden.com/help/password-manager-plans/"
+        },
+        {
+          "id": "raw-source-113cbfda74a5c2bc8f6e",
+          "title": "Permanently Remove Access | Bitwarden",
+          "url": "https://bitwarden.com/help/remove-users/"
+        },
+        {
+          "id": "raw-source-70aef72eac936826d54c",
+          "title": "Delete Member Accounts | Bitwarden",
+          "url": "https://bitwarden.com/help/delete-member-accounts/"
+        }
+      ]
+    },
+    {
+      "product": "1Password",
+      "original_questions": {
+        "total": 2,
+        "pass": 2
+      },
+      "necessary_branches": {
+        "total": 5,
+        "answered": 5
+      },
+      "visible_claims": {
+        "unique_semantic_count": 6,
+        "supported": 6,
+        "strict_text_atomic": 5,
+        "independent_factual_atom_count": 5,
+        "fact_atomic": 5,
+        "denominator_policy": "全部唯一正式 source/derived/renderer 语义主张；重复投影不重复计；受控父题聚合是另列严格文本与独立事实口径。"
+      },
+      "delivery": {
+        "text_deliverable": true,
+        "text_plus_evidence_deliverable": true,
+        "strict_text_atomic_deliverable": false,
+        "independent_fact_atomic_deliverable": true,
+        "current_question_qa_deliverable": true,
+        "strict_system_qa_deliverable": true,
+        "qa_blocker_count": 0
+      },
+      "actual_qa": {
+        "protocol": "independent_questions_v11",
+        "planned": 5,
+        "sent": 5,
+        "valid": 5,
+        "invalid": 0,
+        "unsent": 0,
+        "timeouts": 0,
+        "unresolved_invalid": 0,
+        "invalid_count_policy": "Unique issue IDs with any invalid attempt; may overlap finally valid IDs. See unresolved_invalid and immutable batches.",
+        "sent_issue_occurrences": 5,
+        "invalid_review_row_occurrences": 0,
+        "all_current_questions_valid_affirmative": true
+      },
+      "model_transports": 24,
+      "model_spans_by_agent": {
+        "planner": 1,
+        "collector": 3,
+        "analyst": 1,
+        "comparator": 1,
+        "reflector": 1,
+        "writer": 7,
+        "qa": 10
+      },
+      "known_tokens": 80281,
+      "unknown_usage_spans": 0,
+      "report_path": "docs/optimization/2026-11-02-delivery-final-reports/1password.md",
+      "report_sha256": "451908699cef28318bb1910446b659f65d7bc58124be237a7543d18ead5d5dd4",
+      "sources": [
+        {
+          "id": "raw-source-0c2b7dfbb5cdb79f98e6",
+          "title": "1Password Pricing and Plans | 1Password",
+          "url": "https://1password.com/pricing"
+        },
+        {
+          "id": "raw-source-9ea4b68f00a9a2851e78",
+          "title": "Share with guests in 1Password Families | 1Password Support",
+          "url": "https://support.1password.com/guests/"
+        }
+      ]
+    }
+  ],
+  "qa": {
+    "planned_unique_issues": 26,
+    "sent_unique_issues": 25,
+    "finally_valid_unique_issues": 25,
+    "invalid_attempt_unique_issues": 1,
+    "unresolved_invalid": 0,
+    "unsent_unique_issues": 1,
+    "timeouts": 0,
+    "retained_system_historical_findings": 13,
+    "note": "BW一次缺delivery_gaps无效后有效重试；Tre一条历史finding未送；BW一条事实缺证blocker保留。原生模型意见不等于系统退役决定。"
+  },
+  "model": {
+    "actual_alias": "deepseek-flash",
+    "weight_revision": null,
+    "transports": 120,
+    "known_tokens": 412743,
+    "unknown_usage_spans": 0,
+    "provider_bill_usd": null,
+    "per_product_limits": {
+      "calls": 64,
+      "tokens": 240000,
+      "configured_cost_usd": 0.25
+    },
+    "temperature": 0,
+    "retries": 0,
+    "whole_current_task_first_plus_final": {
+      "transports": 242,
+      "known_tokens": 879487
+    }
+  },
+  "source": {
+    "production_code_sha256": "5bf6a0701b0d56d70a1b5361bb0dd29599345066b39d7492620ecd20693a3d66",
+    "production_packages_sha256": "1b662670aab029911f5d4a847d0a0b525edfd8c4357a302d969ee7cbdbcbb4ba",
+    "model_round_manifest_sha256": "c539af4366f7e754de7be4cdc8109f8ebe68e282220625d2bf36744211be6a7e",
+    "model_round_archive_sha256": "eb888c75e7101b71f82ec61d35be007d771120a87beccee940f5f098c6fccff0",
+    "publication_manifest_sha256": "4086dbb6a32c5719de50f8810dc0282cc19d353e5ad6c727366c89f37e292755",
+    "publication_archive_sha256": "8794d87452710c3082732cbea4f3e4817c7331119b7837f03ba3d862cde32a3b",
+    "production_unchanged_after_model_run": true,
+    "publication_delta": "仅四个测试夹具更新；生产、资源、应用、脚本、runtime、API配置与模型验收冻结版本相同。",
+    "same_day_first_final_input_capture_bytes_identical": true,
+    "capture_freshness": "1Password报价页2026-11-02捕获；其余2026-10-21归档，不作整体实时性承诺。",
+    "cold_producer_and_qa_projection_verified_reports": 4,
+    "independent_audit_sha256": "d71c83d48292fb0538f9094502cda07ceafa602f1d52a089b6cf2f4f123a88c1",
+    "independent_addendum_sha256": "38dc580dc11b4db7ab6274693e7d62e2c17e95cd6c1e5a92b25e1e19b783924e"
+  },
+  "backend": {
+    "interpreter": "existing project Python virtual environment",
+    "test_args": [
+      "-m",
+      "pytest",
+      "backend/tests",
+      "-q",
+      "--tb=short"
+    ],
+    "exit_code": 0,
+    "source_unchanged": true,
+    "elapsed_seconds": 675.5405781269073,
+    "log_sha256": "f42579a07f71ef7e0ad4150ae84f063cedd1cc790740127e031491b99f1384b9",
+    "final_pytest_summary": "9766 passed, 1 skipped, 250 warnings in 672.78s (0:11:12)",
+    "previous_candidate": {
+      "passed": 9762,
+      "failed": 4,
+      "skipped": 1,
+      "log_sha256": "e4a9245cb9ed015298caa87fd66e9cf2d9f62ade80dd6cf255f49de41c7978d6",
+      "failures_preserved": true
+    }
+  },
+  "validation": {
+    "changed_python_files": 54,
+    "ruff_added_findings": 0,
+    "api_types": {
+      "api_export_equal": true,
+      "typescript_export_equal": true,
+      "frontend_tests_or_build_rerun": false
+    },
+    "frontend": {
+      "tracked_frontend_files": 260,
+      "changed_from_base": [],
+      "all_tracked_frontend_bytes_unchanged": true,
+      "tests_or_build_rerun": false
+    }
+  },
+  "rollout": {
+    "writer_task_execution_default": false,
+    "writer_question_atomic_default": false,
+    "task_package_contract": "complete-task-evidence-v1",
+    "qa_contract": "independent_questions_v11",
+    "structured_conclusions_contract": "structured-conclusions-v2"
+  },
+  "remaining": [
+    "既有8题均已曝光；此处只证明固定回归结果，不证明泛化。",
+    "固定官方捕获输入的阶段入口回放，不是完整在线采集/全Graph/E2E/生产RAG。",
+    "必要澄清、CPU缺用量、定制销售报价、实际membership缺失完成当前交付，但相关产品事实/准确金额仍unknown。",
+    "隐藏supported稿、已采但未消费原文、审核理由、身份哈希不补正文。",
+    "Trello一条历史finding未实际送审，Bitwarden一条历史事实blocker有效keep；严格system QA为2/4。",
+    "本独立验收不把runner exit0或内容通过当作全后端通过；全套测试及费用另由真实原始日志单列。"
+  ],
+  "next_steps": [
+    "完成Trello历史待审项的有界继续调度，实际送审后再判系统通过。",
+    "区分历史事实缺证与当前完整澄清，保留缺证记录并明确局部报告释放政策。",
+    "增加独立未曝光验收；改善重复规则和受控父题汇总的可读性。"
+  ],
+  "no_model_training": true,
+  "docker_executed": false,
+  "kafka_added": false
+}

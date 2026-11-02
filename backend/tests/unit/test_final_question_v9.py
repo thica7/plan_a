@@ -25,7 +25,7 @@ V8 = "independent_questions_v8"
 
 
 def test_versioned_systems_caps_and_actual_request_reserve():
-    assert qa.PROTOCOL == V9
+    assert qa.PROTOCOL == "independent_questions_v11"
     for version, digest in {
         5: "d3b389c339ed353b83560842c33f5f64acd500e2241ce49a40ea9f5a1c7466c5",
         6: "077d6cffe1ace86417e94cb16baa4747ca081d285dc2a3f17ed70c2f931fae43",
@@ -39,12 +39,13 @@ def test_versioned_systems_caps_and_actual_request_reserve():
         assert qa.review_byte_limit(f"independent_questions_v{version}") == 8192
     assert qa.TASK_REVIEW_BYTES == 8192
     assert qa.review_byte_limit(V9) == 14000
-    assert qa.INDEPENDENT_SYSTEM == qa.INDEPENDENT_SYSTEM_V9
+    assert qa.INDEPENDENT_SYSTEM == qa.INDEPENDENT_SYSTEM_V11
     assert "current_question" in qa.INDEPENDENT_SYSTEM
     assert "historical_finding" in qa.INDEPENDENT_SYSTEM
     assert "800" in qa.INDEPENDENT_SYSTEM
     assert (
-        qa.FINAL_QA_REQUEST_RESERVE == len(qa.INDEPENDENT_SYSTEM.encode()) + 14000 + 256 + 1600 + 2
+        qa.FINAL_QA_REQUEST_RESERVE
+        == len(qa.INDEPENDENT_SYSTEM_V9.encode()) + 14000 + 256 + 1600 + 2
     )
 
 
@@ -234,7 +235,7 @@ async def test_narrow_final_qa_evidence_allowance_keeps_old_credentials(monkeypa
     monkeypatch.setattr(service, "_begin_evidence_use", observe)
     install_review(monkeypatch, service)
     await reconcile_question_findings(service, record, [], evidence_issues=[])
-    assert calls and all(c["qa_review_protocol"] == V9 for c in calls)
+    assert calls and all(c["qa_review_protocol"] == qa.PROTOCOL for c in calls)
 
 
 @pytest.mark.asyncio
@@ -244,7 +245,9 @@ async def test_explicit_v8_replay_binds_its_old_system_cap_and_cache(monkeypatch
     await reconcile_question_findings(service, record, [], evidence_issues=[])
     rows = candidates(record.detail)
     old_rows = {
-        key: {k: v for k, v in row.items() if k != "review_scope"} for key, row in rows.items()
+        key: {k: v for k, v in row.items() if k not in {
+            "review_scope", "delivery_obligations", "pending_inputs", "blocked_outputs"}}
+        for key, row in rows.items()
     }
     output = receipt(record.detail)
     bound = copy.deepcopy(output["batch_receipts"][0])
@@ -299,7 +302,9 @@ async def test_fresh_budget_uses_actual_sys9_14000_and_restored_limits_stay_exac
         user="x" * 14000,
         max_output_tokens=1600,
     )
-    assert len(requests) == 1 and budget.tokens_used == budget.max_tokens == 80000
+    assert len(requests) == 1
+    assert budget.tokens_used == budget.max_tokens - (
+        len(qa.INDEPENDENT_SYSTEM_V9.encode()) - len(qa.INDEPENDENT_SYSTEM.encode()))
     record.llm_budget = None
     checkpoint = {
         "calls": 10,

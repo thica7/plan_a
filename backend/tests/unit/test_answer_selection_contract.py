@@ -242,6 +242,7 @@ async def test_writer_publishes_bound_plan_rules_and_final_qa_rejects_changed_an
     from packages.skills.registry import SkillRegistry
 
     monkeypatch.setattr("packages.research.evidence.views.datetime", FixedTime)
+    monkeypatch.setattr("packages.agents.writer.question_retrieval.datetime", FixedTime)
     detail = make_detail()
     detail.plan.competitors = ["Product A"]
     detail.plan.dimensions = ["feature"]

@@ -332,6 +332,9 @@ def _billing_service_scope(brief, body, page):
     resolution = _heading_resolution(body, page)
     if not resolution['valid']:
         return 0, ''
+    disclosure_scope = _billing_disclosure_scope(brief, body, page, resolution)
+    if disclosure_scope is not None:
+        return disclosure_scope
     siblings, parents = {}, []
     for entry in resolution['entries']:
         while parents and parents[-1]['level'] >= entry['level']:
@@ -384,6 +387,54 @@ def _billing_service_scope(brief, body, page):
     if finish - start > MAX_INPUT_CHARS:
         return 0, ''
     return start, body[start:finish]
+
+
+def _billing_disclosure_scope(brief, body, page, resolution):
+    """A complete explicitly named FAQ may provide its own service boundary."""
+    from packages.research.extraction.billing_rules import sales_quote_scope
+
+    capture = page.metadata.get('capture_metadata', page.metadata)
+    records = capture.get('disclosures', []) if isinstance(capture, dict) else []
+    qualified = []
+    for record in records if isinstance(records, list) else []:
+        if not isinstance(record, dict) or record.get('status') != 'complete':
+            continue
+        quote, start = record.get('quote'), record.get('quote_start')
+        if (not isinstance(quote, str) or not isinstance(record.get('question'), str)
+                or not isinstance(record.get('answer'), str) or type(start) is not int or start < 0
+                or body.count(quote) != 1 or body[start:start + len(quote)] != quote
+                or record.get('quote_hash') != hashlib.sha256(quote.encode()).hexdigest()[:16]
+                or record.get('question') + '\n' + record.get('answer') != quote):
+            continue
+        plan = sales_quote_scope(quote)
+        headings = [e for e in resolution['entries'] if e['title'] == record['question']
+                    and e['positions'] == [start]]
+        if not plan or len(headings) != 1:
+            continue
+        finish = _resolved_subtree_end(resolution, headings[0], len(body))
+        if finish is None or start + len(quote) > finish:
+            continue
+        qualified.append((plan, start, quote))
+    if not qualified:
+        return None
+    selected = []
+    for question in _billing_questions(brief):
+        matches = [row for row in qualified if re.search(
+            r'(?<![A-Za-z])' + re.escape(row[0]) + r'(?![A-Za-z])', question.question, re.I)]
+        if len(matches) != 1:
+            return 0, ''
+        # An explicitly requested sibling service still prevents narrowing to
+        # a lone FAQ. Its source heading cannot be silently discarded.
+        other_titles = [e['title'] for e in resolution['entries'] if e['title'] != matches[0][0]
+                        and '?' not in e['title'] and '？' not in e['title']]
+        if any(re.search(r'(?<![A-Za-z])' + re.escape(title) + r'(?![A-Za-z])',
+                         question.question, re.I) for title in other_titles):
+            return 0, ''
+        selected.append(matches[0])
+    if not selected or any(row != selected[0] for row in selected):
+        return 0, ''
+    _, start, quote = selected[0]
+    return start, quote
 
 
 def _plan_heading_path(headings, position):

@@ -103,8 +103,12 @@ def parse_claim_drafts(text, candidates, sent_fact_ids, consumption_id, *, sourc
                 continue
             for span_id in claim.source_span_ids:
                 span = (span_candidates or {}).get(span_id)
-                if (span is None or span['fact_id'] not in originals
-                        or span not in source_span_candidates(originals[span['fact_id']])):
+                if (
+                    span is None
+                    or span["fact_id"] not in originals
+                    or span
+                    not in source_span_candidates(originals[span["fact_id"]], relation_members=True)
+                ):
                     raise ValueError('Source span was not a complete sent candidate')
                 bound_spans.append(span)
             if (not bound_spans and span_candidates is not None and len(claim.fact_ids) == 1

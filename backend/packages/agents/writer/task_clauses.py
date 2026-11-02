@@ -450,6 +450,35 @@ def reuse_selection(task, history, facts, consumption_id, snapshot_id):
         support_refs=selection["support_refs"],
         **{k: dispatch[k] for k in ("span_id", "full_input_sha256", "full_output_sha256")},
     )
+    from packages.agents.writer.task_evidence_package import (
+        checked_contract as package_contract,
+    )
+    from packages.agents.writer.task_evidence_package import (
+        complete_selection,
+        source_review_state,
+    )
+    if package_contract(original):
+        from packages.agents.writer.selected_task_delivery import parse_generation
+
+        reviewed = [r for r in prior if r[0]['name'] == 'dimension_question_atomic_review']
+        if len(reviewed) != 1 or not complete_selection(selection_payload, parsed):
+            return None
+        review_dispatch, review_span, review_payload = reviewed[0]
+        if (review_span.status != 'ok'
+                or digest(review_span.full_input) != review_dispatch['full_input_sha256']
+                or digest(review_span.full_output) != review_dispatch['full_output_sha256']
+                or review_payload.get('consumption_id') != consumption_id
+                or review_payload.get('snapshot_id') != snapshot_id
+                or review_payload.get('task_context') != original['generation_tasks'][0]):
+            raise ValueError('task_selection_reuse_source_review_changed')
+        from types import SimpleNamespace
+        claims, _, _ = parse_generation(
+            generated[0][1].full_output, original, SimpleNamespace(facts=facts),
+            SimpleNamespace(id=consumption_id))
+        if source_review_state(review_span.full_output, claims, review_payload) != 'supported':
+            return None
+        certificate['source_review'] = {k: review_dispatch[k] for k in (
+            'span_id', 'full_input_sha256', 'full_output_sha256')}
     return certificate, deepcopy(original), parsed
 
 

@@ -283,8 +283,15 @@ def validate_atomic_handoff(service, record, payload, view, *, review_projection
         raise EvidenceUseRejectedError("Atomic parent request context changed")
     version = checked_review_projection_version(review_projection_version)
     upstream = service._dimension_upstream_context(record, view, projection_version=2)
+    from packages.agents.writer.task_evidence_package import checked_contract as package_contract
+    task_packet = bool(package_contract(payload) and payload.get('task_outcome_contract'))
     expected = (review_identity_metadata(upstream, review_projection_version=version)
-                if version >= 2 else upstream)
+                if version >= 2 or task_packet else upstream)
+    if task_packet and (
+        payload.get('upstream_identity_refs') != expected['upstream_identity_refs']
+        or any(key in payload for key in ADVISORY_KEYS)
+    ):
+        raise EvidenceUseRejectedError('Complete task advisory identity changed')
     if version >= 2:
         if (
             type(payload.get("review_projection_version")) is not int
@@ -868,6 +875,9 @@ def save_atomic_receipt(service, record, compact, view, use, packets):
         receipt['structured_conclusions_contract'] = compact['structured_conclusions_contract']
         if 'conclusion_set' in compact:
             receipt['conclusion_set'] = compact['conclusion_set']
+    from packages.agents.writer.task_evidence_package import checked_contract as package_contract
+    if package_contract(compact):
+        receipt['task_package_contract'] = compact['task_package_contract']
     from packages.agents.writer.selected_task_delivery import checked_policy
     if checked_policy(compact.get('task_execution_policy')):
         receipt['task_execution_policy'] = compact['task_execution_policy']
@@ -1020,6 +1030,7 @@ async def execute_question_atomic_delivery(
     *, review_projection_version=3, generation_projection_version=5,
     answer_review_contract='subquestion-premises-v1', delivery_policy=None,
     task_execution_policy=None, task_clause_contract=None, structured_conclusions_contract=None,
+    task_package_contract=None,
 ):
     from packages.agents.writer.selected_task_delivery import checked_policy, execute
     if (structured_conclusions_contract is None
@@ -1031,13 +1042,22 @@ async def execute_question_atomic_delivery(
         structured_conclusions_contract = fresh_contract(
             service._evidence_live_record(record).detail,
             f'{view.competitor}/{view.dimension}')
+    if (task_package_contract is None
+            and structured_conclusions_contract == 'structured-conclusions-v2'
+            and service._settings.writer_task_execution_enabled
+            and service._settings.writer_question_atomic_enabled):
+        from packages.agents.writer.task_evidence_package import fresh_contract
+        task_package_contract = fresh_contract(
+            service._evidence_live_record(record).detail,
+            f'{view.competitor}/{view.dimension}')
     if checked_policy(task_execution_policy):
         if generation_projection_version != 5 or review_projection_version != 3:
             raise ValueError('Task execution policy requires GEN5 and REVIEW3')
         return await execute(service, record, selected, view, use, questions, packets, allowed,
             boundaries, gaps, answer_review_contract=answer_review_contract,
             execution_policy=task_execution_policy, task_clause_contract=task_clause_contract,
-            structured_conclusions_contract=structured_conclusions_contract)
+            structured_conclusions_contract=structured_conclusions_contract,
+            task_package_contract=task_package_contract)
     from packages.agents.writer.dimension_writer import (
         _support_ref_catalog,
         compact_prompt_json,

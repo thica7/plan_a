@@ -187,3 +187,74 @@ def test_substantive_missing_prefix_is_not_restored(source):
     brief, _, page = source('Only verified subscribers: ' + quote,
                             questions=('What minimum account billing charge applies?',))
     assert not semantic.semantic_extraction(brief, page, {'facts': [{'quote': quote}]}).fields
+
+
+def sales_faq_source(
+    source,
+    *,
+    question="What is the tax-inclusive yearly price for Integrated Shield?",
+    duplicate=False,
+    hide_answer=False,
+):
+    from packages.tools.fetch_page import _capture_html
+
+    plans = ['Integrated Shield', 'Workspace Backup'] + (['Integrated Shield'] if duplicate else [])
+    blocks = []
+    for index, plan in enumerate(plans):
+        answer = (
+            f"{plan} pricing is tailored to your organization’s needs "
+            "and the capabilities you require. "
+            "Contact our sales team to discuss your environment and receive a quote."
+        )
+        blocks.append(
+            f'<div><div><h3>How do I get pricing for {plan}?</h3>'
+            f'<button id="q-{index}" aria-controls="a-{index}" '
+            'aria-expanded="false"></button></div>'
+            f'<div id="a-{index}" role="region" aria-labelledby="q-{index}" '
+            f'aria-hidden="true"><p>{answer if not hide_answer else ""}</p></div></div>'
+        )
+    html = (
+        (
+            "<html><body><main><h1>Pricing</h1><h2>Platform</h2><h3>Integrated"
+            " Shield</h3><p>Access and security capabilities for "
+            "organizations.</p><h2>Frequently asked questions</h2>"
+        )
+        + "".join(blocks)
+        + "</main></body></html>"
+    )
+    body, headings, metadata = _capture_html(html)
+    brief, candidate, page = source(body, questions=(question,), headings=headings)
+    page.metadata.update(metadata)
+    return brief, candidate, page
+
+
+def test_complete_explicit_sales_faq_is_its_own_contiguous_service_scope(source):
+    from packages.research.extraction.structured_evidence import extract_structured_evidence
+
+    brief, candidate, page = sales_faq_source(source)
+    quote = page.metadata['disclosures'][0]['quote']
+    assert semantic.semantic_body_window(brief, page).strip() == quote
+    result = extract_structured_evidence(brief, page)
+    assert [q.text for q in result.quotes] == [quote]
+    items = admit_evidence_items(
+        [result], brief=brief, captured_pages=[page], candidates=[candidate]
+    )
+    assert items and all(item.status == 'accepted' for item in items)
+
+
+@pytest.mark.parametrize('question,duplicate,hide_answer', [
+    ('What is the price for Missing Service?', False, False),
+    ('What is the price for Integrated Shield and Workspace Backup?', False, False),
+    ('What is the price for Integrated Shield?', True, False),
+    ('What is the price for Integrated Shield?', False, True),
+])
+def test_sales_faq_scope_keeps_unknown_multi_service_duplicate_or_incomplete_closed(
+        source, question, duplicate, hide_answer):
+    brief, _, page = sales_faq_source(
+        source, question=question, duplicate=duplicate, hide_answer=hide_answer
+    )
+    if hide_answer:
+        from packages.research.extraction.structured_evidence import extract_structured_evidence
+        assert not extract_structured_evidence(brief, page).fields
+    else:
+        assert not semantic.semantic_body_window(brief, page)

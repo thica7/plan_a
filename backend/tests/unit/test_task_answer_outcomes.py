@@ -146,6 +146,18 @@ async def test_v3_production_named_resource_outcomes_do_not_depend_on_modal_word
     service, record, snapshot = case[:3]
     service._settings = replace(service._settings, writer_question_atomic_enabled=True)
 
+    # This regression exercises the saved v1 free-generation wording contract;
+    # fresh v2 uses server-typed source facts instead of free modal prose.
+    from packages.agents.writer import question_atomic_delivery as atomic
+
+    actual_execute = atomic.execute_question_atomic_delivery
+
+    async def execute_saved_contract(*args, **kwargs):
+        kwargs["structured_conclusions_contract"] = "structured-conclusions-v1"
+        return await actual_execute(*args, **kwargs)
+
+    monkeypatch.setattr(atomic, "execute_question_atomic_delivery", execute_saved_contract)
+
     async def model(record, **kwargs):
         p = expand_prompt_payload(json.loads(kwargs["user"].split("\nJSON:\n", 1)[1]))
         name = kwargs["name"]
@@ -686,6 +698,19 @@ async def test_same_question_four_complete_task_envelopes_split_and_replay_witho
             )
         else:
             sent.append((kwargs, p))
+            # The external response double must drive real ANSWER accounting:
+            # fresh plans release future protection after calls are charged.
+            from packages.llm.execution_budget import LLMCallExecution
+
+            _, prompt, output = service._llm_request_envelope(
+                system=kwargs['system'], user=kwargs['user'], max_output_tokens=1600)
+            execution = LLMCallExecution(
+                service._run_llm_budget(record), False,
+                phase='answer:Example Product/feature',
+                input_tokens=prompt, max_output_tokens=output)
+            execution.reserve()
+            execution.reserve_transport()
+            execution.settle()
             data = dict(
                 version=1,
                 task_reviews=[

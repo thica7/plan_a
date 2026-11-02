@@ -1,0 +1,2763 @@
+{
+  "round": "first_round_frozen_source_6dec8e12",
+  "original_question_summary": {
+    "total": 8,
+    "pass": 5,
+    "partial": 3
+  },
+  "branch_summary": {
+    "total": 22,
+    "text_status_counts": {
+      "answered": 18,
+      "missing": 4
+    },
+    "missing_or_partial_ids": [
+      "Trello-2.3",
+      "Trello-2.4",
+      "Cloudflare-1.3",
+      "1Password-1.1"
+    ],
+    "branches": [
+      {
+        "id": "Trello-1.1",
+        "original_question_id": "Trello-1",
+        "requirement": "A投票否定及启用条件",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          13,
+          23,
+          35,
+          37
+        ],
+        "selected_claim_ids": [
+          "claim-173e5a24d5470dffbe80"
+        ],
+        "reason": "A 未启用投票对应不许可；启用条件正式保留。",
+        "body_literal_occurrences": [
+          {
+            "line": 13,
+            "text": "- 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 23,
+            "text": "- 条件推断：题设 A 已禁用投票时该项投票许可不生效。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 35,
+            "text": "  - 投票（A） — 否"
+          },
+          {
+            "line": 37,
+            "text": "  仅当本看板启用卡片投票时 Observer 看板成员才可投票。 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 题设 A 已禁用投票时该项投票许可不生效。 在题设 B 已启用投票且该用户具有 Observer 角色的条件下可投票。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-1.2",
+        "original_question_id": "Trello-1",
+        "requirement": "B投票允许及启用条件",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          13,
+          25,
+          36,
+          37
+        ],
+        "selected_claim_ids": [
+          "claim-9655a5cd28d00da420e0"
+        ],
+        "reason": "B 已启用且该 Observer 被允许投票，正文和 renderer 明确是。",
+        "body_literal_occurrences": [
+          {
+            "line": 13,
+            "text": "- 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 25,
+            "text": "- 条件推断：在题设 B 已启用投票且该用户具有 Observer 角色的条件下可投票。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 36,
+            "text": "  - 投票（B） — 是"
+          },
+          {
+            "line": 37,
+            "text": "  仅当本看板启用卡片投票时 Observer 看板成员才可投票。 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 题设 A 已禁用投票时该项投票许可不生效。 在题设 B 已启用投票且该用户具有 Observer 角色的条件下可投票。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-1.3",
+        "original_question_id": "Trello-1",
+        "requirement": "下载A卡片附件",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          15,
+          39,
+          40,
+          42
+        ],
+        "selected_claim_ids": [
+          "claim-058a97b09c5880826ef3"
+        ],
+        "reason": "精确 Observer 下载附件规则与 A Observer 题设支撑下载 A 的肯定。",
+        "body_literal_occurrences": [
+          {
+            "line": 15,
+            "text": "- Observer 看板成员可下载卡片附件。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 39,
+            "text": "  结论：是"
+          },
+          {
+            "line": 40,
+            "text": "  - 下载卡片附件（A） — 是"
+          },
+          {
+            "line": 42,
+            "text": "  Observer 看板成员可下载卡片附件。 Observer 看板成员可导出看板。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-1.4",
+        "original_question_id": "Trello-1",
+        "requirement": "导出A",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          17,
+          39,
+          41,
+          42
+        ],
+        "selected_claim_ids": [
+          "claim-9d0466e857ebcd4c36ca"
+        ],
+        "reason": "导出与下载分别给出正式结果；导出 A 有精确操作支持。",
+        "body_literal_occurrences": [
+          {
+            "line": 17,
+            "text": "- Observer 看板成员可导出看板。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 39,
+            "text": "  结论：是"
+          },
+          {
+            "line": 41,
+            "text": "  - 导出看板（A） — 是"
+          },
+          {
+            "line": 42,
+            "text": "  Observer 看板成员可下载卡片附件。 Observer 看板成员可导出看板。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-1.5",
+        "original_question_id": "Trello-1",
+        "requirement": "允许投票不推出每卡强制义务",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          27,
+          44,
+          45
+        ],
+        "selected_claim_ids": [
+          "claim-ed3c84540ae551734b39"
+        ],
+        "reason": "许可不推出必须每卡投票，严格保留为非蕴含结论。",
+        "body_literal_occurrences": [
+          {
+            "line": 27,
+            "text": "- 条件推断：这条 Observer 投票许可本身不构成必须投票的依据。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 44,
+            "text": "  结论：否"
+          },
+          {
+            "line": 45,
+            "text": "  仅当本看板启用卡片投票时 Observer 看板成员才可投票。 这条 Observer 投票许可本身不构成必须投票的依据。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-2.1",
+        "original_question_id": "Trello-2",
+        "requirement": "Workspace不能统一设Observer",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          19,
+          48,
+          52
+        ],
+        "selected_claim_ids": [
+          "claim-f100215a5e5a8a14c822"
+        ],
+        "reason": "Workspace 层级不能统一设 Observer。",
+        "body_literal_occurrences": [
+          {
+            "line": 19,
+            "text": "- 目前无法在 Workspace 层级将用户设为 observer。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 48,
+            "text": "  - 能否在 Workspace 层级把他统一设置成 Observer — 否"
+          },
+          {
+            "line": 52,
+            "text": "  目前无法在 Workspace 层级将用户设为 observer。 每个 observer 按成员逐看板单独设置。 根据逐成员逐看板配置规则对 A 的角色设置不决定 B 的角色。B 的实际角色仍须单独核实。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-2.2",
+        "original_question_id": "Trello-2",
+        "requirement": "A改权不自动决定B具体权限",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          21,
+          29,
+          49,
+          52
+        ],
+        "selected_claim_ids": [
+          "claim-80d69dcadef6473c7987"
+        ],
+        "reason": "明确 A 改权不自动决定 B，并保留 B 实际角色未知。",
+        "body_literal_occurrences": [
+          {
+            "line": 21,
+            "text": "- 每个 observer 按成员逐看板单独设置。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 29,
+            "text": "- 条件推断：根据逐成员逐看板配置规则对 A 的角色设置不决定 B 的角色。B 的实际角色仍须单独核实。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 49,
+            "text": "  - A 上这次改权是否自动决定他在 B 的权限 — 否"
+          },
+          {
+            "line": 52,
+            "text": "  目前无法在 Workspace 层级将用户设为 observer。 每个 observer 按成员逐看板单独设置。 根据逐成员逐看板配置规则对 A 的角色设置不决定 B 的角色。B 的实际角色仍须单独核实。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ]
+      },
+      {
+        "id": "Trello-2.3",
+        "original_question_id": "Trello-2",
+        "requirement": "谁可把A现有成员设Observer",
+        "text_status": "missing",
+        "support_status": "not_published",
+        "report_lines": [
+          50
+        ],
+        "selected_claim_ids": [],
+        "reason": "谁有权改现有成员被留为尚不能确定；未发表 board admin/Workspace admin 授权规则，题设管理员已操作不能充当官方授权证据。",
+        "body_literal_occurrences": [
+          {
+            "line": 50,
+            "text": "  - 谁有权把 A 的现有成员改为 Observer — 尚不能确定"
+          }
+        ]
+      },
+      {
+        "id": "Trello-2.4",
+        "original_question_id": "Trello-2",
+        "requirement": "仅凭Observer标签不能确定免费/计费",
+        "text_status": "missing",
+        "support_status": "not_published",
+        "report_lines": [
+          51
+        ],
+        "selected_claim_ids": [],
+        "reason": "对能否由标签判定收费本身只答尚不能确定；未发表仅凭 Observer 标签不能断定免费/计费及适用成员资格边界。保守未知不等于完成该必要产品规则。",
+        "body_literal_occurrences": [
+          {
+            "line": 51,
+            "text": "  - 能否确定他一定免费或一定计费？ — 尚不能确定"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-1.1",
+        "original_question_id": "Cloudflare-1",
+        "requirement": "Cache Domain Purge特定域权限规则",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          13
+        ],
+        "selected_claim_ids": [
+          "claim-07d66a162b5a379e3818"
+        ],
+        "reason": "正式正文明确特定域的边缘缓存清除权限。",
+        "body_literal_occurrences": [
+          {
+            "line": 13,
+            "text": "- Cache Domain Purge 角色包含特定域的边缘缓存清除权限。 [source:raw-source-c71a5d8161af6e06ae53]"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-1.2",
+        "original_question_id": "Cloudflare-1",
+        "requirement": "角色只能被赋予其给定域范围",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          15,
+          26
+        ],
+        "selected_claim_ids": [
+          "claim-306bbf50dfc7e460485b"
+        ],
+        "reason": "正式正文保留 only given scope 规则；与特定域角色规则同见正文。",
+        "body_literal_occurrences": [
+          {
+            "line": 15,
+            "text": "- Cloudflare 角色只能被赋予其给定作用域（Roles can only ever be assigned to their given scope）。 [source:raw-source-c71a5d8161af6e06ae53]"
+          },
+          {
+            "line": 26,
+            "text": "  Cloudflare 角色只能被赋予其给定作用域（Roles can only ever be assigned to their given scope）。 [source:raw-source-c71a5d8161af6e06ae53]"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-1.3",
+        "original_question_id": "Cloudflare-1",
+        "requirement": "example.com角色不能据此清除other.example",
+        "text_status": "missing",
+        "support_status": "not_published",
+        "report_lines": [
+          24,
+          25,
+          26
+        ],
+        "selected_claim_ids": [],
+        "reason": "核心 other.example 结果被明示为尚不能确定；不能用未发表的 supported 否定稿补成否定答复。",
+        "body_literal_occurrences": [
+          {
+            "line": 24,
+            "text": "  结论：需按条件判断"
+          },
+          {
+            "line": 25,
+            "text": "  - 他能因此清除同一 Cloudflare 账户里 other.example 的边缘缓存吗？ (other.example) — 尚不能确定"
+          },
+          {
+            "line": 26,
+            "text": "  Cloudflare 角色只能被赋予其给定作用域（Roles can only ever be assigned to their given scope）。 [source:raw-source-c71a5d8161af6e06ae53]"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-2.1",
+        "original_question_id": "Cloudflare-2",
+        "requirement": "不能仅据15M请求报准确完整美元账单",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          19,
+          28,
+          29
+        ],
+        "selected_claim_ids": [
+          "claim-fe4659825422093d3abe"
+        ],
+        "reason": "正式正文明确不能仅凭动态请求数核实完整账单，未编造金额。",
+        "body_literal_occurrences": [
+          {
+            "line": 19,
+            "text": "- 条件推断：当前缺少足以确定该项费用的可计费 CPU 总量或可靠用量界限，不能仅凭动态请求数核实完整账单。 [source:raw-source-52ba7b31b51e937245c1]"
+          },
+          {
+            "line": 28,
+            "text": "  结论：尚不能确定"
+          },
+          {
+            "line": 29,
+            "text": "  Workers Paid 套餐的 Standard 用量模式以 CPU 时间作为计费维度。 当前缺少足以确定该项费用的可计费 CPU 总量或可靠用量界限，不能仅凭动态请求数核实完整账单。 [source:raw-source-52ba7b31b51e937245c1]"
+          }
+        ]
+      },
+      {
+        "id": "Cloudflare-2.2",
+        "original_question_id": "Cloudflare-2",
+        "requirement": "CPU为独立用量计费，须CPU输入",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          17,
+          19,
+          29
+        ],
+        "selected_claim_ids": [
+          "claim-fe4659825422093d3abe"
+        ],
+        "reason": "CPU 计费维度和缺少 CPU 总量/可靠用量界限均发表；不是仅靠拒价得分。",
+        "body_literal_occurrences": [
+          {
+            "line": 17,
+            "text": "- Workers Paid 套餐的 Standard 用量模式以 CPU 时间作为计费维度。 [source:raw-source-52ba7b31b51e937245c1]"
+          },
+          {
+            "line": 19,
+            "text": "- 条件推断：当前缺少足以确定该项费用的可计费 CPU 总量或可靠用量界限，不能仅凭动态请求数核实完整账单。 [source:raw-source-52ba7b31b51e937245c1]"
+          },
+          {
+            "line": 29,
+            "text": "  Workers Paid 套餐的 Standard 用量模式以 CPU 时间作为计费维度。 当前缺少足以确定该项费用的可计费 CPU 总量或可靠用量界限，不能仅凭动态请求数核实完整账单。 [source:raw-source-52ba7b31b51e937245c1]"
+          }
+        ]
+      },
+      {
+        "id": "Bitwarden-1.1",
+        "original_question_id": "Bitwarden-1",
+        "requirement": "Free organization无法满足3人且3collections整体请求",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          13,
+          15,
+          20,
+          21
+        ],
+        "selected_claim_ids": [
+          "claim-6cdd95800cfa519475e9"
+        ],
+        "reason": "明确否定 3人且3collections 整体请求；精确支持的 2collections 上限足够，未编造额外人数限制。",
+        "body_literal_occurrences": [
+          {
+            "line": 13,
+            "text": "- Free 组织最多支持在 2 个 collections 中安全共享数据。 [source:raw-source-476cdfef80ec06d6a285]"
+          },
+          {
+            "line": 15,
+            "text": "- 条件推断：在题设共享范围内，请求的 3 collections 超过已核实上限 2 collections，因此该需求无法满足。 [source:raw-source-476cdfef80ec06d6a285]"
+          },
+          {
+            "line": 20,
+            "text": "  结论：否"
+          },
+          {
+            "line": 21,
+            "text": "  Free 组织最多支持在 2 个 collections 中安全共享数据。 在题设共享范围内，请求的 3 collections 超过已核实上限 2 collections，因此该需求无法满足。 [source:raw-source-476cdfef80ec06d6a285]"
+          }
+        ]
+      },
+      {
+        "id": "Bitwarden-2.1",
+        "original_question_id": "Bitwarden-2",
+        "requirement": "澄清移除成员还是永久删除账户/数据",
+        "text_status": "answered",
+        "support_status": "request_only_satisfied",
+        "report_lines": [
+          24
+        ],
+        "selected_claim_ids": [],
+        "reason": "明确询问移除成员还是永久删除账户或数据；必要操作澄清已交付，不等同已回答数据保留行为。",
+        "body_literal_occurrences": [
+          {
+            "line": 24,
+            "text": "  请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？"
+          }
+        ]
+      },
+      {
+        "id": "Bitwarden-2.2",
+        "original_question_id": "Bitwarden-2",
+        "requirement": "澄清个人数据还是组织数据",
+        "text_status": "answered",
+        "support_status": "request_only_satisfied",
+        "report_lines": [
+          24
+        ],
+        "selected_claim_ids": [],
+        "reason": "明确询问个人数据还是组织数据；数据归属未知保留，无无证生命周期断言。",
+        "body_literal_occurrences": [
+          {
+            "line": 24,
+            "text": "  请确认具体操作：您准备移除成员，还是永久删除账户或数据？ 请确认数据归属：相关数据属于个人，还是组织？"
+          }
+        ]
+      },
+      {
+        "id": "1Password-1.1",
+        "original_question_id": "1Password-1",
+        "requirement": "访客不能同时加入2共享vault",
+        "text_status": "missing",
+        "support_status": "not_published",
+        "report_lines": [
+          23
+        ],
+        "selected_claim_ids": [],
+        "reason": "两个共享保险库分支正式仍为尚不能确定；single-vault 支持虽在精确 quote 中，未被正文消费为该否定答案，不能代补。",
+        "body_literal_occurrences": [
+          {
+            "line": 23,
+            "text": "  - 1Password: 在 1Password Families 中，访客已接受邀请并被确认。他能同时加入两个共享保险库 — 尚不能确定"
+          }
+        ]
+      },
+      {
+        "id": "1Password-1.2",
+        "original_question_id": "1Password-1",
+        "requirement": "访客没有自己的Private vault",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          15,
+          24,
+          25
+        ],
+        "selected_claim_ids": [
+          "claim-61ae3bd7eee0c1186491"
+        ],
+        "reason": "Private vault 结果单独明确否且有精确 guest quote。",
+        "body_literal_occurrences": [
+          {
+            "line": 15,
+            "text": "- 1Password 访客账户没有自己的 Private vault。 [source:raw-source-9ea4b68f00a9a2851e78]"
+          },
+          {
+            "line": 24,
+            "text": "  - 或者拥有自己的 Private vault 吗？ — 否"
+          },
+          {
+            "line": 25,
+            "text": "  1Password 访客账户没有自己的 Private vault。 [source:raw-source-9ea4b68f00a9a2851e78]"
+          }
+        ]
+      },
+      {
+        "id": "1Password-2.1",
+        "original_question_id": "1Password-2",
+        "requirement": "不编造精确RMB含税总价",
+        "text_status": "answered",
+        "support_status": "request_only_satisfied",
+        "report_lines": [
+          17,
+          28
+        ],
+        "selected_claim_ids": [
+          "claim-9b409b07b52b53930f11"
+        ],
+        "reason": "明确当前无法核实所问精确含税总额；未编造人民币金额、税率、汇率或忽略题设300人/一年。",
+        "body_literal_occurrences": [
+          {
+            "line": 17,
+            "text": "- 条件推断：Unified Access 采用按组织需求及所需能力确定的销售报价；下一步是联系官方销售说明环境并取得报价。当前无法核实所问精确含税总额。报价时保留题设已给条件。 [source:raw-source-0c2b7dfbb5cdb79f98e6]"
+          },
+          {
+            "line": 28,
+            "text": "  Unified Access 的价格为按组织需求及所需能力确定且向官方销售说明环境后获取的定制报价。 Unified Access 采用按组织需求及所需能力确定的销售报价；下一步是联系官方销售说明环境并取得报价。当前无法核实所问精确含税总额。报价时保留题设已给条件。 [source:raw-source-0c2b7dfbb5cdb79f98e6]"
+          }
+        ]
+      },
+      {
+        "id": "1Password-2.2",
+        "original_question_id": "1Password-2",
+        "requirement": "公开报价性质有官方证据",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          13,
+          17,
+          28
+        ],
+        "selected_claim_ids": [
+          "claim-9b409b07b52b53930f11"
+        ],
+        "reason": "公开官方定价页所选原句明示 Unified Access 为按组织需求/能力确定的定制报价。",
+        "body_literal_occurrences": [
+          {
+            "line": 13,
+            "text": "- Unified Access 的价格为按组织需求及所需能力确定且向官方销售说明环境后获取的定制报价。 [source:raw-source-0c2b7dfbb5cdb79f98e6]"
+          },
+          {
+            "line": 17,
+            "text": "- 条件推断：Unified Access 采用按组织需求及所需能力确定的销售报价；下一步是联系官方销售说明环境并取得报价。当前无法核实所问精确含税总额。报价时保留题设已给条件。 [source:raw-source-0c2b7dfbb5cdb79f98e6]"
+          },
+          {
+            "line": 28,
+            "text": "  Unified Access 的价格为按组织需求及所需能力确定且向官方销售说明环境后获取的定制报价。 Unified Access 采用按组织需求及所需能力确定的销售报价；下一步是联系官方销售说明环境并取得报价。当前无法核实所问精确含税总额。报价时保留题设已给条件。 [source:raw-source-0c2b7dfbb5cdb79f98e6]"
+          }
+        ]
+      },
+      {
+        "id": "1Password-2.3",
+        "original_question_id": "1Password-2",
+        "requirement": "有证官方销售/报价下一步",
+        "text_status": "answered",
+        "support_status": "supported",
+        "report_lines": [
+          17,
+          28
+        ],
+        "selected_claim_ids": [
+          "claim-9b409b07b52b53930f11"
+        ],
+        "reason": "官方销售说明环境取得报价的下一步已发表，有精确 Contact our sales team 原句支持，不是单纯安全拒价。",
+        "body_literal_occurrences": [
+          {
+            "line": 17,
+            "text": "- 条件推断：Unified Access 采用按组织需求及所需能力确定的销售报价；下一步是联系官方销售说明环境并取得报价。当前无法核实所问精确含税总额。报价时保留题设已给条件。 [source:raw-source-0c2b7dfbb5cdb79f98e6]"
+          },
+          {
+            "line": 28,
+            "text": "  Unified Access 的价格为按组织需求及所需能力确定且向官方销售说明环境后获取的定制报价。 Unified Access 采用按组织需求及所需能力确定的销售报价；下一步是联系官方销售说明环境并取得报价。当前无法核实所问精确含税总额。报价时保留题设已给条件。 [source:raw-source-0c2b7dfbb5cdb79f98e6]"
+          }
+        ]
+      }
+    ]
+  },
+  "visible_claim_summary": {
+    "unique_semantic_count": 21,
+    "supported": 21,
+    "strict_text_atomic": 20,
+    "non_atomic": 1,
+    "denominator_policy": "全部唯一正式可见产品规则、场景推论及 renderer Yes/No；同义重复只计一次；纯未知、必要澄清、拒价、流程文字不抬分母但逐项列明。",
+    "claims": [
+      {
+        "id": "claim-76af2f51b061f171522d",
+        "raw_claim_id": "claim-76af2f51b061f171522d",
+        "text": "仅当本看板启用卡片投票时 Observer 看板成员才可投票。",
+        "selected_claim_ids": [
+          "claim-76af2f51b061f171522d",
+          "claim-173e5a24d5470dffbe80",
+          "claim-9655a5cd28d00da420e0",
+          "claim-ed3c84540ae551734b39"
+        ],
+        "report_lines": [
+          13,
+          37,
+          45
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "source",
+        "reason": "精确所选 Observer 动作句明示 vote on cards (if that is enabled for the board)；同一投票动作的启用条件必须保留，仍为原子。四个同文 raw claims 作为同义别名，各自精确选证均核。",
+        "rendered_decision_aliases": [],
+        "body_literal_occurrences": [
+          {
+            "line": 13,
+            "text": "- 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 37,
+            "text": "  仅当本看板启用卡片投票时 Observer 看板成员才可投票。 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 题设 A 已禁用投票时该项投票许可不生效。 在题设 B 已启用投票且该用户具有 Observer 角色的条件下可投票。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 45,
+            "text": "  仅当本看板启用卡片投票时 Observer 看板成员才可投票。 这条 Observer 投票许可本身不构成必须投票的依据。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-de1168d2ad5c684b9a0ccc16",
+            "fact_id": "evidence-fact-record-68c12a566909fe95ffb916d5e90896fbc809d9eee36dd7cb0e4b6148d9cb9b73",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "8896575f6189d8a08fd5edf2d7514caba4fb264f577182aa73f15c31cf7b8ad8",
+            "source_path": "quote",
+            "start": 123,
+            "end": 323,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-76af2f51b061f171522d",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          },
+          {
+            "span_id": "source-span-8227f2f8f006d119b32fcdc0",
+            "fact_id": "evidence-fact-record-2fb6a2b3d95d46a46dbc53fe8954516186211a238eba043d7514f7359ee112a9",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "79477bfb221852bbb71b44862d9cd2738495210329669199796ad9b41a1b59b7",
+            "source_path": "value/0",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-173e5a24d5470dffbe80",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          },
+          {
+            "span_id": "source-span-8227f2f8f006d119b32fcdc0",
+            "fact_id": "evidence-fact-record-2fb6a2b3d95d46a46dbc53fe8954516186211a238eba043d7514f7359ee112a9",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "79477bfb221852bbb71b44862d9cd2738495210329669199796ad9b41a1b59b7",
+            "source_path": "value/0",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-9655a5cd28d00da420e0",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          },
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-ed3c84540ae551734b39",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello"
+      },
+      {
+        "id": "claim-058a97b09c5880826ef3",
+        "raw_claim_id": "claim-058a97b09c5880826ef3",
+        "text": "Observer 看板成员可下载卡片附件。",
+        "selected_claim_ids": [
+          "claim-058a97b09c5880826ef3"
+        ],
+        "report_lines": [
+          15,
+          42
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "source",
+        "reason": "所选动作句明确 download card attachments；正文只表一个下载权限。",
+        "rendered_decision_aliases": [],
+        "body_literal_occurrences": [
+          {
+            "line": 15,
+            "text": "- Observer 看板成员可下载卡片附件。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 42,
+            "text": "  Observer 看板成员可下载卡片附件。 Observer 看板成员可导出看板。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-058a97b09c5880826ef3",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello"
+      },
+      {
+        "id": "claim-9d0466e857ebcd4c36ca",
+        "raw_claim_id": "claim-9d0466e857ebcd4c36ca",
+        "text": "Observer 看板成员可导出看板。",
+        "selected_claim_ids": [
+          "claim-9d0466e857ebcd4c36ca"
+        ],
+        "report_lines": [
+          17,
+          42
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "source",
+        "reason": "所选动作句明确 export the board；正文只表一个导出权限。",
+        "rendered_decision_aliases": [],
+        "body_literal_occurrences": [
+          {
+            "line": 17,
+            "text": "- Observer 看板成员可导出看板。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 42,
+            "text": "  Observer 看板成员可下载卡片附件。 Observer 看板成员可导出看板。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-9d0466e857ebcd4c36ca",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello"
+      },
+      {
+        "id": "claim-f100215a5e5a8a14c822",
+        "raw_claim_id": "claim-f100215a5e5a8a14c822",
+        "text": "目前无法在 Workspace 层级将用户设为 observer。",
+        "selected_claim_ids": [
+          "claim-f100215a5e5a8a14c822"
+        ],
+        "report_lines": [
+          19,
+          52
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "source",
+        "reason": "所选 quote 明说 currently not possible Workspace level；没有推定用户在 B 的实际资格。",
+        "rendered_decision_aliases": [
+          {
+            "text": "能否在 Workspace 层级把他统一设置成 Observer — 否",
+            "report_lines": [
+              48
+            ],
+            "support_status": "supported",
+            "strict_atomic": true,
+            "reason": "该 renderer 否是同一 Workspace 不可统一设定规则的题设实例，引用相同。",
+            "body_literal_occurrences": [
+              {
+                "line": 48,
+                "text": "  - 能否在 Workspace 层级把他统一设置成 Observer — 否"
+              }
+            ],
+            "selected_evidence": [
+              {
+                "span_id": "source-span-e4bb431e3eb31cbcd78073ce",
+                "fact_id": "evidence-fact-record-726501fb9b25677b0293339538df2d7495107948e9b1e986715a4f684b4b0e20",
+                "source_id": "raw-source-033d8ca615035ad47a36",
+                "fact_hash": "5f81c58713419592e24123d7bdc650c9585c66f94625c72ccbe2f2db7ed8d9c7",
+                "source_path": "quote",
+                "start": 0,
+                "end": 189,
+                "quote": "Because an observer is a board member permission it isn't currently possible to set a user as an observer at the\nWorkspace\nlevel, and each observer is set individually per member per board.",
+                "selection_kind": "source_span_binding",
+                "literal_slice_verified": true,
+                "fact_hash_verified": true,
+                "source_identity_verified": true,
+                "span_id_verified": true,
+                "selected_claim_id": "claim-f100215a5e5a8a14c822",
+                "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+              }
+            ]
+          }
+        ],
+        "body_literal_occurrences": [
+          {
+            "line": 19,
+            "text": "- 目前无法在 Workspace 层级将用户设为 observer。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 52,
+            "text": "  目前无法在 Workspace 层级将用户设为 observer。 每个 observer 按成员逐看板单独设置。 根据逐成员逐看板配置规则对 A 的角色设置不决定 B 的角色。B 的实际角色仍须单独核实。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-e4bb431e3eb31cbcd78073ce",
+            "fact_id": "evidence-fact-record-726501fb9b25677b0293339538df2d7495107948e9b1e986715a4f684b4b0e20",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "5f81c58713419592e24123d7bdc650c9585c66f94625c72ccbe2f2db7ed8d9c7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 189,
+            "quote": "Because an observer is a board member permission it isn't currently possible to set a user as an observer at the\nWorkspace\nlevel, and each observer is set individually per member per board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-f100215a5e5a8a14c822",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello"
+      },
+      {
+        "id": "claim-80d69dcadef6473c7987",
+        "raw_claim_id": "claim-80d69dcadef6473c7987",
+        "text": "每个 observer 按成员逐看板单独设置。",
+        "selected_claim_ids": [
+          "claim-80d69dcadef6473c7987"
+        ],
+        "report_lines": [
+          21,
+          52
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "source",
+        "reason": "所选 quote 明说 each observer is set individually per member per board；一个逐成员逐看板配置规则。",
+        "rendered_decision_aliases": [],
+        "body_literal_occurrences": [
+          {
+            "line": 21,
+            "text": "- 每个 observer 按成员逐看板单独设置。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 52,
+            "text": "  目前无法在 Workspace 层级将用户设为 observer。 每个 observer 按成员逐看板单独设置。 根据逐成员逐看板配置规则对 A 的角色设置不决定 B 的角色。B 的实际角色仍须单独核实。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-e4bb431e3eb31cbcd78073ce",
+            "fact_id": "evidence-fact-record-726501fb9b25677b0293339538df2d7495107948e9b1e986715a4f684b4b0e20",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "5f81c58713419592e24123d7bdc650c9585c66f94625c72ccbe2f2db7ed8d9c7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 189,
+            "quote": "Because an observer is a board member permission it isn't currently possible to set a user as an observer at the\nWorkspace\nlevel, and each observer is set individually per member per board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-80d69dcadef6473c7987",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello"
+      },
+      {
+        "id": "trello-derived-vote-A",
+        "text": "题设 A 已禁用投票时该项投票许可不生效。",
+        "report_lines": [
+          23,
+          37
+        ],
+        "selected_claim_ids": [
+          "claim-173e5a24d5470dffbe80"
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "derived",
+        "reason": "所选规则的投票启用条件与题设 A 未启用共同推出 A 无该投票许可；单动作否定。",
+        "rendered_decision_aliases": [
+          {
+            "text": "投票（A） — 否",
+            "report_lines": [
+              35
+            ],
+            "support_status": "supported",
+            "strict_atomic": true,
+            "reason": "相同 A 投票否定的 renderer 同义投影。",
+            "body_literal_occurrences": [
+              {
+                "line": 35,
+                "text": "  - 投票（A） — 否"
+              }
+            ],
+            "selected_evidence": [
+              {
+                "span_id": "source-span-8227f2f8f006d119b32fcdc0",
+                "fact_id": "evidence-fact-record-2fb6a2b3d95d46a46dbc53fe8954516186211a238eba043d7514f7359ee112a9",
+                "source_id": "raw-source-033d8ca615035ad47a36",
+                "fact_hash": "79477bfb221852bbb71b44862d9cd2738495210329669199796ad9b41a1b59b7",
+                "source_path": "value/0",
+                "start": 0,
+                "end": 200,
+                "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+                "selection_kind": "source_span_binding",
+                "literal_slice_verified": true,
+                "fact_hash_verified": true,
+                "source_identity_verified": true,
+                "span_id_verified": true,
+                "selected_claim_id": "claim-173e5a24d5470dffbe80",
+                "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+              }
+            ]
+          }
+        ],
+        "body_literal_occurrences": [
+          {
+            "line": 23,
+            "text": "- 条件推断：题设 A 已禁用投票时该项投票许可不生效。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 37,
+            "text": "  仅当本看板启用卡片投票时 Observer 看板成员才可投票。 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 题设 A 已禁用投票时该项投票许可不生效。 在题设 B 已启用投票且该用户具有 Observer 角色的条件下可投票。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8227f2f8f006d119b32fcdc0",
+            "fact_id": "evidence-fact-record-2fb6a2b3d95d46a46dbc53fe8954516186211a238eba043d7514f7359ee112a9",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "79477bfb221852bbb71b44862d9cd2738495210329669199796ad9b41a1b59b7",
+            "source_path": "value/0",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-173e5a24d5470dffbe80",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello"
+      },
+      {
+        "id": "trello-derived-vote-B",
+        "text": "在题设 B 已启用投票且该用户具有 Observer 角色的条件下可投票。",
+        "report_lines": [
+          25,
+          37
+        ],
+        "selected_claim_ids": [
+          "claim-9655a5cd28d00da420e0"
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "derived",
+        "reason": "所选规则的 Observer 投票许可加上题设 B 已启用并允许 Observer 投票，得出该角色在 B 可投票；同动作 AND 条件原子。",
+        "rendered_decision_aliases": [
+          {
+            "text": "投票（B） — 是",
+            "report_lines": [
+              36
+            ],
+            "support_status": "supported",
+            "strict_atomic": true,
+            "reason": "相同 B 投票许可的 renderer 同义投影。",
+            "body_literal_occurrences": [
+              {
+                "line": 36,
+                "text": "  - 投票（B） — 是"
+              }
+            ],
+            "selected_evidence": [
+              {
+                "span_id": "source-span-8227f2f8f006d119b32fcdc0",
+                "fact_id": "evidence-fact-record-2fb6a2b3d95d46a46dbc53fe8954516186211a238eba043d7514f7359ee112a9",
+                "source_id": "raw-source-033d8ca615035ad47a36",
+                "fact_hash": "79477bfb221852bbb71b44862d9cd2738495210329669199796ad9b41a1b59b7",
+                "source_path": "value/0",
+                "start": 0,
+                "end": 200,
+                "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+                "selection_kind": "source_span_binding",
+                "literal_slice_verified": true,
+                "fact_hash_verified": true,
+                "source_identity_verified": true,
+                "span_id_verified": true,
+                "selected_claim_id": "claim-9655a5cd28d00da420e0",
+                "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+              }
+            ]
+          }
+        ],
+        "body_literal_occurrences": [
+          {
+            "line": 25,
+            "text": "- 条件推断：在题设 B 已启用投票且该用户具有 Observer 角色的条件下可投票。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 37,
+            "text": "  仅当本看板启用卡片投票时 Observer 看板成员才可投票。 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 仅当本看板启用卡片投票时 Observer 看板成员才可投票。 题设 A 已禁用投票时该项投票许可不生效。 在题设 B 已启用投票且该用户具有 Observer 角色的条件下可投票。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8227f2f8f006d119b32fcdc0",
+            "fact_id": "evidence-fact-record-2fb6a2b3d95d46a46dbc53fe8954516186211a238eba043d7514f7359ee112a9",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "79477bfb221852bbb71b44862d9cd2738495210329669199796ad9b41a1b59b7",
+            "source_path": "value/0",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-9655a5cd28d00da420e0",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello"
+      },
+      {
+        "id": "trello-derived-no-duty",
+        "text": "这条 Observer 投票许可本身不构成必须投票的依据。",
+        "report_lines": [
+          27,
+          45
+        ],
+        "selected_claim_ids": [
+          "claim-ed3c84540ae551734b39"
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "derived",
+        "reason": "所选 able to / if enabled 表示能力许可，模态上不能推出必须每卡投票；正文只否定该许可产生强制义务，未断言其他来源不存在义务。",
+        "rendered_decision_aliases": [
+          {
+            "text": "结论：否",
+            "report_lines": [
+              44
+            ],
+            "support_status": "supported",
+            "strict_atomic": true,
+            "reason": "对是否由允许投票推出强制每卡投票的否定，与 derived 同义。",
+            "body_literal_occurrences": [
+              {
+                "line": 44,
+                "text": "  结论：否"
+              }
+            ],
+            "selected_evidence": [
+              {
+                "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+                "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+                "source_id": "raw-source-033d8ca615035ad47a36",
+                "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+                "source_path": "quote",
+                "start": 0,
+                "end": 200,
+                "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+                "selection_kind": "source_span_binding",
+                "literal_slice_verified": true,
+                "fact_hash_verified": true,
+                "source_identity_verified": true,
+                "span_id_verified": true,
+                "selected_claim_id": "claim-ed3c84540ae551734b39",
+                "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+              }
+            ]
+          }
+        ],
+        "body_literal_occurrences": [
+          {
+            "line": 27,
+            "text": "- 条件推断：这条 Observer 投票许可本身不构成必须投票的依据。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 45,
+            "text": "  仅当本看板启用卡片投票时 Observer 看板成员才可投票。 这条 Observer 投票许可本身不构成必须投票的依据。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-ed3c84540ae551734b39",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello"
+      },
+      {
+        "id": "trello-derived-board-independence",
+        "text": "根据逐成员逐看板配置规则对 A 的角色设置不决定 B 的角色。B 的实际角色仍须单独核实。",
+        "report_lines": [
+          29,
+          52
+        ],
+        "selected_claim_ids": [
+          "claim-80d69dcadef6473c7987"
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "derived",
+        "reason": "精确逐成员逐看板配置规则支持 A 设置不自动决定 B；后句只是同一独立配置规则的未知边界，没有推定 B 的角色。",
+        "rendered_decision_aliases": [
+          {
+            "text": "A 上这次改权是否自动决定他在 B 的权限 — 否",
+            "report_lines": [
+              49
+            ],
+            "support_status": "supported",
+            "strict_atomic": true,
+            "reason": "同一 A→B 不自动决定的 renderer 投影。",
+            "body_literal_occurrences": [
+              {
+                "line": 49,
+                "text": "  - A 上这次改权是否自动决定他在 B 的权限 — 否"
+              }
+            ],
+            "selected_evidence": [
+              {
+                "span_id": "source-span-e4bb431e3eb31cbcd78073ce",
+                "fact_id": "evidence-fact-record-726501fb9b25677b0293339538df2d7495107948e9b1e986715a4f684b4b0e20",
+                "source_id": "raw-source-033d8ca615035ad47a36",
+                "fact_hash": "5f81c58713419592e24123d7bdc650c9585c66f94625c72ccbe2f2db7ed8d9c7",
+                "source_path": "quote",
+                "start": 0,
+                "end": 189,
+                "quote": "Because an observer is a board member permission it isn't currently possible to set a user as an observer at the\nWorkspace\nlevel, and each observer is set individually per member per board.",
+                "selection_kind": "source_span_binding",
+                "literal_slice_verified": true,
+                "fact_hash_verified": true,
+                "source_identity_verified": true,
+                "span_id_verified": true,
+                "selected_claim_id": "claim-80d69dcadef6473c7987",
+                "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+              }
+            ]
+          }
+        ],
+        "body_literal_occurrences": [
+          {
+            "line": 29,
+            "text": "- 条件推断：根据逐成员逐看板配置规则对 A 的角色设置不决定 B 的角色。B 的实际角色仍须单独核实。 [source:raw-source-033d8ca615035ad47a36]"
+          },
+          {
+            "line": 52,
+            "text": "  目前无法在 Workspace 层级将用户设为 observer。 每个 observer 按成员逐看板单独设置。 根据逐成员逐看板配置规则对 A 的角色设置不决定 B 的角色。B 的实际角色仍须单独核实。 [source:raw-source-033d8ca615035ad47a36]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-e4bb431e3eb31cbcd78073ce",
+            "fact_id": "evidence-fact-record-726501fb9b25677b0293339538df2d7495107948e9b1e986715a4f684b4b0e20",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "5f81c58713419592e24123d7bdc650c9585c66f94625c72ccbe2f2db7ed8d9c7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 189,
+            "quote": "Because an observer is a board member permission it isn't currently possible to set a user as an observer at the\nWorkspace\nlevel, and each observer is set individually per member per board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-80d69dcadef6473c7987",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello"
+      },
+      {
+        "id": "trello-renderer-download-A",
+        "text": "下载卡片附件（A） — 是",
+        "report_lines": [
+          40
+        ],
+        "selected_claim_ids": [
+          "claim-058a97b09c5880826ef3"
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "renderer",
+        "reason": "正式 renderer 把通用 Observer 下载许可实例化到题设的小林/A；A 角色与 Premium 来自请求，产品操作来自精确 quote。一个下载动作。",
+        "rendered_decision_aliases": [],
+        "body_literal_occurrences": [
+          {
+            "line": 40,
+            "text": "  - 下载卡片附件（A） — 是"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-058a97b09c5880826ef3",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello"
+      },
+      {
+        "id": "trello-renderer-export-A",
+        "text": "导出看板（A） — 是",
+        "report_lines": [
+          41
+        ],
+        "selected_claim_ids": [
+          "claim-9d0466e857ebcd4c36ca"
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "renderer",
+        "reason": "正式 renderer 把通用 Observer 导出许可实例化到题设小林/A；题设角色是条件输入，不作官方产品证据。一个导出动作。",
+        "rendered_decision_aliases": [],
+        "body_literal_occurrences": [
+          {
+            "line": 41,
+            "text": "  - 导出看板（A） — 是"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-9d0466e857ebcd4c36ca",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello"
+      },
+      {
+        "id": "trello-renderer-download-export-summary",
+        "text": "结论：是",
+        "report_lines": [
+          39
+        ],
+        "selected_claim_ids": [
+          "claim-058a97b09c5880826ef3",
+          "claim-9d0466e857ebcd4c36ca"
+        ],
+        "support_status": "supported",
+        "strict_atomic": false,
+        "kind": "renderer_composite",
+        "reason": "L38 问题为下载 A 卡片附件并导出 A；L39 单一 Yes 同时肯定下载与导出两个可独立成立/失败的动作。两项均有精确支持，但不是同一动作的 AND 条件，严格原子性记否。拆出的 L40/L41 不删除此正式复合结论。",
+        "rendered_decision_aliases": [],
+        "body_literal_occurrences": [
+          {
+            "line": 39,
+            "text": "  结论：是"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-058a97b09c5880826ef3",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          },
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-9d0466e857ebcd4c36ca",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello"
+      },
+      {
+        "id": "claim-07d66a162b5a379e3818",
+        "raw_claim_id": "claim-07d66a162b5a379e3818",
+        "text": "Cache Domain Purge 角色包含特定域的边缘缓存清除权限。",
+        "selected_claim_ids": [
+          "claim-07d66a162b5a379e3818"
+        ],
+        "report_lines": [
+          13
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "source",
+        "reason": "精确 quote 明说该角色可清除特定域边缘缓存；一个角色操作与作用域谓词。",
+        "body_literal_occurrences": [
+          {
+            "line": 13,
+            "text": "- Cache Domain Purge 角色包含特定域的边缘缓存清除权限。 [source:raw-source-c71a5d8161af6e06ae53]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-eac052a98e20ae755de3940f",
+            "fact_id": "evidence-fact-record-b965c7d8dc8440b88462f53402847750125ff1025b5d4601af8bc3da71210334",
+            "source_id": "raw-source-c71a5d8161af6e06ae53",
+            "fact_hash": "05321efd9268033bbc6d98dbd2f5ee3dbd549f0071789111c21cb68f4c41fe8c",
+            "source_path": "quote",
+            "start": 0,
+            "end": 125,
+            "quote": "| Cache Domain Purge | Grants access to purge the edge cache for a specific domain and allows the reading of zone settings. |",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-07d66a162b5a379e3818",
+            "source_url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/"
+          }
+        ],
+        "product": "Cloudflare"
+      },
+      {
+        "id": "claim-306bbf50dfc7e460485b",
+        "raw_claim_id": "claim-306bbf50dfc7e460485b",
+        "text": "Cloudflare 角色只能被赋予其给定作用域（Roles can only ever be assigned to their given scope）。",
+        "selected_claim_ids": [
+          "claim-306bbf50dfc7e460485b"
+        ],
+        "report_lines": [
+          15,
+          26
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "source",
+        "reason": "精确所选 value/1 包含 only ever assigned to their given scope；未强化到未发表的跨域结果。",
+        "body_literal_occurrences": [
+          {
+            "line": 15,
+            "text": "- Cloudflare 角色只能被赋予其给定作用域（Roles can only ever be assigned to their given scope）。 [source:raw-source-c71a5d8161af6e06ae53]"
+          },
+          {
+            "line": 26,
+            "text": "  Cloudflare 角色只能被赋予其给定作用域（Roles can only ever be assigned to their given scope）。 [source:raw-source-c71a5d8161af6e06ae53]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-1d8668f870cfe99263c938f9",
+            "fact_id": "evidence-fact-record-42c4330b7d8533b0153a485e1390240579a432da6e9cd8fcf12ee9f2fab165e4",
+            "source_id": "raw-source-c71a5d8161af6e06ae53",
+            "fact_hash": "5dc0294d07ee381a44b1948e185479bd16a40d08ba12e23b3bca5e51854292cb",
+            "source_path": "value/1",
+            "start": 0,
+            "end": 229,
+            "quote": "Whenever you add a new member to your account, you can assign policies to those users and make use of the available roles. Roles can only ever be assigned to their given scope and multiple roles can be assigned to a given policy.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-306bbf50dfc7e460485b",
+            "source_url": "https://developers.cloudflare.com/fundamentals/manage-members/roles/"
+          }
+        ],
+        "product": "Cloudflare"
+      },
+      {
+        "id": "claim-fe4659825422093d3abe",
+        "raw_claim_id": "claim-fe4659825422093d3abe",
+        "text": "Workers Paid 套餐的 Standard 用量模式以 CPU 时间作为计费维度。",
+        "selected_claim_ids": [
+          "claim-fe4659825422093d3abe"
+        ],
+        "report_lines": [
+          17,
+          29
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "source",
+        "reason": "Standard 行的 CPU allowance 与 CPU 超额价格明示独立 CPU 计费维度；正文未夹带运行限制或费率。",
+        "body_literal_occurrences": [
+          {
+            "line": 17,
+            "text": "- Workers Paid 套餐的 Standard 用量模式以 CPU 时间作为计费维度。 [source:raw-source-52ba7b31b51e937245c1]"
+          },
+          {
+            "line": 29,
+            "text": "  Workers Paid 套餐的 Standard 用量模式以 CPU 时间作为计费维度。 当前缺少足以确定该项费用的可计费 CPU 总量或可靠用量界限，不能仅凭动态请求数核实完整账单。 [source:raw-source-52ba7b31b51e937245c1]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-1c8caa1fc143a77f1a2b1539",
+            "fact_id": "evidence-fact-record-56a5e19cb745e6d26a3f27370e40e3b3fc0b41d8daeea9d7938490a25035fd61",
+            "source_id": "raw-source-52ba7b31b51e937245c1",
+            "fact_hash": "6745f93bac89d18e616e6a65ce3f83a5a2955568b753677738b0cfe74c15b19c",
+            "source_path": "quote",
+            "start": 0,
+            "end": 346,
+            "quote": "| Standard | 10 million included per month +$0.30 per additional million | No charge or limit for duration | 30 million CPU milliseconds included per month +$0.02 per additional million CPU milliseconds Max of 5 minutes of CPU time per invocation (default: 30 seconds) Max of 15 minutes of CPU time per Cron Trigger or Queue Consumer invocation |",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-fe4659825422093d3abe",
+            "source_url": "https://developers.cloudflare.com/workers/platform/pricing/"
+          }
+        ],
+        "product": "Cloudflare"
+      },
+      {
+        "id": "cloudflare-visible-derived-cpu-input-gap",
+        "text": "当前缺少足以确定该项费用的可计费 CPU 总量或可靠用量界限，不能仅凭动态请求数核实完整账单。",
+        "selected_claim_ids": [
+          "claim-fe4659825422093d3abe"
+        ],
+        "report_lines": [
+          19,
+          29
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "derived",
+        "reason": "所选 Standard 同一行把请求数与 CPU 毫秒分别列价。题设只给 15M 请求，未给 CPU 总量；因此无法确定 CPU 超额费及完整账单。缺输入与无法核价是同一因果谓词，未推算实际 CPU 费用。",
+        "body_literal_occurrences": [
+          {
+            "line": 19,
+            "text": "- 条件推断：当前缺少足以确定该项费用的可计费 CPU 总量或可靠用量界限，不能仅凭动态请求数核实完整账单。 [source:raw-source-52ba7b31b51e937245c1]"
+          },
+          {
+            "line": 29,
+            "text": "  Workers Paid 套餐的 Standard 用量模式以 CPU 时间作为计费维度。 当前缺少足以确定该项费用的可计费 CPU 总量或可靠用量界限，不能仅凭动态请求数核实完整账单。 [source:raw-source-52ba7b31b51e937245c1]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-1c8caa1fc143a77f1a2b1539",
+            "fact_id": "evidence-fact-record-56a5e19cb745e6d26a3f27370e40e3b3fc0b41d8daeea9d7938490a25035fd61",
+            "source_id": "raw-source-52ba7b31b51e937245c1",
+            "fact_hash": "6745f93bac89d18e616e6a65ce3f83a5a2955568b753677738b0cfe74c15b19c",
+            "source_path": "quote",
+            "start": 0,
+            "end": 346,
+            "quote": "| Standard | 10 million included per month +$0.30 per additional million | No charge or limit for duration | 30 million CPU milliseconds included per month +$0.02 per additional million CPU milliseconds Max of 5 minutes of CPU time per invocation (default: 30 seconds) Max of 15 minutes of CPU time per Cron Trigger or Queue Consumer invocation |",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-fe4659825422093d3abe",
+            "source_url": "https://developers.cloudflare.com/workers/platform/pricing/"
+          }
+        ],
+        "product": "Cloudflare"
+      },
+      {
+        "id": "claim-6cdd95800cfa519475e9",
+        "raw_claim_id": "claim-6cdd95800cfa519475e9",
+        "text": "Free 组织最多支持在 2 个 collections 中安全共享数据。",
+        "selected_claim_ids": [
+          "claim-6cdd95800cfa519475e9"
+        ],
+        "report_lines": [
+          13,
+          21
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "source",
+        "reason": "实际选证 value/0 的 99:226 明示 Free organizations 的 secure data sharing in up to two collections；正文只表达同一共享动作及其容器上限。未把整段 one other user 偷加为正式人数结论。",
+        "body_literal_occurrences": [
+          {
+            "line": 13,
+            "text": "- Free 组织最多支持在 2 个 collections 中安全共享数据。 [source:raw-source-476cdfef80ec06d6a285]"
+          },
+          {
+            "line": 21,
+            "text": "  Free 组织最多支持在 2 个 collections 中安全共享数据。 在题设共享范围内，请求的 3 collections 超过已核实上限 2 collections，因此该需求无法满足。 [source:raw-source-476cdfef80ec06d6a285]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-edc50f82152baef97762720c",
+            "fact_id": "evidence-fact-record-6156fae37421bf9047d7e0185feacb51dfd5602eb5c00f4c751c1655425d8994",
+            "source_id": "raw-source-476cdfef80ec06d6a285",
+            "fact_hash": "ecd37a802f8deef55a218870c987d56f3fee1a392c07b26389ef568e22227f40",
+            "source_path": "value/0",
+            "start": 99,
+            "end": 226,
+            "quote": "Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-6cdd95800cfa519475e9",
+            "source_url": "https://bitwarden.com/help/password-manager-plans/"
+          }
+        ],
+        "rendered_decision_aliases": [],
+        "product": "Bitwarden"
+      },
+      {
+        "id": "bitwarden-visible-derived-collections-cap",
+        "text": "在题设共享范围内，请求的 3 collections 超过已核实上限 2 collections，因此该需求无法满足。",
+        "selected_claim_ids": [
+          "claim-6cdd95800cfa519475e9"
+        ],
+        "report_lines": [
+          15,
+          21
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "derived",
+        "reason": "题设同时要求 3人 且 3collections；有证同单位上限 2collections 已使该合取请求整体不可满足，不需要补发表人数规则。数量比较与需求否定为同一上限推论，原子。",
+        "rendered_decision_aliases": [
+          {
+            "text": "结论：否",
+            "report_lines": [
+              20
+            ],
+            "support_status": "supported",
+            "strict_atomic": true,
+            "reason": "正式 renderer No 以同一 2collections 上限和题设 3collections 为依据，是已计 derived 整体不能满足的同义投影，全部纳入审查但不重复抬唯一语义分母。",
+            "body_literal_occurrences": [
+              {
+                "line": 20,
+                "text": "  结论：否"
+              }
+            ],
+            "selected_evidence": [
+              {
+                "span_id": "source-span-edc50f82152baef97762720c",
+                "fact_id": "evidence-fact-record-6156fae37421bf9047d7e0185feacb51dfd5602eb5c00f4c751c1655425d8994",
+                "source_id": "raw-source-476cdfef80ec06d6a285",
+                "fact_hash": "ecd37a802f8deef55a218870c987d56f3fee1a392c07b26389ef568e22227f40",
+                "source_path": "value/0",
+                "start": 99,
+                "end": 226,
+                "quote": "Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections.",
+                "selection_kind": "source_span_binding",
+                "literal_slice_verified": true,
+                "fact_hash_verified": true,
+                "source_identity_verified": true,
+                "span_id_verified": true,
+                "selected_claim_id": "claim-6cdd95800cfa519475e9",
+                "source_url": "https://bitwarden.com/help/password-manager-plans/"
+              }
+            ]
+          }
+        ],
+        "body_literal_occurrences": [
+          {
+            "line": 15,
+            "text": "- 条件推断：在题设共享范围内，请求的 3 collections 超过已核实上限 2 collections，因此该需求无法满足。 [source:raw-source-476cdfef80ec06d6a285]"
+          },
+          {
+            "line": 21,
+            "text": "  Free 组织最多支持在 2 个 collections 中安全共享数据。 在题设共享范围内，请求的 3 collections 超过已核实上限 2 collections，因此该需求无法满足。 [source:raw-source-476cdfef80ec06d6a285]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-edc50f82152baef97762720c",
+            "fact_id": "evidence-fact-record-6156fae37421bf9047d7e0185feacb51dfd5602eb5c00f4c751c1655425d8994",
+            "source_id": "raw-source-476cdfef80ec06d6a285",
+            "fact_hash": "ecd37a802f8deef55a218870c987d56f3fee1a392c07b26389ef568e22227f40",
+            "source_path": "value/0",
+            "start": 99,
+            "end": 226,
+            "quote": "Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-6cdd95800cfa519475e9",
+            "source_url": "https://bitwarden.com/help/password-manager-plans/"
+          }
+        ],
+        "product": "Bitwarden"
+      },
+      {
+        "id": "claim-9b409b07b52b53930f11",
+        "raw_claim_id": "claim-9b409b07b52b53930f11",
+        "text": "Unified Access 的价格为按组织需求及所需能力确定且向官方销售说明环境后获取的定制报价。",
+        "selected_claim_ids": [
+          "claim-9b409b07b52b53930f11"
+        ],
+        "report_lines": [
+          13,
+          28
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "source",
+        "reason": "精确 value/1 两句给出 tailored pricing 与向 sales 说明环境取得 quote。正文为同一组织报价依赖规则，组织需求/能力和销售环境说明都限定同一次获取报价动作；未夹入美元费率、税率、人民币金额或人数上限。按 rubric 同动作 AND 条件保留，记原子。",
+        "visible_duplicate_clauses": [
+          {
+            "text": "Unified Access 采用按组织需求及所需能力确定的销售报价；",
+            "report_lines": [
+              17,
+              28
+            ],
+            "support_status": "supported",
+            "strict_atomic": true,
+            "reason": "同一定制报价性质的可见同义复述，不再抬唯一语义分母。"
+          }
+        ],
+        "body_literal_occurrences": [
+          {
+            "line": 13,
+            "text": "- Unified Access 的价格为按组织需求及所需能力确定且向官方销售说明环境后获取的定制报价。 [source:raw-source-0c2b7dfbb5cdb79f98e6]"
+          },
+          {
+            "line": 28,
+            "text": "  Unified Access 的价格为按组织需求及所需能力确定且向官方销售说明环境后获取的定制报价。 Unified Access 采用按组织需求及所需能力确定的销售报价；下一步是联系官方销售说明环境并取得报价。当前无法核实所问精确含税总额。报价时保留题设已给条件。 [source:raw-source-0c2b7dfbb5cdb79f98e6]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-62716b490d98e12f89695871",
+            "fact_id": "evidence-fact-record-9b4e2426252bdc21d7e69f2a38ceb0d7fa25cb689284c9ddacb8eb7ea4fbf36f",
+            "source_id": "raw-source-0c2b7dfbb5cdb79f98e6",
+            "fact_hash": "2cbe279aa6d08518230eceeccbab8c480f59be8aa957527a8178ba012067bac7",
+            "source_path": "value/1",
+            "start": 0,
+            "end": 169,
+            "quote": "Unified Access pricing is tailored to your organization’s needs and the capabilities you require. Contact our sales team to discuss your environment and receive a quote.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-9b409b07b52b53930f11",
+            "source_url": "https://1password.com/pricing"
+          }
+        ],
+        "rendered_decision_aliases": [],
+        "product": "1Password"
+      },
+      {
+        "id": "claim-61ae3bd7eee0c1186491",
+        "raw_claim_id": "claim-61ae3bd7eee0c1186491",
+        "text": "1Password 访客账户没有自己的 Private vault。",
+        "selected_claim_ids": [
+          "claim-61ae3bd7eee0c1186491"
+        ],
+        "report_lines": [
+          15,
+          25
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "source",
+        "reason": "所选 quote 明示 guest accounts don’t have their own private vaults；正文只取 Private 一个结果，没有连带补答多 vault 分支。",
+        "rendered_decision_aliases": [
+          {
+            "text": "或者拥有自己的 Private vault 吗？ — 否",
+            "report_lines": [
+              24
+            ],
+            "support_status": "supported",
+            "strict_atomic": true,
+            "reason": "正式 renderer No 与同一访客 Private 否定同义；题设已接受/确认不提供额外产品权限。",
+            "body_literal_occurrences": [
+              {
+                "line": 24,
+                "text": "  - 或者拥有自己的 Private vault 吗？ — 否"
+              }
+            ],
+            "selected_evidence": [
+              {
+                "span_id": "source-span-3c0bb3c97f81030a6dfb4165",
+                "fact_id": "evidence-fact-record-05a42c1329be29ac573848863165635026b084d591765e27e4dff96b2b3b4203",
+                "source_id": "raw-source-9ea4b68f00a9a2851e78",
+                "fact_hash": "f0a96e95e6803348f8a4bcb3b0bd1bb2d6e384c6c9bf01fd488cb5913ee8f482",
+                "source_path": "value/1",
+                "start": 0,
+                "end": 179,
+                "quote": "Guest accounts are ideal for sharing information with people on a limited basis. They don’t have their own private vaults and only have access to a single vault, which you choose.",
+                "selection_kind": "source_span_binding",
+                "literal_slice_verified": true,
+                "fact_hash_verified": true,
+                "source_identity_verified": true,
+                "span_id_verified": true,
+                "selected_claim_id": "claim-61ae3bd7eee0c1186491",
+                "source_url": "https://support.1password.com/guests/"
+              }
+            ]
+          }
+        ],
+        "body_literal_occurrences": [
+          {
+            "line": 15,
+            "text": "- 1Password 访客账户没有自己的 Private vault。 [source:raw-source-9ea4b68f00a9a2851e78]"
+          },
+          {
+            "line": 25,
+            "text": "  1Password 访客账户没有自己的 Private vault。 [source:raw-source-9ea4b68f00a9a2851e78]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-3c0bb3c97f81030a6dfb4165",
+            "fact_id": "evidence-fact-record-05a42c1329be29ac573848863165635026b084d591765e27e4dff96b2b3b4203",
+            "source_id": "raw-source-9ea4b68f00a9a2851e78",
+            "fact_hash": "f0a96e95e6803348f8a4bcb3b0bd1bb2d6e384c6c9bf01fd488cb5913ee8f482",
+            "source_path": "value/1",
+            "start": 0,
+            "end": 179,
+            "quote": "Guest accounts are ideal for sharing information with people on a limited basis. They don’t have their own private vaults and only have access to a single vault, which you choose.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-61ae3bd7eee0c1186491",
+            "source_url": "https://support.1password.com/guests/"
+          }
+        ],
+        "product": "1Password"
+      },
+      {
+        "id": "1password-derived-official-sales-next-step",
+        "text": "下一步是联系官方销售说明环境并取得报价。",
+        "selected_claim_ids": [
+          "claim-9b409b07b52b53930f11"
+        ],
+        "report_lines": [
+          17,
+          28
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "kind": "derived_next_step",
+        "reason": "精确所选官方 quote 明说 Contact our sales team to discuss your environment and receive a quote；这是一个向官方销售取得适用报价的动作和必要环境说明，不自行承诺报价金额。",
+        "body_literal_occurrences": [
+          {
+            "line": 17,
+            "text": "- 条件推断：Unified Access 采用按组织需求及所需能力确定的销售报价；下一步是联系官方销售说明环境并取得报价。当前无法核实所问精确含税总额。报价时保留题设已给条件。 [source:raw-source-0c2b7dfbb5cdb79f98e6]"
+          },
+          {
+            "line": 28,
+            "text": "  Unified Access 的价格为按组织需求及所需能力确定且向官方销售说明环境后获取的定制报价。 Unified Access 采用按组织需求及所需能力确定的销售报价；下一步是联系官方销售说明环境并取得报价。当前无法核实所问精确含税总额。报价时保留题设已给条件。 [source:raw-source-0c2b7dfbb5cdb79f98e6]"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-62716b490d98e12f89695871",
+            "fact_id": "evidence-fact-record-9b4e2426252bdc21d7e69f2a38ceb0d7fa25cb689284c9ddacb8eb7ea4fbf36f",
+            "source_id": "raw-source-0c2b7dfbb5cdb79f98e6",
+            "fact_hash": "2cbe279aa6d08518230eceeccbab8c480f59be8aa957527a8178ba012067bac7",
+            "source_path": "value/1",
+            "start": 0,
+            "end": 169,
+            "quote": "Unified Access pricing is tailored to your organization’s needs and the capabilities you require. Contact our sales team to discuss your environment and receive a quote.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-9b409b07b52b53930f11",
+            "source_url": "https://1password.com/pricing"
+          }
+        ],
+        "rendered_decision_aliases": [],
+        "product": "1Password"
+      }
+    ],
+    "all_formal_renderer_projection_count": 10,
+    "all_formal_renderer_supported": 10,
+    "all_formal_renderer_strict_text_atomic": 9,
+    "renderer_projections": [
+      {
+        "text": "能否在 Workspace 层级把他统一设置成 Observer — 否",
+        "report_lines": [
+          48
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "reason": "该 renderer 否是同一 Workspace 不可统一设定规则的题设实例，引用相同。",
+        "body_literal_occurrences": [
+          {
+            "line": 48,
+            "text": "  - 能否在 Workspace 层级把他统一设置成 Observer — 否"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-e4bb431e3eb31cbcd78073ce",
+            "fact_id": "evidence-fact-record-726501fb9b25677b0293339538df2d7495107948e9b1e986715a4f684b4b0e20",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "5f81c58713419592e24123d7bdc650c9585c66f94625c72ccbe2f2db7ed8d9c7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 189,
+            "quote": "Because an observer is a board member permission it isn't currently possible to set a user as an observer at the\nWorkspace\nlevel, and each observer is set individually per member per board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-f100215a5e5a8a14c822",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello",
+        "semantic_owner": "claim-f100215a5e5a8a14c822"
+      },
+      {
+        "text": "投票（A） — 否",
+        "report_lines": [
+          35
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "reason": "相同 A 投票否定的 renderer 同义投影。",
+        "body_literal_occurrences": [
+          {
+            "line": 35,
+            "text": "  - 投票（A） — 否"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8227f2f8f006d119b32fcdc0",
+            "fact_id": "evidence-fact-record-2fb6a2b3d95d46a46dbc53fe8954516186211a238eba043d7514f7359ee112a9",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "79477bfb221852bbb71b44862d9cd2738495210329669199796ad9b41a1b59b7",
+            "source_path": "value/0",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-173e5a24d5470dffbe80",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello",
+        "semantic_owner": "trello-derived-vote-A"
+      },
+      {
+        "text": "投票（B） — 是",
+        "report_lines": [
+          36
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "reason": "相同 B 投票许可的 renderer 同义投影。",
+        "body_literal_occurrences": [
+          {
+            "line": 36,
+            "text": "  - 投票（B） — 是"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8227f2f8f006d119b32fcdc0",
+            "fact_id": "evidence-fact-record-2fb6a2b3d95d46a46dbc53fe8954516186211a238eba043d7514f7359ee112a9",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "79477bfb221852bbb71b44862d9cd2738495210329669199796ad9b41a1b59b7",
+            "source_path": "value/0",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-9655a5cd28d00da420e0",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello",
+        "semantic_owner": "trello-derived-vote-B"
+      },
+      {
+        "text": "结论：否",
+        "report_lines": [
+          44
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "reason": "对是否由允许投票推出强制每卡投票的否定，与 derived 同义。",
+        "body_literal_occurrences": [
+          {
+            "line": 44,
+            "text": "  结论：否"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-ed3c84540ae551734b39",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello",
+        "semantic_owner": "trello-derived-no-duty"
+      },
+      {
+        "text": "A 上这次改权是否自动决定他在 B 的权限 — 否",
+        "report_lines": [
+          49
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "reason": "同一 A→B 不自动决定的 renderer 投影。",
+        "body_literal_occurrences": [
+          {
+            "line": 49,
+            "text": "  - A 上这次改权是否自动决定他在 B 的权限 — 否"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-e4bb431e3eb31cbcd78073ce",
+            "fact_id": "evidence-fact-record-726501fb9b25677b0293339538df2d7495107948e9b1e986715a4f684b4b0e20",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "5f81c58713419592e24123d7bdc650c9585c66f94625c72ccbe2f2db7ed8d9c7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 189,
+            "quote": "Because an observer is a board member permission it isn't currently possible to set a user as an observer at the\nWorkspace\nlevel, and each observer is set individually per member per board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-80d69dcadef6473c7987",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "product": "Trello",
+        "semantic_owner": "trello-derived-board-independence"
+      },
+      {
+        "product": "Trello",
+        "id": "trello-renderer-download-A",
+        "text": "下载卡片附件（A） — 是",
+        "report_lines": [
+          40
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-058a97b09c5880826ef3",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "reason": "正式 renderer 把通用 Observer 下载许可实例化到题设的小林/A；A 角色与 Premium 来自请求，产品操作来自精确 quote。一个下载动作。"
+      },
+      {
+        "product": "Trello",
+        "id": "trello-renderer-export-A",
+        "text": "导出看板（A） — 是",
+        "report_lines": [
+          41
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-9d0466e857ebcd4c36ca",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "reason": "正式 renderer 把通用 Observer 导出许可实例化到题设小林/A；题设角色是条件输入，不作官方产品证据。一个导出动作。"
+      },
+      {
+        "product": "Trello",
+        "id": "trello-renderer-download-export-summary",
+        "text": "结论：是",
+        "report_lines": [
+          39
+        ],
+        "support_status": "supported",
+        "strict_atomic": false,
+        "selected_evidence": [
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-058a97b09c5880826ef3",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          },
+          {
+            "span_id": "source-span-8b49d335967e2d5b9d760fd0",
+            "fact_id": "evidence-fact-record-53274cf71791686a946a2957b782104a2061611d7fd222920e221247afc109b6",
+            "source_id": "raw-source-033d8ca615035ad47a36",
+            "fact_hash": "e9d88093ac4c86e9305d1a092aaddd96d5444cbace3f21c80d0356f785ae77b7",
+            "source_path": "quote",
+            "start": 0,
+            "end": 200,
+            "quote": "Observers are board members that are able to view a board and the cards within the board, download card attachments, comment and vote on cards (if that is enabled for the board), and export the board.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-9d0466e857ebcd4c36ca",
+            "source_url": "https://support.atlassian.com/trello/docs/adding-observers-to-boards/"
+          }
+        ],
+        "reason": "L38 问题为下载 A 卡片附件并导出 A；L39 单一 Yes 同时肯定下载与导出两个可独立成立/失败的动作。两项均有精确支持，但不是同一动作的 AND 条件，严格原子性记否。拆出的 L40/L41 不删除此正式复合结论。"
+      },
+      {
+        "text": "结论：否",
+        "report_lines": [
+          20
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "reason": "正式 renderer No 以同一 2collections 上限和题设 3collections 为依据，是已计 derived 整体不能满足的同义投影，全部纳入审查但不重复抬唯一语义分母。",
+        "body_literal_occurrences": [
+          {
+            "line": 20,
+            "text": "  结论：否"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-edc50f82152baef97762720c",
+            "fact_id": "evidence-fact-record-6156fae37421bf9047d7e0185feacb51dfd5602eb5c00f4c751c1655425d8994",
+            "source_id": "raw-source-476cdfef80ec06d6a285",
+            "fact_hash": "ecd37a802f8deef55a218870c987d56f3fee1a392c07b26389ef568e22227f40",
+            "source_path": "value/0",
+            "start": 99,
+            "end": 226,
+            "quote": "Free organizations offer both users all the core features of Password Manager and secure data sharing in up to two collections.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-6cdd95800cfa519475e9",
+            "source_url": "https://bitwarden.com/help/password-manager-plans/"
+          }
+        ],
+        "product": "Bitwarden",
+        "semantic_owner": "bitwarden-visible-derived-collections-cap"
+      },
+      {
+        "text": "或者拥有自己的 Private vault 吗？ — 否",
+        "report_lines": [
+          24
+        ],
+        "support_status": "supported",
+        "strict_atomic": true,
+        "reason": "正式 renderer No 与同一访客 Private 否定同义；题设已接受/确认不提供额外产品权限。",
+        "body_literal_occurrences": [
+          {
+            "line": 24,
+            "text": "  - 或者拥有自己的 Private vault 吗？ — 否"
+          }
+        ],
+        "selected_evidence": [
+          {
+            "span_id": "source-span-3c0bb3c97f81030a6dfb4165",
+            "fact_id": "evidence-fact-record-05a42c1329be29ac573848863165635026b084d591765e27e4dff96b2b3b4203",
+            "source_id": "raw-source-9ea4b68f00a9a2851e78",
+            "fact_hash": "f0a96e95e6803348f8a4bcb3b0bd1bb2d6e384c6c9bf01fd488cb5913ee8f482",
+            "source_path": "value/1",
+            "start": 0,
+            "end": 179,
+            "quote": "Guest accounts are ideal for sharing information with people on a limited basis. They don’t have their own private vaults and only have access to a single vault, which you choose.",
+            "selection_kind": "source_span_binding",
+            "literal_slice_verified": true,
+            "fact_hash_verified": true,
+            "source_identity_verified": true,
+            "span_id_verified": true,
+            "selected_claim_id": "claim-61ae3bd7eee0c1186491",
+            "source_url": "https://support.1password.com/guests/"
+          }
+        ],
+        "product": "1Password",
+        "semantic_owner": "claim-61ae3bd7eee0c1186491"
+      }
+    ]
+  },
+  "atomicity_sensitivity": {
+    "strict_text_predicate_policy": {
+      "denominator": 21,
+      "supported": 21,
+      "atomic": 20,
+      "non_atomic_ids": [
+        "trello-renderer-download-export-summary"
+      ],
+      "reason": "正式多动作聚合 Yes 也逐项登记；严格文本单位中，两个不同动作并为一个肯定句具有两个谓词。"
+    },
+    "independent_fact_review_policy": {
+      "denominator": 20,
+      "supported": 20,
+      "atomic": 20,
+      "reason": "仅排除已审核全部细分 Yes cells 的受控父题聚合投影，不排除任何独立产品事实、场景推论或自由生成复合事实。"
+    },
+    "controlled_trello_summary": {
+      "text": "结论：是",
+      "report_lines": [
+        39
+      ],
+      "all_required_children_answered_yes": true,
+      "children": [
+        "trello-renderer-download-A",
+        "trello-renderer-export-A"
+      ],
+      "independently_reviewed_source_claim_ids": [
+        "claim-058a97b09c5880826ef3",
+        "claim-9d0466e857ebcd4c36ca"
+      ],
+      "actual_final_qa_span_id": "span-114",
+      "supported": true,
+      "new_free_product_fact": false,
+      "task2_all_children_required_gate_satisfied": true,
+      "interpretation": "原计划允许父题全部必要子问完成才整体肯定；此处下载/导出已分别 label、选证和审核，满足聚合前提。严格文本 nonatomic 只作单独口径记录，不表示新unsupported断言，也不自动泛化摘要不合格。"
+    }
+  },
+  "report_delivery_summary": {
+    "total_reports": 4,
+    "text_deliverable": 1,
+    "text_plus_evidence_deliverable": 1,
+    "all_claims_atomic_deliverable": 1,
+    "strict_system_qa_deliverable": 0,
+    "published_claims_support_pass": 4,
+    "published_claims_atomic_pass": 3,
+    "qa_blocker_count": 10
+  },
+  "actual_final_qa": {
+    "details_path": "independent-delivery-first-round-qa-validity.json",
+    "products": [
+      {
+        "product": "trello",
+        "planned_issue_count": 8,
+        "sent_issue_count": 6,
+        "valid_issue_count": 6,
+        "unsent_issue_ids": [
+          "final-question-question-659854eaa5bf118b8901",
+          "qc-issue-514aa3151351e24c"
+        ],
+        "omitted_issue_ids": [
+          "final-question-question-659854eaa5bf118b8901",
+          "qc-issue-514aa3151351e24c"
+        ],
+        "retry_exhausted_issue_ids": [],
+        "unreviewed_reasons": {
+          "final-question-question-659854eaa5bf118b8901": "Complete question context exceeded the bounded final QA byte limit.",
+          "qc-issue-514aa3151351e24c": "Complete question context is pending beyond the bounded review window."
+        },
+        "attempts_by_issue_id": {
+          "final-question-question-00e2382d7575b5384c9a": 1,
+          "final-question-question-1305198ad16f108bf375": 1,
+          "final-question-question-659854eaa5bf118b8901": 0,
+          "final-question-question-a5be8c7a210d770f2ea7": 1,
+          "qc-issue-1fed93a35e21396b": 1,
+          "qc-issue-514aa3151351e24c": 0,
+          "qc-issue-865d77c7a1f493c2": 1,
+          "qc-issue-8d890d181ebb560f": 1
+        },
+        "question_review_states": {
+          "question-00e2382d7575b5384c9a": "superseded",
+          "question-1305198ad16f108bf375": "superseded",
+          "question-659854eaa5bf118b8901": "pending",
+          "question-a5be8c7a210d770f2ea7": "blocked"
+        },
+        "internal_current_child_count": 4,
+        "internal_current_child_sent": 3,
+        "internal_current_child_valid": 3,
+        "batch_status_counts": {
+          "valid": 6
+        },
+        "actual_parser_matches_recorded_receipt": true
+      },
+      {
+        "product": "cloudflare",
+        "planned_issue_count": 5,
+        "sent_issue_count": 5,
+        "valid_issue_count": 5,
+        "unsent_issue_ids": [],
+        "omitted_issue_ids": [],
+        "retry_exhausted_issue_ids": [],
+        "unreviewed_reasons": {},
+        "attempts_by_issue_id": {
+          "final-question-question-1b7471af0d3dcf4af91c": 1,
+          "final-question-question-dd9aeefb8be2a32bc5bf": 1,
+          "qc-issue-19b2033a712b754e": 1,
+          "qc-issue-51f4098011394474": 1,
+          "qc-issue-819f5d48446df892": 1
+        },
+        "question_review_states": {
+          "question-1b7471af0d3dcf4af91c": "blocked",
+          "question-dd9aeefb8be2a32bc5bf": "current_limitation"
+        },
+        "internal_current_child_count": 2,
+        "internal_current_child_sent": 2,
+        "internal_current_child_valid": 2,
+        "batch_status_counts": {
+          "valid": 4
+        },
+        "actual_parser_matches_recorded_receipt": true
+      },
+      {
+        "product": "bitwarden",
+        "planned_issue_count": 6,
+        "sent_issue_count": 6,
+        "valid_issue_count": 5,
+        "unsent_issue_ids": [],
+        "omitted_issue_ids": [],
+        "retry_exhausted_issue_ids": [
+          "final-question-question-63762e09ae5d8faa1071"
+        ],
+        "unreviewed_reasons": {
+          "final-question-question-63762e09ae5d8faa1071": "Final QA attempt limit reached; review remains incomplete."
+        },
+        "attempts_by_issue_id": {
+          "final-question-question-63762e09ae5d8faa1071": 2,
+          "final-question-question-cb40c90e4d944bf23275": 1,
+          "qc-issue-15448ad60b476974": 1,
+          "qc-issue-208b427eff67e4b7": 1,
+          "qc-issue-72251e5d20223e4c": 1,
+          "qc-issue-b7f62334cba7a30d": 1
+        },
+        "question_review_states": {
+          "question-63762e09ae5d8faa1071": "pending",
+          "question-cb40c90e4d944bf23275": "superseded"
+        },
+        "internal_current_child_count": 2,
+        "internal_current_child_sent": 2,
+        "internal_current_child_valid": 1,
+        "batch_status_counts": {
+          "valid": 3,
+          "invalid": 2
+        },
+        "actual_parser_matches_recorded_receipt": true
+      },
+      {
+        "product": "1password",
+        "planned_issue_count": 7,
+        "sent_issue_count": 7,
+        "valid_issue_count": 4,
+        "unsent_issue_ids": [],
+        "omitted_issue_ids": [],
+        "retry_exhausted_issue_ids": [
+          "qc-issue-01bf9a57cf3a577d",
+          "qc-issue-cfcba7b038be79d4"
+        ],
+        "unreviewed_reasons": {
+          "qc-issue-01bf9a57cf3a577d": "Final QA attempt limit reached; review remains incomplete.",
+          "qc-issue-18104742b8d5a7fe": "Final QA actual transport or response binding is unverified.",
+          "qc-issue-cfcba7b038be79d4": "Final QA attempt limit reached; review remains incomplete."
+        },
+        "attempts_by_issue_id": {
+          "final-question-question-26d795d67d79bd12e05d": 1,
+          "final-question-question-60a7010e0c7ca2ae7058": 1,
+          "qc-issue-01bf9a57cf3a577d": 2,
+          "qc-issue-18104742b8d5a7fe": 1,
+          "qc-issue-2d7ed7da422aa85e": 1,
+          "qc-issue-5a772de0e4349b60": 1,
+          "qc-issue-cfcba7b038be79d4": 2
+        },
+        "question_review_states": {
+          "question-26d795d67d79bd12e05d": "current_limitation",
+          "question-60a7010e0c7ca2ae7058": "blocked"
+        },
+        "internal_current_child_count": 2,
+        "internal_current_child_sent": 2,
+        "internal_current_child_valid": 2,
+        "batch_status_counts": {
+          "valid": 3,
+          "invalid": 3
+        },
+        "actual_parser_matches_recorded_receipt": true
+      }
+    ],
+    "all_issue_summary": {
+      "planned_issue_count": 26,
+      "sent_issue_count": 24,
+      "valid_issue_count": 20
+    },
+    "batch_status_counts": {
+      "valid": 16,
+      "invalid": 5
+    },
+    "internal_current_child_denominator_note": "内部 child 的10项只用于真实送审诊断，绝不把原题8项扩大为10。",
+    "bitwarden_addendum": "independent-delivery-bitwarden-qa-addendum-01.json"
+  },
+  "usage": {
+    "total": {
+      "llm_span_count": 122,
+      "prompt_tokens": 437917,
+      "completion_tokens": 28827,
+      "total_tokens": 466744,
+      "prompt_cache_hit_tokens": 140672,
+      "prompt_cache_miss_tokens": 297245,
+      "llm_tokens_charged": 466744,
+      "llm_cost_charged_usd": 0.12460993199999998,
+      "llm_transport_attempts": 122
+    },
+    "products": [
+      {
+        "prompt_tokens": 159401,
+        "completion_tokens": 8554,
+        "total_tokens": 167955,
+        "prompt_cache_hit_tokens": 52480,
+        "prompt_cache_miss_tokens": 106921,
+        "llm_tokens_charged": 167955,
+        "llm_cost_charged_usd": 0.042655979999999996,
+        "llm_transport_attempts": 42,
+        "product": "Trello",
+        "llm_span_count": 42,
+        "actual_model_aliases": {
+          "deepseek-flash": 42
+        },
+        "unknown_usage_span_ids": [],
+        "dispatch_counts": {
+          "planner_scope": 1,
+          "collector_semantic_extract": 1,
+          "collector_question_evidence_review": 1,
+          "feature_trello_analyst": 1,
+          "comparison_matrix": 1,
+          "coverage_reflection": 1,
+          "dimension_question_task_support_selection": 8,
+          "dimension_question_atomic_generation": 8,
+          "dimension_question_atomic_review": 8,
+          "dimension_question_atomic_answer_review": 6,
+          "final_question_reconciliation": 6
+        },
+        "run_metrics": {
+          "total_spans": 128,
+          "total_duration_ms": 65574,
+          "llm_calls": 42,
+          "search_calls": 0,
+          "fetch_calls": 0,
+          "input_tokens_estimate": 228479,
+          "output_tokens_estimate": 133403,
+          "cost_estimate_usd": 0.042656,
+          "source_coverage_rate": 1.0,
+          "verified_source_rate": 1.0,
+          "claim_citation_rate": 1.0,
+          "schema_pass_rate": 1.0,
+          "human_override_rate": 0.0,
+          "acceptance_rate": 0.0,
+          "qa_issue_count": 8,
+          "revision_count": 0,
+          "compliance_redaction_count": 0
+        },
+        "budget_checkpoint": {
+          "calls": 42,
+          "tokens_charged": 167955,
+          "cost_charged_usd": 0.042655979999999996
+        },
+        "metrics_note": "provider usage metadata token totals distinct from run-level estimates; cost is local usage-based estimate, not provider invoice."
+      },
+      {
+        "prompt_tokens": 102296,
+        "completion_tokens": 6571,
+        "total_tokens": 108867,
+        "prompt_cache_hit_tokens": 34944,
+        "prompt_cache_miss_tokens": 67352,
+        "llm_tokens_charged": 108867,
+        "llm_cost_charged_usd": 0.028300463999999994,
+        "llm_transport_attempts": 29,
+        "product": "Cloudflare",
+        "llm_span_count": 29,
+        "actual_model_aliases": {
+          "deepseek-flash": 29
+        },
+        "unknown_usage_span_ids": [],
+        "dispatch_counts": {
+          "planner_scope": 1,
+          "collector_semantic_extract": 2,
+          "collector_question_evidence_review": 1,
+          "feature_cloudflare_analyst": 1,
+          "comparison_matrix": 1,
+          "coverage_reflection": 1,
+          "dimension_question_task_support_selection": 4,
+          "dimension_question_atomic_generation": 5,
+          "dimension_question_atomic_review": 5,
+          "dimension_question_atomic_answer_review": 4,
+          "final_question_reconciliation": 4
+        },
+        "run_metrics": {
+          "total_spans": 105,
+          "total_duration_ms": 48806,
+          "llm_calls": 29,
+          "search_calls": 0,
+          "fetch_calls": 0,
+          "input_tokens_estimate": 163697,
+          "output_tokens_estimate": 122066,
+          "cost_estimate_usd": 0.0283,
+          "source_coverage_rate": 1.0,
+          "verified_source_rate": 1.0,
+          "claim_citation_rate": 1.0,
+          "schema_pass_rate": 1.0,
+          "human_override_rate": 0.0,
+          "acceptance_rate": 0.0,
+          "qa_issue_count": 6,
+          "revision_count": 0,
+          "compliance_redaction_count": 0
+        },
+        "budget_checkpoint": {
+          "calls": 29,
+          "tokens_charged": 108867,
+          "cost_charged_usd": 0.028300463999999994
+        },
+        "metrics_note": "provider usage metadata token totals distinct from run-level estimates; cost is local usage-based estimate, not provider invoice."
+      },
+      {
+        "prompt_tokens": 70593,
+        "completion_tokens": 6180,
+        "total_tokens": 76773,
+        "prompt_cache_hit_tokens": 21120,
+        "prompt_cache_miss_tokens": 49473,
+        "llm_tokens_charged": 76773,
+        "llm_cost_charged_usd": 0.022384619999999994,
+        "llm_transport_attempts": 22,
+        "product": "Bitwarden",
+        "llm_span_count": 22,
+        "actual_model_aliases": {
+          "deepseek-flash": 22
+        },
+        "unknown_usage_span_ids": [],
+        "dispatch_counts": {
+          "planner_scope": 1,
+          "collector_semantic_extract": 2,
+          "collector_question_evidence_review": 1,
+          "feature_bitwarden_analyst": 1,
+          "comparison_matrix": 1,
+          "coverage_reflection": 1,
+          "dimension_question_task_support_selection": 2,
+          "dimension_question_atomic_generation": 3,
+          "dimension_question_atomic_review": 3,
+          "dimension_question_atomic_answer_review": 2,
+          "final_question_reconciliation": 5
+        },
+        "run_metrics": {
+          "total_spans": 93,
+          "total_duration_ms": 43068,
+          "llm_calls": 22,
+          "search_calls": 0,
+          "fetch_calls": 0,
+          "input_tokens_estimate": 147420,
+          "output_tokens_estimate": 184568,
+          "cost_estimate_usd": 0.022385,
+          "source_coverage_rate": 1.0,
+          "verified_source_rate": 1.0,
+          "claim_citation_rate": 1.0,
+          "schema_pass_rate": 1.0,
+          "human_override_rate": 0.0,
+          "acceptance_rate": 0.0,
+          "qa_issue_count": 5,
+          "revision_count": 0,
+          "compliance_redaction_count": 0
+        },
+        "budget_checkpoint": {
+          "calls": 22,
+          "tokens_charged": 76773,
+          "cost_charged_usd": 0.022384619999999994
+        },
+        "metrics_note": "provider usage metadata token totals distinct from run-level estimates; cost is local usage-based estimate, not provider invoice."
+      },
+      {
+        "prompt_tokens": 105627,
+        "completion_tokens": 7522,
+        "total_tokens": 113149,
+        "prompt_cache_hit_tokens": 32128,
+        "prompt_cache_miss_tokens": 73499,
+        "llm_tokens_charged": 113149,
+        "llm_cost_charged_usd": 0.031268868,
+        "llm_transport_attempts": 29,
+        "product": "1Password",
+        "llm_span_count": 29,
+        "actual_model_aliases": {
+          "deepseek-flash": 29
+        },
+        "unknown_usage_span_ids": [],
+        "dispatch_counts": {
+          "planner_scope": 1,
+          "collector_semantic_extract": 2,
+          "collector_question_evidence_review": 1,
+          "feature_1password_analyst": 1,
+          "comparison_matrix": 1,
+          "coverage_reflection": 1,
+          "dimension_question_task_support_selection": 3,
+          "dimension_question_atomic_generation": 5,
+          "dimension_question_atomic_review": 5,
+          "dimension_question_atomic_answer_review": 3,
+          "final_question_reconciliation": 6
+        },
+        "run_metrics": {
+          "total_spans": 106,
+          "total_duration_ms": 50453,
+          "llm_calls": 29,
+          "search_calls": 0,
+          "fetch_calls": 0,
+          "input_tokens_estimate": 171659,
+          "output_tokens_estimate": 92429,
+          "cost_estimate_usd": 0.031269,
+          "source_coverage_rate": 1.0,
+          "verified_source_rate": 1.0,
+          "claim_citation_rate": 1.0,
+          "schema_pass_rate": 1.0,
+          "human_override_rate": 0.0,
+          "acceptance_rate": 0.0,
+          "qa_issue_count": 8,
+          "revision_count": 0,
+          "compliance_redaction_count": 0
+        },
+        "budget_checkpoint": {
+          "calls": 29,
+          "tokens_charged": 113149,
+          "cost_charged_usd": 0.031268868
+        },
+        "metrics_note": "provider usage metadata token totals distinct from run-level estimates; cost is local usage-based estimate, not provider invoice."
+      }
+    ],
+    "model_alias": "deepseek-flash",
+    "server_weights_revision": "not established",
+    "provider_invoice_usd": null,
+    "unknown_usage_span_count": 0,
+    "local_cost_estimate_usd": 0.12460993199999998,
+    "runtime_metrics_path": "runtime-metrics.json"
+  },
+  "limitations": [
+    "既有8题为已暴露回归；不能声称泛化提升。",
+    "仅固定页面生产阶段入口回放，不是完整 discovery/全Graph/E2E。",
+    "1Password pricing为本轮真实官方2026-11-02更新；其余冻结页为2026-10-21；并非完全同输入因果实验。",
+    "必要澄清与安全缺价只局部完成交付，产品数据保留/精确金额等未知继续保留。",
+    "全部正式 source/derived/renderer 已纳引用和原子性；状态标签、身份hash、已采未消费事实、未发表supported稿不证明语义或补正文。",
+    "传输调用122次和所有runner exit0不表示内容或全套通过；首轮全后端15failed已原样保留。"
+  ],
+  "status": "not_accepted",
+  "source_sha256": "6dec8e12d763a26abfda40c4210fb47aa0d5d59b46a48ab85821bded4ea39ee5",
+  "backend": {
+    "passed": 9704,
+    "failed": 15,
+    "skipped": 1,
+    "exit_code": 1
+  },
+  "reports": {
+    "trello": {
+      "path": "docs/optimization/2026-11-02-delivery-initial-reports/trello.md",
+      "sha256": "c983b7d30f6019ab6d1ee6b6a86b004685baa0196cc3aac3fe2596f03a278e84"
+    },
+    "cloudflare": {
+      "path": "docs/optimization/2026-11-02-delivery-initial-reports/cloudflare.md",
+      "sha256": "8427405258f3fe0e86431cff74cc727bb4bdbfc1517b6b184bd7af8dae6efb55"
+    },
+    "bitwarden": {
+      "path": "docs/optimization/2026-11-02-delivery-initial-reports/bitwarden.md",
+      "sha256": "c7f06dd6145983a81d99a9faa4f54395ad153cd00c343179308c8b1fbc7ddea0"
+    },
+    "1password": {
+      "path": "docs/optimization/2026-11-02-delivery-initial-reports/1password.md",
+      "sha256": "a310ecbb1c2be29e1e48122ea55304251e28ea81096b03758aa5f15fc9d90698"
+    }
+  },
+  "scope": "Existing eight questions and22 required branches; locked-page production stage replay; 1Password pricing captured2026-11-02, other pages2026-10-21; not discovery/E2E or generalization acceptance."
+}
